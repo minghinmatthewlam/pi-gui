@@ -10,6 +10,7 @@ import type {
   WorkspaceCatalogSnapshot,
   WorkspaceId,
 } from "@pi-app/catalogs";
+import { sessionKey } from "./session-supervisor-utils.js";
 
 type CatalogFileState = {
   version: 1;
@@ -26,6 +27,11 @@ export interface SessionFileCatalogStorage extends CatalogStorage {
   getSessionFile(sessionRef: SessionRef): Promise<string | undefined>;
   setSessionFile(sessionRef: SessionRef, sessionFile: string): Promise<void>;
   deleteSessionFile(sessionRef: SessionRef): Promise<void>;
+  replaceWorkspaceSessions(
+    workspaceId: WorkspaceId,
+    entries: readonly SessionCatalogEntry[],
+    sessionFiles: Readonly<Record<string, string>>,
+  ): Promise<void>;
 }
 
 export class JsonCatalogStore implements SessionFileCatalogStorage {
@@ -85,12 +91,12 @@ export class JsonCatalogStore implements SessionFileCatalogStorage {
     },
     getSession: async (sessionRef: SessionRef): Promise<SessionCatalogEntry | undefined> => {
       const state = await this.getState();
-      const entry = state.sessions.find((session) => sessionRefKey(session.sessionRef) === sessionRefKey(sessionRef));
+      const entry = state.sessions.find((session) => sessionKey(session.sessionRef) === sessionKey(sessionRef));
       return entry ? cloneSessionEntry(entry) : undefined;
     },
     upsertSession: async (entry: SessionCatalogEntry): Promise<void> => {
       await this.mutateState((state) => {
-        const index = state.sessions.findIndex((session) => sessionRefKey(session.sessionRef) === sessionRefKey(entry.sessionRef));
+        const index = state.sessions.findIndex((session) => sessionKey(session.sessionRef) === sessionKey(entry.sessionRef));
         const next = cloneSessionEntry(entry);
         if (index >= 0) {
           state.sessions[index] = next;
@@ -101,8 +107,8 @@ export class JsonCatalogStore implements SessionFileCatalogStorage {
     },
     deleteSession: async (sessionRef: SessionRef): Promise<void> => {
       await this.mutateState((state) => {
-        const key = sessionRefKey(sessionRef);
-        state.sessions = state.sessions.filter((session) => sessionRefKey(session.sessionRef) !== key);
+        const key = sessionKey(sessionRef);
+        state.sessions = state.sessions.filter((session) => sessionKey(session.sessionRef) !== key);
         delete state.sessionFiles[key];
       });
     },
@@ -110,18 +116,44 @@ export class JsonCatalogStore implements SessionFileCatalogStorage {
 
   async getSessionFile(sessionRef: SessionRef): Promise<string | undefined> {
     const state = await this.getState();
-    return state.sessionFiles[sessionRefKey(sessionRef)];
+    return state.sessionFiles[sessionKey(sessionRef)];
   }
 
   async setSessionFile(sessionRef: SessionRef, sessionFile: string): Promise<void> {
     await this.mutateState((state) => {
-      state.sessionFiles[sessionRefKey(sessionRef)] = sessionFile;
+      state.sessionFiles[sessionKey(sessionRef)] = sessionFile;
     });
   }
 
   async deleteSessionFile(sessionRef: SessionRef): Promise<void> {
     await this.mutateState((state) => {
-      delete state.sessionFiles[sessionRefKey(sessionRef)];
+      delete state.sessionFiles[sessionKey(sessionRef)];
+    });
+  }
+
+  async replaceWorkspaceSessions(
+    workspaceId: WorkspaceId,
+    entries: readonly SessionCatalogEntry[],
+    sessionFiles: Readonly<Record<string, string>>,
+  ): Promise<void> {
+    await this.mutateState((state) => {
+      const nextEntries = entries.map(cloneSessionEntry);
+      const nextKeys = new Set(nextEntries.map((entry) => sessionKey(entry.sessionRef)));
+
+      state.sessions = [
+        ...state.sessions.filter((session) => session.workspaceId !== workspaceId),
+        ...nextEntries,
+      ];
+
+      for (const key of Object.keys(state.sessionFiles)) {
+        if (key.startsWith(`${workspaceId}:`) && !nextKeys.has(key)) {
+          delete state.sessionFiles[key];
+        }
+      }
+
+      for (const [key, filePath] of Object.entries(sessionFiles)) {
+        state.sessionFiles[key] = filePath;
+      }
     });
   }
 
@@ -208,10 +240,6 @@ function parseState(raw: string, filePath: string): CatalogFileState {
     sessions: Array.isArray(parsed.sessions) ? parsed.sessions.map(cloneSessionEntry) : [],
     sessionFiles: isRecord(parsed.sessionFiles) ? { ...parsed.sessionFiles } : {},
   };
-}
-
-function sessionRefKey(sessionRef: SessionRef): string {
-  return `${sessionRef.workspaceId}:${sessionRef.sessionId}`;
 }
 
 function compareWorkspaceEntries(left: WorkspaceCatalogEntry, right: WorkspaceCatalogEntry): number {

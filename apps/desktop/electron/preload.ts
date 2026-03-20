@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from "electron";
 import { desktopIpc } from "../src/ipc";
-import type { DesktopAppState } from "../src/desktop-state";
+import type { CreateSessionInput, DesktopAppState, WorkspaceSessionTarget } from "../src/desktop-state";
 
 contextBridge.exposeInMainWorld("piApp", {
   platform: process.platform,
@@ -23,9 +23,9 @@ contextBridge.exposeInMainWorld("piApp", {
     ipcRenderer.invoke(desktopIpc.selectWorkspace, workspaceId) as Promise<DesktopAppState>,
   syncCurrentWorkspace: () =>
     ipcRenderer.invoke(desktopIpc.syncCurrentWorkspace) as Promise<DesktopAppState>,
-  selectSession: (target: { workspaceId: string; sessionId: string }) =>
+  selectSession: (target: WorkspaceSessionTarget) =>
     ipcRenderer.invoke(desktopIpc.selectSession, target) as Promise<DesktopAppState>,
-  createSession: (input: { workspaceId: string; title?: string }) =>
+  createSession: (input: CreateSessionInput) =>
     ipcRenderer.invoke(desktopIpc.createSession, input) as Promise<DesktopAppState>,
   updateComposerDraft: (composerDraft: string) =>
     ipcRenderer.invoke(desktopIpc.updateComposerDraft, composerDraft) as Promise<DesktopAppState>,

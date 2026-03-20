@@ -120,9 +120,17 @@ export class DesktopAppStore {
       return this.emit();
     }
 
-    return this.syncWorkspace(workspaceId, {
+    const firstSession = workspace.sessions[0];
+    if (firstSession) {
+      await this.ensureSessionReady({
+        workspaceId,
+        sessionId: firstSession.id,
+      });
+    }
+
+    return this.refreshState({
       selectedWorkspaceId: workspaceId,
-      selectedSessionId: workspace.sessions[0]?.id ?? "",
+      selectedSessionId: firstSession?.id ?? "",
       clearLastError: true,
     });
   }
@@ -443,10 +451,10 @@ export class DesktopAppStore {
       return undefined;
     }
 
-    return {
+    return toSessionRef({
       workspaceId: this.state.selectedWorkspaceId,
       sessionId: this.state.selectedSessionId,
-    };
+    });
   }
 
   private async readUiState(): Promise<PersistedUiState> {

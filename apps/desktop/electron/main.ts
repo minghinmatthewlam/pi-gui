@@ -3,6 +3,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { DesktopAppStore } from "./app-store";
 import { desktopIpc } from "../src/ipc";
+import type { CreateSessionInput, WorkspaceSessionTarget } from "../src/desktop-state";
 
 const isDev = Boolean(process.env.VITE_DEV_SERVER_URL);
 let store: DesktopAppStore;
@@ -90,10 +91,10 @@ app.whenReady().then(async () => {
   });
   ipcMain.handle(desktopIpc.selectWorkspace, (_event, workspaceId: string) => store.selectWorkspace(workspaceId));
   ipcMain.handle(desktopIpc.syncCurrentWorkspace, () => store.syncCurrentWorkspace());
-  ipcMain.handle(desktopIpc.selectSession, (_event, target: { workspaceId: string; sessionId: string }) =>
+  ipcMain.handle(desktopIpc.selectSession, (_event, target: WorkspaceSessionTarget) =>
     store.selectSession(target),
   );
-  ipcMain.handle(desktopIpc.createSession, (_event, input: { workspaceId: string; title?: string }) =>
+  ipcMain.handle(desktopIpc.createSession, (_event, input: CreateSessionInput) =>
     store.createSession(input),
   );
   ipcMain.handle(desktopIpc.updateComposerDraft, (_event, composerDraft: string) =>

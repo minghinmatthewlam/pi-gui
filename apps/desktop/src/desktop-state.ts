@@ -1,12 +1,8 @@
-export type SessionStatus = "idle" | "running" | "failed";
-export type SessionRole = "user" | "assistant";
+import type { SessionTranscriptMessage, SessionTranscriptRole } from "@pi-app/pi-sdk-driver";
 
-export interface TranscriptMessage {
-  readonly id: string;
-  readonly role: SessionRole;
-  readonly text: string;
-  readonly createdAt: string;
-}
+export type SessionStatus = "idle" | "running" | "failed";
+export type SessionRole = SessionTranscriptRole;
+export type TranscriptMessage = SessionTranscriptMessage;
 
 export interface SessionRecord {
   readonly id: string;

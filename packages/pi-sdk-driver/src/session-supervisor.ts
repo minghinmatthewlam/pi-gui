@@ -92,16 +92,12 @@ export class SessionSupervisor {
   async syncWorkspace(path: string, displayName?: string): Promise<SyncWorkspaceResult> {
     const workspace = await this.registerWorkspace(path, displayName);
     const infos = await SessionManager.list(path);
-    const discoveredKeys = new Set<string>();
-
-    for (const info of infos) {
-      const entry = this.sessionEntryFromInfo(workspace, info);
-      discoveredKeys.add(sessionKey(entry.sessionRef));
-      await this.catalogs.sessions.upsertSession(entry);
-      await this.catalogs.setSessionFile(entry.sessionRef, info.path);
-    }
-
     const existingSessions = (await this.catalogs.sessions.listSessions(workspace.workspaceId)).sessions;
+    const nextEntries = infos.map((info) => this.sessionEntryFromInfo(workspace, info));
+    const discoveredKeys = new Set(nextEntries.map((entry) => sessionKey(entry.sessionRef)));
+    const nextSessionFiles = Object.fromEntries(nextEntries.map((entry, index) => [sessionKey(entry.sessionRef), infos[index]?.path ?? ""]));
+
+    await this.catalogs.replaceWorkspaceSessions(workspace.workspaceId, nextEntries, nextSessionFiles);
     for (const session of existingSessions) {
       const key = sessionKey(session.sessionRef);
       if (discoveredKeys.has(key)) {
@@ -235,23 +231,16 @@ export class SessionSupervisor {
   }
 
   subscribe(sessionRef: SessionRef, listener: SessionEventListener): Unsubscribe {
-    const key = sessionKey(sessionRef);
-    let active = true;
+    const record = this.records.get(sessionKey(sessionRef));
+    if (!record) {
+      throw new Error(`Unknown session ${sessionKey(sessionRef)}.`);
+    }
 
-    void this.ensureRecord(sessionRef)
-      .then((record) => {
-        if (!active) {
-          return;
-        }
-
-        record.listeners.add(listener);
-        void Promise.resolve(listener(sessionUpdatedEvent(record))).catch(() => {});
-      })
-      .catch(() => {});
+    record.listeners.add(listener);
+    void Promise.resolve(listener(sessionUpdatedEvent(record))).catch(() => {});
 
     return () => {
-      active = false;
-      this.records.get(key)?.listeners.delete(listener);
+      record.listeners.delete(listener);
     };
   }
 

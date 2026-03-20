@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import net from "node:net";
-import { basename, join } from "node:path";
+import { basename, delimiter, join } from "node:path";
 import { tmpdir } from "node:os";
 import { chromium, expect, test, type Browser, type Page } from "@playwright/test";
 import type { PiDesktopApi } from "../src/ipc";
@@ -116,7 +116,7 @@ async function launchDesktop(userDataDir: string, initialWorkspaces: readonly st
     env: {
       ...process.env,
       PI_APP_USER_DATA_DIR: userDataDir,
-      PI_APP_INITIAL_WORKSPACES: initialWorkspaces.join(process.platform === "win32" ? ";" : ":"),
+      PI_APP_INITIAL_WORKSPACES: initialWorkspaces.join(delimiter),
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
