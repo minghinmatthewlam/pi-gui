@@ -1,4 +1,4 @@
-import type { CatalogStorage } from "@pi-app/catalogs";
+import type { SessionCatalogSnapshot, WorkspaceCatalogSnapshot, WorkspaceId } from "@pi-app/catalogs";
 import type {
   CreateSessionOptions,
   SessionDriver,
@@ -11,9 +11,7 @@ import type {
 } from "@pi-app/session-driver";
 import { SessionSupervisor, type PiSdkDriverOptions } from "./session-supervisor.js";
 
-export interface PiSdkDriverConfig extends PiSdkDriverOptions {
-  readonly catalogStorage?: CatalogStorage;
-}
+export interface PiSdkDriverConfig extends PiSdkDriverOptions {}
 
 export class PiSdkDriver implements SessionDriver {
   private readonly supervisor: SessionSupervisor;
@@ -44,6 +42,14 @@ export class PiSdkDriver implements SessionDriver {
 
   closeSession(sessionRef: SessionRef): Promise<void> {
     return this.supervisor.closeSession(sessionRef);
+  }
+
+  listWorkspaces(): Promise<WorkspaceCatalogSnapshot> {
+    return this.supervisor.listWorkspaces();
+  }
+
+  listSessions(workspaceId?: WorkspaceId): Promise<SessionCatalogSnapshot> {
+    return this.supervisor.listSessions(workspaceId);
   }
 }
 

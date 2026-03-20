@@ -5,7 +5,7 @@ import {
   type AgentSessionEvent,
   type CreateAgentSessionOptions,
 } from "@mariozechner/pi-coding-agent";
-import type { CatalogStorage, SessionCatalogEntry } from "@pi-app/catalogs";
+import type { SessionCatalogSnapshot, WorkspaceCatalogSnapshot } from "@pi-app/catalogs";
 import type {
   CreateSessionOptions,
   SessionDriverEvent,
@@ -15,9 +15,10 @@ import type {
   SessionSnapshot,
   SessionStatus,
   Unsubscribe,
+  WorkspaceId,
   WorkspaceRef,
 } from "@pi-app/session-driver";
-import { MemoryCatalogStore } from "./memory-catalog-store.js";
+import { JsonCatalogStore } from "./json-catalog-store.js";
 import {
   buildSnapshot,
   deriveWorkspaceTitle,
@@ -31,7 +32,7 @@ import {
 } from "./session-supervisor-utils.js";
 
 export interface PiSdkDriverOptions {
-  readonly catalogStorage?: CatalogStorage;
+  readonly catalogFilePath?: string;
   readonly createAgentSessionImpl?: (options?: CreateAgentSessionOptions) => Promise<{ session: AgentSession }>;
 }
 
@@ -52,13 +53,23 @@ interface ManagedSessionRecord {
 }
 
 export class SessionSupervisor {
-  private readonly catalogs: CatalogStorage;
+  private readonly catalogs: JsonCatalogStore;
   private readonly createAgentSessionImpl: (options?: CreateAgentSessionOptions) => Promise<{ session: AgentSession }>;
   private readonly records = new Map<string, ManagedSessionRecord>();
 
   constructor(options: PiSdkDriverOptions = {}) {
-    this.catalogs = options.catalogStorage ?? new MemoryCatalogStore();
+    this.catalogs = options.catalogFilePath
+      ? new JsonCatalogStore({ catalogFilePath: options.catalogFilePath })
+      : new JsonCatalogStore();
     this.createAgentSessionImpl = options.createAgentSessionImpl ?? ((createOptions) => createAgentSession(createOptions));
+  }
+
+  listWorkspaces(): Promise<WorkspaceCatalogSnapshot> {
+    return this.catalogs.workspaces.listWorkspaces();
+  }
+
+  listSessions(workspaceId?: WorkspaceId): Promise<SessionCatalogSnapshot> {
+    return this.catalogs.sessions.listSessions(workspaceId);
   }
 
   async createSession(workspace: WorkspaceRef, options?: CreateSessionOptions): Promise<SessionSnapshot> {
@@ -69,6 +80,11 @@ export class SessionSupervisor {
       sessionManager: SessionManager.create(workspace.path),
     });
     const record = this.createRecord(workspace, session, options?.title ?? deriveWorkspaceTitle(workspace));
+    const sessionFile = record.sessionFile ?? session.sessionManager.getSessionFile();
+    if (sessionFile) {
+      record.sessionFile = sessionFile;
+      await this.catalogs.setSessionFile(record.ref, sessionFile);
+    }
 
     this.records.set(sessionKey(record.ref), record);
     await this.persistSnapshot(record);
@@ -224,7 +240,7 @@ export class SessionSupervisor {
     }
     await this.touchWorkspace(workspaceToRef(workspace));
 
-    const sessionFile = existing?.sessionFile;
+    const sessionFile = existing?.sessionFile ?? (await this.catalogs.getSessionFile(sessionRef));
     if (!sessionFile) {
       throw new Error(
         `Session ${key} cannot be reopened yet because no session file is tracked. This spike keeps the persistence layer minimal.`,
@@ -289,6 +305,7 @@ export class SessionSupervisor {
     }
 
     record.eventQueue = record.eventQueue.then(async () => {
+      await this.persistSnapshot(record);
       for (const next of mapped) {
         await this.emit(record, next);
       }
@@ -419,15 +436,17 @@ export class SessionSupervisor {
 
   private async persistSnapshot(record: ManagedSessionRecord): Promise<void> {
     const snapshot = buildSnapshot(record);
-    const entry: SessionCatalogEntry = {
+    await this.catalogs.sessions.upsertSession({
       sessionRef: snapshot.ref,
       workspaceId: snapshot.ref.workspaceId,
       title: snapshot.title,
       updatedAt: snapshot.updatedAt,
       status: snapshot.status,
       ...(snapshot.preview !== undefined ? { previewSnippet: snapshot.preview } : {}),
-    };
-    await this.catalogs.sessions.upsertSession(entry);
+    });
+    if (record.sessionFile) {
+      await this.catalogs.setSessionFile(record.ref, record.sessionFile);
+    }
   }
 
   private async deriveWorkspaceSortOrder(workspaceId: string): Promise<number> {
