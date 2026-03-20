@@ -203,8 +203,8 @@ export function buildSlashCommandSections(
     .map<ComposerSlashCommand>((skill: RuntimeSkillRecord) => ({
       id: `skill:${skill.name}`,
       kind: "skill",
-      command: `/${skill.slashCommand}`,
-      template: `/${skill.slashCommand} `,
+      command: skill.slashCommand,
+      template: `${skill.slashCommand} `,
       title: titleCase(skill.name),
       description: skill.description,
       submitMode: "prefill",

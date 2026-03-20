@@ -78,7 +78,7 @@ export function SkillsView({
                   source: "project",
                   enabled: true,
                   disableModelInvocation: false,
-                  slashCommand: "skill:new-skill",
+                  slashCommand: "/skill:new-skill",
                 })
               }
             >
@@ -125,7 +125,7 @@ export function SkillsView({
                   <span className="skill-card__description">{skill.description}</span>
                   <span className="skill-card__meta">
                     <span>{skill.source}</span>
-                    <span>/{skill.slashCommand}</span>
+                    <span>{skill.slashCommand}</span>
                     {skill.disableModelInvocation ? <span>slash only</span> : null}
                   </span>
                 </button>
@@ -139,7 +139,7 @@ export function SkillsView({
                 <div className="skill-detail__header">
                   <div>
                     <h2>{titleCase(selectedSkill.name)}</h2>
-                    <div className="skill-detail__slash">/{selectedSkill.slashCommand}</div>
+                    <div className="skill-detail__slash">{selectedSkill.slashCommand}</div>
                   </div>
                   <span className={`skill-detail__status ${selectedSkill.enabled ? "skill-detail__status--enabled" : ""}`}>
                     {selectedSkill.enabled ? "Enabled" : "Disabled"}

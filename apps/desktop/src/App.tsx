@@ -943,7 +943,7 @@ export default function App() {
             onTrySkill={(skill) =>
               handleTrySkill(
                 skill.filePath
-                  ? `/${skill.slashCommand} `
+                  ? `${skill.slashCommand} `
                   : "Create a new skill for this workspace and explain which files you will add.",
               )
             }
