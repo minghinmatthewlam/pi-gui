@@ -168,10 +168,7 @@ export default function App() {
     const previousDraft = composerDraft;
     setComposerDraft("");
     void (async () => {
-      if (previousDraft !== snapshot.composerDraft) {
-        await updateSnapshot(api, setSnapshot, () => api.updateComposerDraft(previousDraft));
-      }
-      const nextState = await updateSnapshot(api, setSnapshot, () => api.submitComposerDraft());
+      const nextState = await updateSnapshot(api, setSnapshot, () => api.submitComposer(previousDraft));
       setComposerDraft(nextState.composerDraft);
     })().catch(() => {
       setComposerDraft(previousDraft);

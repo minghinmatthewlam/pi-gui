@@ -58,6 +58,7 @@ export class DesktopAppStore {
   private readonly runningSinceBySession = new Map<string, string>();
   private readonly runMetricsBySession = new Map<string, RunMetrics>();
   private readonly activeWorkingActivityBySession = new Map<string, string>();
+  private readonly loadedTranscriptKeys = new Set<string>();
   private readonly initialWorkspacePaths: readonly string[];
   private persistTimer: NodeJS.Timeout | undefined;
   private initPromise: Promise<void> | undefined;
@@ -207,9 +208,9 @@ export class DesktopAppStore {
     return this.emit();
   }
 
-  async submitComposerDraft(): Promise<DesktopAppState> {
+  async submitComposer(textInput: string): Promise<DesktopAppState> {
     await this.initialize();
-    const text = this.state.composerDraft.trim();
+    const text = textInput.trim();
     if (!text) {
       return this.emit();
     }
@@ -220,11 +221,13 @@ export class DesktopAppStore {
     }
 
     const key = sessionKey(sessionRef);
+    if (!this.loadedTranscriptKeys.has(key)) {
+      await this.ensureSessionReady(sessionRef);
+    }
     const transcript = appendUserMessage(this.transcriptCache, sessionRef, text);
     clearActiveAssistantMessage(this.activeAssistantMessageBySession, sessionRef);
 
     try {
-      await this.ensureSessionReady(sessionRef);
       await this.driver.sendUserMessage(sessionRef, { text });
       return this.refreshState({
         composerDraft: "",
@@ -263,7 +266,11 @@ export class DesktopAppStore {
       const persisted = await this.readUiState();
       this.transcriptCache.clear();
       for (const [key, transcript] of Object.entries(persisted.transcripts ?? {})) {
-        this.transcriptCache.set(key, transcript.map(cloneTranscriptMessage));
+        const clonedTranscript = transcript.map(cloneTranscriptMessage);
+        this.transcriptCache.set(key, clonedTranscript);
+        if (clonedTranscript.length > 0) {
+          this.loadedTranscriptKeys.add(key);
+        }
       }
 
       for (const workspacePath of this.initialWorkspacePaths) {
@@ -369,6 +376,7 @@ export class DesktopAppStore {
         this.runningSinceBySession.delete(key);
         this.runMetricsBySession.delete(key);
         this.activeWorkingActivityBySession.delete(key);
+        this.loadedTranscriptKeys.delete(key);
         this.transcriptCache.delete(key);
       }
     }
@@ -395,19 +403,13 @@ export class DesktopAppStore {
 
   private async ensureTranscriptLoaded(sessionRef: SessionRef): Promise<void> {
     const key = sessionKey(sessionRef);
-    const cached = this.transcriptCache.get(key);
-    if (cached && cached.length > 0) {
+    if (this.loadedTranscriptKeys.has(key)) {
       return;
     }
 
     const transcript = await this.driver.getTranscript(sessionRef);
-    if (transcript.length > 0) {
-      this.transcriptCache.set(key, transcript.map(cloneTranscriptMessage));
-      return;
-    }
-    if (!cached) {
-      this.transcriptCache.set(key, []);
-    }
+    this.loadedTranscriptKeys.add(key);
+    this.transcriptCache.set(key, transcript.map(cloneTranscriptMessage));
   }
 
   private async ensureSessionSubscribed(sessionRef: SessionRef): Promise<void> {

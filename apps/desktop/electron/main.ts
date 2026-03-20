@@ -101,7 +101,7 @@ app.whenReady().then(async () => {
   ipcMain.handle(desktopIpc.updateComposerDraft, (_event, composerDraft: string) =>
     store.updateComposerDraft(composerDraft),
   );
-  ipcMain.handle(desktopIpc.submitComposerDraft, () => store.submitComposerDraft());
+  ipcMain.handle(desktopIpc.submitComposer, (_event, text: string) => store.submitComposer(text));
 
   mainWindow = createWindow();
   attachStatePublisher(mainWindow);

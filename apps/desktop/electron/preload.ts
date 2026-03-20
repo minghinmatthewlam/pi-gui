@@ -30,6 +30,7 @@ contextBridge.exposeInMainWorld("piApp", {
   cancelCurrentRun: () => ipcRenderer.invoke(desktopIpc.cancelCurrentRun) as Promise<DesktopAppState>,
   updateComposerDraft: (composerDraft: string) =>
     ipcRenderer.invoke(desktopIpc.updateComposerDraft, composerDraft) as Promise<DesktopAppState>,
-  submitComposerDraft: () => ipcRenderer.invoke(desktopIpc.submitComposerDraft) as Promise<DesktopAppState>,
+  submitComposer: (text: string) =>
+    ipcRenderer.invoke(desktopIpc.submitComposer, text) as Promise<DesktopAppState>,
   openExternal: (url: string) => ipcRenderer.invoke(desktopIpc.openExternal, url) as Promise<void>,
 });
