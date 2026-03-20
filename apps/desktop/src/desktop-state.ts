@@ -1,6 +1,14 @@
+import type { SessionConfig } from "@pi-app/session-driver";
 export type SessionStatus = "idle" | "running" | "failed";
 export type { SessionRole, TranscriptMessage } from "./timeline-types";
 import type { TranscriptMessage } from "./timeline-types";
+
+export interface ComposerImageAttachment {
+  readonly id: string;
+  readonly name: string;
+  readonly mimeType: string;
+  readonly data: string;
+}
 
 export interface SessionRecord {
   readonly id: string;
@@ -9,6 +17,7 @@ export interface SessionRecord {
   readonly preview: string;
   readonly status: SessionStatus;
   readonly runningSince?: string;
+  readonly config?: SessionConfig;
   readonly transcript: readonly TranscriptMessage[];
 }
 
@@ -25,6 +34,7 @@ export interface DesktopAppState {
   readonly selectedWorkspaceId: string;
   readonly selectedSessionId: string;
   readonly composerDraft: string;
+  readonly composerAttachments: readonly ComposerImageAttachment[];
   readonly revision: number;
   readonly lastError?: string;
 }
@@ -45,6 +55,7 @@ export function createEmptyDesktopAppState(): DesktopAppState {
     selectedWorkspaceId: "",
     selectedSessionId: "",
     composerDraft: "",
+    composerAttachments: [],
     revision: 0,
   };
 }

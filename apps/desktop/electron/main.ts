@@ -1,9 +1,11 @@
 import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
+import { randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { DesktopAppStore } from "./app-store";
 import { desktopIpc } from "../src/ipc";
-import type { CreateSessionInput, WorkspaceSessionTarget } from "../src/desktop-state";
+import type { ComposerImageAttachment, CreateSessionInput, WorkspaceSessionTarget } from "../src/desktop-state";
 
 const isDev = Boolean(process.env.VITE_DEV_SERVER_URL);
 let store: DesktopAppStore;
@@ -98,6 +100,29 @@ app.whenReady().then(async () => {
     store.createSession(input),
   );
   ipcMain.handle(desktopIpc.cancelCurrentRun, () => store.cancelCurrentRun());
+  ipcMain.handle(desktopIpc.pickComposerImages, async () => {
+    const result = await dialog.showOpenDialog({
+      properties: ["openFile", "multiSelections"],
+      filters: [
+        {
+          name: "Images",
+          extensions: ["png", "jpg", "jpeg", "gif", "webp"],
+        },
+      ],
+      title: "Attach images",
+    });
+    if (result.canceled || result.filePaths.length === 0) {
+      return store.getState();
+    }
+    const attachments = await Promise.all(result.filePaths.map(readComposerImage));
+    return store.addComposerImages(attachments);
+  });
+  ipcMain.handle(desktopIpc.addComposerImages, (_event, attachments: readonly ComposerImageAttachment[]) =>
+    store.addComposerImages(attachments),
+  );
+  ipcMain.handle(desktopIpc.removeComposerImage, (_event, attachmentId: string) =>
+    store.removeComposerImage(attachmentId),
+  );
   ipcMain.handle(desktopIpc.updateComposerDraft, (_event, composerDraft: string) =>
     store.updateComposerDraft(composerDraft),
   );
@@ -130,4 +155,23 @@ function resolveInitialWorkspacePaths(): readonly string[] {
   }
 
   return [];
+}
+
+async function readComposerImage(filePath: string): Promise<ComposerImageAttachment> {
+  const buffer = await readFile(filePath);
+  return {
+    id: randomUUID(),
+    name: path.basename(filePath),
+    mimeType: mimeTypeForPath(filePath),
+    data: buffer.toString("base64"),
+  };
+}
+
+function mimeTypeForPath(filePath: string): string {
+  const extension = path.extname(filePath).toLowerCase();
+  if (extension === ".png") return "image/png";
+  if (extension === ".jpg" || extension === ".jpeg") return "image/jpeg";
+  if (extension === ".gif") return "image/gif";
+  if (extension === ".webp") return "image/webp";
+  return "application/octet-stream";
 }

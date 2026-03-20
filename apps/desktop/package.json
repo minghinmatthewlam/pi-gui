@@ -5,16 +5,19 @@
   "description": "Codex-style desktop shell for pi",
   "main": "dist-electron/main.js",
   "scripts": {
-    "dev": "concurrently -k -r \"pnpm:dev:renderer\" \"pnpm:dev:electron:watch\" \"pnpm:dev:electron:start\"",
+    "build:deps": "pnpm --filter @pi-app/session-driver build && pnpm --filter @pi-app/catalogs build && pnpm --filter @pi-app/pi-sdk-driver build",
+    "dev": "pnpm run build:deps && concurrently -k -r \"pnpm:dev:renderer\" \"pnpm:dev:electron:watch\" \"pnpm:dev:electron:start\"",
     "dev:renderer": "vite",
     "dev:electron:watch": "tsup electron/main.ts electron/preload.ts --format cjs --platform node --target node22 --out-dir dist-electron --external electron --watch",
     "dev:electron:start": "wait-on dist-electron/main.js dist-electron/preload.js tcp:5173 && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron .",
-    "build": "pnpm run build:renderer && pnpm run build:electron",
+    "build": "pnpm run build:deps && pnpm run build:renderer && pnpm run build:electron",
     "build:renderer": "vite build",
     "build:electron": "tsup electron/main.ts electron/preload.ts --format cjs --platform node --target node22 --out-dir dist-electron --external electron",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.electron.json --noEmit",
     "test": "pnpm build && playwright test tests/smoke.spec.ts",
-    "start": "electron ."
+    "start": "pnpm run build:deps && electron .",
+    "test:live:parallel": "pnpm exec playwright test tests/parallel-live.spec.ts",
+    "test:live:controls": "pnpm build && pnpm exec playwright test tests/controls-live.spec.ts"
   },
   "dependencies": {
     "@pi-app/pi-sdk-driver": "workspace:*",

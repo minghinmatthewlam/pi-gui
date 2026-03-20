@@ -24,6 +24,7 @@ declare module "@pi-app/session-driver" {
     readonly status: SessionStatus;
     readonly updatedAt: Timestamp;
     readonly preview?: string;
+    readonly config?: SessionConfig;
     readonly runningRunId?: RunId;
   }
 
@@ -32,6 +33,17 @@ declare module "@pi-app/session-driver" {
     readonly mimeType: string;
     readonly data: string;
     readonly name?: string;
+  }
+
+  export interface SessionConfig {
+    readonly provider?: string;
+    readonly modelId?: string;
+    readonly thinkingLevel?: string;
+  }
+
+  export interface SessionModelSelection {
+    readonly provider: string;
+    readonly modelId: string;
   }
 
   export interface SessionMessageInput {
@@ -184,6 +196,8 @@ declare module "@pi-app/session-driver" {
     openSession(sessionRef: SessionRef): Promise<SessionSnapshot>;
     sendUserMessage(sessionRef: SessionRef, input: SessionMessageInput): Promise<void>;
     cancelCurrentRun(sessionRef: SessionRef): Promise<void>;
+    setSessionModel(sessionRef: SessionRef, selection: SessionModelSelection): Promise<void>;
+    setSessionThinkingLevel(sessionRef: SessionRef, thinkingLevel: string): Promise<void>;
     subscribe(sessionRef: SessionRef, listener: SessionEventListener): Unsubscribe;
     closeSession(sessionRef: SessionRef): Promise<void>;
   }

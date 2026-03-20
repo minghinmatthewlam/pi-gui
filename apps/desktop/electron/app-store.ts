@@ -1,15 +1,17 @@
 import { join } from "node:path";
 import { PiSdkDriver, type PiSdkDriverConfig } from "@pi-app/pi-sdk-driver";
 import type { SessionCatalogEntry } from "@pi-app/catalogs";
-import type { SessionDriverEvent, SessionRef, WorkspaceRef } from "@pi-app/session-driver";
+import type { SessionConfig, SessionDriverEvent, SessionRef, WorkspaceRef } from "@pi-app/session-driver";
 import {
   cloneDesktopAppState,
   createEmptyDesktopAppState,
+  type ComposerImageAttachment,
   type CreateSessionInput,
   type DesktopAppState,
   type TranscriptMessage,
   type WorkspaceSessionTarget,
 } from "../src/desktop-state";
+import { formatSessionConfigStatus, parseComposerCommand } from "../src/composer-commands";
 import {
   applyTimelineEvent,
   appendAssistantDelta,
@@ -25,10 +27,16 @@ import {
 } from "./app-store-persistence";
 import {
   buildWorkspaceRecords,
+  cloneComposerImageAttachment,
+  cloneComposerImageAttachments,
   cloneTranscriptMessage,
+  makeActivityItem,
+  previewFromTranscript,
   resolveSelectedSessionId,
   resolveSelectedWorkspaceId,
   sessionKey,
+  toSessionAttachments,
+  toTranscriptAttachments,
   TRANSCRIPT_HISTORY_LIMIT,
   toSessionRef,
 } from "./app-store-utils";
@@ -54,6 +62,8 @@ export class DesktopAppStore {
   private readonly uiStateFilePath: string;
   private readonly transcriptCache = new Map<string, TranscriptMessage[]>();
   private readonly composerDraftsBySession = new Map<string, string>();
+  private readonly composerAttachmentsBySession = new Map<string, ComposerImageAttachment[]>();
+  private readonly sessionConfigBySession = new Map<string, SessionConfig>();
   private readonly sessionErrorsBySession = new Map<string, string>();
   private readonly sessionSubscriptions = new Map<string, () => void>();
   private readonly activeAssistantMessageBySession = new Map<string, string>();
@@ -185,7 +195,10 @@ export class DesktopAppStore {
       const snapshot = await this.driver.createSession(workspace, {
         title: input.title?.trim() || "New thread",
       });
-      this.transcriptCache.set(sessionKey(snapshot.ref), []);
+      const key = sessionKey(snapshot.ref);
+      this.transcriptCache.set(key, []);
+      this.loadedTranscriptKeys.add(key);
+      this.updateSessionConfig(snapshot.ref, snapshot.config);
       await this.ensureSessionSubscribed(snapshot.ref);
       return this.refreshState({
         selectedWorkspaceId: snapshot.ref.workspaceId,
@@ -219,29 +232,88 @@ export class DesktopAppStore {
     return this.emit();
   }
 
-  async submitComposer(textInput: string): Promise<DesktopAppState> {
+  async addComposerImages(attachments: readonly ComposerImageAttachment[]): Promise<DesktopAppState> {
     await this.initialize();
-    const text = textInput.trim();
-    if (!text) {
+    const sessionRef = this.selectedSessionRef();
+    if (!sessionRef || attachments.length === 0) {
       return this.emit();
     }
 
+    const key = sessionKey(sessionRef);
+    const existing = this.composerAttachmentsBySession.get(key) ?? [];
+    const next = [...existing, ...attachments];
+    this.composerAttachmentsBySession.set(key, next);
+    this.state = {
+      ...this.state,
+      composerAttachments: next,
+      revision: this.state.revision + 1,
+    };
+    await this.persistUiState();
+    return this.emit();
+  }
+
+  async removeComposerImage(attachmentId: string): Promise<DesktopAppState> {
+    await this.initialize();
     const sessionRef = this.selectedSessionRef();
     if (!sessionRef) {
+      return this.emit();
+    }
+
+    const key = sessionKey(sessionRef);
+    const existing = this.composerAttachmentsBySession.get(key) ?? [];
+    const next = existing.filter((attachment) => attachment.id !== attachmentId);
+    if (next.length > 0) {
+      this.composerAttachmentsBySession.set(key, next);
+    } else {
+      this.composerAttachmentsBySession.delete(key);
+    }
+    this.state = {
+      ...this.state,
+      composerAttachments: next,
+      revision: this.state.revision + 1,
+    };
+    await this.persistUiState();
+    return this.emit();
+  }
+
+  async submitComposer(textInput: string): Promise<DesktopAppState> {
+    await this.initialize();
+    const text = textInput.trim();
+    const sessionRef = this.selectedSessionRef();
+    const attachments = sessionRef
+      ? this.composerAttachmentsBySession.get(sessionKey(sessionRef)) ?? []
+      : [];
+    if (!text && attachments.length === 0) {
+      return this.emit();
+    }
+    if (!sessionRef) {
       return this.withError("Create or select a session before sending a message.");
+    }
+
+    if (text.startsWith("/")) {
+      return this.runComposerCommand(sessionRef, text);
     }
 
     const key = sessionKey(sessionRef);
     if (!this.loadedTranscriptKeys.has(key)) {
       await this.ensureSessionReady(sessionRef);
     }
-    const transcript = appendUserMessage(this.transcriptCache, sessionRef, text);
+    const transcript = appendUserMessage(
+      this.transcriptCache,
+      sessionRef,
+      text,
+      toTranscriptAttachments(attachments),
+    );
     clearActiveAssistantMessage(this.activeAssistantMessageBySession, sessionRef);
     this.sessionErrorsBySession.delete(key);
     this.composerDraftsBySession.delete(key);
+    this.composerAttachmentsBySession.delete(key);
 
     try {
-      await this.driver.sendUserMessage(sessionRef, { text });
+      await this.driver.sendUserMessage(sessionRef, {
+        text,
+        attachments: toSessionAttachments(attachments),
+      });
       return this.refreshState({
         clearLastError: true,
       });
@@ -249,6 +321,9 @@ export class DesktopAppStore {
       this.transcriptCache.set(key, transcript.slice(0, -1));
       if (textInput) {
         this.composerDraftsBySession.set(key, textInput);
+      }
+      if (attachments.length > 0) {
+        this.composerAttachmentsBySession.set(key, cloneComposerImageAttachments(attachments));
       }
       return this.withError(error);
     }
@@ -294,18 +369,29 @@ export class DesktopAppStore {
           this.composerDraftsBySession.set(key, draft);
         }
       }
-
-      for (const workspacePath of this.initialWorkspacePaths) {
-        if (!workspacePath.trim()) {
-          continue;
+      this.composerAttachmentsBySession.clear();
+      for (const [key, attachments] of Object.entries(persisted.composerAttachmentsBySession ?? {})) {
+        if (attachments.length > 0) {
+          this.composerAttachmentsBySession.set(key, cloneComposerImageAttachments(attachments));
         }
-        await this.driver.syncWorkspace(workspacePath);
+      }
+      const initialWorkspacePaths = this.initialWorkspacePaths.map((path) => path.trim()).filter(Boolean);
+      const knownWorkspaces = await this.driver.listWorkspaces();
+      const workspacesToSync = new Map<string, string | undefined>();
+
+      for (const workspacePath of initialWorkspacePaths) {
+        workspacesToSync.set(workspacePath, undefined);
       }
 
-      const knownWorkspaces = await this.driver.listWorkspaces();
       for (const workspace of knownWorkspaces.workspaces) {
-        await this.driver.syncWorkspace(workspace.path, workspace.displayName);
+        workspacesToSync.set(workspace.path, workspace.displayName);
       }
+
+      await Promise.all(
+        [...workspacesToSync.entries()].map(([workspacePath, displayName]) =>
+          this.driver.syncWorkspace(workspacePath, displayName),
+        ),
+      );
 
       await this.refreshState({
         selectedWorkspaceId: persisted.selectedWorkspaceId,
@@ -338,6 +424,7 @@ export class DesktopAppStore {
       sessionsSnapshot.sessions,
       this.transcriptCache,
       this.runningSinceBySession,
+      this.sessionConfigBySession,
     );
     const selectedWorkspaceId = resolveSelectedWorkspaceId(
       options.selectedWorkspaceId ?? this.state.selectedWorkspaceId,
@@ -359,6 +446,7 @@ export class DesktopAppStore {
         sessionsSnapshot.sessions,
         this.transcriptCache,
         this.runningSinceBySession,
+        this.sessionConfigBySession,
       );
     }
 
@@ -368,6 +456,7 @@ export class DesktopAppStore {
       selectedWorkspaceId,
       selectedSessionId,
       composerDraft: this.resolveComposerDraft(selectedWorkspaceId, selectedSessionId, options.composerDraft),
+      composerAttachments: this.resolveComposerAttachments(selectedWorkspaceId, selectedSessionId),
       lastError: this.resolveSelectedSessionError(selectedWorkspaceId, selectedSessionId, options.clearLastError),
       revision: this.state.revision + 1,
     };
@@ -400,6 +489,8 @@ export class DesktopAppStore {
         this.runMetricsBySession.delete(key);
         this.activeWorkingActivityBySession.delete(key);
         this.composerDraftsBySession.delete(key);
+        this.composerAttachmentsBySession.delete(key);
+        this.sessionConfigBySession.delete(key);
         this.sessionErrorsBySession.delete(key);
         this.loadedTranscriptKeys.delete(key);
         this.transcriptCache.delete(key);
@@ -432,6 +523,10 @@ export class DesktopAppStore {
 
   private async ensureSessionReady(sessionRef: SessionRef): Promise<void> {
     await this.ensureTranscriptLoaded(sessionRef);
+    if (!this.sessionSubscriptions.has(sessionKey(sessionRef))) {
+      const snapshot = await this.driver.openSession(sessionRef);
+      this.updateSessionConfig(sessionRef, snapshot.config);
+    }
     await this.ensureSessionSubscribed(sessionRef);
   }
 
@@ -465,16 +560,18 @@ export class DesktopAppStore {
       case "assistantDelta":
         appendAssistantDelta(this.transcriptCache, this.activeAssistantMessageBySession, event.sessionRef, event.text);
         break;
+      case "sessionOpened":
+      case "sessionUpdated":
+      case "runCompleted":
+        this.updateSessionConfig(event.sessionRef, event.snapshot.config);
+        break;
       case "runFailed":
         this.state = {
           ...this.state,
           lastError: event.error.message,
         };
         break;
-      case "runCompleted":
       case "sessionClosed":
-      case "sessionOpened":
-      case "sessionUpdated":
       case "toolStarted":
       case "toolUpdated":
       case "toolFinished":
@@ -552,6 +649,12 @@ export class DesktopAppStore {
       selectedSessionId: this.state.selectedSessionId || undefined,
       composerDraft: this.state.composerDraft || undefined,
       composerDraftsBySession: Object.fromEntries(this.composerDraftsBySession.entries()),
+      composerAttachmentsBySession: Object.fromEntries(
+        [...this.composerAttachmentsBySession.entries()].map(([key, attachments]) => [
+          key,
+          cloneComposerImageAttachments(attachments),
+        ]),
+      ),
       transcripts: Object.fromEntries(
         [...this.transcriptCache.entries()].map(([key, transcript]) => [key, transcript.slice(-TRANSCRIPT_HISTORY_LIMIT)]),
       ),
@@ -618,6 +721,19 @@ export class DesktopAppStore {
     return this.composerDraftsBySession.get(sessionKey({ workspaceId: selectedWorkspaceId, sessionId: selectedSessionId })) ?? "";
   }
 
+  private resolveComposerAttachments(
+    selectedWorkspaceId: string,
+    selectedSessionId: string,
+  ): readonly ComposerImageAttachment[] {
+    if (!selectedWorkspaceId || !selectedSessionId) {
+      return [];
+    }
+
+    return this.composerAttachmentsBySession.get(
+      sessionKey({ workspaceId: selectedWorkspaceId, sessionId: selectedSessionId }),
+    )?.map(cloneComposerImageAttachment) ?? [];
+  }
+
   private resolveSelectedSessionError(
     selectedWorkspaceId: string,
     selectedSessionId: string,
@@ -634,5 +750,83 @@ export class DesktopAppStore {
     }
 
     return this.sessionErrorsBySession.get(key);
+  }
+
+  private async runComposerCommand(sessionRef: SessionRef, commandText: string): Promise<DesktopAppState> {
+    const parsed = parseComposerCommand(commandText);
+    if (!parsed) {
+      return this.withError(`Unknown slash command: ${commandText.split(/\s+/, 1)[0] ?? commandText}`);
+    }
+
+    const key = sessionKey(sessionRef);
+
+    if (parsed.type === "model") {
+      await this.driver.setSessionModel(sessionRef, {
+        provider: parsed.provider,
+        modelId: parsed.modelId,
+      });
+      return this.finishComposerCommand(sessionRef, key, `Model set to ${parsed.provider}:${parsed.modelId}`);
+    }
+
+    if (parsed.type === "thinking") {
+      await this.driver.setSessionThinkingLevel(sessionRef, parsed.thinkingLevel);
+      return this.finishComposerCommand(sessionRef, key, `Thinking set to ${parsed.thinkingLevel}`);
+    }
+
+    if (parsed.type === "status") {
+      return this.finishComposerCommand(sessionRef, key, formatSessionConfigStatus(this.sessionConfigBySession.get(key)));
+    }
+
+    return this.withError(`Unsupported slash command: ${commandText}`);
+  }
+
+  private appendLocalActivity(sessionRef: SessionRef, label: string): void {
+    const key = sessionKey(sessionRef);
+    const transcript = [...(this.transcriptCache.get(key) ?? [])];
+    transcript.push(makeActivityItem(label));
+    this.transcriptCache.set(key, transcript);
+  }
+
+  private finishComposerCommand(sessionRef: SessionRef, key: string, label: string): DesktopAppState {
+    this.composerDraftsBySession.delete(key);
+    this.composerAttachmentsBySession.delete(key);
+    this.appendLocalActivity(sessionRef, label);
+    const transcript = (this.transcriptCache.get(key) ?? []).map(cloneTranscriptMessage);
+    const preview = previewFromTranscript(transcript);
+    this.state = {
+      ...this.state,
+      workspaces: this.state.workspaces.map((workspace) =>
+        workspace.id === sessionRef.workspaceId
+          ? {
+              ...workspace,
+              sessions: workspace.sessions.map((session) =>
+                session.id === sessionRef.sessionId
+                  ? {
+                      ...session,
+                      preview: preview ?? session.preview,
+                      config: this.sessionConfigBySession.get(key),
+                      transcript,
+                    }
+                  : session,
+              ),
+            }
+          : workspace,
+      ),
+      composerDraft: "",
+      composerAttachments: [],
+      lastError: undefined,
+      revision: this.state.revision + 1,
+    };
+    this.schedulePersistUiState();
+    return this.emit();
+  }
+
+  private updateSessionConfig(sessionRef: SessionRef, config: SessionConfig | undefined): void {
+    const key = sessionKey(sessionRef);
+    if (config && Object.keys(config).length > 0) {
+      this.sessionConfigBySession.set(key, config);
+    } else {
+      this.sessionConfigBySession.delete(key);
+    }
   }
 }

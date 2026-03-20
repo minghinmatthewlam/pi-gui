@@ -1,3 +1,4 @@
+import { access } from "node:fs/promises";
 import {
   createAgentSession,
   SessionManager,
@@ -9,8 +10,10 @@ import {
 import type { SessionCatalogSnapshot, WorkspaceCatalogSnapshot } from "@pi-app/catalogs";
 import type {
   CreateSessionOptions,
+  SessionConfig,
   SessionDriverEvent,
   SessionEventListener,
+  SessionModelSelection,
   SessionMessageInput,
   SessionRef,
   SessionSnapshot,
@@ -23,9 +26,11 @@ import { JsonCatalogStore, type SessionFileCatalogStorage } from "./json-catalog
 import {
   buildSnapshot,
   createWorkspaceRef,
+  deriveSessionConfig,
   deriveWorkspaceTitle,
   determineRunOutcome,
   extractPreview,
+  forcePersistSession,
   nowIso,
   previewFromSessionInfo,
   sessionKey,
@@ -56,6 +61,7 @@ interface ManagedSessionRecord {
   status: SessionStatus;
   updatedAt: string;
   preview: string | undefined;
+  config: SessionConfig | undefined;
   runningRunId: string | undefined;
   closed: boolean;
   listeners: Set<SessionEventListener>;
@@ -103,12 +109,33 @@ export class SessionSupervisor {
       ),
     );
     const discoveredKeys = new Set(nextEntries.map((entry) => sessionKey(entry.sessionRef)));
-    const nextSessionFiles = Object.fromEntries(nextEntries.map((entry, index) => [sessionKey(entry.sessionRef), infos[index]?.path ?? ""]));
+    const preservedEntries = (
+      await Promise.all(
+        existingSessions.map(async (session) => {
+          const key = sessionKey(session.sessionRef);
+          if (discoveredKeys.has(key) || !session.sessionFilePath) {
+            return undefined;
+          }
 
-    await this.catalogs.replaceWorkspaceSessions(workspace.workspaceId, nextEntries, nextSessionFiles);
+          try {
+            await access(session.sessionFilePath);
+            return session;
+          } catch {
+            return undefined;
+          }
+        }),
+      )
+    ).filter((session): session is (typeof existingSessions)[number] => Boolean(session));
+    const mergedEntries = [...nextEntries, ...preservedEntries];
+    const nextSessionFiles = Object.fromEntries([
+      ...nextEntries.map((entry, index) => [sessionKey(entry.sessionRef), infos[index]?.path ?? ""]),
+      ...preservedEntries.map((entry) => [sessionKey(entry.sessionRef), entry.sessionFilePath ?? ""]),
+    ]);
+
+    await this.catalogs.replaceWorkspaceSessions(workspace.workspaceId, mergedEntries, nextSessionFiles);
     for (const session of existingSessions) {
       const key = sessionKey(session.sessionRef);
-      if (discoveredKeys.has(key)) {
+      if (discoveredKeys.has(key) || preservedEntries.some((entry) => sessionKey(entry.sessionRef) === key)) {
         continue;
       }
 
@@ -145,6 +172,9 @@ export class SessionSupervisor {
     });
 
     const record = this.createRecord(workspace, session, options?.title ?? deriveWorkspaceTitle(workspace));
+    session.sessionManager.appendSessionInfo(record.title);
+    forcePersistSession(session.sessionManager);
+    record.config = deriveSessionConfig(session.sessionManager);
     const sessionFile = record.sessionFile ?? session.sessionManager.getSessionFile();
     if (sessionFile) {
       record.sessionFile = sessionFile;
@@ -189,6 +219,7 @@ export class SessionSupervisor {
     record.runningRunId = runId;
     record.status = "running";
     record.updatedAt = nowIso();
+    record.config = deriveSessionConfig(record.session.sessionManager);
     record.preview = truncate(input.text);
     await this.persistSnapshot(record);
     await this.emit(record, sessionUpdatedEvent(record));
@@ -233,6 +264,28 @@ export class SessionSupervisor {
     await record.session.abort();
     record.runningRunId = undefined;
     record.status = "idle";
+    record.updatedAt = nowIso();
+    await this.persistSnapshot(record);
+    await this.emit(record, sessionUpdatedEvent(record));
+  }
+
+  async setSessionModel(sessionRef: SessionRef, selection: SessionModelSelection): Promise<void> {
+    const record = await this.ensureRecord(sessionRef);
+    const sessionManager = this.getWritableSessionManager(record);
+    sessionManager.appendModelChange(selection.provider, selection.modelId);
+    forcePersistSession(sessionManager);
+    record.config = deriveSessionConfig(sessionManager);
+    record.updatedAt = nowIso();
+    await this.persistSnapshot(record);
+    await this.emit(record, sessionUpdatedEvent(record));
+  }
+
+  async setSessionThinkingLevel(sessionRef: SessionRef, thinkingLevel: string): Promise<void> {
+    const record = await this.ensureRecord(sessionRef);
+    const sessionManager = this.getWritableSessionManager(record);
+    sessionManager.appendThinkingLevelChange(thinkingLevel);
+    forcePersistSession(sessionManager);
+    record.config = deriveSessionConfig(sessionManager);
     record.updatedAt = nowIso();
     await this.persistSnapshot(record);
     await this.emit(record, sessionUpdatedEvent(record));
@@ -319,6 +372,7 @@ export class SessionSupervisor {
     record.status = sessionEntry.status;
     record.updatedAt = sessionEntry.updatedAt;
     record.preview = sessionEntry.previewSnippet ?? undefined;
+    record.config = deriveSessionConfig(session.sessionManager);
     record.closed = false;
 
     record.unsubscribeAgent?.();
@@ -345,6 +399,7 @@ export class SessionSupervisor {
       status: "idle",
       updatedAt: nowIso(),
       preview: undefined,
+      config: deriveSessionConfig(session.sessionManager),
       runningRunId: undefined,
       closed: false,
       listeners: new Set<SessionEventListener>(),
@@ -356,6 +411,14 @@ export class SessionSupervisor {
       void this.handleAgentEvent(record, event);
     });
     return record;
+  }
+
+  private getWritableSessionManager(record: ManagedSessionRecord): SessionManager {
+    const sessionManager = record.session?.sessionManager;
+    if (!sessionManager) {
+      throw new Error(`Session ${sessionKey(record.ref)} is not active.`);
+    }
+    return sessionManager;
   }
 
   private async handleAgentEvent(record: ManagedSessionRecord, event: AgentSessionEvent): Promise<void> {

@@ -11,6 +11,18 @@ export function TimelineItem({
       return item.role === "user" ? (
         <article className="timeline-item timeline-item--user">
           <div className="timeline-item__bubble">
+            {item.attachments?.length ? (
+              <div className="timeline-item__attachments">
+                {item.attachments.map((attachment, index) => (
+                  <img
+                    alt={attachment.name ?? `Attachment ${index + 1}`}
+                    className="timeline-item__attachment"
+                    key={`${item.id}:${index}`}
+                    src={`data:${attachment.mimeType};base64,${attachment.data}`}
+                  />
+                ))}
+              </div>
+            ) : null}
             <MessageMarkdown text={item.text} />
           </div>
         </article>

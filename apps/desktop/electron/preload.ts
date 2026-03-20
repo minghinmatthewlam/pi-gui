@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from "electron";
 import { desktopIpc } from "../src/ipc";
-import type { CreateSessionInput, DesktopAppState, WorkspaceSessionTarget } from "../src/desktop-state";
+import type { ComposerImageAttachment, CreateSessionInput, DesktopAppState, WorkspaceSessionTarget } from "../src/desktop-state";
 
 contextBridge.exposeInMainWorld("piApp", {
   platform: process.platform,
@@ -28,6 +28,11 @@ contextBridge.exposeInMainWorld("piApp", {
   createSession: (input: CreateSessionInput) =>
     ipcRenderer.invoke(desktopIpc.createSession, input) as Promise<DesktopAppState>,
   cancelCurrentRun: () => ipcRenderer.invoke(desktopIpc.cancelCurrentRun) as Promise<DesktopAppState>,
+  pickComposerImages: () => ipcRenderer.invoke(desktopIpc.pickComposerImages) as Promise<DesktopAppState>,
+  addComposerImages: (attachments: readonly ComposerImageAttachment[]) =>
+    ipcRenderer.invoke(desktopIpc.addComposerImages, attachments) as Promise<DesktopAppState>,
+  removeComposerImage: (attachmentId: string) =>
+    ipcRenderer.invoke(desktopIpc.removeComposerImage, attachmentId) as Promise<DesktopAppState>,
   updateComposerDraft: (composerDraft: string) =>
     ipcRenderer.invoke(desktopIpc.updateComposerDraft, composerDraft) as Promise<DesktopAppState>,
   submitComposer: (text: string) =>

@@ -1,12 +1,13 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import type { TranscriptMessage } from "../src/desktop-state";
+import type { ComposerImageAttachment, TranscriptMessage } from "../src/desktop-state";
 
 export interface PersistedUiState {
   readonly selectedWorkspaceId?: string;
   readonly selectedSessionId?: string;
   readonly composerDraft?: string;
   readonly composerDraftsBySession?: Record<string, string>;
+  readonly composerAttachmentsBySession?: Record<string, readonly ComposerImageAttachment[]>;
   readonly transcripts?: Record<string, readonly TranscriptMessage[]>;
 }
 
@@ -19,6 +20,7 @@ export async function readPersistedUiState(uiStateFilePath: string): Promise<Per
       selectedSessionId: parsed.selectedSessionId,
       composerDraft: parsed.composerDraft ?? "",
       composerDraftsBySession: parsed.composerDraftsBySession,
+      composerAttachmentsBySession: parsed.composerAttachmentsBySession,
       transcripts: parsed.transcripts,
     };
   } catch {

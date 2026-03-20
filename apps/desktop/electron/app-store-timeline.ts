@@ -6,6 +6,7 @@ import {
   makeSummaryItem,
   makeToolItem,
   makeTranscriptMessage,
+  makeTranscriptMessageWithAttachments,
   sessionKey,
   TRANSCRIPT_HISTORY_LIMIT,
 } from "./app-store-utils";
@@ -28,10 +29,13 @@ export function appendUserMessage(
   transcriptCache: Map<string, TranscriptMessage[]>,
   sessionRef: SessionRef,
   text: string,
+  attachments: NonNullable<Extract<TranscriptMessage, { kind: "message" }>["attachments"]> = [],
 ): TranscriptMessage[] {
   const key = sessionKey(sessionRef);
   const transcript = [...(transcriptCache.get(key) ?? [])];
-  transcript.push(makeTranscriptMessage("user", text));
+  transcript.push(
+    attachments.length > 0 ? makeTranscriptMessageWithAttachments("user", text, attachments) : makeTranscriptMessage("user", text),
+  );
   transcriptCache.set(key, transcript);
   return transcript;
 }

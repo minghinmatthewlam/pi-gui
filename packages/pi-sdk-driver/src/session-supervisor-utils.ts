@@ -1,6 +1,6 @@
 import { basename } from "node:path";
 import type { SessionInfo } from "@mariozechner/pi-coding-agent";
-import type { SessionErrorInfo, SessionRef, SessionSnapshot, SessionStatus, WorkspaceRef } from "@pi-app/session-driver";
+import type { SessionConfig, SessionErrorInfo, SessionRef, SessionSnapshot, SessionStatus, WorkspaceRef } from "@pi-app/session-driver";
 import type { SessionTranscriptMessage } from "./transcript.js";
 
 export interface SnapshotSource {
@@ -10,6 +10,7 @@ export interface SnapshotSource {
   readonly status: SessionStatus;
   readonly updatedAt: string;
   readonly preview: string | undefined;
+  readonly config: SessionConfig | undefined;
   readonly runningRunId: string | undefined;
 }
 
@@ -21,8 +22,28 @@ export function buildSnapshot(source: SnapshotSource): SessionSnapshot {
     status: source.status,
     updatedAt: source.updatedAt,
     ...(source.preview !== undefined ? { preview: source.preview } : {}),
+    ...(source.config ? { config: source.config } : {}),
     ...(source.runningRunId !== undefined ? { runningRunId: source.runningRunId } : {}),
   };
+}
+
+export function deriveSessionConfig(sessionManager: {
+  buildSessionContext(): {
+    thinkingLevel: string;
+    model: { provider: string; modelId: string } | null;
+  };
+}): SessionConfig | undefined {
+  const context = sessionManager.buildSessionContext();
+  const config: SessionConfig = {
+    ...(context.model ? { provider: context.model.provider, modelId: context.model.modelId } : {}),
+    ...(context.thinkingLevel && context.thinkingLevel !== "off" ? { thinkingLevel: context.thinkingLevel } : {}),
+  };
+  return Object.keys(config).length > 0 ? config : undefined;
+}
+
+export function forcePersistSession(sessionManager: object): void {
+  const maybeRewrite = (sessionManager as { _rewriteFile?: () => void })._rewriteFile;
+  maybeRewrite?.call(sessionManager);
 }
 
 export function sessionKey(sessionRef: SessionRef): string {
@@ -170,8 +191,11 @@ export function transcriptFromMessages(messages: readonly unknown[], fallbackTim
     }
 
     const text = messageText(message);
+    const attachments = messageAttachments(message);
     if (!text) {
-      continue;
+      if (attachments.length === 0) {
+        continue;
+      }
     }
 
     transcript.push({
@@ -179,6 +203,7 @@ export function transcriptFromMessages(messages: readonly unknown[], fallbackTim
       id: typeof message.id === "string" ? message.id : `${role}-${index}`,
       role,
       text,
+      ...(attachments.length > 0 ? { attachments } : {}),
       createdAt: typeof message.createdAt === "string" ? message.createdAt : fallbackTimestamp,
     });
   }
@@ -204,4 +229,26 @@ function messageText(message: Record<string, unknown>): string {
   }
 
   return "";
+}
+
+function messageAttachments(message: Record<string, unknown>) {
+  const { content } = message;
+  if (!Array.isArray(content)) {
+    return [];
+  }
+
+  return content.flatMap((part) => {
+    if (!isRecord(part) || part.type !== "image" || typeof part.data !== "string" || typeof part.mimeType !== "string") {
+      return [];
+    }
+
+    return [
+      {
+        kind: "image" as const,
+        data: part.data,
+        mimeType: part.mimeType,
+        ...(typeof part.name === "string" ? { name: part.name } : {}),
+      },
+    ];
+  });
 }

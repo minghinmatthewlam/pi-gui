@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import type { SessionCatalogEntry, WorkspaceCatalogEntry } from "@pi-app/catalogs";
-import type { SessionRef } from "@pi-app/session-driver";
+import type { SessionAttachment, SessionConfig, SessionRef } from "@pi-app/session-driver";
 import type {
+  ComposerImageAttachment,
   SessionRecord,
   TranscriptMessage,
   WorkspaceRecord,
@@ -15,6 +16,7 @@ export function buildWorkspaceRecords(
   sessions: readonly SessionCatalogEntry[],
   transcriptCache: Map<string, TranscriptMessage[]>,
   runningSinceBySession: Map<string, string>,
+  sessionConfigBySession: Map<string, SessionConfig>,
 ): WorkspaceRecord[] {
   return workspaces.map((workspace) => ({
     id: workspace.workspaceId,
@@ -23,7 +25,7 @@ export function buildWorkspaceRecords(
     lastOpenedAt: workspace.lastOpenedAt,
     sessions: sessions
       .filter((session) => session.workspaceId === workspace.workspaceId)
-      .map((session) => buildSessionRecord(session, transcriptCache, runningSinceBySession)),
+      .map((session) => buildSessionRecord(session, transcriptCache, runningSinceBySession, sessionConfigBySession)),
   }));
 }
 
@@ -31,6 +33,7 @@ function buildSessionRecord(
   session: SessionCatalogEntry,
   transcriptCache: Map<string, TranscriptMessage[]>,
   runningSinceBySession: Map<string, string>,
+  sessionConfigBySession: Map<string, SessionConfig>,
 ): SessionRecord {
   const key = sessionKey(session.sessionRef);
   const transcript = transcriptCache.get(key) ?? [];
@@ -42,6 +45,7 @@ function buildSessionRecord(
     preview,
     status: session.status,
     runningSince: runningSinceBySession.get(key),
+    config: sessionConfigBySession.get(key),
     transcript: transcript.map(cloneTranscriptMessage),
   };
 }
@@ -92,8 +96,56 @@ export function makeTranscriptMessage(role: "user" | "assistant", text: string):
   };
 }
 
+export function makeTranscriptMessageWithAttachments(
+  role: "user" | "assistant",
+  text: string,
+  attachments: NonNullable<Extract<TranscriptMessage, { kind: "message" }>["attachments"]>,
+): TranscriptMessage {
+  return {
+    ...makeTranscriptMessage(role, text),
+    ...(attachments?.length ? { attachments: attachments.map((attachment) => ({ ...attachment })) } : {}),
+  };
+}
+
 export function cloneTranscriptMessage(message: TranscriptMessage): TranscriptMessage {
+  if (message.kind === "message" && message.attachments) {
+    return {
+      ...message,
+      attachments: message.attachments.map((attachment) => ({ ...attachment })),
+    };
+  }
   return { ...message };
+}
+
+export function cloneComposerImageAttachment(attachment: ComposerImageAttachment): ComposerImageAttachment {
+  return { ...attachment };
+}
+
+export function cloneComposerImageAttachments(
+  attachments: readonly ComposerImageAttachment[],
+): ComposerImageAttachment[] {
+  return attachments.map(cloneComposerImageAttachment);
+}
+
+export function toSessionAttachments(
+  attachments: readonly ComposerImageAttachment[],
+): SessionAttachment[] {
+  return attachments.map(toImageAttachmentPayload);
+}
+
+export function toTranscriptAttachments(
+  attachments: readonly ComposerImageAttachment[],
+): NonNullable<Extract<TranscriptMessage, { kind: "message" }>["attachments"]> {
+  return attachments.map(toImageAttachmentPayload);
+}
+
+function toImageAttachmentPayload({ data, mimeType, name }: ComposerImageAttachment) {
+  return {
+    kind: "image" as const,
+    data,
+    mimeType,
+    name,
+  };
 }
 
 export function makeActivityItem(

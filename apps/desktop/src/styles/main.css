@@ -169,6 +169,22 @@
   background: #f5f6fa;
 }
 
+.timeline-item__attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.timeline-item__attachment {
+  width: 88px;
+  height: 88px;
+  object-fit: cover;
+  border-radius: 12px;
+  border: 1px solid #dfe4ee;
+  background: #edf1f7;
+}
+
 .timeline-activity {
   display: flex;
   flex-wrap: wrap;
@@ -366,6 +382,99 @@
 }
 
 .composer__hint {
+  color: var(--muted-soft);
+  font-size: 12px;
+}
+
+.composer__config {
+  color: var(--muted);
+}
+
+.composer__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.composer__attach {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  color: var(--muted-soft);
+  border: 1px solid #dfe4ee;
+  background: #f6f7fb;
+}
+
+.composer__attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.composer-attachment {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px 6px 6px;
+  border-radius: 999px;
+  border: 1px solid #dfe4ee;
+  background: #f6f7fb;
+}
+
+.composer-attachment__preview {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  object-fit: cover;
+  background: #e8ecf5;
+}
+
+.composer-attachment__name {
+  color: var(--muted-strong);
+  font-size: 13px;
+  font-weight: 520;
+}
+
+.composer-attachment__remove {
+  color: var(--muted-soft);
+  font-size: 18px;
+  line-height: 1;
+}
+
+.slash-menu {
+  display: grid;
+  gap: 4px;
+  margin-top: 10px;
+  padding: 6px;
+  border-radius: 14px;
+  border: 1px solid #dfe4ee;
+  background: #fcfcfe;
+}
+
+.slash-menu__item {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  text-align: left;
+}
+
+.slash-menu__item--active,
+.slash-menu__item:hover {
+  background: #f2f4f9;
+}
+
+.slash-menu__title {
+  color: var(--text-strong);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.slash-menu__command,
+.slash-menu__description {
   color: var(--muted-soft);
   font-size: 12px;
 }

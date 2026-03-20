@@ -6,6 +6,8 @@ import {
   type WorkspaceRecord,
 } from "./desktop-state";
 import { FolderIcon, PlusIcon, SettingsIcon } from "./icons";
+import { ComposerPanel } from "./composer-panel";
+import { SLASH_COMMANDS } from "./composer-commands";
 import { TimelineItem } from "./timeline-item";
 
 function useDesktopAppState() {
@@ -111,13 +113,28 @@ function formatRunningLabel(startedAt: string | undefined): string {
 export default function App() {
   const [snapshot, setSnapshot] = useDesktopAppState();
   const [composerDraft, setComposerDraft] = useState("");
+  const [slashIndex, setSlashIndex] = useState(0);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const api = window.piApp;
 
   const selectedWorkspace = snapshot ? (getSelectedWorkspace(snapshot) ?? snapshot.workspaces[0]) : undefined;
   const selectedSession = snapshot ? (getSelectedSession(snapshot) ?? selectedWorkspace?.sessions[0]) : undefined;
+  const composerAttachments = snapshot?.composerAttachments ?? [];
   const runningLabel = useRunningLabel(selectedSession?.status === "running" ? selectedSession.runningSince : undefined);
   const selectedSessionKey = `${selectedWorkspace?.id ?? ""}:${selectedSession?.id ?? ""}`;
+  const slashQuery = composerDraft.trimStart();
+  const slashSuggestions =
+    slashQuery.startsWith("/")
+      ? SLASH_COMMANDS.filter(({ command, title }) =>
+          [command, title].some((value) => value.toLowerCase().includes(slashQuery.toLowerCase())),
+        )
+      : [];
+  const showSlashMenu =
+    selectedSession?.status !== "running" &&
+    slashQuery.startsWith("/") &&
+    !slashQuery.includes("\n") &&
+    slashSuggestions.length > 0;
+  const selectedSlashCommand = showSlashMenu ? slashSuggestions[slashIndex % slashSuggestions.length] : undefined;
 
   useEffect(() => {
     if (!snapshot) {
@@ -125,6 +142,10 @@ export default function App() {
     }
     setComposerDraft(snapshot.composerDraft);
   }, [selectedSessionKey]);
+
+  useEffect(() => {
+    setSlashIndex(0);
+  }, [slashQuery]);
 
   useEffect(() => {
     if (!api || !snapshot || composerDraft === snapshot.composerDraft) {
@@ -163,9 +184,19 @@ export default function App() {
   }
 
   const submitComposerDraft = () => {
-    if (!composerDraft.trim()) {
+    if (!selectedSession) {
       return;
     }
+
+    if (selectedSession.status === "running") {
+      void updateSnapshot(api, setSnapshot, () => api.cancelCurrentRun());
+      return;
+    }
+
+    if (!composerDraft.trim() && composerAttachments.length === 0) {
+      return;
+    }
+
     const previousDraft = composerDraft;
     setComposerDraft("");
     void (async () => {
@@ -176,13 +207,51 @@ export default function App() {
     });
   };
 
+  const handlePickImages = () => {
+    void updateSnapshot(api, setSnapshot, () => api.pickComposerImages());
+  };
+
+  const handleRemoveImage = (attachmentId: string) => {
+    void updateSnapshot(api, setSnapshot, () => api.removeComposerImage(attachmentId));
+  };
+
   const handleComposerKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing && selectedSession?.status === "running") {
+      event.preventDefault();
+      submitComposerDraft();
+      return;
+    }
+
+    if (showSlashMenu && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
+      event.preventDefault();
+      setSlashIndex((current) => {
+        if (!slashSuggestions.length) {
+          return 0;
+        }
+        const delta = event.key === "ArrowDown" ? 1 : -1;
+        return (current + delta + slashSuggestions.length) % slashSuggestions.length;
+      });
+      return;
+    }
+
+    if (showSlashMenu && event.key === "Tab" && selectedSlashCommand) {
+      event.preventDefault();
+      setComposerDraft(selectedSlashCommand.template);
+      return;
+    }
+
+    if (showSlashMenu && event.key === "Enter" && selectedSlashCommand && !slashQuery.includes(" ")) {
+      event.preventDefault();
+      setComposerDraft(selectedSlashCommand.template);
+      return;
+    }
+
     if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) {
       return;
     }
 
     event.preventDefault();
-    if (!composerDraft.trim()) {
+    if (!composerDraft.trim() && composerAttachments.length === 0) {
       return;
     }
 
@@ -362,47 +431,21 @@ export default function App() {
               </div>
             </section>
 
-            <footer className="composer">
-              <div className="conversation conversation--composer">
-                <div className="composer__surface">
-                  <textarea
-                    aria-label="Composer"
-                    data-testid="composer"
-                    ref={composerRef}
-                    value={composerDraft}
-                    onChange={(event) => {
-                      setComposerDraft(event.target.value);
-                    }}
-                    onKeyDown={handleComposerKeyDown}
-                    placeholder="Ask pi to inspect the repo, run a fix, or continue the current thread..."
-                  />
-                  <div className="composer__bar">
-                    <div className="composer__hint">
-                      {selectedSession.status === "running" ? (
-                        runningLabel
-                      ) : (
-                        "Enter to send · Shift+Enter for newline"
-                      )}
-                    </div>
-                    <button
-                      className="button button--primary"
-                      data-testid="send"
-                      type="button"
-                      disabled={!composerDraft.trim() && selectedSession.status !== "running"}
-                      onClick={() => {
-                        if (selectedSession.status === "running") {
-                          void updateSnapshot(api, setSnapshot, () => api.cancelCurrentRun());
-                          return;
-                        }
-                        submitComposerDraft();
-                      }}
-                    >
-                      {selectedSession.status === "running" ? "Stop" : "Send"}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </footer>
+            <ComposerPanel
+              attachments={composerAttachments}
+              composerDraft={composerDraft}
+              composerRef={composerRef}
+              onComposerKeyDown={handleComposerKeyDown}
+              onPickImages={handlePickImages}
+              onRemoveImage={handleRemoveImage}
+              onSubmit={submitComposerDraft}
+              runningLabel={runningLabel}
+              selectedSession={selectedSession}
+              selectedSlashCommand={selectedSlashCommand}
+              setComposerDraft={setComposerDraft}
+              showSlashMenu={showSlashMenu}
+              slashSuggestions={slashSuggestions}
+            />
           </>
         ) : selectedWorkspace ? (
           <section className="canvas canvas--empty">

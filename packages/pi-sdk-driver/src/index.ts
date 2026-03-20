@@ -4,4 +4,4 @@ export { createPiSdkDriver, PiSdkDriver } from "./pi-sdk-driver.js";
 export type { PiSdkDriverOptions, SyncWorkspaceResult } from "./session-supervisor.js";
 export { SessionSupervisor } from "./session-supervisor.js";
 export { sessionKey } from "./session-supervisor-utils.js";
-export type { SessionTranscriptMessage, SessionTranscriptRole } from "./transcript.js";
+export type { SessionTranscriptAttachment, SessionTranscriptMessage, SessionTranscriptRole } from "./transcript.js";

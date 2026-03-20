@@ -47,6 +47,7 @@ function updateSessionRecord(
     preview: preview ?? snapshot?.preview ?? session.preview,
     status: statusForEvent(session.status, event),
     runningSince,
+    config: snapshot?.config ?? session.config,
     transcript,
   };
 }

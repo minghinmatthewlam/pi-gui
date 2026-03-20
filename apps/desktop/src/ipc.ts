@@ -1,4 +1,4 @@
-import type { CreateSessionInput, DesktopAppState, WorkspaceSessionTarget } from "./desktop-state";
+import type { ComposerImageAttachment, CreateSessionInput, DesktopAppState, WorkspaceSessionTarget } from "./desktop-state";
 
 export const desktopIpc = {
   stateRequest: "pi-app:state-request",
@@ -10,6 +10,9 @@ export const desktopIpc = {
   selectSession: "pi-app:select-session",
   createSession: "pi-app:create-session",
   cancelCurrentRun: "pi-app:cancel-current-run",
+  pickComposerImages: "pi-app:pick-composer-images",
+  addComposerImages: "pi-app:add-composer-images",
+  removeComposerImage: "pi-app:remove-composer-image",
   updateComposerDraft: "pi-app:update-composer-draft",
   submitComposer: "pi-app:submit-composer",
   ping: "app:ping",
@@ -31,6 +34,9 @@ export interface PiDesktopApi {
   selectSession(target: WorkspaceSessionTarget): Promise<DesktopAppState>;
   createSession(input: CreateSessionInput): Promise<DesktopAppState>;
   cancelCurrentRun(): Promise<DesktopAppState>;
+  pickComposerImages(): Promise<DesktopAppState>;
+  addComposerImages(attachments: readonly ComposerImageAttachment[]): Promise<DesktopAppState>;
+  removeComposerImage(attachmentId: string): Promise<DesktopAppState>;
   updateComposerDraft(composerDraft: string): Promise<DesktopAppState>;
   submitComposer(text: string): Promise<DesktopAppState>;
   openExternal(url: string): Promise<void>;

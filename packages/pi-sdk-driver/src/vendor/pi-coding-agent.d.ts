@@ -4,7 +4,11 @@ declare module "@mariozechner/pi-coding-agent" {
     getSessionFile(): string | undefined;
     getSessionName(): string | undefined;
     appendSessionInfo(name: string): string;
-    buildSessionContext(): { messages: readonly unknown[] };
+    buildSessionContext(): {
+      messages: readonly unknown[];
+      thinkingLevel: string;
+      model: { provider: string; modelId: string } | null;
+    };
     appendThinkingLevelChange(thinkingLevel: string): string;
     appendModelChange(provider: string, modelId: string): string;
   }
@@ -104,7 +108,11 @@ declare module "@mariozechner/pi-coding-agent" {
     appendSessionInfo(name: string): string;
     appendThinkingLevelChange(thinkingLevel: string): string;
     appendModelChange(provider: string, modelId: string): string;
-    buildSessionContext(): { messages: readonly unknown[] };
+    buildSessionContext(): {
+      messages: readonly unknown[];
+      thinkingLevel: string;
+      model: { provider: string; modelId: string } | null;
+    };
   }
 
   export function createAgentSession(options?: CreateAgentSessionOptions): Promise<CreateAgentSessionResult>;

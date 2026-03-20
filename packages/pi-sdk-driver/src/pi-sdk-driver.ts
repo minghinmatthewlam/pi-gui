@@ -3,6 +3,7 @@ import type {
   CreateSessionOptions,
   SessionDriver,
   SessionEventListener,
+  SessionModelSelection,
   SessionRef,
   SessionSnapshot,
   SessionMessageInput,
@@ -38,6 +39,14 @@ export class PiSdkDriver implements SessionDriver {
 
   cancelCurrentRun(sessionRef: SessionRef): Promise<void> {
     return this.supervisor.cancelCurrentRun(sessionRef);
+  }
+
+  setSessionModel(sessionRef: SessionRef, selection: SessionModelSelection): Promise<void> {
+    return this.supervisor.setSessionModel(sessionRef, selection);
+  }
+
+  setSessionThinkingLevel(sessionRef: SessionRef, thinkingLevel: string): Promise<void> {
+    return this.supervisor.setSessionThinkingLevel(sessionRef, thinkingLevel);
   }
 
   subscribe(sessionRef: SessionRef, listener: SessionEventListener): Unsubscribe {
