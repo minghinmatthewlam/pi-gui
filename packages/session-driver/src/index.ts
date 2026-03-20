@@ -29,3 +29,16 @@ export type {
   WorkspaceId,
   WorkspaceRef,
 } from "./types.js";
+export type {
+  RuntimeAuthType,
+  RuntimeLoginAuthInfo,
+  RuntimeLoginCallbacks,
+  RuntimeLoginPrompt,
+  RuntimeModelRecord,
+  RuntimeProviderRecord,
+  RuntimeResourceDriver,
+  RuntimeScopedModelPatternRecord,
+  RuntimeSettingsSnapshot,
+  RuntimeSkillRecord,
+  RuntimeSnapshot,
+} from "./runtime-types.js";

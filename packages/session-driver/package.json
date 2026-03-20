@@ -13,6 +13,10 @@
     "./types": {
       "types": "./dist/types.d.ts",
       "default": "./dist/types.js"
+    },
+    "./runtime-types": {
+      "types": "./dist/runtime-types.d.ts",
+      "default": "./dist/runtime-types.js"
     }
   },
   "files": [
