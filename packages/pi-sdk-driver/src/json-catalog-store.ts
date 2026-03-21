@@ -314,6 +314,8 @@ function compareWorkspaceEntries(left: WorkspaceCatalogEntry, right: WorkspaceCa
 }
 
 function compareSessionEntries(left: SessionCatalogEntry, right: SessionCatalogEntry): number {
+  const archiveRank = rankSessionArchiveState(left) - rankSessionArchiveState(right);
+  if (archiveRank !== 0) return archiveRank;
   const statusRank = rankSessionStatus(left.status) - rankSessionStatus(right.status);
   if (statusRank !== 0) return statusRank;
   return right.updatedAt.localeCompare(left.updatedAt);
@@ -368,6 +370,10 @@ function rankSessionStatus(status: SessionCatalogEntry["status"]): number {
   if (status === "running") return 0;
   if (status === "idle") return 1;
   return 2;
+}
+
+function rankSessionArchiveState(session: SessionCatalogEntry): number {
+  return session.archivedAt ? 1 : 0;
 }
 
 function cloneWorkspaceEntry(entry: WorkspaceCatalogEntry): WorkspaceCatalogEntry {

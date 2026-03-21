@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { basename, dirname, join } from "node:path";
+import { homedir } from "node:os";
 import { JsonCatalogStore, PiSdkDriver, type PiSdkDriverConfig } from "@pi-app/pi-sdk-driver";
 import type { SessionCatalogEntry, WorktreeCatalogEntry } from "@pi-app/catalogs";
 import type { SessionConfig, SessionDriverEvent, SessionRef, WorkspaceRef } from "@pi-app/session-driver";
@@ -14,10 +15,15 @@ import {
   type DesktopAppState,
   type NotificationPreferences,
   type RemoveWorktreeInput,
+  type StartThreadInput,
   type TranscriptMessage,
   type WorkspaceSessionTarget,
 } from "../src/desktop-state";
-import { formatSessionConfigStatus, parseComposerCommand } from "../src/composer-commands";
+import {
+  formatSessionConfigStatus,
+  incompleteComposerCommandMessage,
+  parseComposerCommand,
+} from "../src/composer-commands";
 import {
   applyTimelineEvent,
   appendAssistantDelta,
@@ -60,6 +66,7 @@ interface RefreshStateOptions {
   readonly composerDraft?: string;
   readonly clearLastError?: boolean;
   readonly refreshWorktrees?: boolean;
+  readonly activeView?: AppView;
 }
 
 export interface DesktopAppStoreOptions {
@@ -297,6 +304,7 @@ export class DesktopAppStore {
       selectedSessionId: this.state.selectedWorkspaceId === workspaceId ? this.state.selectedSessionId : "",
       clearLastError: true,
       refreshWorktrees: true,
+      activeView: "threads",
     });
   }
 
@@ -308,6 +316,79 @@ export class DesktopAppStore {
         selectedWorkspaceId: target.workspaceId,
         selectedSessionId: target.sessionId,
         clearLastError: true,
+        activeView: "threads",
+      });
+    } catch (error) {
+      return this.withError(error);
+    }
+  }
+
+  async archiveSession(target: WorkspaceSessionTarget): Promise<DesktopAppState> {
+    await this.initialize();
+
+    try {
+      await this.driver.archiveSession(toSessionRef(target));
+      return this.refreshState(this.selectionAfterArchiving(target));
+    } catch (error) {
+      return this.withError(error);
+    }
+  }
+
+  async unarchiveSession(target: WorkspaceSessionTarget): Promise<DesktopAppState> {
+    await this.initialize();
+
+    try {
+      await this.driver.unarchiveSession(toSessionRef(target));
+      return this.refreshState({
+        selectedWorkspaceId: this.state.selectedWorkspaceId,
+        selectedSessionId:
+          this.state.selectedWorkspaceId === target.workspaceId && !this.state.selectedSessionId
+            ? target.sessionId
+            : this.state.selectedSessionId,
+        clearLastError: true,
+        activeView: "threads",
+      });
+    } catch (error) {
+      return this.withError(error);
+    }
+  }
+
+  async startThread(input: StartThreadInput): Promise<DesktopAppState> {
+    await this.initialize();
+    const rootWorkspace = this.workspaceRefFromState(input.rootWorkspaceId);
+    if (!rootWorkspace) {
+      return this.withError(`Unknown workspace: ${input.rootWorkspaceId}`);
+    }
+
+    try {
+      let targetWorkspace = rootWorkspace;
+      if (input.environment === "new-worktree") {
+        const worktreeOptions = this.defaultWorktreeOptions(rootWorkspace, undefined, undefined, input.prompt);
+        const created = await this.worktreeManager.createWorktree(rootWorkspace, worktreeOptions);
+        const synced = await this.driver.syncWorkspace(created.path, created.displayName);
+        targetWorkspace = synced.workspace;
+      }
+
+      const prompt = input.prompt?.trim() ?? "";
+      const session = await this.driver.createSession(targetWorkspace, {
+        title: initialThreadTitle(prompt),
+      });
+      const key = sessionKey(session.ref);
+      this.transcriptCache.set(key, []);
+      this.loadedTranscriptKeys.add(key);
+      this.updateSessionConfig(session.ref, session.config);
+      await this.ensureSessionSubscribed(session.ref);
+      if (prompt) {
+        await this.sendMessageToSession(session.ref, prompt, []);
+      }
+
+      return this.refreshState({
+        selectedWorkspaceId: session.ref.workspaceId,
+        selectedSessionId: session.ref.sessionId,
+        composerDraft: "",
+        clearLastError: true,
+        refreshWorktrees: input.environment === "new-worktree",
+        activeView: "threads",
       });
     } catch (error) {
       return this.withError(error);
@@ -343,6 +424,19 @@ export class DesktopAppStore {
     }
   }
 
+  async setSessionModel(target: WorkspaceSessionTarget, provider: string, modelId: string): Promise<DesktopAppState> {
+    await this.initialize();
+    const sessionRef = toSessionRef(target);
+    const key = sessionKey(sessionRef);
+
+    try {
+      await this.driver.setSessionModel(sessionRef, { provider, modelId });
+      return this.finishComposerCommand(sessionRef, key, `Model set to ${provider}:${modelId}`);
+    } catch (error) {
+      return this.withError(error);
+    }
+  }
+
   async setDefaultModel(workspaceId: string, provider: string, modelId: string): Promise<DesktopAppState> {
     await this.initialize();
     const workspace = this.workspaceRefFromState(workspaceId);
@@ -373,6 +467,20 @@ export class DesktopAppStore {
       const snapshot = await this.driver.setDefaultThinkingLevel(workspace, thinkingLevel);
       this.runtimeByWorkspace.set(workspaceId, snapshot);
       return this.refreshState({ clearLastError: true });
+    } catch (error) {
+      return this.withError(error);
+    }
+  }
+
+  async setSessionThinkingLevel(
+    sessionRef: SessionRef,
+    thinkingLevel: NonNullable<RuntimeSettingsSnapshot["defaultThinkingLevel"]>,
+  ): Promise<DesktopAppState> {
+    await this.initialize();
+    const key = sessionKey(sessionRef);
+    try {
+      await this.driver.setSessionThinkingLevel(sessionRef, thinkingLevel);
+      return this.finishComposerCommand(sessionRef, key, `Thinking set to ${thinkingLevel}`);
     } catch (error) {
       return this.withError(error);
     }
@@ -500,6 +608,7 @@ export class DesktopAppStore {
         selectedSessionId: snapshot.ref.sessionId,
         composerDraft: "",
         clearLastError: true,
+        activeView: "threads",
       });
     } catch (error) {
       return this.withError(error);
@@ -593,33 +702,12 @@ export class DesktopAppStore {
     }
 
     const key = sessionKey(sessionRef);
-    if (!this.loadedTranscriptKeys.has(key)) {
-      await this.ensureSessionReady(sessionRef);
-    }
-    const transcript = appendUserMessage(
-      this.transcriptCache,
-      sessionRef,
-      text,
-      toTranscriptAttachments(attachments),
-    );
-    this.persistTranscriptCacheForSession(sessionRef);
-    clearActiveAssistantMessage(this.activeAssistantMessageBySession, sessionRef);
-    this.sessionErrorsBySession.delete(key);
-    this.composerDraftsBySession.delete(key);
-    this.composerAttachmentsBySession.delete(key);
-    await this.persistComposerAttachments(key, []);
-
     try {
-      await this.driver.sendUserMessage(sessionRef, {
-        text,
-        attachments: toSessionAttachments(attachments),
-      });
+      await this.sendMessageToSession(sessionRef, text, attachments);
       return this.refreshState({
         clearLastError: true,
       });
     } catch (error) {
-      this.transcriptCache.set(key, transcript.slice(0, -1));
-      this.persistTranscriptCacheForSession(sessionRef);
       if (textInput) {
         this.composerDraftsBySession.set(key, textInput);
       }
@@ -791,14 +879,15 @@ export class DesktopAppStore {
       await this.ensureRuntimeLoaded(selectedWorkspaceId);
     }
 
-    this.state = {
-      ...this.state,
-      workspaces,
-      worktreesByWorkspace,
-      selectedWorkspaceId,
-      selectedSessionId,
-      runtimeByWorkspace: this.serializeRuntimeState(),
-      composerDraft: this.resolveComposerDraft(selectedWorkspaceId, selectedSessionId, options.composerDraft),
+      this.state = {
+        ...this.state,
+        workspaces,
+        worktreesByWorkspace,
+        selectedWorkspaceId,
+        selectedSessionId,
+        activeView: options.activeView ?? this.state.activeView,
+        runtimeByWorkspace: this.serializeRuntimeState(),
+        composerDraft: this.resolveComposerDraft(selectedWorkspaceId, selectedSessionId, options.composerDraft),
       composerAttachments: this.resolveComposerAttachments(selectedWorkspaceId, selectedSessionId),
       lastError: this.resolveSelectedSessionError(selectedWorkspaceId, selectedSessionId, options.clearLastError),
       revision: this.state.revision + 1,
@@ -1075,18 +1164,23 @@ export class DesktopAppStore {
     workspace: WorkspaceRef,
     fromSessionWorkspaceId?: string,
     fromSessionId?: string,
+    titleHint?: string,
   ): CreateWorktreeOptions {
     const sessionTitle =
       fromSessionId && fromSessionWorkspaceId
         ? this.sessionTitleForWorktree(fromSessionWorkspaceId, fromSessionId)
         : undefined;
-    const baseLabel = slugify(sessionTitle || workspace.displayName || basename(workspace.path) || "worktree");
-    const suffix = timestampSuffix();
+    const preferredTitle = shortDisplayTitle(titleHint?.trim() || sessionTitle);
+    const suffix = shortUniqueSuffix();
+    const baseLabel = preferredTitle
+      ? clampSlug(slugify(preferredTitle), 18)
+      : "wt";
     const folderName = `${baseLabel}-${suffix}`;
-    const repoName = basename(workspace.path);
+    const repoName = clampSlug(slugify(basename(workspace.path) || "repo"), 20);
+    const displayName = preferredTitle || `Worktree ${suffix}`;
     return {
-      path: join(dirname(workspace.path), `${repoName}-worktrees`, folderName),
-      displayName: sessionTitle || titleizeSlug(baseLabel),
+      path: join(homedir(), ".pi", "worktrees", repoName, folderName),
+      displayName,
       branchName: `pi/${folderName}`,
       startPoint: "HEAD",
     };
@@ -1112,6 +1206,70 @@ export class DesktopAppStore {
       workspaceId: this.state.selectedWorkspaceId,
       sessionId: this.state.selectedSessionId,
     });
+  }
+
+  private sessionFromState(sessionRef: SessionRef) {
+    return this.state.workspaces
+      .find((workspace) => workspace.id === sessionRef.workspaceId)
+      ?.sessions.find((session) => session.id === sessionRef.sessionId);
+  }
+
+  private selectionAfterArchiving(target: WorkspaceSessionTarget): RefreshStateOptions {
+    if (
+      this.state.selectedWorkspaceId !== target.workspaceId ||
+      this.state.selectedSessionId !== target.sessionId
+    ) {
+      return {
+        selectedWorkspaceId: this.state.selectedWorkspaceId,
+        selectedSessionId: this.state.selectedSessionId,
+        clearLastError: true,
+        activeView: "threads",
+      };
+    }
+
+    const targetWorkspace = this.state.workspaces.find((workspace) => workspace.id === target.workspaceId);
+    if (!targetWorkspace) {
+      return {
+        selectedWorkspaceId: this.state.selectedWorkspaceId,
+        selectedSessionId: this.state.selectedSessionId,
+        clearLastError: true,
+        activeView: "threads",
+      };
+    }
+
+    const rootWorkspaceId =
+      targetWorkspace.kind === "worktree" ? (targetWorkspace.rootWorkspaceId ?? targetWorkspace.id) : targetWorkspace.id;
+    const rankedCandidates = this.state.workspaces
+      .filter(
+        (workspace) =>
+          workspace.id === rootWorkspaceId || workspace.rootWorkspaceId === rootWorkspaceId,
+      )
+      .flatMap((workspace) =>
+        workspace.sessions
+          .filter((session) => session.id !== target.sessionId || workspace.id !== target.workspaceId)
+          .filter((session) => !session.archivedAt)
+          .map((session) => ({ workspaceId: workspace.id, session })),
+      )
+      .sort((left, right) => {
+        if (left.workspaceId === target.workspaceId && right.workspaceId !== target.workspaceId) {
+          return -1;
+        }
+        if (left.workspaceId !== target.workspaceId && right.workspaceId === target.workspaceId) {
+          return 1;
+        }
+        if (left.session.updatedAt !== right.session.updatedAt) {
+          return right.session.updatedAt.localeCompare(left.session.updatedAt);
+        }
+        return left.session.title.localeCompare(right.session.title);
+      });
+
+    const next = rankedCandidates[0];
+    return {
+      selectedWorkspaceId: next?.workspaceId ?? target.workspaceId,
+      selectedSessionId: next?.session.id ?? "",
+      clearLastError: true,
+      activeView: "threads",
+    };
   }
 
   private async readUiState(): Promise<LegacyPersistedUiState> {
@@ -1254,9 +1412,50 @@ export class DesktopAppStore {
     return this.sessionErrorsBySession.get(key);
   }
 
+  private async sendMessageToSession(
+    sessionRef: SessionRef,
+    text: string,
+    attachments: readonly ComposerImageAttachment[],
+  ): Promise<void> {
+    const key = sessionKey(sessionRef);
+    if (!this.loadedTranscriptKeys.has(key)) {
+      await this.ensureSessionReady(sessionRef);
+    }
+    if (this.sessionFromState(sessionRef)?.archivedAt) {
+      await this.driver.unarchiveSession(sessionRef);
+    }
+    appendUserMessage(
+      this.transcriptCache,
+      sessionRef,
+      text,
+      toTranscriptAttachments(attachments),
+    );
+    this.persistTranscriptCacheForSession(sessionRef);
+    clearActiveAssistantMessage(this.activeAssistantMessageBySession, sessionRef);
+    this.sessionErrorsBySession.delete(key);
+    this.composerDraftsBySession.delete(key);
+    this.composerAttachmentsBySession.delete(key);
+    await this.persistComposerAttachments(key, []);
+    try {
+      await this.driver.sendUserMessage(sessionRef, {
+        text,
+        attachments: toSessionAttachments(attachments),
+      });
+    } catch (error) {
+      const transcript = this.transcriptCache.get(key) ?? [];
+      this.transcriptCache.set(key, transcript.slice(0, -1));
+      this.persistTranscriptCacheForSession(sessionRef);
+      throw error;
+    }
+  }
+
   private async runComposerCommand(sessionRef: SessionRef, commandText: string): Promise<DesktopAppState | undefined> {
     const parsed = parseComposerCommand(commandText);
     if (!parsed) {
+      const message = incompleteComposerCommandMessage(commandText);
+      if (message) {
+        return this.withError(message);
+      }
       return undefined;
     }
 
@@ -1370,6 +1569,14 @@ function slugify(value: string): string {
   return normalized || "worktree";
 }
 
+function clampSlug(value: string, limit = 28): string {
+  if (value.length <= limit) {
+    return value;
+  }
+  const trimmed = value.slice(0, limit).replace(/-+$/g, "");
+  return trimmed || "worktree";
+}
+
 function titleizeSlug(value: string): string {
   return value
     .split("-")
@@ -1378,16 +1585,25 @@ function titleizeSlug(value: string): string {
     .join(" ");
 }
 
-function timestampSuffix(): string {
-  const now = new Date();
-  const parts = [
-    now.getUTCFullYear().toString(),
-    String(now.getUTCMonth() + 1).padStart(2, "0"),
-    String(now.getUTCDate()).padStart(2, "0"),
-    String(now.getUTCHours()).padStart(2, "0"),
-    String(now.getUTCMinutes()).padStart(2, "0"),
-    String(now.getUTCSeconds()).padStart(2, "0"),
-    String(now.getUTCMilliseconds()).padStart(3, "0"),
-  ];
-  return `${parts.join("")}-${randomUUID().slice(0, 6)}`;
+function shortUniqueSuffix(): string {
+  return randomUUID().slice(0, 6);
+}
+
+function shortDisplayTitle(value: string | undefined, limit = 44): string | undefined {
+  const trimmed = value?.replace(/\s+/g, " ").trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  return trimmed.length > limit ? `${trimmed.slice(0, limit - 3).trimEnd()}...` : trimmed;
+}
+
+function initialThreadTitle(prompt: string): string {
+  const firstLine = prompt
+    .trim()
+    .split(/\r?\n/, 1)[0]
+    ?.trim();
+  if (!firstLine) {
+    return "New thread";
+  }
+  return firstLine.length > 72 ? `${firstLine.slice(0, 69).trimEnd()}...` : firstLine;
 }

@@ -4,9 +4,10 @@ export type SessionStatus = "idle" | "running" | "failed";
 export type { SessionRole, TranscriptMessage } from "./timeline-types";
 import type { TranscriptMessage } from "./timeline-types";
 
-export type AppView = "threads" | "skills" | "settings";
+export type AppView = "threads" | "new-thread" | "skills" | "settings";
 export type WorkspaceKind = "primary" | "worktree";
 export type WorktreeStatus = "ready" | "missing" | "error";
+export type NewThreadEnvironment = "local" | "new-worktree";
 
 export interface NotificationPreferences {
   readonly backgroundCompletion: boolean;
@@ -25,6 +26,7 @@ export interface SessionRecord {
   readonly id: string;
   readonly title: string;
   readonly updatedAt: string;
+  readonly archivedAt?: string;
   readonly preview: string;
   readonly status: SessionStatus;
   readonly runningSince?: string;
@@ -58,6 +60,12 @@ export interface CreateWorktreeInput {
   readonly workspaceId: string;
   readonly fromSessionWorkspaceId?: string;
   readonly fromSessionId?: string;
+}
+
+export interface StartThreadInput {
+  readonly rootWorkspaceId: string;
+  readonly environment: NewThreadEnvironment;
+  readonly prompt?: string;
 }
 
 export interface RemoveWorktreeInput {

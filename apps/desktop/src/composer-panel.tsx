@@ -5,6 +5,8 @@ import type { ComposerSlashCommand, ComposerSlashCommandSection, ComposerSlashOp
 
 interface ComposerPanelProps {
   readonly selectedSession: SessionRecord;
+  readonly activeSlashCommand?: ComposerSlashCommand;
+  readonly activeSlashCommandMeta?: string;
   readonly composerDraft: string;
   readonly setComposerDraft: Dispatch<SetStateAction<string>>;
   readonly composerRef: RefObject<HTMLTextAreaElement | null>;
@@ -16,6 +18,7 @@ interface ComposerPanelProps {
   readonly selectedSlashOption?: ComposerSlashOption;
   readonly showSlashMenu: boolean;
   readonly showSlashOptionMenu: boolean;
+  readonly onClearSlashCommand: () => void;
   readonly onComposerKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
   readonly onPickImages: () => void;
   readonly onRemoveImage: (attachmentId: string) => void;
@@ -26,6 +29,8 @@ interface ComposerPanelProps {
 
 export function ComposerPanel({
   selectedSession,
+  activeSlashCommand,
+  activeSlashCommandMeta,
   composerDraft,
   setComposerDraft,
   composerRef,
@@ -37,6 +42,7 @@ export function ComposerPanel({
   selectedSlashOption,
   showSlashMenu,
   showSlashOptionMenu,
+  onClearSlashCommand,
   onComposerKeyDown,
   onPickImages,
   onRemoveImage,
@@ -47,47 +53,96 @@ export function ComposerPanel({
   return (
     <footer className="composer">
       <div className="conversation conversation--composer">
-        {showSlashMenu ? (
-          <div className="slash-menu" data-testid="slash-menu">
-            {slashSections.map((section) => (
-              <div className="slash-menu__section" key={section.id}>
-                {section.title ? <div className="slash-menu__section-title">{section.title}</div> : null}
-                {section.items.map((command) => (
+        {showSlashMenu || (showSlashOptionMenu && selectedSlashCommand) ? (
+          <div className="composer__menus">
+            {showSlashMenu ? (
+              <div className="slash-menu" data-testid="slash-menu" onWheel={(event) => event.stopPropagation()}>
+                {slashSections.map((section) => (
+                  <div className="slash-menu__section" key={section.id}>
+                    {section.title ? (
+                      <div className={`slash-menu__section-title slash-menu__section-title--${section.id}`}>
+                        <span className="slash-menu__section-icon" aria-hidden="true">
+                          {section.id === "skills" ? <SkillIcon /> : <SparkIcon />}
+                        </span>
+                        <span>{section.title}</span>
+                      </div>
+                    ) : null}
+                    {section.items.map((command) => (
+                      <button
+                        className={`slash-menu__item ${command.section === "skills" ? "slash-menu__item--skill" : ""} ${selectedSlashCommand?.command === command.command ? "slash-menu__item--active" : ""}`}
+                        key={`${section.id}:${command.command}`}
+                        type="button"
+                        onClick={() => onSelectSlashCommand(command)}
+                      >
+                        <span className="slash-menu__icon" aria-hidden="true">
+                          <SlashCommandIcon command={command} />
+                        </span>
+                        {command.section === "skills" ? (
+                          <span className="slash-menu__content slash-menu__content--skill">
+                            <span className="slash-menu__line">
+                              <span className="slash-menu__title">{command.title}</span>
+                              <span className="slash-menu__skill-badge">{skillSourceLabel(command)}</span>
+                            </span>
+                            <span className="slash-menu__description">{command.description}</span>
+                            <span className="slash-menu__meta">
+                              <span className="slash-menu__command slash-menu__command--skill">{command.command}</span>
+                            </span>
+                          </span>
+                        ) : (
+                          <span className="slash-menu__content">
+                            <span className="slash-menu__line">
+                              <span className="slash-menu__title">{command.title}</span>
+                              <span className="slash-menu__command">{command.command}</span>
+                            </span>
+                            <span className="slash-menu__description">{command.description}</span>
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            {showSlashOptionMenu && selectedSlashCommand ? (
+              <div className="slash-menu slash-menu--options" data-testid="slash-options-menu" onWheel={(event) => event.stopPropagation()}>
+                <div className="slash-menu__search">{selectedSlashCommand.title}</div>
+                {slashOptions.map((option) => (
                   <button
-                    className={`slash-menu__item ${selectedSlashCommand?.command === command.command ? "slash-menu__item--active" : ""}`}
-                    key={`${section.id}:${command.command}`}
+                    className={`slash-menu__option ${selectedSlashOption?.value === option.value ? "slash-menu__option--active" : ""}`}
+                    key={option.value}
                     type="button"
-                    onClick={() => onSelectSlashCommand(command)}
+                    onClick={() => onSelectSlashOption(option)}
                   >
-                    <span className="slash-menu__icon" aria-hidden="true">
-                      <SlashCommandIcon command={command} />
-                    </span>
-                    <span className="slash-menu__title">{command.title}</span>
-                    <span className="slash-menu__command">{command.command}</span>
-                    <span className="slash-menu__description">{command.description}</span>
+                    <span className="slash-menu__option-title">{option.label}</span>
+                    <span className="slash-menu__option-description">{option.description}</span>
                   </button>
                 ))}
               </div>
-            ))}
-          </div>
-        ) : null}
-        {showSlashOptionMenu && selectedSlashCommand ? (
-          <div className="slash-menu slash-menu--options" data-testid="slash-options-menu">
-            <div className="slash-menu__search">{selectedSlashCommand.title}</div>
-            {slashOptions.map((option) => (
-              <button
-                className={`slash-menu__option ${selectedSlashOption?.value === option.value ? "slash-menu__option--active" : ""}`}
-                key={option.value}
-                type="button"
-                onClick={() => onSelectSlashOption(option)}
-              >
-                <span className="slash-menu__option-title">{option.label}</span>
-                <span className="slash-menu__option-description">{option.description}</span>
-              </button>
-            ))}
+            ) : null}
           </div>
         ) : null}
         <div className="composer__surface">
+          {activeSlashCommand ? (
+            <div className="composer__slash-intent">
+              <span className="composer__slash-intent-icon" aria-hidden="true">
+                <SlashCommandIcon command={activeSlashCommand} />
+              </span>
+              <span className="composer__slash-intent-body">
+                <span className="composer__slash-intent-title">{activeSlashCommand.title}</span>
+                {activeSlashCommandMeta ? (
+                  <span className="composer__slash-intent-meta">{activeSlashCommandMeta}</span>
+                ) : null}
+              </span>
+              <button
+                aria-label={`Clear ${activeSlashCommand.title}`}
+                className="composer__slash-intent-clear"
+                type="button"
+                onClick={onClearSlashCommand}
+              >
+                ×
+              </button>
+            </div>
+          ) : null}
           {attachments.length > 0 ? (
             <div className="composer__attachments">
               {attachments.map((attachment) => (
@@ -156,6 +211,14 @@ export function ComposerPanel({
       </div>
     </footer>
   );
+}
+
+function skillSourceLabel(command: ComposerSlashCommand): string {
+  const source = command.skill?.source?.trim();
+  if (!source) {
+    return "Skill";
+  }
+  return source.charAt(0).toUpperCase() + source.slice(1);
 }
 
 function SlashCommandIcon({ command }: { readonly command: ComposerSlashCommand }) {

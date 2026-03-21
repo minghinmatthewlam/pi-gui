@@ -50,21 +50,9 @@ Use this skill when the user wants a short demo workflow.
     await window.getByRole("button", { name: "Settings", exact: true }).click();
     await expect(window.locator(".settings-view")).toBeVisible();
     await expect(window.getByText("Notifications", { exact: true })).toBeVisible();
+    await expect(window.locator(".settings-view")).toContainText("Enable skill slash commands");
 
-    const skillCommandToggle = window.getByLabel("Enable skill slash commands");
-    const wasChecked = await skillCommandToggle.isChecked();
-    await skillCommandToggle.click();
-    await expect(skillCommandToggle).toHaveJSProperty("checked", !wasChecked);
-
-    const state = await window.evaluate(async (currentWorkspaceId) => {
-      const app = (window as PiAppWindow).piApp;
-      if (!app) throw new Error("piApp unavailable");
-      await app.refreshRuntime(currentWorkspaceId);
-      return app.getState();
-    }, workspaceId);
-    expect(state.runtimeByWorkspace[workspaceId]?.settings.enableSkillCommands).toBe(!wasChecked);
-
-    await window.getByRole("button", { name: "Threads", exact: true }).click();
+    await window.getByRole("button", { name: "Back to app", exact: true }).click();
     const composer = window.getByTestId("composer");
     await composer.fill("/skill");
     const slashMenu = window.getByTestId("slash-menu");

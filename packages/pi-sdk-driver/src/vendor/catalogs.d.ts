@@ -41,6 +41,7 @@ declare module "@pi-app/catalogs" {
     workspaceId: WorkspaceId;
     title: string;
     updatedAt: string;
+    archivedAt?: string;
     previewSnippet?: string;
     sessionFilePath?: string;
     status: SessionStatus;

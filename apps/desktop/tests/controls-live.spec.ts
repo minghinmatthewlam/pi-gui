@@ -54,18 +54,23 @@ test("supports slash commands plus image draft preview and removal", async () =>
     await composer.press("ArrowDown");
     await composer.press("Enter");
     await expect(optionsMenu).toHaveCount(0);
-    await expect(composer).toHaveValue("/thinking high");
-    await composer.press("Enter");
     await expect(window.locator(".timeline")).toContainText("Thinking set to high");
     await expect(window.locator(".composer__hint")).toContainText("high");
+    await expect(composer).toHaveValue("");
 
-    await window.evaluate(async () => {
-      const app = (window as PiAppWindow).piApp;
-      if (!app) throw new Error("piApp unavailable");
-      await app.submitComposer("/model openai gpt-5.4");
-    });
-    await expect(window.locator(".timeline")).toContainText("Model set to openai:gpt-5.4");
-    await expect(window.locator(".composer__hint")).toContainText("openai:gpt-5.4");
+    await composer.fill("/model");
+    await expect(optionsMenu).toBeVisible();
+    await optionsMenu.getByRole("button").first().click();
+    await expect(optionsMenu).toHaveCount(0);
+    const stateAfterModel = await getDesktopState(window);
+    const selectedWorkspace = stateAfterModel.workspaces.find((workspace) => workspace.id === stateAfterModel.selectedWorkspaceId);
+    const selectedSession = selectedWorkspace?.sessions.find((session) => session.id === stateAfterModel.selectedSessionId);
+    const selectedConfig = selectedSession?.config;
+    expect(selectedConfig?.provider).toBeTruthy();
+    expect(selectedConfig?.modelId).toBeTruthy();
+    await expect(window.locator(".timeline")).toContainText(`Model set to ${selectedConfig?.provider}:${selectedConfig?.modelId}`);
+    await expect(window.locator(".composer__hint")).toContainText(`${selectedConfig?.provider}:${selectedConfig?.modelId}`);
+    await expect(composer).toHaveValue("");
 
     await window.evaluate(async (data) => {
       const app = (window as PiAppWindow).piApp;

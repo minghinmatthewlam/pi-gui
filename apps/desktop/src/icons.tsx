@@ -29,6 +29,43 @@ export function FolderIcon() {
   );
 }
 
+export function ArchiveIcon() {
+  return (
+    <Icon>
+      <path
+        d="M4.1 5.1h11.8l-.8 10.1a1.2 1.2 0 0 1-1.2 1.1H6.1a1.2 1.2 0 0 1-1.2-1.1L4.1 5.1Z"
+        stroke="currentColor"
+        strokeLinejoin="round"
+        strokeWidth="1.35"
+      />
+      <path d="M3.4 4.1h13.2v2.4H3.4zM7.1 9.15h5.8" stroke="currentColor" strokeLinecap="round" strokeWidth="1.35" />
+    </Icon>
+  );
+}
+
+export function RestoreIcon() {
+  return (
+    <Icon>
+      <path
+        d="M4.1 6.15h11.8l-.8 9.05a1.2 1.2 0 0 1-1.2 1.1H6.1a1.2 1.2 0 0 1-1.2-1.1L4.1 6.15Z"
+        stroke="currentColor"
+        strokeLinejoin="round"
+        strokeWidth="1.35"
+      />
+      <path d="M3.4 5.15h13.2v2.1H3.4z" stroke="currentColor" strokeWidth="1.35" />
+      <path d="M10 12.8V8.4m0 0L8.2 10.2M10 8.4l1.8 1.8" stroke="currentColor" strokeLinecap="round" strokeWidth="1.35" />
+    </Icon>
+  );
+}
+
+export function ChevronDownIcon() {
+  return (
+    <Icon>
+      <path d="m5.7 8.1 4.3 4.1 4.3-4.1" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
+    </Icon>
+  );
+}
+
 export function ClockIcon() {
   return (
     <Icon>

@@ -40,6 +40,7 @@ export interface SessionCatalogEntry {
   workspaceId: WorkspaceId;
   title: string;
   updatedAt: string;
+  archivedAt?: string;
   previewSnippet?: string;
   sessionFilePath?: string;
   status: SessionStatus;

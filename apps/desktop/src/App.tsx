@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type Dispatch, type KeyboardEvent, type MouseEvent as ReactMouseEvent, type SetStateAction } from "react";
+import { useEffect, useMemo, useRef, useState, type Dispatch, type KeyboardEvent, type MouseEvent as ReactMouseEvent, type SetStateAction } from "react";
 import type { RuntimeSnapshot } from "@pi-app/session-driver/runtime-types";
 import {
   getSelectedSession,
@@ -8,7 +8,7 @@ import {
   type WorktreeRecord,
   type WorkspaceRecord,
 } from "./desktop-state";
-import { FolderIcon, PlusIcon, SettingsIcon, SkillIcon } from "./icons";
+import { ArchiveIcon, ChevronDownIcon, FolderIcon, PlusIcon, RestoreIcon, SettingsIcon, SkillIcon } from "./icons";
 import { ComposerPanel } from "./composer-panel";
 import {
   buildModelOptions,
@@ -20,8 +20,15 @@ import {
   type ComposerSlashOption,
 } from "./composer-commands";
 import { SkillsView } from "./skills-view";
-import { SettingsView } from "./settings-view";
+import { SettingsView, type SettingsSection } from "./settings-view";
 import { TimelineItem } from "./timeline-item";
+import { SecondarySurface } from "./secondary-surface";
+import { NewThreadView } from "./new-thread-view";
+import { buildThreadGroups, type ThreadListEntry } from "./thread-groups";
+
+interface ActiveSlashFlow {
+  readonly command: ComposerSlashCommand;
+}
 
 function useDesktopAppState() {
   const [snapshot, setSnapshot] = useState<DesktopAppState | null>(null);
@@ -136,20 +143,24 @@ export default function App() {
   const [composerDraft, setComposerDraft] = useState("");
   const [slashIndex, setSlashIndex] = useState(0);
   const [slashOptionIndex, setSlashOptionIndex] = useState(0);
-  const [slashOptionCommand, setSlashOptionCommand] = useState<ComposerSlashCommand | undefined>();
-  const [slashOptionProviderId, setSlashOptionProviderId] = useState<string | undefined>();
+  const [activeSlashFlow, setActiveSlashFlow] = useState<ActiveSlashFlow | undefined>();
   const [slashMenuSuppressedDraft, setSlashMenuSuppressedDraft] = useState("");
   const [workspaceMenuId, setWorkspaceMenuId] = useState<string | null>(null);
-  const [worktreeMenuId, setWorktreeMenuId] = useState<string | null>(null);
   const [workspaceRenameId, setWorkspaceRenameId] = useState<string | null>(null);
   const [workspaceRenameDraft, setWorkspaceRenameDraft] = useState("");
+  const [expandedArchivedByWorkspace, setExpandedArchivedByWorkspace] = useState<Record<string, boolean>>({});
   const [environmentMenuOpen, setEnvironmentMenuOpen] = useState(false);
+  const [settingsSection, setSettingsSection] = useState<SettingsSection>("general");
+  const [settingsWorkspaceId, setSettingsWorkspaceId] = useState("");
+  const [skillsWorkspaceId, setSkillsWorkspaceId] = useState("");
+  const [newThreadRootWorkspaceId, setNewThreadRootWorkspaceId] = useState("");
+  const [newThreadEnvironment, setNewThreadEnvironment] = useState<"local" | "new-worktree">("local");
+  const [newThreadPrompt, setNewThreadPrompt] = useState("");
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const timelinePaneRef = useRef<HTMLDivElement | null>(null);
   const lastTranscriptMarkerRef = useRef("");
   const pinnedToBottomRef = useRef(true);
   const workspaceMenuWrapRef = useRef<HTMLSpanElement | null>(null);
-  const worktreeMenuWrapRef = useRef<HTMLSpanElement | null>(null);
   const workspaceRenamePanelRef = useRef<HTMLFormElement | null>(null);
   const workspaceRenameInputRef = useRef<HTMLInputElement | null>(null);
   const environmentMenuRef = useRef<HTMLDivElement | null>(null);
@@ -158,27 +169,62 @@ export default function App() {
 
   const selectedWorkspace = snapshot ? (getSelectedWorkspace(snapshot) ?? snapshot.workspaces[0]) : undefined;
   const selectedSession = snapshot ? (getSelectedSession(snapshot) ?? selectedWorkspace?.sessions[0]) : undefined;
-  const rootWorkspace =
-    selectedWorkspace?.kind === "worktree"
-      ? snapshot?.workspaces.find((workspace) => workspace.id === selectedWorkspace.rootWorkspaceId) ?? selectedWorkspace
-      : selectedWorkspace;
-  const primaryWorkspaces = snapshot?.workspaces.filter((workspace) => workspace.kind === "primary") ?? [];
-  const orphanWorkspaces =
-    snapshot?.workspaces.filter(
-      (workspace) =>
-        workspace.kind === "worktree" &&
-        !snapshot.workspaces.some((candidate) => candidate.id === workspace.rootWorkspaceId),
-    ) ?? [];
-  const visibleWorkspaces =
-    primaryWorkspaces.length > 0 ? [...primaryWorkspaces, ...orphanWorkspaces] : (snapshot?.workspaces ?? []);
-  const activeWorktrees = rootWorkspace ? snapshot?.worktreesByWorkspace[rootWorkspace.id] ?? [] : [];
-  const linkedWorktreeByWorkspaceId = new Map(
-    Object.values(snapshot?.worktreesByWorkspace ?? {})
-      .flat()
-      .filter((worktree) => Boolean(worktree.linkedWorkspaceId))
-      .map((worktree) => [worktree.linkedWorkspaceId as string, worktree] as const),
-  );
+  const {
+    activeWorktrees,
+    linkedWorktreeByWorkspaceId,
+    rootWorkspace,
+    rootWorkspaceOptions,
+    visibleWorkspaces,
+  } = useMemo(() => {
+    if (!snapshot) {
+      return {
+        activeWorktrees: [] as readonly WorktreeRecord[],
+        linkedWorktreeByWorkspaceId: new Map<string, WorktreeRecord>(),
+        rootWorkspace: undefined as WorkspaceRecord | undefined,
+        rootWorkspaceOptions: [] as readonly WorkspaceRecord[],
+        visibleWorkspaces: [] as readonly WorkspaceRecord[],
+      };
+    }
+
+    const workspacesById = new Map(snapshot.workspaces.map((workspace) => [workspace.id, workspace] as const));
+    const primaryWorkspaces = snapshot.workspaces.filter((workspace) => workspace.kind === "primary");
+    const orphanWorkspaces = snapshot.workspaces.filter(
+      (workspace) => workspace.kind === "worktree" && !workspacesById.has(workspace.rootWorkspaceId ?? ""),
+    );
+    const nextVisibleWorkspaces =
+      primaryWorkspaces.length > 0 ? [...primaryWorkspaces, ...orphanWorkspaces] : snapshot.workspaces;
+    const nextLinkedWorktreeByWorkspaceId = new Map(
+      Object.values(snapshot.worktreesByWorkspace)
+        .flat()
+        .filter((worktree) => Boolean(worktree.linkedWorkspaceId))
+        .map((worktree) => [worktree.linkedWorkspaceId as string, worktree] as const),
+    );
+    const nextRootWorkspace =
+      selectedWorkspace?.kind === "worktree"
+        ? snapshot.workspaces.find((workspace) => workspace.id === selectedWorkspace.rootWorkspaceId) ?? selectedWorkspace
+        : selectedWorkspace;
+
+    return {
+      activeWorktrees: nextRootWorkspace ? snapshot.worktreesByWorkspace[nextRootWorkspace.id] ?? [] : [],
+      linkedWorktreeByWorkspaceId: nextLinkedWorktreeByWorkspaceId,
+      rootWorkspace: nextRootWorkspace,
+      rootWorkspaceOptions:
+        primaryWorkspaces.length > 0
+          ? primaryWorkspaces
+          : nextVisibleWorkspaces.filter((workspace) => workspace.kind !== "worktree"),
+      visibleWorkspaces: nextVisibleWorkspaces,
+    };
+  }, [selectedWorkspace, snapshot]);
   const selectedRuntime = selectedWorkspace ? snapshot?.runtimeByWorkspace[selectedWorkspace.id] : undefined;
+  const selectedWorktree = selectedWorkspace ? linkedWorktreeByWorkspaceId.get(selectedWorkspace.id) : undefined;
+  const settingsWorkspace = settingsWorkspaceId
+    ? rootWorkspaceOptions.find((workspace) => workspace.id === settingsWorkspaceId)
+    : undefined;
+  const skillsWorkspace = skillsWorkspaceId
+    ? rootWorkspaceOptions.find((workspace) => workspace.id === skillsWorkspaceId)
+    : undefined;
+  const settingsRuntime = settingsWorkspace ? snapshot?.runtimeByWorkspace[settingsWorkspace.id] : undefined;
+  const skillsRuntime = skillsWorkspace ? snapshot?.runtimeByWorkspace[skillsWorkspace.id] : undefined;
   const composerAttachments = snapshot?.composerAttachments ?? [];
   const runningLabel = useRunningLabel(selectedSession?.status === "running" ? selectedSession.runningSince : undefined);
   const selectedSessionKey = `${selectedWorkspace?.id ?? ""}:${selectedSession?.id ?? ""}`;
@@ -191,7 +237,7 @@ export default function App() {
   const slashSuggestions = flattenSlashSections(slashSections);
   const exactSlashCommand = findExactSlashCommand(slashQuery, selectedRuntime);
   const activeSlashOptionCommand =
-    slashOptionCommand ?? (exactSlashCommand?.submitMode === "pick-option" ? exactSlashCommand : undefined);
+    activeSlashFlow?.command ?? (exactSlashCommand?.submitMode === "pick-option" ? exactSlashCommand : undefined);
   const showSlashMenu =
     selectedSession?.status !== "running" &&
     slashQuery.startsWith("/") &&
@@ -201,15 +247,18 @@ export default function App() {
     slashSuggestions.length > 0;
   const selectedSlashCommand = showSlashMenu ? slashSuggestions[slashIndex % slashSuggestions.length] : undefined;
   const slashOptions =
-    activeSlashOptionCommand?.kind === "model" && slashOptionProviderId
-      ? buildModelOptions(selectedRuntime, slashOptionProviderId)
+    activeSlashOptionCommand?.kind === "model"
+      ? buildModelOptions(selectedRuntime)
       : slashOptionsForCommand(activeSlashOptionCommand, selectedRuntime);
   const showSlashOptionMenu =
     selectedSession?.status !== "running" &&
     Boolean(activeSlashOptionCommand) &&
-    slashOptions.length > 0 &&
-    !slashQuery.includes("\n");
+    slashOptions.length > 0;
   const selectedSlashOption = showSlashOptionMenu ? slashOptions[slashOptionIndex % slashOptions.length] : undefined;
+  const threadGroups = useMemo(
+    () => (snapshot ? buildThreadGroups(snapshot) : []),
+    [snapshot],
+  );
 
   useEffect(() => {
     if (!snapshot) {
@@ -217,6 +266,37 @@ export default function App() {
     }
     setComposerDraft(snapshot.composerDraft);
   }, [selectedSessionKey]);
+
+  useEffect(() => {
+    if (rootWorkspaceOptions.length === 0) {
+      setSettingsWorkspaceId("");
+      setSkillsWorkspaceId("");
+      setNewThreadRootWorkspaceId("");
+      return;
+    }
+    setSettingsWorkspaceId((current) =>
+      rootWorkspaceOptions.some((workspace) => workspace.id === current) ? current : (current || rootWorkspaceOptions[0]?.id || ""),
+    );
+    setSkillsWorkspaceId((current) =>
+      rootWorkspaceOptions.some((workspace) => workspace.id === current) ? current : (current || rootWorkspaceOptions[0]?.id || ""),
+    );
+    setNewThreadRootWorkspaceId((current) =>
+      rootWorkspaceOptions.some((workspace) => workspace.id === current) ? current : (current || rootWorkspaceOptions[0]?.id || ""),
+    );
+  }, [rootWorkspaceOptions]);
+
+  useEffect(() => {
+    const handler = (event: globalThis.KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key === ",") {
+        event.preventDefault();
+        openSettings(selectedWorkspace?.rootWorkspaceId ?? selectedWorkspace?.id);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => {
+      window.removeEventListener("keydown", handler);
+    };
+  }, [selectedWorkspace?.id, selectedWorkspace?.rootWorkspaceId]);
 
   useEffect(() => {
     setSlashIndex(0);
@@ -230,25 +310,25 @@ export default function App() {
 
   useEffect(() => {
     if (!slashQuery.startsWith("/")) {
-      setSlashOptionCommand(undefined);
-      setSlashOptionProviderId(undefined);
+      if (!slashQuery && activeSlashFlow) {
+        return;
+      }
+      setActiveSlashFlow(undefined);
       setSlashOptionIndex(0);
       return;
     }
 
-    if (slashOptionCommand && slashQuery.trim().length > slashOptionCommand.command.length) {
-      setSlashOptionCommand(undefined);
-      setSlashOptionProviderId(undefined);
+    if (activeSlashFlow?.command && slashQuery.trim().length > activeSlashFlow.command.command.length) {
+      setActiveSlashFlow(undefined);
       setSlashOptionIndex(0);
     }
-  }, [slashOptionCommand, slashQuery]);
+  }, [activeSlashFlow, slashQuery]);
 
   useEffect(() => {
     setShowJumpToLatest(false);
     lastTranscriptMarkerRef.current = "";
     pinnedToBottomRef.current = true;
-    setSlashOptionCommand(undefined);
-    setSlashOptionProviderId(undefined);
+    setActiveSlashFlow(undefined);
     setSlashOptionIndex(0);
     setSlashMenuSuppressedDraft("");
   }, [selectedSessionKey]);
@@ -270,12 +350,10 @@ export default function App() {
         return;
       }
       const menuContains = workspaceMenuWrapRef.current?.contains(target) ?? false;
-      const worktreeMenuContains = worktreeMenuWrapRef.current?.contains(target) ?? false;
       const renamePanelContains = workspaceRenamePanelRef.current?.contains(target) ?? false;
       const environmentMenuContains = environmentMenuRef.current?.contains(target) ?? false;
-      if (!menuContains && !worktreeMenuContains && !renamePanelContains && !environmentMenuContains) {
+      if (!menuContains && !renamePanelContains && !environmentMenuContains) {
         setWorkspaceMenuId(null);
-        setWorktreeMenuId(null);
         setWorkspaceRenameId(null);
         setEnvironmentMenuOpen(false);
       }
@@ -284,7 +362,6 @@ export default function App() {
     const handleKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.key === "Escape") {
         setWorkspaceMenuId(null);
-        setWorktreeMenuId(null);
         setWorkspaceRenameId(null);
         setEnvironmentMenuOpen(false);
       }
@@ -359,6 +436,44 @@ export default function App() {
     void updateSnapshot(api, setSnapshot, () => api.setActiveView(view));
   };
 
+  const openSettings = (workspaceId?: string, section?: SettingsSection) => {
+    const nextWorkspaceId =
+      workspaceId && rootWorkspaceOptions.some((workspace) => workspace.id === workspaceId)
+        ? workspaceId
+        : settingsWorkspace?.id || rootWorkspaceOptions[0]?.id || "";
+    if (nextWorkspaceId) {
+      setSettingsWorkspaceId(nextWorkspaceId);
+    }
+    if (section) {
+      setSettingsSection(section);
+    }
+    setActiveView("settings");
+  };
+
+  const openSkills = (workspaceId?: string) => {
+    const nextWorkspaceId =
+      workspaceId && rootWorkspaceOptions.some((workspace) => workspace.id === workspaceId)
+        ? workspaceId
+        : skillsWorkspace?.id || rootWorkspaceOptions[0]?.id || "";
+    if (nextWorkspaceId) {
+      setSkillsWorkspaceId(nextWorkspaceId);
+    }
+    setActiveView("skills");
+  };
+
+  const openNewThreadSurface = (workspaceId?: string) => {
+    const nextRootWorkspace =
+      (workspaceId && rootWorkspaceOptions.find((workspace) => workspace.id === workspaceId)) ||
+      rootWorkspace ||
+      visibleWorkspaces[0];
+    if (nextRootWorkspace) {
+      setNewThreadRootWorkspaceId(nextRootWorkspace.id);
+    }
+    setNewThreadEnvironment("local");
+    setNewThreadPrompt("");
+    setActiveView("new-thread");
+  };
+
   const submitComposerDraft = () => {
     if (!selectedSession) {
       return;
@@ -392,70 +507,70 @@ export default function App() {
   };
 
   const handleRefreshRuntime = () => {
-    if (!selectedWorkspace) {
+    if (!settingsWorkspace) {
       return;
     }
-    void updateSnapshot(api, setSnapshot, () => api.refreshRuntime(selectedWorkspace.id));
+    void updateSnapshot(api, setSnapshot, () => api.refreshRuntime(settingsWorkspace.id));
   };
 
   const handleSetDefaultModel = (provider: string, modelId: string) => {
-    if (!selectedWorkspace) {
+    if (!settingsWorkspace) {
       return;
     }
-    void updateSnapshot(api, setSnapshot, () => api.setDefaultModel(selectedWorkspace.id, provider, modelId));
+    void updateSnapshot(api, setSnapshot, () => api.setDefaultModel(settingsWorkspace.id, provider, modelId));
   };
 
   const handleSetThinkingLevel = (thinkingLevel: RuntimeSnapshot["settings"]["defaultThinkingLevel"]) => {
-    if (!selectedWorkspace) {
+    if (!settingsWorkspace) {
       return;
     }
-    void updateSnapshot(api, setSnapshot, () => api.setDefaultThinkingLevel(selectedWorkspace.id, thinkingLevel));
+    void updateSnapshot(api, setSnapshot, () => api.setDefaultThinkingLevel(settingsWorkspace.id, thinkingLevel));
   };
 
   const handleToggleSkillCommands = (enabled: boolean) => {
-    if (!selectedWorkspace) {
+    if (!settingsWorkspace) {
       return;
     }
-    void updateSnapshot(api, setSnapshot, () => api.setEnableSkillCommands(selectedWorkspace.id, enabled));
+    void updateSnapshot(api, setSnapshot, () => api.setEnableSkillCommands(settingsWorkspace.id, enabled));
   };
 
   const handleSetScopedModelPatterns = (patterns: readonly string[]) => {
-    if (!selectedWorkspace) {
+    if (!settingsWorkspace) {
       return;
     }
-    void updateSnapshot(api, setSnapshot, () => api.setScopedModelPatterns(selectedWorkspace.id, patterns));
+    void updateSnapshot(api, setSnapshot, () => api.setScopedModelPatterns(settingsWorkspace.id, patterns));
   };
 
   const handleLoginProvider = (providerId: string) => {
-    if (!selectedWorkspace) {
+    if (!settingsWorkspace) {
       return;
     }
-    void updateSnapshot(api, setSnapshot, () => api.loginProvider(selectedWorkspace.id, providerId));
+    void updateSnapshot(api, setSnapshot, () => api.loginProvider(settingsWorkspace.id, providerId));
   };
 
   const handleLogoutProvider = (providerId: string) => {
-    if (!selectedWorkspace) {
+    if (!settingsWorkspace) {
       return;
     }
-    void updateSnapshot(api, setSnapshot, () => api.logoutProvider(selectedWorkspace.id, providerId));
+    void updateSnapshot(api, setSnapshot, () => api.logoutProvider(settingsWorkspace.id, providerId));
   };
 
   const handleToggleSkill = (filePath: string, enabled: boolean) => {
-    if (!selectedWorkspace) {
+    if (!skillsWorkspace) {
       return;
     }
-    void updateSnapshot(api, setSnapshot, () => api.setSkillEnabled(selectedWorkspace.id, filePath, enabled));
+    void updateSnapshot(api, setSnapshot, () => api.setSkillEnabled(skillsWorkspace.id, filePath, enabled));
   };
 
   const handleOpenSkillFolder = (filePath: string) => {
-    if (!selectedWorkspace) {
+    if (!skillsWorkspace) {
       return;
     }
-    void api.openSkillInFinder(selectedWorkspace.id, filePath);
+    void api.openSkillInFinder(skillsWorkspace.id, filePath);
   };
 
   const handleTrySkill = (command: string) => {
-    setActiveView("threads");
+    void updateSnapshot(api, setSnapshot, () => api.setActiveView("threads"));
     fillComposerFromSlash(command);
   };
 
@@ -465,7 +580,6 @@ export default function App() {
 
   const handleWorkspaceRenameStart = (workspace: WorkspaceRecord) => {
     setWorkspaceMenuId(null);
-    setWorktreeMenuId(null);
     setWorkspaceRenameId(workspace.id);
     setWorkspaceRenameDraft(workspace.name);
   };
@@ -485,7 +599,6 @@ export default function App() {
   const handleWorkspaceRemove = (workspace: WorkspaceRecord) => {
     const confirmed = window.confirm(`Remove ${workspace.name} from pi-app? This will not delete any files.`);
     setWorkspaceMenuId(null);
-    setWorktreeMenuId(null);
     setWorkspaceRenameId(null);
     if (!confirmed) {
       return;
@@ -500,7 +613,6 @@ export default function App() {
 
   const handleCreateWorktree = (workspaceId: string, fromSessionWorkspaceId?: string, fromSessionId?: string) => {
     setWorkspaceMenuId(null);
-    setWorktreeMenuId(null);
     setEnvironmentMenuOpen(false);
     void updateSnapshot(api, setSnapshot, () =>
       api.createWorktree({ workspaceId, fromSessionWorkspaceId, fromSessionId }),
@@ -509,7 +621,6 @@ export default function App() {
 
   const handleRemoveWorktree = (workspaceId: string, worktree: WorktreeRecord) => {
     const confirmed = window.confirm(`Remove worktree ${worktree.name}? This removes the git worktree from disk.`);
-    setWorktreeMenuId(null);
     setEnvironmentMenuOpen(false);
     if (!confirmed) {
       return;
@@ -522,6 +633,35 @@ export default function App() {
   const handleSelectWorkspace = (workspaceId: string) => {
     setEnvironmentMenuOpen(false);
     void updateSnapshot(api, setSnapshot, () => api.selectWorkspace(workspaceId));
+  };
+
+  const setArchivedSectionOpen = (workspaceId: string, open: boolean) => {
+    setExpandedArchivedByWorkspace((current) => ({ ...current, [workspaceId]: open }));
+  };
+
+  const handleArchiveSession = (rootWorkspaceId: string, target: { workspaceId: string; sessionId: string }) => {
+    setArchivedSectionOpen(rootWorkspaceId, true);
+    void updateSnapshot(api, setSnapshot, () => api.archiveSession(target));
+  };
+
+  const handleUnarchiveSession = (target: { workspaceId: string; sessionId: string }) => {
+    void updateSnapshot(api, setSnapshot, () => api.unarchiveSession(target));
+  };
+
+  const handleStartThread = () => {
+    if (!newThreadRootWorkspaceId) {
+      return;
+    }
+    void updateSnapshot(api, setSnapshot, () =>
+      api.startThread({
+        rootWorkspaceId: newThreadRootWorkspaceId,
+        environment: newThreadEnvironment,
+        prompt: newThreadPrompt,
+      }),
+    ).then(() => {
+      setNewThreadPrompt("");
+      setNewThreadEnvironment("local");
+    });
   };
 
   const handleTimelineScroll = () => {
@@ -555,8 +695,7 @@ export default function App() {
   };
 
   const closeSlashOptionMenu = () => {
-    setSlashOptionCommand(undefined);
-    setSlashOptionProviderId(undefined);
+    setActiveSlashFlow(undefined);
     setSlashOptionIndex(0);
   };
 
@@ -573,10 +712,9 @@ export default function App() {
 
   const openSlashOptionMenu = (command: ComposerSlashCommand) => {
     setSlashMenuSuppressedDraft("");
-    setSlashOptionCommand(command);
-    setSlashOptionProviderId(undefined);
+    setActiveSlashFlow({ command });
     setSlashOptionIndex(0);
-    setComposerDraft(command.command);
+    setComposerDraft("");
     focusComposer();
   };
 
@@ -593,7 +731,10 @@ export default function App() {
     if (command.kind === "settings" || command.kind === "scoped-models") {
       resetSlashUi();
       setComposerDraft("");
-      setActiveView("settings");
+      openSettings(
+        selectedWorkspace?.rootWorkspaceId ?? selectedWorkspace?.id,
+        command.kind === "scoped-models" ? "models" : undefined,
+      );
       return;
     }
 
@@ -621,19 +762,37 @@ export default function App() {
       return;
     }
 
-    if (activeSlashOptionCommand.kind === "model" && !slashOptionProviderId) {
-      setSlashOptionProviderId(option.value);
-      setSlashOptionIndex(0);
-      setComposerDraft(`${activeSlashOptionCommand.command} ${option.value}`);
-      focusComposer();
+    if (activeSlashOptionCommand.kind === "model") {
+      if (!selectedSession) {
+        return;
+      }
+      resetSlashUi();
+      setComposerDraft("");
+      const modelOption = option as Extract<ComposerSlashOption, { value: string }> & { providerId?: string };
+      const providerId = modelOption.providerId;
+      if (!providerId) {
+        return;
+      }
+      void updateSnapshot(api, setSnapshot, () =>
+        api.setSessionModel(selectedWorkspace.id, selectedSession.id, providerId, option.value),
+      ).then((state) => {
+        setComposerDraft(state.composerDraft);
+      });
       return;
     }
 
-    if (activeSlashOptionCommand.kind === "model" && slashOptionProviderId) {
+    if (activeSlashOptionCommand.kind === "thinking") {
+      if (!selectedSession) {
+        return;
+      }
       resetSlashUi();
       setComposerDraft("");
       void updateSnapshot(api, setSnapshot, () =>
-        api.submitComposer(`/model ${slashOptionProviderId} ${option.value}`),
+        api.setSessionThinkingLevel(
+          selectedWorkspace.id,
+          selectedSession.id,
+          option.value as NonNullable<RuntimeSnapshot["settings"]["defaultThinkingLevel"]>,
+        ),
       ).then((state) => {
         setComposerDraft(state.composerDraft);
       });
@@ -740,6 +899,98 @@ export default function App() {
     void api.toggleWindowMaximize();
   };
 
+  const settingsNav = [
+    { id: "general", label: "General" },
+    { id: "providers", label: "Providers" },
+    { id: "models", label: "Models" },
+    { id: "notifications", label: "Notifications" },
+  ] as const;
+
+  if (snapshot.activeView === "settings") {
+    return (
+      <SecondarySurface
+        activeNavId={settingsSection}
+        navItems={settingsNav}
+        onBack={() => setActiveView("threads")}
+        onSelectNav={(section) => setSettingsSection(section as SettingsSection)}
+        title="Settings"
+      >
+        {settingsSection === "providers" || settingsSection === "models" ? (
+          <div className="surface-toolbar">
+            <label className="surface-toolbar__field">
+              <span>Workspace</span>
+              <select
+                value={settingsWorkspace?.id ?? ""}
+                onChange={(event) => setSettingsWorkspaceId(event.target.value)}
+              >
+                {rootWorkspaceOptions.map((workspace) => (
+                  <option key={workspace.id} value={workspace.id}>
+                    {workspace.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        ) : null}
+        <SettingsView
+          workspace={settingsWorkspace}
+          runtime={settingsRuntime}
+          section={settingsSection}
+          notificationPreferences={snapshot.notificationPreferences}
+          onLoginProvider={handleLoginProvider}
+          onLogoutProvider={handleLogoutProvider}
+          onRefresh={handleRefreshRuntime}
+          onSetDefaultModel={handleSetDefaultModel}
+          onSetNotificationPreferences={handleSetNotificationPreferences}
+          onSetScopedModelPatterns={handleSetScopedModelPatterns}
+          onSetThinkingLevel={handleSetThinkingLevel}
+          onToggleSkillCommands={handleToggleSkillCommands}
+        />
+      </SecondarySurface>
+    );
+  }
+
+  if (snapshot.activeView === "skills") {
+    return (
+      <SecondarySurface onBack={() => setActiveView("threads")} title="Skills">
+        <div className="surface-toolbar">
+          <label className="surface-toolbar__field">
+            <span>Workspace</span>
+            <select
+              value={skillsWorkspace?.id ?? ""}
+              onChange={(event) => setSkillsWorkspaceId(event.target.value)}
+            >
+              {rootWorkspaceOptions.map((workspace) => (
+                <option key={workspace.id} value={workspace.id}>
+                  {workspace.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <SkillsView
+          workspace={skillsWorkspace}
+          runtime={skillsRuntime}
+          onOpenSkillFolder={handleOpenSkillFolder}
+          onRefresh={() => {
+            if (!skillsWorkspace) {
+              return;
+            }
+            void updateSnapshot(api, setSnapshot, () => api.refreshRuntime(skillsWorkspace.id));
+          }}
+          onToggleSkill={handleToggleSkill}
+          onTrySkill={(skill) =>
+            handleTrySkill(
+              skill.filePath
+                ? `${skill.slashCommand} `
+                : "Create a new skill for this workspace and explain which files you will add.",
+            )
+          }
+        />
+      </SecondarySurface>
+    );
+  }
+
   return (
     <div className="shell">
       <aside className="sidebar">
@@ -748,14 +999,7 @@ export default function App() {
             className="sidebar__new"
             type="button"
             disabled={!selectedWorkspace}
-            onClick={() => {
-              if (!selectedWorkspace) {
-                return;
-              }
-              void updateSnapshot(api, setSnapshot, () =>
-                api.createSession({ workspaceId: selectedWorkspace.id, title: "New thread" }),
-              );
-            }}
+            onClick={() => openNewThreadSurface()}
           >
             <PlusIcon />
             <span>New thread</span>
@@ -770,19 +1014,19 @@ export default function App() {
               <FolderIcon />
               <span>Threads</span>
             </button>
-            <button
-              className={`sidebar__nav-item ${snapshot.activeView === "skills" ? "sidebar__nav-item--active" : ""}`}
-              type="button"
-              onClick={() => setActiveView("skills")}
-            >
+          <button
+            className="sidebar__nav-item"
+            type="button"
+            onClick={() => openSkills(selectedWorkspace?.rootWorkspaceId ?? selectedWorkspace?.id)}
+          >
               <SkillIcon />
               <span>Skills</span>
             </button>
-            <button
-              className={`sidebar__nav-item ${snapshot.activeView === "settings" ? "sidebar__nav-item--active" : ""}`}
-              type="button"
-              onClick={() => setActiveView("settings")}
-            >
+          <button
+            className="sidebar__nav-item"
+            type="button"
+            onClick={() => openSettings(selectedWorkspace?.rootWorkspaceId ?? selectedWorkspace?.id)}
+          >
               <SettingsIcon />
               <span>Settings</span>
             </button>
@@ -822,50 +1066,52 @@ export default function App() {
             </div>
           ) : (
             <div className="workspace-list" data-testid="workspace-list">
-              {visibleWorkspaces.map((workspace: WorkspaceRecord) => {
-                const workspaceActive = workspace.id === selectedWorkspace?.id;
-                const worktrees = snapshot.worktreesByWorkspace[workspace.id] ?? [];
-                const linkedWorktree = linkedWorktreeByWorkspaceId.get(workspace.id);
+              {threadGroups.map(({ rootWorkspace, threads, archivedThreads }) => {
+                const workspaceActive =
+                  rootWorkspace.id === selectedWorkspace?.id ||
+                  rootWorkspace.id === selectedWorkspace?.rootWorkspaceId;
+                const linkedWorktree = linkedWorktreeByWorkspaceId.get(rootWorkspace.id);
+                const archivedSectionOpen = expandedArchivedByWorkspace[rootWorkspace.id] ?? false;
                 return (
-                  <section key={workspace.id} className="workspace-group">
+                  <section key={rootWorkspace.id} className="workspace-group">
                     <div className={`workspace-row ${workspaceActive ? "workspace-row--active" : ""}`}>
                       <button
                         className="workspace-row__select"
-                        onClick={() => handleSelectWorkspace(workspace.id)}
+                        onClick={() => handleSelectWorkspace(rootWorkspace.id)}
                         type="button"
                       >
                         <span className="workspace-row__icon" aria-hidden="true">
                           <FolderIcon />
                         </span>
-                        <span className="workspace-row__name">{workspace.name}</span>
-                        <span className="workspace-row__time">{formatRelativeTime(workspace.lastOpenedAt)}</span>
+                        <span className="workspace-row__name">{rootWorkspace.name}</span>
+                        <span className="workspace-row__time">{formatRelativeTime(rootWorkspace.lastOpenedAt)}</span>
                       </button>
                       <span
                         className="workspace-row__menu-wrap"
-                        ref={workspaceMenuId === workspace.id ? workspaceMenuWrapRef : undefined}
+                        ref={workspaceMenuId === rootWorkspace.id ? workspaceMenuWrapRef : undefined}
                       >
                         <button
-                          aria-label={`Workspace actions for ${workspace.name}`}
+                          aria-label={`Workspace actions for ${rootWorkspace.name}`}
                           aria-haspopup="menu"
                           className="icon-button workspace-row__menu-button"
-                          aria-expanded={workspaceMenuId === workspace.id}
+                          aria-expanded={workspaceMenuId === rootWorkspace.id}
                           type="button"
                           onClick={(event) => {
                             event.preventDefault();
                             event.stopPropagation();
-                            setWorkspaceMenuId((current) => (current === workspace.id ? null : workspace.id));
+                            setWorkspaceMenuId((current) => (current === rootWorkspace.id ? null : rootWorkspace.id));
                           }}
                         >
                           …
                         </button>
-                        {workspaceMenuId === workspace.id ? (
+                        {workspaceMenuId === rootWorkspace.id ? (
                           <div className="workspace-menu">
                             <button
                               className="workspace-menu__item"
                               type="button"
                               onClick={(event) =>
                                 runWorkspaceMenuAction(event, () => {
-                                  void api.openWorkspaceInFinder(workspace.id);
+                                  void api.openWorkspaceInFinder(rootWorkspace.id);
                                 })
                               }
                             >
@@ -877,7 +1123,7 @@ export default function App() {
                                 type="button"
                                 onClick={(event) =>
                                   runWorkspaceMenuAction(event, () =>
-                                    handleRemoveWorktree(linkedWorktree.rootWorkspaceId || workspace.id, linkedWorktree),
+                                    handleRemoveWorktree(linkedWorktree.rootWorkspaceId || rootWorkspace.id, linkedWorktree),
                                   )
                                 }
                               >
@@ -888,7 +1134,7 @@ export default function App() {
                                 className="workspace-menu__item"
                                 type="button"
                                 onClick={(event) =>
-                                  runWorkspaceMenuAction(event, () => handleCreateWorktree(workspace.id))
+                                  runWorkspaceMenuAction(event, () => handleCreateWorktree(rootWorkspace.id))
                                 }
                               >
                                 Create permanent worktree
@@ -897,14 +1143,14 @@ export default function App() {
                             <button
                               className="workspace-menu__item"
                               type="button"
-                              onClick={(event) => runWorkspaceMenuAction(event, () => handleWorkspaceRenameStart(workspace))}
+                              onClick={(event) => runWorkspaceMenuAction(event, () => handleWorkspaceRenameStart(rootWorkspace))}
                             >
                               Edit name
                             </button>
                             <button
                               className="workspace-menu__item workspace-menu__item--danger"
                               type="button"
-                              onClick={(event) => runWorkspaceMenuAction(event, () => handleWorkspaceRemove(workspace))}
+                              onClick={(event) => runWorkspaceMenuAction(event, () => handleWorkspaceRemove(rootWorkspace))}
                             >
                               Remove
                             </button>
@@ -912,17 +1158,17 @@ export default function App() {
                         ) : null}
                       </span>
                     </div>
-                    {workspaceRenameId === workspace.id ? (
+                    {workspaceRenameId === rootWorkspace.id ? (
                       <form
                         className="workspace-rename"
                         ref={workspaceRenamePanelRef}
                         onSubmit={(event) => {
                           event.preventDefault();
-                          handleWorkspaceRenameSubmit(workspace);
+                          handleWorkspaceRenameSubmit(rootWorkspace);
                         }}
                       >
                         <input
-                          aria-label={`Rename ${workspace.name}`}
+                          aria-label={`Rename ${rootWorkspace.name}`}
                           className="workspace-rename__input"
                           ref={workspaceRenameInputRef}
                           value={workspaceRenameDraft}
@@ -947,135 +1193,72 @@ export default function App() {
                       </form>
                     ) : null}
                     <div className="session-list">
-                      {workspace.sessions.map((session) => {
-                        const active = workspace.id === selectedWorkspace?.id && session.id === selectedSession?.id;
+                      {threads.map((thread) => {
+                        const active = thread.workspaceId === selectedWorkspace?.id && thread.session.id === selectedSession?.id;
                         return (
-                          <button
-                            key={session.id}
-                            className={`session-row ${active ? "session-row--active" : ""}`}
-                            onClick={() => {
+                          <ThreadSessionRow
+                            key={`${thread.workspaceId}:${thread.session.id}`}
+                            active={active}
+                            thread={thread}
+                            onAction={() =>
+                              handleArchiveSession(rootWorkspace.id, {
+                                workspaceId: thread.workspaceId,
+                                sessionId: thread.session.id,
+                              })
+                            }
+                            onSelect={() => {
                               void updateSnapshot(api, setSnapshot, () =>
-                                api.selectSession({ workspaceId: workspace.id, sessionId: session.id }),
+                                api.selectSession({ workspaceId: thread.workspaceId, sessionId: thread.session.id }),
                               );
                             }}
-                            type="button"
-                          >
-                            <span className={`session-row__status session-row__status--${session.status}`} />
-                            <span className="session-row__body">
-                              <span className="session-row__title">{session.title}</span>
-                              {active && session.preview ? (
-                                <span className="session-row__preview">{session.preview}</span>
-                              ) : null}
-                            </span>
-                            <span className="session-row__time">{formatRelativeTime(session.updatedAt)}</span>
-                          </button>
+                          />
                         );
                       })}
                     </div>
-                    {worktrees.length > 0 ? (
-                      <div className="worktree-list">
-                        {worktrees.map((worktree) => {
-                          const linkedWorkspace = snapshot.workspaces.find(
-                            (candidate) => candidate.id === worktree.linkedWorkspaceId,
-                          );
-                          const active = linkedWorkspace?.id === selectedWorkspace?.id;
-                          return (
-                            <div key={worktree.id} className="worktree-group">
-                              <div className={`worktree-row ${active ? "worktree-row--active" : ""}`}>
-                                <button
-                                  className="worktree-row__select"
-                                  disabled={!linkedWorkspace}
-                                  type="button"
-                                  onClick={() => {
-                                    if (linkedWorkspace) {
-                                      handleSelectWorkspace(linkedWorkspace.id);
-                                    }
-                                  }}
-                                >
-                                  <span className="worktree-row__name">{worktree.name}</span>
-                                  <span className="worktree-row__meta">
-                                    {worktree.branchName ?? "worktree"}
-                                    {worktree.status !== "ready" ? ` · ${worktree.status}` : ""}
-                                  </span>
-                                </button>
-                                <span
-                                  className="workspace-row__menu-wrap"
-                                  ref={worktreeMenuId === worktree.id ? worktreeMenuWrapRef : undefined}
-                                >
-                                  <button
-                                    aria-label={`Worktree actions for ${worktree.name}`}
-                                    aria-haspopup="menu"
-                                    className="icon-button workspace-row__menu-button"
-                                    aria-expanded={worktreeMenuId === worktree.id}
-                                    type="button"
-                                    onClick={(event) => {
-                                      event.preventDefault();
-                                      event.stopPropagation();
-                                      setWorktreeMenuId((current) => (current === worktree.id ? null : worktree.id));
-                                    }}
-                                  >
-                                    …
-                                  </button>
-                                  {worktreeMenuId === worktree.id ? (
-                                    <div className="workspace-menu">
-                                      <button
-                                        className="workspace-menu__item"
-                                        type="button"
-                                        onClick={(event) =>
-                                          runWorkspaceMenuAction(event, () => {
-                                            if (linkedWorkspace) {
-                                              void api.openWorkspaceInFinder(linkedWorkspace.id);
-                                            }
-                                          })
-                                        }
-                                      >
-                                        Open in Finder
-                                      </button>
-                                      <button
-                                        className="workspace-menu__item workspace-menu__item--danger"
-                                        type="button"
-                                        onClick={(event) =>
-                                          runWorkspaceMenuAction(event, () => handleRemoveWorktree(workspace.id, worktree))
-                                        }
-                                      >
-                                        Remove worktree
-                                      </button>
-                                    </div>
-                                  ) : null}
-                                </span>
-                              </div>
-                              {linkedWorkspace && active ? (
-                                <div className="session-list session-list--nested">
-                                  {linkedWorkspace.sessions.map((session) => {
-                                    const sessionActive =
-                                      linkedWorkspace.id === selectedWorkspace?.id && session.id === selectedSession?.id;
-                                    return (
-                                      <button
-                                        key={session.id}
-                                        className={`session-row ${sessionActive ? "session-row--active" : ""}`}
-                                        onClick={() => {
-                                          void updateSnapshot(api, setSnapshot, () =>
-                                            api.selectSession({ workspaceId: linkedWorkspace.id, sessionId: session.id }),
-                                          );
-                                        }}
-                                        type="button"
-                                      >
-                                        <span className={`session-row__status session-row__status--${session.status}`} />
-                                        <span className="session-row__body">
-                                          <span className="session-row__title">{session.title}</span>
-                                          {sessionActive && session.preview ? (
-                                            <span className="session-row__preview">{session.preview}</span>
-                                          ) : null}
-                                        </span>
-                                        <span className="session-row__time">{formatRelativeTime(session.updatedAt)}</span>
-                                      </button>
+                    {archivedThreads.length > 0 ? (
+                      <div className="archived-thread-group">
+                        <button
+                          aria-expanded={archivedSectionOpen}
+                          className="archived-thread-group__toggle"
+                          type="button"
+                          onClick={() => setArchivedSectionOpen(rootWorkspace.id, !archivedSectionOpen)}
+                        >
+                          <span
+                            aria-hidden="true"
+                            className={`archived-thread-group__chevron ${archivedSectionOpen ? "archived-thread-group__chevron--open" : ""}`}
+                          >
+                            <ChevronDownIcon />
+                          </span>
+                          <span>Archived</span>
+                          <span className="archived-thread-group__count">{archivedThreads.length}</span>
+                        </button>
+                        {archivedSectionOpen ? (
+                          <div className="session-list session-list--archived">
+                            {archivedThreads.map((thread) => {
+                              const active =
+                                thread.workspaceId === selectedWorkspace?.id && thread.session.id === selectedSession?.id;
+                              return (
+                                <ThreadSessionRow
+                                  key={`${thread.workspaceId}:${thread.session.id}`}
+                                  active={active}
+                                  archived
+                                  thread={thread}
+                                  onAction={() =>
+                                    handleUnarchiveSession({
+                                      workspaceId: thread.workspaceId,
+                                      sessionId: thread.session.id,
+                                    })
+                                  }
+                                  onSelect={() => {
+                                    void updateSnapshot(api, setSnapshot, () =>
+                                      api.selectSession({ workspaceId: thread.workspaceId, sessionId: thread.session.id }),
                                     );
-                                  })}
-                                </div>
-                              ) : null}
-                            </div>
-                          );
-                        })}
+                                  }}
+                                />
+                              );
+                            })}
+                          </div>
+                        ) : null}
                       </div>
                     ) : null}
                   </section>
@@ -1103,7 +1286,7 @@ export default function App() {
                     type="button"
                     onClick={() => setEnvironmentMenuOpen((current) => !current)}
                   >
-                    {selectedWorkspace.kind === "worktree" ? selectedWorkspace.name : "Local project"}
+                    {selectedWorkspace.kind === "worktree" ? selectedWorktree?.name ?? selectedWorkspace.name : "Local"}
                   </button>
                   {environmentMenuOpen && rootWorkspace ? (
                     <div className="workspace-menu environment-picker__menu">
@@ -1112,7 +1295,7 @@ export default function App() {
                         type="button"
                         onClick={() => handleSelectWorkspace(rootWorkspace.id)}
                       >
-                        Local project
+                        Local
                       </button>
                       {activeWorktrees.map((worktree) => {
                         const linkedWorkspace = snapshot.workspaces.find(
@@ -1136,13 +1319,6 @@ export default function App() {
                           </button>
                         );
                       })}
-                      <button
-                        className="workspace-menu__item"
-                        type="button"
-                        onClick={() => handleCreateWorktree(rootWorkspace.id, selectedWorkspace?.id, selectedSession?.id)}
-                      >
-                        New worktree
-                      </button>
                     </div>
                   ) : null}
                 </div>
@@ -1153,12 +1329,10 @@ export default function App() {
                 <span className="topbar__separator">/</span>
                 <span className="topbar__session">{selectedSession.title}</span>
               </>
-            ) : selectedWorkspace && snapshot.activeView !== "threads" ? (
+            ) : snapshot.activeView === "new-thread" && rootWorkspace ? (
               <>
                 <span className="topbar__separator">/</span>
-                <span className="topbar__session">
-                  {snapshot.activeView === "skills" ? "Skills" : "Settings"}
-                </span>
+                <span className="topbar__session">New thread</span>
               </>
             ) : null}
           </div>
@@ -1177,35 +1351,34 @@ export default function App() {
           </div>
         </header>
 
-        {snapshot.activeView === "skills" ? (
-          <SkillsView
-            workspace={selectedWorkspace}
-            runtime={selectedRuntime}
-            onOpenSkillFolder={handleOpenSkillFolder}
-            onRefresh={handleRefreshRuntime}
-            onToggleSkill={handleToggleSkill}
-            onTrySkill={(skill) =>
-              handleTrySkill(
-                skill.filePath
-                  ? `${skill.slashCommand} `
-                  : "Create a new skill for this workspace and explain which files you will add.",
-              )
-            }
-          />
-        ) : snapshot.activeView === "settings" ? (
-          <SettingsView
-            workspace={selectedWorkspace}
-            runtime={selectedRuntime}
-            notificationPreferences={snapshot.notificationPreferences}
-            onLoginProvider={handleLoginProvider}
-            onLogoutProvider={handleLogoutProvider}
-            onRefresh={handleRefreshRuntime}
-            onSetDefaultModel={handleSetDefaultModel}
-            onSetNotificationPreferences={handleSetNotificationPreferences}
-            onSetScopedModelPatterns={handleSetScopedModelPatterns}
-            onSetThinkingLevel={handleSetThinkingLevel}
-            onToggleSkillCommands={handleToggleSkillCommands}
-          />
+        {snapshot.activeView === "new-thread" ? (
+          rootWorkspaceOptions.length > 0 ? (
+            <NewThreadView
+              workspaces={rootWorkspaceOptions}
+              selectedWorkspaceId={newThreadRootWorkspaceId || rootWorkspaceOptions[0]?.id || ""}
+              runtime={
+                (() => {
+                  const workspace =
+                    rootWorkspaceOptions.find((entry) => entry.id === newThreadRootWorkspaceId) ?? rootWorkspaceOptions[0];
+                  return workspace ? snapshot.runtimeByWorkspace[workspace.id] : undefined;
+                })()
+              }
+              environment={newThreadEnvironment}
+              prompt={newThreadPrompt}
+              onChangePrompt={setNewThreadPrompt}
+              onSelectEnvironment={setNewThreadEnvironment}
+              onSelectWorkspace={setNewThreadRootWorkspaceId}
+              onSubmit={handleStartThread}
+            />
+          ) : (
+            <section className="canvas canvas--empty">
+              <div className="empty-panel">
+                <div className="session-header__eyebrow">Workspace</div>
+                <h1>Open a folder to start</h1>
+                <p>Add a project folder before creating a new thread.</p>
+              </div>
+            </section>
+          )
         ) : selectedWorkspace && selectedSession ? (
           <>
             <section className="canvas">
@@ -1213,8 +1386,8 @@ export default function App() {
                 <div className="chat-header">
                   <div className="chat-header__eyebrow">
                     {selectedWorkspace.kind === "worktree"
-                      ? `${rootWorkspace?.name ?? selectedWorkspace.name} · ${selectedWorkspace.branchName ?? "Worktree"}`
-                      : `${selectedWorkspace.name} · Local project`}
+                      ? `${rootWorkspace?.name ?? selectedWorkspace.name} · ${selectedWorktree?.name ?? selectedWorkspace.branchName ?? "Worktree"}`
+                      : `${selectedWorkspace.name} · Local`}
                   </div>
                   <div className="chat-header__row">
                     <h1 className="chat-header__title">{selectedSession.title}</h1>
@@ -1246,9 +1419,12 @@ export default function App() {
             </section>
 
             <ComposerPanel
+              activeSlashCommand={activeSlashFlow?.command}
+              activeSlashCommandMeta={describeActiveSlashFlow(activeSlashFlow?.command)}
               attachments={composerAttachments}
               composerDraft={composerDraft}
               composerRef={composerRef}
+              onClearSlashCommand={resetSlashUi}
               onComposerKeyDown={handleComposerKeyDown}
               onPickImages={handlePickImages}
               onRemoveImage={handleRemoveImage}
@@ -1276,19 +1452,11 @@ export default function App() {
               <div className="session-header__eyebrow">Workspace</div>
               <h1>{selectedWorkspace.name}</h1>
               <p>Create a thread for this folder, then jump between sessions from the sidebar.</p>
-              <div className="empty-panel__meta">
-                <span className="meta-chip meta-chip--path">{selectedWorkspace.path}</span>
-                <span className="meta-chip">{formatRelativeTime(selectedWorkspace.lastOpenedAt)}</span>
-              </div>
               <div className="empty-panel__actions">
                 <button
                   className="button button--primary"
                   type="button"
-                  onClick={() => {
-                    void updateSnapshot(api, setSnapshot, () =>
-                      api.createSession({ workspaceId: selectedWorkspace.id, title: "New thread" }),
-                    );
-                  }}
+                  onClick={() => openNewThreadSurface()}
                 >
                   New thread
                 </button>
@@ -1312,4 +1480,60 @@ export default function App() {
 function isNearBottom(element: HTMLDivElement): boolean {
   const remaining = element.scrollHeight - element.scrollTop - element.clientHeight;
   return remaining < 32;
+}
+
+function describeActiveSlashFlow(
+  command: ComposerSlashCommand | undefined,
+): string | undefined {
+  if (!command) {
+    return undefined;
+  }
+
+  return command.description;
+}
+
+function ThreadSessionRow({
+  active,
+  archived = false,
+  thread,
+  onAction,
+  onSelect,
+}: {
+  readonly active: boolean;
+  readonly archived?: boolean;
+  readonly thread: ThreadListEntry;
+  readonly onAction: () => void;
+  readonly onSelect: () => void;
+}) {
+  return (
+    <div className={`session-row ${active ? "session-row--active" : ""}`}>
+      <button className="session-row__select" onClick={onSelect} type="button">
+        <span className={`session-row__status session-row__status--${thread.session.status}`} />
+        <span className="session-row__body">
+          <span className="session-row__title-line">
+            <span className="session-row__title">{thread.session.title}</span>
+          </span>
+          {thread.session.preview ? <span className="session-row__preview">{thread.session.preview}</span> : null}
+          <span className={`session-row__environment session-row__environment--${thread.environment.kind}`}>
+            {thread.environment.kind === "local"
+              ? "Local"
+              : thread.environment.branchName
+                ? `Worktree · ${thread.environment.branchName}`
+                : "Worktree · Detached"}
+          </span>
+        </span>
+      </button>
+      <span className="session-row__trailing">
+        <span className="session-row__time">{formatRelativeTime(thread.session.updatedAt)}</span>
+        <button
+          aria-label={`${archived ? "Restore" : "Archive"} ${thread.session.title}`}
+          className="icon-button session-row__action"
+          type="button"
+          onClick={onAction}
+        >
+          {archived ? <RestoreIcon /> : <ArchiveIcon />}
+        </button>
+      </span>
+    </div>
+  );
 }

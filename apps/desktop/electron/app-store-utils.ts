@@ -108,6 +108,7 @@ function buildSessionRecord(
     id: session.sessionRef.sessionId,
     title: session.title,
     updatedAt: session.updatedAt,
+    archivedAt: session.archivedAt,
     preview,
     status: session.status,
     runningSince: runningSinceBySession.get(key),

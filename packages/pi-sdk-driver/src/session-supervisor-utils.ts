@@ -9,6 +9,7 @@ export interface SnapshotSource {
   readonly title: string;
   readonly status: SessionStatus;
   readonly updatedAt: string;
+  readonly archivedAt: string | undefined;
   readonly preview: string | undefined;
   readonly config: SessionConfig | undefined;
   readonly runningRunId: string | undefined;
@@ -21,6 +22,7 @@ export function buildSnapshot(source: SnapshotSource): SessionSnapshot {
     title: source.title.trim() || deriveWorkspaceTitle(source.workspace),
     status: source.status,
     updatedAt: source.updatedAt,
+    ...(source.archivedAt !== undefined ? { archivedAt: source.archivedAt } : {}),
     ...(source.preview !== undefined ? { preview: source.preview } : {}),
     ...(source.config ? { config: source.config } : {}),
     ...(source.runningRunId !== undefined ? { runningRunId: source.runningRunId } : {}),

@@ -9,6 +9,7 @@ import type {
   DesktopAppState,
   NotificationPreferences,
   RemoveWorktreeInput,
+  StartThreadInput,
   WorkspaceSessionTarget,
 } from "../src/desktop-state";
 
@@ -47,8 +48,14 @@ contextBridge.exposeInMainWorld("piApp", {
     ipcRenderer.invoke(desktopIpc.syncCurrentWorkspace) as Promise<DesktopAppState>,
   selectSession: (target: WorkspaceSessionTarget) =>
     ipcRenderer.invoke(desktopIpc.selectSession, target) as Promise<DesktopAppState>,
+  archiveSession: (target: WorkspaceSessionTarget) =>
+    ipcRenderer.invoke(desktopIpc.archiveSession, target) as Promise<DesktopAppState>,
+  unarchiveSession: (target: WorkspaceSessionTarget) =>
+    ipcRenderer.invoke(desktopIpc.unarchiveSession, target) as Promise<DesktopAppState>,
   createSession: (input: CreateSessionInput) =>
     ipcRenderer.invoke(desktopIpc.createSession, input) as Promise<DesktopAppState>,
+  startThread: (input: StartThreadInput) =>
+    ipcRenderer.invoke(desktopIpc.startThread, input) as Promise<DesktopAppState>,
   cancelCurrentRun: () => ipcRenderer.invoke(desktopIpc.cancelCurrentRun) as Promise<DesktopAppState>,
   setActiveView: (view: AppView) =>
     ipcRenderer.invoke(desktopIpc.setActiveView, view) as Promise<DesktopAppState>,
@@ -58,6 +65,10 @@ contextBridge.exposeInMainWorld("piApp", {
     ipcRenderer.invoke(desktopIpc.setDefaultModel, workspaceId, provider, modelId) as Promise<DesktopAppState>,
   setDefaultThinkingLevel: (workspaceId: string, thinkingLevel: RuntimeSettingsSnapshot["defaultThinkingLevel"]) =>
     ipcRenderer.invoke(desktopIpc.setDefaultThinkingLevel, workspaceId, thinkingLevel) as Promise<DesktopAppState>,
+  setSessionModel: (workspaceId: string, sessionId: string, provider: string, modelId: string) =>
+    ipcRenderer.invoke(desktopIpc.setSessionModel, workspaceId, sessionId, provider, modelId) as Promise<DesktopAppState>,
+  setSessionThinkingLevel: (workspaceId: string, sessionId: string, thinkingLevel: RuntimeSettingsSnapshot["defaultThinkingLevel"]) =>
+    ipcRenderer.invoke(desktopIpc.setSessionThinkingLevel, workspaceId, sessionId, thinkingLevel) as Promise<DesktopAppState>,
   loginProvider: (workspaceId: string, providerId: string) =>
     ipcRenderer.invoke(desktopIpc.loginProvider, workspaceId, providerId) as Promise<DesktopAppState>,
   logoutProvider: (workspaceId: string, providerId: string) =>

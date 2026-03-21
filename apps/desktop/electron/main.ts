@@ -11,6 +11,7 @@ import type {
   CreateSessionInput,
   CreateWorktreeInput,
   RemoveWorktreeInput,
+  StartThreadInput,
   WorkspaceSessionTarget,
 } from "../src/desktop-state";
 
@@ -130,14 +131,28 @@ app.whenReady().then(async () => {
   ipcMain.handle(desktopIpc.selectSession, (_event, target: WorkspaceSessionTarget) =>
     store.selectSession(target),
   );
+  ipcMain.handle(desktopIpc.archiveSession, (_event, target: WorkspaceSessionTarget) =>
+    store.archiveSession(target),
+  );
+  ipcMain.handle(desktopIpc.unarchiveSession, (_event, target: WorkspaceSessionTarget) =>
+    store.unarchiveSession(target),
+  );
   ipcMain.handle(desktopIpc.setActiveView, (_event, activeView) => store.setActiveView(activeView));
   ipcMain.handle(desktopIpc.refreshRuntime, (_event, workspaceId?: string) => store.refreshRuntime(workspaceId));
+  ipcMain.handle(desktopIpc.setSessionModel, (_event, workspaceId: string, sessionId: string, provider: string, modelId: string) =>
+    store.setSessionModel({ workspaceId, sessionId }, provider, modelId),
+  );
   ipcMain.handle(desktopIpc.setDefaultModel, (_event, workspaceId: string, provider: string, modelId: string) =>
     store.setDefaultModel(workspaceId, provider, modelId),
   );
   ipcMain.handle(
     desktopIpc.setDefaultThinkingLevel,
     (_event, workspaceId: string, thinkingLevel) => store.setDefaultThinkingLevel(workspaceId, thinkingLevel),
+  );
+  ipcMain.handle(
+    desktopIpc.setSessionThinkingLevel,
+    (_event, workspaceId: string, sessionId: string, thinkingLevel) =>
+      store.setSessionThinkingLevel({ workspaceId, sessionId }, thinkingLevel),
   );
   ipcMain.handle(desktopIpc.loginProvider, (_event, workspaceId: string, providerId: string) =>
     store.loginProvider(workspaceId, providerId, createRuntimeLoginCallbacks()),
@@ -160,6 +175,7 @@ app.whenReady().then(async () => {
   ipcMain.handle(desktopIpc.createSession, (_event, input: CreateSessionInput) =>
     store.createSession(input),
   );
+  ipcMain.handle(desktopIpc.startThread, (_event, input: StartThreadInput) => store.startThread(input));
   ipcMain.handle(desktopIpc.openSkillInFinder, async (_event, workspaceId: string, filePath: string) => {
     const resolved = store.getSkillFilePath(workspaceId, filePath);
     if (!resolved) {
@@ -266,24 +282,11 @@ function mimeTypeForPath(filePath: string): string {
 
 function createRuntimeLoginCallbacks() {
   return {
-    onAuth: async ({ url, instructions }: { readonly url: string; readonly instructions?: string }) => {
+    onAuth: async ({ url, instructions: _instructions }: { readonly url: string; readonly instructions?: string }) => {
       await shell.openExternal(url);
-      const window = mainWindow;
-      if (!window || window.isDestroyed()) {
-        return;
-      }
-      await dialog.showMessageBox(window, {
-        type: "info",
-        title: "Continue sign in",
-        message: instructions ?? "Continue sign in with your browser.",
-        detail: url,
-        buttons: ["OK"],
-        defaultId: 0,
-      });
     },
     onPrompt: async ({ message, placeholder }: { readonly message: string; readonly placeholder?: string }) =>
       promptForText(message, placeholder),
-    onManualCodeInput: async () => promptForText("Paste the authorization code or callback URL", ""),
   };
 }
 

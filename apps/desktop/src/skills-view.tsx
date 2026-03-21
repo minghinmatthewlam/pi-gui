@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import type { RuntimeSkillRecord, RuntimeSnapshot } from "@pi-app/session-driver/runtime-types";
 import type { WorkspaceRecord } from "./desktop-state";
 import { RefreshIcon } from "./icons";
+import { titleCase } from "./string-utils";
 
 interface SkillsViewProps {
   readonly workspace?: WorkspaceRecord;
@@ -183,12 +184,4 @@ export function SkillsView({
       </div>
     </section>
   );
-}
-
-function titleCase(value: string): string {
-  return value
-    .split(/[-_]/)
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
 }

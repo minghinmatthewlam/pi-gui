@@ -1,5 +1,6 @@
 import type { SessionConfig } from "@pi-app/session-driver";
 import type { RuntimeProviderRecord, RuntimeSettingsSnapshot, RuntimeSkillRecord, RuntimeSnapshot } from "@pi-app/session-driver/runtime-types";
+import { titleCase } from "./string-utils";
 
 export type ComposerSlashCommandKind =
   | "model"
@@ -56,6 +57,17 @@ export type ParsedComposerCommand =
   | { type: "reload" }
   | { type: "compact"; customInstructions?: string }
   | { type: "name"; title: string };
+
+const INCOMPLETE_COMMAND_MESSAGES: Readonly<Record<string, string>> = {
+  "/compact": "Add optional instructions after /compact or send it directly from the slash menu.",
+  "/login": "Choose a provider from the slash menu before sending /login.",
+  "/logout": "Choose a connected provider from the slash menu before sending /logout.",
+  "/model": "Choose a provider and model from the slash menu before sending /model.",
+  "/name": "Add a thread title after /name.",
+  "/scoped-models": "Open Scoped models from the slash menu or Settings.",
+  "/settings": "Open Settings from the slash menu or Cmd+,.",
+  "/thinking": "Choose a reasoning level from the slash menu before sending /thinking.",
+} as const;
 
 const BUILTIN_SLASH_COMMANDS: readonly ComposerSlashCommand[] = [
   {
@@ -206,7 +218,7 @@ export function buildSlashCommandSections(
       command: skill.slashCommand,
       template: `${skill.slashCommand} `,
       title: titleCase(skill.name),
-      description: skill.description,
+      description: summarizeSkillDescription(skill.description),
       submitMode: "prefill",
       section: "skills",
       skill,
@@ -257,6 +269,7 @@ export function buildProviderOptions(
 ): readonly ComposerProviderOption[] {
   return providers
     .filter(filter)
+    .sort(compareProviders)
     .map((provider) => ({
       value: provider.id,
       label: provider.name,
@@ -267,17 +280,23 @@ export function buildProviderOptions(
 
 export function buildModelOptions(
   runtime: RuntimeSnapshot | undefined,
-  providerId: string,
 ): readonly ComposerModelOption[] {
   if (!runtime) {
     return [];
   }
 
-  return runtime.models
-    .filter((model: RuntimeSnapshot["models"][number]) => model.providerId === providerId)
+  return [...runtime.models]
+    .sort((left: RuntimeSnapshot["models"][number], right: RuntimeSnapshot["models"][number]) => {
+      const providerCompare =
+        providerRankForId(runtime.providers, left.providerId) - providerRankForId(runtime.providers, right.providerId);
+      if (providerCompare !== 0) {
+        return providerCompare;
+      }
+      return `${left.providerName} ${left.label}`.localeCompare(`${right.providerName} ${right.label}`);
+    })
     .map((model: RuntimeSnapshot["models"][number]) => ({
-      value: `${model.providerId}:${model.modelId}`,
-      label: model.label,
+      value: model.modelId,
+      label: `${model.providerName} · ${model.label}`,
       description: `${model.modelId}${model.available ? "" : " · unavailable"}`,
       providerId: model.providerId,
       modelId: model.modelId,
@@ -296,9 +315,7 @@ export function slashOptionsForCommand(
     return THINKING_OPTIONS;
   }
   if (command.kind === "model") {
-    return buildProviderOptions(runtime?.providers ?? [], (provider) =>
-      Boolean(runtime?.models.some((model: RuntimeSnapshot["models"][number]) => model.providerId === provider.id)),
-    );
+    return buildModelOptions(runtime);
   }
   if (command.kind === "login") {
     return buildProviderOptions(runtime?.providers ?? [], (provider) => provider.oauthSupported);
@@ -334,12 +351,44 @@ function describeProvider(provider: RuntimeProviderRecord): string {
   return provider.authType === "api_key" ? "Needs API key" : "Available";
 }
 
-function titleCase(value: string): string {
-  return value
-    .split(/[-_]/)
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
+function compareProviders(left: RuntimeProviderRecord, right: RuntimeProviderRecord): number {
+  const leftRank = providerRank(left);
+  const rightRank = providerRank(right);
+  if (leftRank !== rightRank) {
+    return leftRank - rightRank;
+  }
+  return left.name.localeCompare(right.name);
+}
+
+function providerRank(provider: RuntimeProviderRecord): number {
+  if (provider.hasAuth) {
+    return 0;
+  }
+  if (provider.id === "openai-codex" || provider.id === "anthropic") {
+    return 1;
+  }
+  if (provider.oauthSupported) {
+    return 2;
+  }
+  return 3;
+}
+
+function providerRankForId(
+  providers: readonly RuntimeProviderRecord[],
+  providerId: string,
+): number {
+  const provider = providers.find((entry) => entry.id === providerId);
+  return provider ? providerRank(provider) : 99;
+}
+
+function summarizeSkillDescription(value: string): string {
+  const trimmed = value.trim().replace(/\s+/g, " ");
+  if (!trimmed) {
+    return "Reusable workflow";
+  }
+
+  const firstSentence = trimmed.match(/^[^.!?]+[.!?]?/)?.[0]?.trim() ?? trimmed;
+  return firstSentence.length > 96 ? `${firstSentence.slice(0, 93).trimEnd()}...` : firstSentence;
 }
 
 export function formatSessionConfigStatus(config?: SessionConfig): string {
@@ -399,6 +448,16 @@ export function parseComposerCommand(value: string): ParsedComposerCommand | und
   }
 
   return undefined;
+}
+
+export function incompleteComposerCommandMessage(value: string): string | undefined {
+  const trimmed = value.trim();
+  if (!trimmed.startsWith("/")) {
+    return undefined;
+  }
+
+  const [command] = trimmed.split(/\s+/);
+  return INCOMPLETE_COMMAND_MESSAGES[command as keyof typeof INCOMPLETE_COMMAND_MESSAGES];
 }
 
 export function isExactSlashCommand(query: string, command: ComposerSlashCommand): boolean {

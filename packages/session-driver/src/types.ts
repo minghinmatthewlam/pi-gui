@@ -22,6 +22,7 @@ export interface SessionSnapshot {
   readonly title: string;
   readonly status: SessionStatus;
   readonly updatedAt: Timestamp;
+  readonly archivedAt?: Timestamp;
   readonly preview?: string;
   readonly config?: SessionConfig;
   readonly runningRunId?: RunId;
@@ -193,6 +194,8 @@ export type Unsubscribe = () => void;
 export interface SessionDriver {
   createSession(workspace: WorkspaceRef, options?: CreateSessionOptions): Promise<SessionSnapshot>;
   openSession(sessionRef: SessionRef): Promise<SessionSnapshot>;
+  archiveSession(sessionRef: SessionRef): Promise<void>;
+  unarchiveSession(sessionRef: SessionRef): Promise<void>;
   sendUserMessage(sessionRef: SessionRef, input: SessionMessageInput): Promise<void>;
   cancelCurrentRun(sessionRef: SessionRef): Promise<void>;
   setSessionModel(sessionRef: SessionRef, selection: SessionModelSelection): Promise<void>;

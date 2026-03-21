@@ -61,6 +61,7 @@ interface ManagedSessionRecord {
   sessionFile: string | undefined;
   status: SessionStatus;
   updatedAt: string;
+  archivedAt: string | undefined;
   preview: string | undefined;
   config: SessionConfig | undefined;
   runningRunId: string | undefined;
@@ -241,6 +242,14 @@ export class SessionSupervisor {
       snapshot,
     });
     return snapshot;
+  }
+
+  async archiveSession(sessionRef: SessionRef): Promise<void> {
+    await this.updateArchivedState(sessionRef, nowIso());
+  }
+
+  async unarchiveSession(sessionRef: SessionRef): Promise<void> {
+    await this.updateArchivedState(sessionRef, undefined);
   }
 
   async sendUserMessage(sessionRef: SessionRef, input: SessionMessageInput): Promise<void> {
@@ -453,6 +462,7 @@ export class SessionSupervisor {
     record.title = sessionEntry.title;
     record.status = sessionEntry.status;
     record.updatedAt = sessionEntry.updatedAt;
+    record.archivedAt = sessionEntry.archivedAt;
     record.preview = sessionEntry.previewSnippet ?? undefined;
     record.config = deriveSessionConfig(session.sessionManager);
     record.closed = false;
@@ -480,6 +490,7 @@ export class SessionSupervisor {
       sessionFile: session.sessionFile ?? session.sessionManager.getSessionFile(),
       status: "idle",
       updatedAt: nowIso(),
+      archivedAt: undefined,
       preview: undefined,
       config: deriveSessionConfig(session.sessionManager),
       runningRunId: undefined,
@@ -638,6 +649,7 @@ export class SessionSupervisor {
       title: snapshot.title,
       updatedAt: snapshot.updatedAt,
       status: snapshot.status,
+      ...(snapshot.archivedAt !== undefined ? { archivedAt: snapshot.archivedAt } : {}),
       ...(snapshot.preview !== undefined ? { previewSnippet: snapshot.preview } : {}),
       ...(record.sessionFile ? { sessionFilePath: record.sessionFile } : {}),
     });
@@ -671,11 +683,12 @@ export class SessionSupervisor {
     info: SessionInfo,
     runtimeRecord?: ManagedSessionRecord,
     existingEntry?: SessionCatalogSnapshot["sessions"][number],
-  ) {
+  ): SessionCatalogSnapshot["sessions"][number] {
     const runtimeSnapshot =
       runtimeRecord && runtimeRecord.session && !runtimeRecord.closed ? buildSnapshot(runtimeRecord) : undefined;
     const previewSnippet = runtimeSnapshot?.preview ?? previewFromSessionInfo(info);
-    const entry = {
+    const archivedAt = runtimeSnapshot?.archivedAt ?? existingEntry?.archivedAt;
+    const entry: SessionCatalogSnapshot["sessions"][number] = {
       sessionRef: {
         workspaceId: workspace.workspaceId,
         sessionId: info.id,
@@ -686,7 +699,50 @@ export class SessionSupervisor {
       status: runtimeSnapshot?.status ?? "idle",
       sessionFilePath: info.path,
     };
-    return previewSnippet !== undefined ? { ...entry, previewSnippet } : entry;
+    if (archivedAt) {
+      entry.archivedAt = archivedAt;
+    }
+    if (previewSnippet !== undefined) {
+      entry.previewSnippet = previewSnippet;
+    }
+    return entry;
+  }
+
+  private async updateArchivedState(sessionRef: SessionRef, archivedAt: string | undefined): Promise<void> {
+    const key = sessionKey(sessionRef);
+    const record = this.records.get(key);
+    if (record) {
+      if (record.archivedAt === archivedAt) {
+        return;
+      }
+      record.archivedAt = archivedAt;
+      await this.persistSnapshot(record);
+      await this.emit(record, sessionUpdatedEvent(record));
+      return;
+    }
+
+    const sessionEntry = await this.catalogs.sessions.getSession(sessionRef);
+    if (!sessionEntry) {
+      throw new Error(`Session ${key} is not in the catalog.`);
+    }
+    if (sessionEntry.archivedAt === archivedAt) {
+      return;
+    }
+
+    const nextEntry =
+      archivedAt !== undefined
+        ? { ...sessionEntry, archivedAt }
+        : {
+            sessionRef: sessionEntry.sessionRef,
+            workspaceId: sessionEntry.workspaceId,
+            title: sessionEntry.title,
+            updatedAt: sessionEntry.updatedAt,
+            ...(sessionEntry.previewSnippet !== undefined ? { previewSnippet: sessionEntry.previewSnippet } : {}),
+            ...(sessionEntry.sessionFilePath !== undefined ? { sessionFilePath: sessionEntry.sessionFilePath } : {}),
+            status: sessionEntry.status,
+          };
+
+    await this.catalogs.sessions.upsertSession(nextEntry);
   }
 }
 

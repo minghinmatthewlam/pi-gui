@@ -31,7 +31,7 @@ test("persists workspace, session selection, and draft across app restart", asyn
   const userDataDir = await mkdtemp(join(tmpdir(), "pi-app-user-data-"));
   const workspacePath = await makeWorkspace("codex-style-folder");
   const sessionTitle = "New thread";
-  const draft = "Read the README and report the project title.";
+  const draft = "Now summarize the project title in one sentence.";
 
   const firstRun = await launchDesktop(userDataDir);
   try {
@@ -40,6 +40,11 @@ test("persists workspace, session selection, and draft across app restart", asyn
     await expect(window.getByTestId("workspace-list")).toContainText(basename(workspacePath));
 
     await window.locator(".sidebar__new").click();
+    await expect(window.getByRole("heading", { name: "Let's build" })).toBeVisible();
+    await expect(window.locator(".topbar__session")).toHaveText("New thread");
+
+    await window.getByRole("button", { name: "Start thread" }).click();
+
     await expect(window.locator(".topbar__session")).toHaveText(sessionTitle);
 
     const composer = window.getByTestId("composer");
@@ -94,10 +99,10 @@ test("navigates across folders and sessions through the sidebar", async () => {
     await window.locator(".workspace-row", { hasText: "alpha-workspace" }).click();
     await expect(window.locator(".topbar__workspace")).toHaveText("alpha-workspace");
 
-    await window.getByRole("button", { name: /Alpha session one/i }).click();
+    await window.locator(".session-row__select", { hasText: "Alpha session one" }).click();
     await expect(window.locator(".topbar__session")).toHaveText("Alpha session one");
 
-    await window.getByRole("button", { name: /Beta session one/i }).click();
+    await window.locator(".session-row__select", { hasText: "Beta session one" }).click();
     await expect(window.locator(".topbar__session")).toHaveText("Beta session one");
 
     const state = await getDesktopState(window);

@@ -44,6 +44,7 @@ function updateSessionRecord(
     ...session,
     title: snapshot?.title ?? session.title,
     updatedAt: snapshot?.updatedAt ?? event.timestamp,
+    archivedAt: snapshot?.archivedAt ?? session.archivedAt,
     preview: preview ?? snapshot?.preview ?? session.preview,
     status: statusForEvent(session.status, event),
     runningSince,

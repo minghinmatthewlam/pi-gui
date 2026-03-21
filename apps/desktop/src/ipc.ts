@@ -7,6 +7,7 @@ import type {
   DesktopAppState,
   NotificationPreferences,
   RemoveWorktreeInput,
+  StartThreadInput,
   WorkspaceSessionTarget,
 } from "./desktop-state";
 
@@ -24,12 +25,17 @@ export const desktopIpc = {
   openSkillInFinder: "pi-app:open-skill-in-finder",
   syncCurrentWorkspace: "pi-app:sync-current-workspace",
   selectSession: "pi-app:select-session",
+  archiveSession: "pi-app:archive-session",
+  unarchiveSession: "pi-app:unarchive-session",
   createSession: "pi-app:create-session",
+  startThread: "pi-app:start-thread",
   cancelCurrentRun: "pi-app:cancel-current-run",
   setActiveView: "pi-app:set-active-view",
   refreshRuntime: "pi-app:refresh-runtime",
   setDefaultModel: "pi-app:set-default-model",
   setDefaultThinkingLevel: "pi-app:set-default-thinking-level",
+  setSessionModel: "pi-app:set-session-model",
+  setSessionThinkingLevel: "pi-app:set-session-thinking-level",
   loginProvider: "pi-app:login-provider",
   logoutProvider: "pi-app:logout-provider",
   setEnableSkillCommands: "pi-app:set-enable-skill-commands",
@@ -65,7 +71,10 @@ export interface PiDesktopApi {
   openSkillInFinder(workspaceId: string, filePath: string): Promise<void>;
   syncCurrentWorkspace(): Promise<DesktopAppState>;
   selectSession(target: WorkspaceSessionTarget): Promise<DesktopAppState>;
+  archiveSession(target: WorkspaceSessionTarget): Promise<DesktopAppState>;
+  unarchiveSession(target: WorkspaceSessionTarget): Promise<DesktopAppState>;
   createSession(input: CreateSessionInput): Promise<DesktopAppState>;
+  startThread(input: StartThreadInput): Promise<DesktopAppState>;
   cancelCurrentRun(): Promise<DesktopAppState>;
   setActiveView(view: AppView): Promise<DesktopAppState>;
   refreshRuntime(workspaceId?: string): Promise<DesktopAppState>;
@@ -73,6 +82,17 @@ export interface PiDesktopApi {
   setDefaultThinkingLevel(
     workspaceId: string,
     thinkingLevel: RuntimeSettingsSnapshot["defaultThinkingLevel"],
+  ): Promise<DesktopAppState>;
+  setSessionModel(
+    workspaceId: string,
+    sessionId: string,
+    provider: string,
+    modelId: string,
+  ): Promise<DesktopAppState>;
+  setSessionThinkingLevel(
+    workspaceId: string,
+    sessionId: string,
+    thinkingLevel: NonNullable<RuntimeSettingsSnapshot["defaultThinkingLevel"]>,
   ): Promise<DesktopAppState>;
   loginProvider(workspaceId: string, providerId: string): Promise<DesktopAppState>;
   logoutProvider(workspaceId: string, providerId: string): Promise<DesktopAppState>;

@@ -41,23 +41,19 @@ test("creates and selects a worktree-backed workspace from the desktop UI", asyn
     }
 
     await expect(window.locator(".environment-picker__button")).toContainText(worktreeWorkspace.name);
-    await expect(window.getByTestId("workspace-list")).toContainText(worktreeWorkspace.name);
+    await expect(window.locator(".empty-panel")).toContainText("Create a thread for this folder");
+    await expect(window.locator(".empty-panel")).not.toContainText("/Users/");
 
     await window.getByRole("complementary").getByRole("button", { name: "New thread" }).click();
-
-    await expect
-      .poll(async () => {
-        const state = await getState(window);
-        const selected = state.workspaces.find((workspace) => workspace.id === state.selectedWorkspaceId);
-        return selected?.kind === "worktree" && (selected.sessions.length ?? 0) > 0;
-      })
-      .toBe(true);
+    await expect(window.getByTestId("new-thread-composer")).toBeVisible();
+    await expect(window.getByRole("button", { name: "Local", exact: true })).toBeVisible();
+    await expect(window.getByRole("button", { name: "New worktree", exact: true })).toBeVisible();
   } finally {
     await harness.close();
   }
 });
 
-test("creating a new worktree from a selected worktree thread preserves the thread title", async () => {
+test("shows worktree-backed threads as thread environment metadata", async () => {
   test.setTimeout(90_000);
   const userDataDir = await mkdtemp(join(tmpdir(), "pi-app-user-data-"));
   const workspacePath = await makeGitWorkspace("worktree-source-session");
@@ -116,18 +112,14 @@ test("creating a new worktree from a selected worktree thread preserves the thre
       await app.selectSession({ workspaceId, sessionId });
     }, { workspaceId: firstWorktree.id, sessionId: sourceSession.id });
     await expect(window.locator(".topbar__session")).toHaveText(sessionTitle);
+    await expect(window.getByTestId("workspace-list")).toContainText(sessionTitle);
+    await expect(window.getByTestId("workspace-list")).toContainText("Worktree ·");
+    await expect(window.getByTestId("workspace-list")).not.toContainText("/Users/");
 
     await window.locator(".environment-picker__button").click();
-    await window.getByRole("button", { name: "New worktree" }).click();
-
-    await expect
-      .poll(async () => {
-        const state = await getState(window);
-        const selected = state.workspaces.find((workspace) => workspace.id === state.selectedWorkspaceId);
-        const activeSession = selected?.sessions.find((session) => session.id === state.selectedSessionId);
-        return selected?.kind === "worktree" && activeSession?.title === sessionTitle;
-      })
-      .toBe(true);
+    const environmentMenu = window.locator(".environment-picker__menu");
+    await expect(environmentMenu.getByRole("button", { name: "Local" })).toBeVisible();
+    await expect(environmentMenu.getByRole("button", { name: firstWorktree.name })).toBeVisible();
   } finally {
     await harness.close();
   }
