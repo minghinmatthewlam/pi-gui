@@ -235,7 +235,7 @@
 
 .workspace-row__name {
   font-size: 15px;
-  font-weight: 520;
+  font-weight: 500;
   color: var(--muted-strong);
 }
 
@@ -449,7 +449,7 @@
 
 .session-row__title {
   font-size: 14px;
-  font-weight: 540;
+  font-weight: 500;
   color: var(--text-strong);
   min-width: 0;
 }
