@@ -1,0 +1,20 @@
+{
+  "name": "@pi-app/video",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "preview": "remotion preview src/index.ts",
+    "render": "remotion render src/index.ts PiShowcase out/pi-showcase.mp4 --codec h264",
+    "build": "remotion render src/index.ts PiShowcase out/pi-showcase.mp4 --codec h264 --crf 18"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.438",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "remotion": "4.0.438"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "typescript": "^5.9.0"
+  }
+}
