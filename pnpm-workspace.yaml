@@ -1,6 +1,7 @@
 packages:
   - apps/*
   - packages/*
+  - video
 
 onlyBuiltDependencies:
   - electron
