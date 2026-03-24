@@ -170,6 +170,19 @@ svg {
   border-color: #31384d;
 }
 
+.button--cta-icon {
+  width: 64px;
+  min-width: 64px;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+}
+
+.button--cta-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
 .meta-chip {
   display: inline-flex;
   align-items: center;

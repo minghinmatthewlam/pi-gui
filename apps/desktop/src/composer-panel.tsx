@@ -198,7 +198,7 @@ export function ComposerPanel({
               </button>
               <button
                 aria-label={selectedSession.status === "running" ? "Stop run" : "Send message"}
-                className="button button--primary"
+                className="button button--primary button--cta-icon"
                 data-testid="send"
                 type="button"
                 disabled={!composerDraft.trim() && attachments.length === 0 && selectedSession.status !== "running"}

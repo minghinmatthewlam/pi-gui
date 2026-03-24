@@ -17,7 +17,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.electron.json --noEmit",
     "test": "pnpm build && playwright test tests/smoke.spec.ts tests/worktrees-live.spec.ts",
     "demo:readme": "pnpm run build && node --experimental-strip-types scripts/readme-demo.mts",
-    "start": "pnpm run build:deps && electron .",
+    "start": "pnpm run build && electron .",
     "test:live:parallel": "pnpm exec playwright test tests/parallel-live.spec.ts",
     "test:live:controls": "pnpm build && pnpm exec playwright test tests/controls-live.spec.ts",
     "test:live:skills-settings": "pnpm build && pnpm exec playwright test tests/skills-settings-live.spec.ts",

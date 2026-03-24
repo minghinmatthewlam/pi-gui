@@ -517,19 +517,6 @@
   background: #f6f7fb;
 }
 
-.composer [data-testid="send"] {
-  width: 64px;
-  min-width: 64px;
-  padding: 0;
-  display: inline-grid;
-  place-items: center;
-}
-
-.composer [data-testid="send"] svg {
-  width: 18px;
-  height: 18px;
-}
-
 .composer__attachments {
   display: flex;
   flex-wrap: wrap;
@@ -953,7 +940,7 @@
 
 .new-thread__controls {
   display: flex;
-  align-items: end;
+  align-items: center;
   gap: 12px;
   flex-wrap: wrap;
 }
@@ -975,10 +962,6 @@
 .new-thread__meta-item svg {
   width: 14px;
   height: 14px;
-}
-
-.new-thread__submit {
-  min-width: 152px;
 }
 
 .settings-disclosure {

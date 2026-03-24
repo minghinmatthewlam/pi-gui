@@ -1,7 +1,7 @@
 import { useEffect, useRef, type KeyboardEvent } from "react";
 import type { RuntimeSnapshot } from "@pi-app/session-driver/runtime-types";
 import type { NewThreadEnvironment, WorkspaceRecord } from "./desktop-state";
-import { ModelIcon, PlusIcon, ReasoningIcon } from "./icons";
+import { ArrowUpIcon, ModelIcon, ReasoningIcon } from "./icons";
 
 interface NewThreadViewProps {
   readonly workspaces: readonly WorkspaceRecord[];
@@ -124,9 +124,13 @@ export function NewThreadView({
               </div>
             </div>
 
-            <button className="button button--primary new-thread__submit" type="button" onClick={onSubmit}>
-              <PlusIcon />
-              <span>Start thread</span>
+            <button
+              aria-label="Start thread"
+              className="button button--primary button--cta-icon"
+              type="button"
+              onClick={onSubmit}
+            >
+              <ArrowUpIcon />
             </button>
           </div>
         </div>
