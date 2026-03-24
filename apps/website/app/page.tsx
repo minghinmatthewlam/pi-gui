@@ -1,4 +1,5 @@
 const GITHUB_URL = "https://github.com/minghinmatthewlam/pi-app";
+const PI_MONO_URL = "https://github.com/mariozechner/pi";
 
 function GitHubIcon() {
   return (
@@ -31,7 +32,7 @@ export default function Page() {
       {/* ===== Nav ===== */}
       <nav className="nav">
         <div className="nav-inner">
-          <span className="nav-logo">pi</span>
+          <span className="nav-logo">pi-gui</span>
           <div className="nav-links">
             <a href="#features" className="nav-link">
               Features
@@ -65,9 +66,17 @@ export default function Page() {
               AI coding agents
             </h1>
             <p className="hero-subtitle">
-              pi is a Codex-style macOS desktop app for the pi coding agent.
-              Manage workspaces, run sessions, and review agent work — all from
-              a native interface.
+              pi-gui is a Codex-style macOS desktop app for the{" "}
+              <a
+                href={PI_MONO_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-link"
+              >
+                pi coding agent
+              </a>
+              . Manage workspaces, run sessions, and review agent work — all
+              from a native interface.
             </p>
             <div className="hero-ctas">
               <a
@@ -92,8 +101,8 @@ export default function Page() {
                 <span className="screenshot-dot" />
               </div>
               <img
-                src="/demo-poster.png"
-                alt="pi desktop app showing a coding session with sidebar navigation and agent conversation"
+                src="/demo.gif"
+                alt="pi-gui desktop app showing a coding session with sidebar navigation and agent conversation"
                 className="screenshot-img"
                 width={1480}
                 height={980}
@@ -106,9 +115,9 @@ export default function Page() {
         <section className="value-prop">
           <div className="container container--narrow">
             <p>
-              From quick fixes to complex refactors, pi gives you a persistent
-              desktop workspace for AI-powered coding sessions — with full
-              visibility into what the agent is doing and why.
+              From quick fixes to complex refactors, pi-gui gives you a
+              persistent desktop workspace for AI-powered coding sessions —
+              with full visibility into what the agent is doing and why.
             </p>
           </div>
         </section>
@@ -154,9 +163,9 @@ export default function Page() {
                 <div className="feature-icon">&#128295;</div>
                 <h3>Skills &amp; slash commands</h3>
                 <p>
-                  Extend pi with workspace-specific skills and slash commands for
-                  model switching, thinking levels, settings, and custom
-                  workflows.
+                  Extend pi-gui with workspace-specific skills and slash
+                  commands for model switching, thinking levels, settings, and
+                  custom workflows.
                 </p>
               </div>
             </div>
@@ -171,7 +180,17 @@ export default function Page() {
             <p className="architecture-desc">
               The desktop shell is separated from the agent runtime through a
               durable SessionDriver interface — making the frontend independent
-              of backend changes and ready for future runtime swaps.
+              of backend changes and ready for future runtime swaps. Built on
+              top of{" "}
+              <a
+                href={PI_MONO_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-link"
+              >
+                @mariozechner/pi-coding-agent
+              </a>
+              .
             </p>
             <div className="tech-stack">
               <span className="tech-chip">Electron 34</span>
@@ -243,7 +262,7 @@ export default function Page() {
       {/* ===== Footer ===== */}
       <footer className="footer">
         <div className="footer-inner">
-          <span>pi</span>
+          <span>pi-gui</span>
           <span className="footer-sep">&middot;</span>
           <span>MIT License</span>
           <span className="footer-sep">&middot;</span>
@@ -254,6 +273,17 @@ export default function Page() {
           >
             GitHub
           </a>
+          <span className="footer-sep">&middot;</span>
+          <span className="footer-credit">
+            Built on{" "}
+            <a
+              href={PI_MONO_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              pi
+            </a>
+          </span>
         </div>
       </footer>
     </>

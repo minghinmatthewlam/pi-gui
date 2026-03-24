@@ -134,7 +134,7 @@ video {
   width: 72px;
   height: 72px;
   border-radius: 20px;
-  background: var(--accent);
+  background: #1a1a1a;
   color: white;
   display: inline-flex;
   align-items: center;
@@ -143,7 +143,7 @@ video {
   font-weight: 700;
   font-style: italic;
   margin-bottom: 28px;
-  box-shadow: 0 4px 20px rgba(106, 85, 242, 0.3);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
 }
 
 .hero-heading {
@@ -476,6 +476,18 @@ video {
 
 .footer a:hover {
   color: var(--text);
+}
+
+/* ===== Inline Links ===== */
+.inline-link {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  transition: color 150ms ease;
+}
+
+.inline-link:hover {
+  color: var(--accent-hover);
 }
 
 /* ===== Responsive ===== */

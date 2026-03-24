@@ -2,11 +2,11 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "pi — A native desktop for AI coding agents",
+  title: "pi-gui — A native desktop for AI coding agents",
   description:
-    "pi is a macOS desktop app that wraps the pi coding agent in a Codex-style interface. Multi-workspace sessions, real-time agent execution, and persistent history.",
+    "pi-gui is a macOS desktop app that wraps the pi coding agent in a Codex-style interface. Multi-workspace sessions, real-time agent execution, and persistent history.",
   openGraph: {
-    title: "pi — A native desktop for AI coding agents",
+    title: "pi-gui — A native desktop for AI coding agents",
     description:
       "A Codex-style desktop interface for AI coding agents. Manage workspaces, run sessions, and review agent work from a native macOS app.",
     type: "website",
