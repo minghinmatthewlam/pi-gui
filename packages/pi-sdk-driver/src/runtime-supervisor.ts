@@ -281,32 +281,22 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
   }
 
   private toggleSkillResource(context: RuntimeContext, resource: ResolvedResource, enabled: boolean): void {
-    if (resource.metadata.origin === "top-level") {
-      this.toggleTopLevelSkill(context.settingsManager, resource, enabled);
+    const { settingsManager } = context;
+    const scope = resource.metadata.scope as ResourceScope;
+    const origin = resource.metadata.origin;
+    const settings = scope === "project" ? settingsManager.getProjectSettings() : settingsManager.getGlobalSettings();
+    const pattern = this.relativeSkillPattern(resource.path, resource.metadata, scope, origin);
+
+    if (origin === "top-level") {
+      const updated = replaceResourcePattern([...(settings.skills ?? [])], pattern, enabled);
+      if (scope === "project") {
+        settingsManager.setProjectSkillPaths(updated);
+      } else {
+        settingsManager.setSkillPaths(updated);
+      }
       return;
     }
 
-    this.togglePackageSkill(context.settingsManager, resource, enabled);
-  }
-
-  private toggleTopLevelSkill(settingsManager: SettingsManager, resource: ResolvedResource, enabled: boolean): void {
-    const scope = resource.metadata.scope as ResourceScope;
-    const settings = scope === "project" ? settingsManager.getProjectSettings() : settingsManager.getGlobalSettings();
-    const current = [...(settings.skills ?? [])];
-    const pattern = this.relativeSkillPattern(resource.path, resource.metadata, scope, "top-level");
-    const updated = replaceResourcePattern(current, pattern, enabled);
-
-    if (scope === "project") {
-      settingsManager.setProjectSkillPaths(updated);
-      return;
-    }
-
-    settingsManager.setSkillPaths(updated);
-  }
-
-  private togglePackageSkill(settingsManager: SettingsManager, resource: ResolvedResource, enabled: boolean): void {
-    const scope = resource.metadata.scope as ResourceScope;
-    const settings = scope === "project" ? settingsManager.getProjectSettings() : settingsManager.getGlobalSettings();
     const packages = [...(settings.packages ?? [])];
     const source = resource.metadata.source;
     const packageIndex = packages.findIndex((entry) => (typeof entry === "string" ? entry : entry.source) === source);
@@ -316,9 +306,7 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
 
     const currentPackage = packages[packageIndex];
     const nextPackage = typeof currentPackage === "string" ? { source: currentPackage } : { ...currentPackage };
-    const currentPatterns = [...(nextPackage.skills ?? [])];
-    const pattern = this.relativeSkillPattern(resource.path, resource.metadata, scope, "package");
-    const updatedPatterns = replaceResourcePattern(currentPatterns, pattern, enabled);
+    const updatedPatterns = replaceResourcePattern([...(nextPackage.skills ?? [])], pattern, enabled);
     if (updatedPatterns.length > 0) {
       nextPackage.skills = updatedPatterns;
     } else {
@@ -332,10 +320,9 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
 
     if (scope === "project") {
       settingsManager.setProjectPackages(packages);
-      return;
+    } else {
+      settingsManager.setPackages(packages);
     }
-
-    settingsManager.setPackages(packages);
   }
 
   private relativeSkillPattern(
