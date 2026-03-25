@@ -37,8 +37,7 @@ import {
   type PersistedUiState,
   writePersistedUiState,
 } from "./app-store-persistence";
-import { TranscriptCacheStore } from "./transcript-cache-store";
-import { AttachmentStore } from "./attachment-store";
+import { JsonFileStore } from "./json-file-store";
 import {
   buildWorktreeRecords,
   buildWorkspaceRecords,
@@ -92,8 +91,8 @@ export class DesktopAppStore {
   private readonly catalogStore: JsonCatalogStore;
   private readonly worktreeManager: GitWorktreeManager;
   private readonly uiStateFilePath: string;
-  private readonly transcriptStore: TranscriptCacheStore;
-  private readonly attachmentStore: AttachmentStore;
+  private readonly transcriptStore: JsonFileStore<TranscriptMessage[]>;
+  private readonly attachmentStore: JsonFileStore<ComposerImageAttachment[]>;
   private readonly transcriptCache = new Map<string, TranscriptMessage[]>();
   private readonly composerDraftsBySession = new Map<string, string>();
   private readonly composerAttachmentsBySession = new Map<string, ComposerImageAttachment[]>();
@@ -122,8 +121,8 @@ export class DesktopAppStore {
     this.catalogStore = new JsonCatalogStore({ catalogFilePath });
     this.worktreeManager = new GitWorktreeManager({ catalogStorage: this.catalogStore });
     this.uiStateFilePath = join(options.userDataDir, "ui-state.json");
-    this.transcriptStore = new TranscriptCacheStore(options.userDataDir);
-    this.attachmentStore = new AttachmentStore(options.userDataDir);
+    this.transcriptStore = new JsonFileStore<TranscriptMessage[]>(options.userDataDir, "transcripts");
+    this.attachmentStore = new JsonFileStore<ComposerImageAttachment[]>(options.userDataDir, "attachments");
     this.initialWorkspacePaths = options.initialWorkspacePaths;
   }
 
