@@ -247,15 +247,6 @@ export function flattenSlashSections(
   return sections.flatMap((section) => section.items);
 }
 
-export function findExactSlashCommand(
-  query: string,
-  runtime?: RuntimeSnapshot,
-): ComposerSlashCommand | undefined {
-  return flattenSlashSections(buildSlashCommandSections(query, runtime)).find((command) =>
-    isExactSlashCommand(query, command),
-  );
-}
-
 export function buildProviderOptions(
   providers: readonly RuntimeProviderRecord[],
   filter: (provider: RuntimeProviderRecord) => boolean = () => true,
