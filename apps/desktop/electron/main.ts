@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { DesktopAppStore } from "./app-store";
+import { getChangedFiles, getFileDiff, stageFile } from "./app-store-diff";
 import { listWorkspaceFiles } from "./app-store-files";
 import { NotificationManager } from "./notification-manager";
 import { desktopIpc, getDesktopCommandFromShortcut } from "../src/ipc";
@@ -234,6 +235,27 @@ app.whenReady().then(async () => {
       return [];
     }
     return listWorkspaceFiles(workspacePath);
+  });
+  ipcMain.handle(desktopIpc.getChangedFiles, async (_event, workspaceId: string) => {
+    const workspacePath = store.getWorkspacePath(workspaceId);
+    if (!workspacePath) {
+      return [];
+    }
+    return getChangedFiles(workspacePath);
+  });
+  ipcMain.handle(desktopIpc.getFileDiff, async (_event, workspaceId: string, filePath: string) => {
+    const workspacePath = store.getWorkspacePath(workspaceId);
+    if (!workspacePath) {
+      return "";
+    }
+    return getFileDiff(workspacePath, filePath);
+  });
+  ipcMain.handle(desktopIpc.stageFile, async (_event, workspaceId: string, filePath: string) => {
+    const workspacePath = store.getWorkspacePath(workspaceId);
+    if (!workspacePath) {
+      throw new Error(`Unknown workspace: ${workspaceId}`);
+    }
+    await stageFile(workspacePath, filePath);
   });
   ipcMain.handle(desktopIpc.toggleWindowMaximize, (event) => {
     const window = BrowserWindow.fromWebContents(event.sender);

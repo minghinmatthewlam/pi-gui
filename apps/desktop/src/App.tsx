@@ -10,6 +10,7 @@ import {
 } from "./desktop-state";
 import { formatRelativeTime } from "./string-utils";
 import { ComposerPanel } from "./composer-panel";
+import { DiffPanel } from "./diff-panel";
 import type { ComposerSlashCommand } from "./composer-commands";
 import { desktopCommands, getDesktopCommandFromShortcut, type PiDesktopCommand } from "./ipc";
 import { SkillsView } from "./skills-view";
@@ -118,6 +119,7 @@ export default function App() {
   const pinnedToBottomRef = useRef(true);
   const previousActiveViewRef = useRef<AppView | null>(null);
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
+  const [showDiffPanel, setShowDiffPanel] = useState(false);
   const api = window.piApp;
 
   const selectedWorkspace = snapshot ? (getSelectedWorkspace(snapshot) ?? snapshot.workspaces[0]) : undefined;
@@ -275,6 +277,12 @@ export default function App() {
 
     const removeCommandListener = window.piApp?.onCommand?.(handleCommand);
     const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      // Cmd+D toggles diff panel
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "d" && !event.shiftKey) {
+        event.preventDefault();
+        setShowDiffPanel((prev) => !prev);
+        return;
+      }
       const command = getDesktopCommandFromShortcut({
         modifier: event.metaKey || event.ctrlKey,
         shift: event.shiftKey,
@@ -749,7 +757,7 @@ export default function App() {
         onUnarchiveSession={handleUnarchiveSession}
       />
 
-      <main className="main">
+      <main className={`main ${showDiffPanel ? "main--with-diff" : ""}`}>
         <Topbar
           activeView={snapshot.activeView}
           rootWorkspace={rootWorkspace}
@@ -762,6 +770,8 @@ export default function App() {
           api={api}
           setSnapshot={setSnapshot}
           updateSnapshot={updateSnapshot}
+          showDiffPanel={showDiffPanel}
+          onToggleDiffPanel={() => setShowDiffPanel((prev) => !prev)}
         />
 
         {snapshot.activeView === "new-thread" ? (
@@ -879,6 +889,13 @@ export default function App() {
                 setComposerDraft(`${before}${inserted}${after}`);
               }}
             />
+            {showDiffPanel && selectedWorkspace ? (
+              <DiffPanel
+                workspaceId={selectedWorkspace.id}
+                api={api}
+                sessionStatus={selectedSession.status}
+              />
+            ) : null}
           </>
         ) : selectedWorkspace ? (
           <section className="canvas canvas--empty">

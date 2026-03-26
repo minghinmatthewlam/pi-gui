@@ -201,3 +201,12 @@ export function WorktreeIcon() {
     </Icon>
   );
 }
+
+export function DiffIcon() {
+  return (
+    <Icon>
+      <path d="M7 7h6M7 10h4M7 13h5" stroke="currentColor" strokeLinecap="round" strokeWidth="1.3" />
+      <rect x="4" y="4" width="12" height="12" rx="2" stroke="currentColor" strokeWidth="1.3" fill="none" />
+    </Icon>
+  );
+}

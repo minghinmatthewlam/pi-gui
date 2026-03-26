@@ -50,6 +50,9 @@ export const desktopIpc = {
   submitComposer: "pi-gui:submit-composer",
   toggleWindowMaximize: "pi-gui:toggle-window-maximize",
   listWorkspaceFiles: "pi-gui:list-workspace-files",
+  getChangedFiles: "pi-gui:get-changed-files",
+  getFileDiff: "pi-gui:get-file-diff",
+  stageFile: "pi-gui:stage-file",
   ping: "app:ping",
   openExternal: "app:open-external",
 } as const;
@@ -142,6 +145,9 @@ export interface PiDesktopApi {
   updateComposerDraft(composerDraft: string): Promise<DesktopAppState>;
   submitComposer(text: string): Promise<DesktopAppState>;
   listWorkspaceFiles(workspaceId: string): Promise<string[]>;
+  getChangedFiles(workspaceId: string): Promise<{ path: string; status: string }[]>;
+  getFileDiff(workspaceId: string, filePath: string): Promise<string>;
+  stageFile(workspaceId: string, filePath: string): Promise<void>;
   toggleWindowMaximize(): Promise<void>;
   openExternal(url: string): Promise<void>;
 }

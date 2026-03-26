@@ -6,6 +6,18 @@
   overflow: hidden;
 }
 
+.main--with-diff {
+  grid-template-columns: 1fr 400px;
+}
+
+.main--with-diff > .topbar {
+  grid-column: 1 / -1;
+}
+
+.main--with-diff > .composer {
+  grid-column: 1;
+}
+
 .topbar {
   -webkit-app-region: drag;
   padding: 12px 18px 10px;
@@ -433,6 +445,135 @@
 .diff-line__content {
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+/* Diff review panel */
+
+.diff-panel {
+  width: 400px;
+  min-width: 320px;
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  overflow: hidden;
+  grid-row: 1 / -1;
+}
+
+.diff-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.diff-panel__title {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0;
+  color: var(--ink-strong);
+}
+
+.diff-panel__empty {
+  padding: 40px 16px;
+  text-align: center;
+  color: var(--muted-soft);
+  font-size: 13px;
+}
+
+.diff-panel__file-list {
+  border-bottom: 1px solid var(--border);
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.diff-panel__file {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+}
+
+.diff-panel__file--selected {
+  background: var(--surface-subtle);
+}
+
+.diff-panel__file-name {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  font-size: 13px;
+  font-family: var(--font-mono);
+  color: var(--ink);
+}
+
+.diff-panel__file-name:hover {
+  background: var(--surface-subtle);
+}
+
+.diff-panel__status-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.diff-panel__status-dot--modified {
+  background: #e8a838;
+}
+
+.diff-panel__status-dot--added {
+  background: #2ea043;
+}
+
+.diff-panel__status-dot--deleted {
+  background: #f85149;
+}
+
+.diff-panel__status-dot--untracked {
+  background: #8b949e;
+}
+
+.diff-panel__stage-btn {
+  padding: 2px 8px;
+  margin-right: 8px;
+  font-size: 11px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: none;
+  cursor: pointer;
+  color: var(--muted-strong);
+}
+
+.diff-panel__stage-btn:hover {
+  background: var(--surface-subtle);
+}
+
+.diff-panel__viewer {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.diff-panel__viewer-header {
+  padding: 8px 12px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--surface-subtle);
+  border-bottom: 1px solid var(--border);
+  color: var(--ink);
+}
+
+.icon-button--active {
+  color: var(--accent);
 }
 
 .timeline-summary {
