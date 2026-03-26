@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 
 const fileCache = new Map<string, { files: string[]; timestamp: number }>();
 const CACHE_TTL_MS = 30_000;
+const CACHE_MAX_ENTRIES = 20;
 
 export function listWorkspaceFiles(workspacePath: string): Promise<string[]> {
   const cached = fileCache.get(workspacePath);
@@ -24,6 +25,12 @@ export function listWorkspaceFiles(workspacePath: string): Promise<string[]> {
           .map((line) => line.trim())
           .filter(Boolean)
           .sort();
+        if (fileCache.size >= CACHE_MAX_ENTRIES) {
+          const oldest = fileCache.keys().next().value;
+          if (oldest !== undefined) {
+            fileCache.delete(oldest);
+          }
+        }
         fileCache.set(workspacePath, { files, timestamp: Date.now() });
         resolve(files);
       },

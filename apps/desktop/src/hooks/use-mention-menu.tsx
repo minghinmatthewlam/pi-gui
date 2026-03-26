@@ -14,6 +14,7 @@ export interface MentionMenuState {
   readonly mentionOptions: readonly string[];
   readonly selectedIndex: number;
   readonly handleMentionKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => boolean;
+  readonly insertMention: (filePath: string) => void;
 }
 
 export function useMentionMenu({
@@ -150,5 +151,6 @@ export function useMentionMenu({
     mentionOptions,
     selectedIndex,
     handleMentionKeyDown,
+    insertMention,
   };
 }

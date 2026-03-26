@@ -5,7 +5,7 @@ import { RefreshIcon } from "./icons";
 
 interface ChangedFile {
   readonly path: string;
-  readonly status: string;
+  readonly status: "added" | "modified" | "deleted" | "untracked";
 }
 
 interface DiffPanelProps {

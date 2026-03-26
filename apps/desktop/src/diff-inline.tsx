@@ -1,3 +1,5 @@
+import { useMemo } from "react";
+
 interface DiffLine {
   readonly type: "added" | "removed" | "context" | "header";
   readonly content: string;
@@ -5,7 +7,7 @@ interface DiffLine {
 }
 
 export function InlineDiff({ diff }: { readonly diff: string }) {
-  const lines = parseDiff(diff);
+  const lines = useMemo(() => parseDiff(diff), [diff]);
   if (lines.length === 0) {
     return null;
   }
@@ -59,13 +61,13 @@ export function extractDiffFromOutput(output: unknown): string | undefined {
   if (typeof output === "string" && (output.includes("@@") || output.startsWith("diff "))) {
     return output;
   }
-  if (isRecord(output)) {
+  if (isObj(output)) {
     if (typeof output.diff === "string") {
       return output.diff;
     }
     if (Array.isArray(output.content)) {
       for (const part of output.content) {
-        if (isRecord(part) && part.type === "text" && typeof part.text === "string") {
+        if (isObj(part) && part.type === "text" && typeof part.text === "string") {
           if (part.text.includes("@@") || part.text.startsWith("diff ")) {
             return part.text;
           }
@@ -76,6 +78,6 @@ export function extractDiffFromOutput(output: unknown): string | undefined {
   return undefined;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+function isObj(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }

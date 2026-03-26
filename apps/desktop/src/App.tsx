@@ -872,22 +872,7 @@ export default function App() {
               showMentionMenu={mentionMenu.showMentionMenu}
               mentionOptions={mentionMenu.mentionOptions}
               selectedMentionIndex={mentionMenu.selectedIndex}
-              onSelectMention={(filePath) => {
-                const textarea = composerRef.current;
-                if (!textarea) {
-                  return;
-                }
-                const cursorPos = textarea.selectionStart;
-                const textBeforeCursor = composerDraft.slice(0, cursorPos);
-                const atIndex = textBeforeCursor.lastIndexOf("@");
-                if (atIndex < 0) {
-                  return;
-                }
-                const before = composerDraft.slice(0, atIndex);
-                const after = composerDraft.slice(cursorPos);
-                const inserted = `@${filePath} `;
-                setComposerDraft(`${before}${inserted}${after}`);
-              }}
+              onSelectMention={mentionMenu.insertMention}
             />
             {showDiffPanel && selectedWorkspace ? (
               <DiffPanel

@@ -145,7 +145,7 @@ export interface PiDesktopApi {
   updateComposerDraft(composerDraft: string): Promise<DesktopAppState>;
   submitComposer(text: string): Promise<DesktopAppState>;
   listWorkspaceFiles(workspaceId: string): Promise<string[]>;
-  getChangedFiles(workspaceId: string): Promise<{ path: string; status: string }[]>;
+  getChangedFiles(workspaceId: string): Promise<{ path: string; status: "added" | "modified" | "deleted" | "untracked" }[]>;
   getFileDiff(workspaceId: string, filePath: string): Promise<string>;
   stageFile(workspaceId: string, filePath: string): Promise<void>;
   toggleWindowMaximize(): Promise<void>;
