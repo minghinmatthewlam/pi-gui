@@ -27,6 +27,10 @@ interface ComposerPanelProps {
   readonly onSelectSlashCommand: (command: ComposerSlashCommand) => void;
   readonly onSelectSlashOption: (option: ComposerSlashOption) => void;
   readonly onSubmit: () => void;
+  readonly showMentionMenu: boolean;
+  readonly mentionOptions: readonly string[];
+  readonly selectedMentionIndex: number;
+  readonly onSelectMention: (filePath: string) => void;
 }
 
 export function ComposerPanel({
@@ -53,10 +57,36 @@ export function ComposerPanel({
   onSelectSlashCommand,
   onSelectSlashOption,
   onSubmit,
+  showMentionMenu,
+  mentionOptions,
+  selectedMentionIndex,
+  onSelectMention,
 }: ComposerPanelProps) {
   return (
     <footer className="composer">
       <div className="conversation conversation--composer">
+        {showMentionMenu ? (
+          <div className="composer__menus">
+            <div className="mention-menu" data-testid="mention-menu" onWheel={(event) => event.stopPropagation()}>
+              {mentionOptions.map((filePath, index) => {
+                const lastSlash = filePath.lastIndexOf("/");
+                const dirPart = lastSlash >= 0 ? filePath.slice(0, lastSlash + 1) : "";
+                const namePart = lastSlash >= 0 ? filePath.slice(lastSlash + 1) : filePath;
+                return (
+                  <button
+                    className={`mention-menu__item ${index === selectedMentionIndex ? "mention-menu__item--active" : ""}`}
+                    key={filePath}
+                    type="button"
+                    onClick={() => onSelectMention(filePath)}
+                  >
+                    {dirPart ? <span className="mention-menu__dirname">{dirPart}</span> : null}
+                    <span className="mention-menu__filename">{namePart}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
         {showSlashMenu || (showSlashOptionMenu && selectedSlashCommand) ? (
           <div className="composer__menus">
             {showSlashMenu ? (

@@ -49,6 +49,7 @@ export const desktopIpc = {
   updateComposerDraft: "pi-gui:update-composer-draft",
   submitComposer: "pi-gui:submit-composer",
   toggleWindowMaximize: "pi-gui:toggle-window-maximize",
+  listWorkspaceFiles: "pi-gui:list-workspace-files",
   ping: "app:ping",
   openExternal: "app:open-external",
 } as const;
@@ -140,6 +141,7 @@ export interface PiDesktopApi {
   removeComposerImage(attachmentId: string): Promise<DesktopAppState>;
   updateComposerDraft(composerDraft: string): Promise<DesktopAppState>;
   submitComposer(text: string): Promise<DesktopAppState>;
+  listWorkspaceFiles(workspaceId: string): Promise<string[]>;
   toggleWindowMaximize(): Promise<void>;
   openExternal(url: string): Promise<void>;
 }

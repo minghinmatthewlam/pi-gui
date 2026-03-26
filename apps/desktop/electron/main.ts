@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { DesktopAppStore } from "./app-store";
+import { listWorkspaceFiles } from "./app-store-files";
 import { NotificationManager } from "./notification-manager";
 import { desktopIpc, getDesktopCommandFromShortcut } from "../src/ipc";
 import type {
@@ -227,6 +228,13 @@ app.whenReady().then(async () => {
     store.updateComposerDraft(composerDraft),
   );
   ipcMain.handle(desktopIpc.submitComposer, (_event, text: string) => store.submitComposer(text));
+  ipcMain.handle(desktopIpc.listWorkspaceFiles, async (_event, workspaceId: string) => {
+    const workspacePath = store.getWorkspacePath(workspaceId);
+    if (!workspacePath) {
+      return [];
+    }
+    return listWorkspaceFiles(workspacePath);
+  });
   ipcMain.handle(desktopIpc.toggleWindowMaximize, (event) => {
     const window = BrowserWindow.fromWebContents(event.sender);
     if (!window) {

@@ -21,6 +21,7 @@ import { buildThreadGroups } from "./thread-groups";
 import { Sidebar } from "./sidebar";
 import { Topbar } from "./topbar";
 import { useSlashMenu } from "./hooks/use-slash-menu";
+import { useMentionMenu } from "./hooks/use-mention-menu";
 import { useWorkspaceMenu } from "./hooks/use-workspace-menu";
 
 function useDesktopAppState() {
@@ -222,6 +223,14 @@ export default function App() {
     focusComposer,
     openSettings,
     updateSnapshot,
+  });
+
+  const mentionMenu = useMentionMenu({
+    composerDraft,
+    setComposerDraft,
+    composerRef,
+    workspaceId: selectedWorkspace?.id,
+    api,
   });
 
   const wsMenu = useWorkspaceMenu({
@@ -605,6 +614,10 @@ export default function App() {
       return;
     }
 
+    if (mentionMenu.handleMentionKeyDown(event)) {
+      return;
+    }
+
     if (slashMenu.handleSlashKeyDown(event)) {
       return;
     }
@@ -846,6 +859,25 @@ export default function App() {
               showSlashMenu={slashMenu.showSlashMenu}
               slashOptions={slashMenu.slashOptions}
               slashSections={slashMenu.slashSections}
+              showMentionMenu={mentionMenu.showMentionMenu}
+              mentionOptions={mentionMenu.mentionOptions}
+              selectedMentionIndex={mentionMenu.selectedIndex}
+              onSelectMention={(filePath) => {
+                const textarea = composerRef.current;
+                if (!textarea) {
+                  return;
+                }
+                const cursorPos = textarea.selectionStart;
+                const textBeforeCursor = composerDraft.slice(0, cursorPos);
+                const atIndex = textBeforeCursor.lastIndexOf("@");
+                if (atIndex < 0) {
+                  return;
+                }
+                const before = composerDraft.slice(0, atIndex);
+                const after = composerDraft.slice(cursorPos);
+                const inserted = `@${filePath} `;
+                setComposerDraft(`${before}${inserted}${after}`);
+              }}
             />
           </>
         ) : selectedWorkspace ? (
