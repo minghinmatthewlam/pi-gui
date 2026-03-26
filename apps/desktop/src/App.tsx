@@ -424,6 +424,8 @@ export default function App() {
 
     const previousDraft = composerDraft;
     setComposerDraft("");
+    // Optimistically clear attachments so they disappear immediately on Enter
+    setSnapshot((prev) => prev ? { ...prev, composerAttachments: [] } : prev);
     void (async () => {
       const nextState = await updateSnapshot(api, setSnapshot, () => api.submitComposer(previousDraft));
       setComposerDraft(nextState.composerDraft);
@@ -874,13 +876,6 @@ export default function App() {
               selectedMentionIndex={mentionMenu.selectedIndex}
               onSelectMention={mentionMenu.insertMention}
             />
-            {showDiffPanel && selectedWorkspace ? (
-              <DiffPanel
-                workspaceId={selectedWorkspace.id}
-                api={api}
-                sessionStatus={selectedSession.status}
-              />
-            ) : null}
           </>
         ) : selectedWorkspace ? (
           <section className="canvas canvas--empty">
@@ -908,6 +903,14 @@ export default function App() {
             </div>
           </section>
         )}
+
+        {showDiffPanel && selectedWorkspace ? (
+          <DiffPanel
+            workspaceId={selectedWorkspace.id}
+            api={api}
+            sessionStatus={selectedSession?.status}
+          />
+        ) : null}
       </main>
     </div>
   );

@@ -65,6 +65,9 @@ export function extractDiffFromOutput(output: unknown): string | undefined {
     if (typeof output.diff === "string") {
       return output.diff;
     }
+    if (isObj(output.details) && typeof output.details.diff === "string") {
+      return output.details.diff;
+    }
     if (Array.isArray(output.content)) {
       for (const part of output.content) {
         if (isObj(part) && part.type === "text" && typeof part.text === "string") {

@@ -17,6 +17,18 @@ export interface MentionMenuState {
   readonly insertMention: (filePath: string) => void;
 }
 
+// Match @<query> at end of string (or preceded by whitespace)
+function extractMentionQuery(text: string): { query: string; atIndex: number } | null {
+  // Find the last @ that could be a mention trigger
+  const match = /(?:^|\s)@([^\s]*)$/.exec(text);
+  if (!match) {
+    return null;
+  }
+  const query = match[1] ?? "";
+  const atIndex = text.length - query.length - 1; // position of @
+  return { query, atIndex };
+}
+
 export function useMentionMenu({
   composerDraft,
   setComposerDraft,
@@ -26,8 +38,7 @@ export function useMentionMenu({
 }: UseMentionMenuParams): MentionMenuState {
   const [allFiles, setAllFiles] = useState<readonly string[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const mentionStartRef = useRef<number | null>(null);
-  const suppressRef = useRef(false);
+  const [suppressed, setSuppressed] = useState(false);
 
   // Fetch file list when workspace changes
   useEffect(() => {
@@ -35,48 +46,31 @@ export function useMentionMenu({
       setAllFiles([]);
       return;
     }
-    void api.listWorkspaceFiles(workspaceId).then(setAllFiles);
+    void api.listWorkspaceFiles(workspaceId).then(setAllFiles).catch(() => setAllFiles([]));
   }, [api, workspaceId]);
 
-  // Detect active @ mention
-  const mentionQuery = useMemo(() => {
-    if (suppressRef.current) {
-      return null;
-    }
-    const textarea = composerRef.current;
-    if (!textarea) {
-      return null;
-    }
-    const cursorPos = textarea.selectionStart;
-    const textBeforeCursor = composerDraft.slice(0, cursorPos);
+  // Reset suppression when draft changes
+  useEffect(() => {
+    setSuppressed(false);
+  }, [composerDraft]);
 
-    // Find the last @ not preceded by a non-whitespace char
-    const atIndex = textBeforeCursor.lastIndexOf("@");
-    if (atIndex < 0) {
+  // Detect active @ mention from the draft text
+  const mentionMatch = useMemo(() => {
+    if (suppressed) {
       return null;
     }
-    // @ must be at start or preceded by whitespace
-    if (atIndex > 0 && !/\s/.test(textBeforeCursor[atIndex - 1] ?? "")) {
-      return null;
-    }
-    const query = textBeforeCursor.slice(atIndex + 1);
-    // No spaces allowed in query (once user types a space, the mention is done)
-    if (/\s/.test(query)) {
-      return null;
-    }
-    mentionStartRef.current = atIndex;
-    return query;
-  }, [composerDraft, composerRef]);
+    return extractMentionQuery(composerDraft);
+  }, [composerDraft, suppressed]);
 
   const mentionOptions = useMemo(() => {
-    if (mentionQuery === null) {
+    if (!mentionMatch) {
       return [];
     }
-    const lowerQuery = mentionQuery.toLowerCase();
+    const lowerQuery = mentionMatch.query.toLowerCase();
     return allFiles
       .filter((file) => file.toLowerCase().includes(lowerQuery))
       .slice(0, 10);
-  }, [allFiles, mentionQuery]);
+  }, [allFiles, mentionMatch]);
 
   const showMentionMenu = mentionOptions.length > 0;
 
@@ -87,25 +81,24 @@ export function useMentionMenu({
 
   const insertMention = useCallback(
     (filePath: string) => {
-      const atIndex = mentionStartRef.current;
-      if (atIndex === null) {
+      if (!mentionMatch) {
         return;
       }
-      const textarea = composerRef.current;
-      const cursorPos = textarea?.selectionStart ?? composerDraft.length;
-      const before = composerDraft.slice(0, atIndex);
-      const after = composerDraft.slice(cursorPos);
+      const before = composerDraft.slice(0, mentionMatch.atIndex);
+      const afterCursor = composerDraft.slice(mentionMatch.atIndex + 1 + mentionMatch.query.length);
       const inserted = `@${filePath} `;
-      setComposerDraft(`${before}${inserted}${after}`);
-      suppressRef.current = true;
-      // Reset suppress after a tick so next keystroke can re-trigger
+      const newDraft = `${before}${inserted}${afterCursor}`;
+      setComposerDraft(newDraft);
+      setSuppressed(true);
       requestAnimationFrame(() => {
-        suppressRef.current = false;
-        const newPos = before.length + inserted.length;
-        textarea?.setSelectionRange(newPos, newPos);
+        const textarea = composerRef.current;
+        if (textarea) {
+          const newPos = before.length + inserted.length;
+          textarea.setSelectionRange(newPos, newPos);
+        }
       });
     },
-    [composerDraft, composerRef, setComposerDraft],
+    [composerDraft, composerRef, setComposerDraft, mentionMatch],
   );
 
   const handleMentionKeyDown = useCallback(
@@ -134,10 +127,7 @@ export function useMentionMenu({
       }
       if (event.key === "Escape") {
         event.preventDefault();
-        suppressRef.current = true;
-        requestAnimationFrame(() => {
-          suppressRef.current = false;
-        });
+        setSuppressed(true);
         return true;
       }
 

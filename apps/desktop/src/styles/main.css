@@ -457,7 +457,8 @@
   flex-direction: column;
   background: var(--surface);
   overflow: hidden;
-  grid-row: 1 / -1;
+  grid-column: 2;
+  grid-row: 2 / -1;
 }
 
 .diff-panel__header {
