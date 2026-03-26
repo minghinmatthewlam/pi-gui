@@ -1,10 +1,13 @@
 import { type ClipboardEvent, type Dispatch, type DragEvent, type KeyboardEvent, type RefObject, type SetStateAction } from "react";
+import type { RuntimeSnapshot } from "@pi-gui/session-driver/runtime-types";
 import type { ComposerImageAttachment, SessionRecord } from "./desktop-state";
 import { ArrowUpIcon, ModelIcon, PlusIcon, ReasoningIcon, SkillIcon, SparkIcon, StatusIcon, StopSquareIcon } from "./icons";
 import type { ComposerSlashCommand, ComposerSlashCommandSection, ComposerSlashOption } from "./composer-commands";
+import { ModelSelector } from "./model-selector";
 
 interface ComposerPanelProps {
   readonly selectedSession: SessionRecord;
+  readonly runtime?: RuntimeSnapshot;
   readonly activeSlashCommand?: ComposerSlashCommand;
   readonly activeSlashCommandMeta?: string;
   readonly composerDraft: string;
@@ -26,6 +29,8 @@ interface ComposerPanelProps {
   readonly onRemoveImage: (attachmentId: string) => void;
   readonly onSelectSlashCommand: (command: ComposerSlashCommand) => void;
   readonly onSelectSlashOption: (option: ComposerSlashOption) => void;
+  readonly onSetModel: (provider: string, modelId: string) => void;
+  readonly onSetThinking: (level: string) => void;
   readonly onSubmit: () => void;
   readonly showMentionMenu: boolean;
   readonly mentionOptions: readonly string[];
@@ -35,6 +40,7 @@ interface ComposerPanelProps {
 
 export function ComposerPanel({
   selectedSession,
+  runtime,
   activeSlashCommand,
   activeSlashCommandMeta,
   composerDraft,
@@ -56,6 +62,8 @@ export function ComposerPanel({
   onRemoveImage,
   onSelectSlashCommand,
   onSelectSlashOption,
+  onSetModel,
+  onSetThinking,
   onSubmit,
   showMentionMenu,
   mentionOptions,
@@ -218,12 +226,12 @@ export function ComposerPanel({
           <div className="composer__bar">
             <div className="composer__hint">
               {selectedSession.status === "running" ? runningLabel : "Enter to send · Shift+Enter for newline"}
-              {selectedSession.config?.provider && selectedSession.config?.modelId ? (
-                <span className="composer__config"> · {selectedSession.config.provider}:{selectedSession.config.modelId}</span>
-              ) : null}
-              {selectedSession.config?.thinkingLevel ? (
-                <span className="composer__config"> · {selectedSession.config.thinkingLevel}</span>
-              ) : null}
+              <ModelSelector
+                runtime={runtime}
+                session={selectedSession}
+                onSetModel={onSetModel}
+                onSetThinking={onSetThinking}
+              />
             </div>
             <div className="composer__actions">
               <button

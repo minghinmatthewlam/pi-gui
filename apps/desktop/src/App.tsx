@@ -505,6 +505,28 @@ export default function App() {
     void updateSnapshot(api, setSnapshot, () => api.addComposerImages(attachments));
   }
 
+  const handleSetSessionModel = (provider: string, modelId: string) => {
+    if (!selectedWorkspace || !selectedSession) {
+      return;
+    }
+    void updateSnapshot(api, setSnapshot, () =>
+      api.setSessionModel(selectedWorkspace.id, selectedSession.id, provider, modelId),
+    );
+  };
+
+  const handleSetSessionThinking = (level: string) => {
+    if (!selectedWorkspace || !selectedSession) {
+      return;
+    }
+    void updateSnapshot(api, setSnapshot, () =>
+      api.setSessionThinkingLevel(
+        selectedWorkspace.id,
+        selectedSession.id,
+        level as NonNullable<RuntimeSnapshot["settings"]["defaultThinkingLevel"]>,
+      ),
+    );
+  };
+
   const handleRefreshRuntime = () => {
     if (!settingsWorkspace) {
       return;
@@ -876,6 +898,7 @@ export default function App() {
               attachments={composerAttachments}
               composerDraft={composerDraft}
               composerRef={composerRef}
+              runtime={selectedRuntime}
               onClearSlashCommand={slashMenu.resetSlashUi}
               onComposerKeyDown={handleComposerKeyDown}
               onComposerPaste={handleComposerPaste}
@@ -888,6 +911,8 @@ export default function App() {
               onSelectSlashOption={(option) => {
                 slashMenu.applySlashOptionSelection(option);
               }}
+              onSetModel={handleSetSessionModel}
+              onSetThinking={handleSetSessionThinking}
               onSubmit={submitComposerDraft}
               runningLabel={runningLabel}
               selectedSession={selectedSession}
