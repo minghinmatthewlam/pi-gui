@@ -293,6 +293,7 @@ async function runComposerCommand(
   }
 
   if (parsed.type === "reload") {
+    store.clearExtensionUiForSession(sessionRef);
     await store.driver.reloadSession(sessionRef);
     await store.refreshSessionCommandsFor(sessionRef);
     return finishComposerCommand(store, sessionRef, key, "Reloaded session resources");

@@ -1,5 +1,4 @@
 // IPC bridge access requires inline window.evaluate — see harness.ts for shared helpers
-// TODO: test workspace with no skills directory and toggling skill slash commands setting
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -53,9 +52,19 @@ Use this skill when the user wants a short demo workflow.
     await expect(window.locator(".settings-view")).toBeVisible();
     await expect(window.getByText("Notifications", { exact: true })).toBeVisible();
     await expect(window.locator(".settings-view")).toContainText("Enable skill slash commands");
+    const skillCommandsToggle = window.getByRole("checkbox", { name: "Enable skill slash commands" });
+    await expect(skillCommandsToggle).toBeChecked();
+    await skillCommandsToggle.click();
 
     await window.getByRole("button", { name: "Back to app", exact: true }).click();
     const composer = window.getByTestId("composer");
+    await composer.fill("/skill");
+    await expect(window.getByTestId("slash-menu")).toHaveCount(0);
+
+    await window.getByRole("button", { name: "Settings", exact: true }).click();
+    await expect(skillCommandsToggle).not.toBeChecked();
+    await skillCommandsToggle.click();
+    await window.getByRole("button", { name: "Back to app", exact: true }).click();
     await composer.fill("/skill");
     const slashMenu = window.getByTestId("slash-menu");
     await expect(slashMenu).toContainText("Runtime Commands");

@@ -261,6 +261,7 @@ export class DesktopAppStore implements AppStoreInternals {
     return this.withErrorHandling(async () => {
       const snapshot = await this.driver.runtimeSupervisor.refreshRuntime(ws);
       this.runtimeByWorkspace.set(ws.workspaceId, snapshot);
+      this.clearExtensionUiForWorkspace(ws.workspaceId);
       await this.reloadSessionsForWorkspace(ws.workspaceId);
       await this.refreshSessionCommandsForWorkspace(ws.workspaceId);
       return this.refreshState({ clearLastError: true });
@@ -349,6 +350,7 @@ export class DesktopAppStore implements AppStoreInternals {
       const snapshot = await action(ws);
       this.runtimeByWorkspace.set(workspaceId, snapshot);
       if (options?.reloadSessions) {
+        this.clearExtensionUiForWorkspace(workspaceId);
         await this.reloadSessionsForWorkspace(workspaceId);
       }
       await this.refreshSessionCommandsForWorkspace(workspaceId);
@@ -647,6 +649,16 @@ export class DesktopAppStore implements AppStoreInternals {
     await this.refreshSessionCommands(sessionRef);
   }
 
+  clearExtensionUiForSession(sessionRef: SessionRef): void {
+    const key = sessionKey(sessionRef);
+    if (!this.sessionState.extensionUiBySession.has(key)) {
+      return;
+    }
+
+    this.sessionState.extensionUiBySession.delete(key);
+    this.state = this.syncDerivedSessionState(this.state, sessionRef);
+  }
+
   private async refreshSessionCommandsForWorkspace(workspaceId: string): Promise<void> {
     const sessionRefs = this.sessionRefsForWorkspace(workspaceId);
     await Promise.all(sessionRefs.map((sessionRef) => this.refreshSessionCommands(sessionRef)));
@@ -655,6 +667,12 @@ export class DesktopAppStore implements AppStoreInternals {
   private async reloadSessionsForWorkspace(workspaceId: string): Promise<void> {
     const sessionRefs = this.sessionRefsForWorkspace(workspaceId);
     await Promise.all(sessionRefs.map((sessionRef) => this.driver.reloadSession(sessionRef)));
+  }
+
+  private clearExtensionUiForWorkspace(workspaceId: string): void {
+    for (const sessionRef of this.sessionRefsForWorkspace(workspaceId)) {
+      this.clearExtensionUiForSession(sessionRef);
+    }
   }
 
   private sessionRefsForWorkspace(workspaceId: string): SessionRef[] {
@@ -691,8 +709,13 @@ export class DesktopAppStore implements AppStoreInternals {
   }
 
   private applyHostUiRequest(event: Extract<SessionDriverEvent, { type: "hostUiRequest" }>): void {
-    const uiState = this.getOrCreateExtensionUiState(event.sessionRef);
     const key = sessionKey(event.sessionRef);
+    if (event.request.kind === "reset") {
+      this.sessionState.extensionUiBySession.delete(key);
+      return;
+    }
+
+    const uiState = this.getOrCreateExtensionUiState(event.sessionRef);
     applyHostUiRequestToExtensionUiState(uiState, event.request);
 
     switch (event.request.kind) {

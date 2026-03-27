@@ -36,6 +36,7 @@ export interface AppStoreInternals {
   ensureSessionReady(sessionRef: SessionRef): Promise<void>;
   ensureSessionSubscribed(sessionRef: SessionRef): Promise<void>;
   refreshSessionCommandsFor(sessionRef: SessionRef): Promise<void>;
+  clearExtensionUiForSession(sessionRef: SessionRef): void;
   cancelPendingDialogsForSession(sessionRef: SessionRef): Promise<void>;
   persistUiState(): Promise<void>;
   persistComposerAttachments(key: string, attachments: readonly ComposerImageAttachment[]): Promise<void>;

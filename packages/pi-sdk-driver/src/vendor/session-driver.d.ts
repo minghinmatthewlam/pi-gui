@@ -199,7 +199,11 @@ declare module "@pi-gui/session-driver" {
         readonly kind: "editorText";
         readonly requestId: string;
         readonly text: string;
-      };
+    }
+    | {
+        readonly kind: "reset";
+        readonly requestId: string;
+    };
 
   export interface HostUiRequestEvent extends SessionEventBase {
     readonly type: "hostUiRequest";

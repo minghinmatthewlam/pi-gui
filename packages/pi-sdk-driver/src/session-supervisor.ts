@@ -443,8 +443,7 @@ export class SessionSupervisor {
     const record = await this.ensureRecord(sessionRef);
     const session = this.requireSession(record);
 
-    this.clearExtensionUiState(record);
-    this.cancelPendingHostUiRequests(record);
+    this.resetExtensionUi(record);
     await session.reload();
     await this.syncRecordAfterSessionMutation(record, { emitUpdate: true });
   }
@@ -632,8 +631,7 @@ export class SessionSupervisor {
         return { cancelled };
       },
       reload: async () => {
-        this.clearExtensionUiState(record);
-        this.cancelPendingHostUiRequests(record);
+        this.resetExtensionUi(record);
         await this.requireSession(record).reload();
         await this.syncRecordAfterSessionMutation(record, { emitUpdate: true });
       },
@@ -870,6 +868,15 @@ export class SessionSupervisor {
     record.extensionUiState.widgets.clear();
     record.extensionUiState.title = undefined;
     record.extensionUiState.editorText = undefined;
+  }
+
+  private resetExtensionUi(record: ManagedSessionRecord): void {
+    this.emitHostUiRequest(record, {
+      kind: "reset",
+      requestId: crypto.randomUUID(),
+    });
+    this.clearExtensionUiState(record);
+    this.cancelPendingHostUiRequests(record);
   }
 
   private cancelPendingHostUiRequests(record: ManagedSessionRecord): void {

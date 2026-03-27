@@ -347,6 +347,8 @@ function hostUiLabel(event: Extract<SessionDriverEvent, { type: "hostUiRequest" 
       return `Renamed session to ${event.request.title}`;
     case "editorText":
       return "Prepared editor text";
+    case "reset":
+      return "Cleared extension UI";
     default:
       return "Requested input";
   }

@@ -254,12 +254,19 @@ export function resolveRuntimeCommands(
   runtime: RuntimeSnapshot | undefined,
   sessionCommands: readonly RuntimeCommandRecord[],
 ): readonly RuntimeCommandRecord[] {
-  if (!runtime || !runtime.settings.enableSkillCommands) {
+  if (!runtime) {
     return sessionCommands;
   }
 
-  const merged = [...sessionCommands];
-  const seenNames = new Set(sessionCommands.map((command) => command.name));
+  const baseCommands = runtime.settings.enableSkillCommands
+    ? sessionCommands
+    : sessionCommands.filter((command) => command.source !== "skill");
+  if (!runtime.settings.enableSkillCommands) {
+    return baseCommands;
+  }
+
+  const merged = [...baseCommands];
+  const seenNames = new Set(baseCommands.map((command) => command.name));
   for (const skill of runtime.skills) {
     if (!skill.enabled) {
       continue;

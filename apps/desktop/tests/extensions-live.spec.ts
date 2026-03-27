@@ -62,6 +62,9 @@ test("manages extensions and prefers runtime commands over colliding host action
     await window.getByRole("button", { name: "Disable", exact: true }).click();
     await expect(window.locator(".skill-detail__status")).toHaveText("Disabled");
     await window.getByRole("button", { name: "Back to app", exact: true }).click();
+    await expect(window.locator(".topbar__session")).toHaveText("Extension session");
+    await expect(window.getByTestId("extension-status-strip")).toHaveCount(0);
+    await expect(window.locator(".extension-widget-card")).toHaveCount(0);
     const composer = window.getByTestId("composer");
     await composer.fill("/settings");
     const disabledSlashMenu = window.getByTestId("slash-menu");
@@ -75,6 +78,8 @@ test("manages extensions and prefers runtime commands over colliding host action
     await window.getByRole("button", { name: "Enable", exact: true }).click();
     await expect(window.locator(".skill-detail__status")).toHaveText("Enabled");
     await window.getByRole("button", { name: "Back to app", exact: true }).click();
+    await expect(window.locator(".topbar__session")).toHaveText("Extension Surface");
+    await expect(window.getByTestId("extension-status-strip")).toContainText("Demo ready");
 
     await composer.fill("/settings");
     const slashMenu = window.getByTestId("slash-menu");
