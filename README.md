@@ -54,6 +54,8 @@ Run the default test suite:
 pnpm test
 ```
 
+Desktop E2E lanes and setup are documented in [`apps/desktop/README.md`](./apps/desktop/README.md). The default desktop test command runs the `core` lane; use `pnpm --filter @pi-gui/desktop run test:e2e:all` when you need `core`, `live`, and `native`.
+
 Regenerate the README demo assets:
 
 ```bash
