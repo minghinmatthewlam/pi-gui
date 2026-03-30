@@ -134,6 +134,7 @@ export interface DesktopAppState {
   readonly sessionExtensionUiBySession: Readonly<Record<string, SessionExtensionUiStateRecord>>;
   readonly notificationPreferences: NotificationPreferences;
   readonly lastViewedAtBySession: Readonly<Record<string, string>>;
+  readonly workspaceOrder: readonly string[];
   readonly revision: number;
   readonly lastError?: string;
 }
@@ -166,6 +167,7 @@ export function createEmptyDesktopAppState(): DesktopAppState {
       attentionNeeded: true,
     },
     lastViewedAtBySession: {},
+    workspaceOrder: [],
     revision: 0,
   };
 }

@@ -26,8 +26,19 @@ export function buildThreadGroups(state: DesktopAppState): readonly ThreadGroup[
     (workspace) => workspace.kind === "worktree" && !workspacesById.has(workspace.rootWorkspaceId ?? ""),
   );
 
+  const order = state.workspaceOrder;
+  const sortedRoots = [...rootWorkspaces].sort((a, b) => {
+    const ai = order.indexOf(a.id);
+    const bi = order.indexOf(b.id);
+    // Workspaces not in the order list come first (newly added)
+    if (ai === -1 && bi === -1) return 0;
+    if (ai === -1) return -1;
+    if (bi === -1) return 1;
+    return ai - bi;
+  });
+
   return [
-    ...rootWorkspaces.map((workspace) => buildRootGroup(state, workspacesById, workspace)),
+    ...sortedRoots.map((workspace) => buildRootGroup(state, workspacesById, workspace)),
     ...orphanWorktrees.map(buildOrphanGroup),
   ];
 }

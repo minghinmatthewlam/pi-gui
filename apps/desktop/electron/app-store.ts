@@ -148,6 +148,20 @@ export class DesktopAppStore implements AppStoreInternals {
     return workspace.removeWorkspace(this, workspaceId);
   }
 
+  async reorderWorkspaces(order: readonly string[]): Promise<DesktopAppState> {
+    await this.initialize();
+    const primaryIds = new Set(this.state.workspaces.filter((w) => w.kind === "primary").map((w) => w.id));
+    const sanitized = [...new Set(order)].filter((id) => primaryIds.has(id));
+    this.state = {
+      ...this.state,
+      workspaceOrder: sanitized,
+      lastError: undefined,
+      revision: this.state.revision + 1,
+    };
+    await this.persistUiState();
+    return this.emit();
+  }
+
   async selectWorkspace(workspaceId: string): Promise<DesktopAppState> {
     return workspace.selectWorkspace(this, workspaceId);
   }
@@ -371,6 +385,7 @@ export class DesktopAppStore implements AppStoreInternals {
           ...persisted.notificationPreferences,
         },
         lastViewedAtBySession: persisted.lastViewedAtBySession ?? {},
+        workspaceOrder: persisted.workspaceOrder ?? [],
       };
       await this.migrateLegacyPersistence(persisted);
       this.sessionState.lastViewedAtBySession.clear();
@@ -510,6 +525,7 @@ export class DesktopAppStore implements AppStoreInternals {
       sessionCommandsBySession: mapToRecord(this.sessionState.sessionCommandsBySession),
       sessionExtensionUiBySession: this.serializeSessionExtensionUiState(),
       lastViewedAtBySession: mapToRecord(this.sessionState.lastViewedAtBySession),
+      workspaceOrder: this.state.workspaceOrder,
       composerDraft: this.resolveComposerDraft(selectedWorkspaceId, selectedSessionId, options.composerDraft),
       composerAttachments: this.resolveComposerAttachments(selectedWorkspaceId, selectedSessionId),
       lastError: this.resolveSelectedSessionError(selectedWorkspaceId, selectedSessionId, options.clearLastError),
@@ -923,6 +939,7 @@ export class DesktopAppStore implements AppStoreInternals {
       composerDraftsBySession: mapToRecord(this.sessionState.composerDraftsBySession),
       notificationPreferences: this.state.notificationPreferences,
       lastViewedAtBySession: mapToRecord(this.sessionState.lastViewedAtBySession),
+      workspaceOrder: this.state.workspaceOrder.length > 0 ? this.state.workspaceOrder : undefined,
     };
 
     await writePersistedUiState(this.uiStateFilePath, payload);

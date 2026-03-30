@@ -149,6 +149,7 @@ app.whenReady().then(async () => {
     store.renameWorkspace(workspaceId, displayName),
   );
   ipcMain.handle(desktopIpc.removeWorkspace, (_event, workspaceId: string) => store.removeWorkspace(workspaceId));
+  ipcMain.handle(desktopIpc.reorderWorkspaces, (_event, order: readonly string[]) => store.reorderWorkspaces(order));
   ipcMain.handle(desktopIpc.openWorkspaceInFinder, async (_event, workspaceId: string) => {
     const workspacePath = store.getWorkspacePath(workspaceId);
     if (!workspacePath) {

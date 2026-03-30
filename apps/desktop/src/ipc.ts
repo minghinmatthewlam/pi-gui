@@ -20,6 +20,7 @@ export const desktopIpc = {
   selectWorkspace: "pi-gui:select-workspace",
   renameWorkspace: "pi-gui:rename-workspace",
   removeWorkspace: "pi-gui:remove-workspace",
+  reorderWorkspaces: "pi-gui:reorder-workspaces",
   openWorkspaceInFinder: "pi-gui:open-workspace-in-finder",
   createWorktree: "pi-gui:create-worktree",
   removeWorktree: "pi-gui:remove-worktree",
@@ -111,6 +112,7 @@ export interface PiDesktopApi {
   selectWorkspace(workspaceId: string): Promise<DesktopAppState>;
   renameWorkspace(workspaceId: string, displayName: string): Promise<DesktopAppState>;
   removeWorkspace(workspaceId: string): Promise<DesktopAppState>;
+  reorderWorkspaces(workspaceOrder: readonly string[]): Promise<DesktopAppState>;
   openWorkspaceInFinder(workspaceId: string): Promise<void>;
   createWorktree(input: CreateWorktreeInput): Promise<DesktopAppState>;
   removeWorktree(input: RemoveWorktreeInput): Promise<DesktopAppState>;

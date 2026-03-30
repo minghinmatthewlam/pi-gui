@@ -220,6 +220,17 @@ export default function App() {
   const newThreadWorkspace =
     rootWorkspaceOptions.find((entry) => entry.id === newThreadRootWorkspaceId) ?? rootWorkspaceOptions[0];
   const newThreadRuntime = newThreadWorkspace ? snapshot?.runtimeByWorkspace[newThreadWorkspace.id] : undefined;
+  const newThreadDefaultEnabled = (() => {
+    const rt = newThreadRuntime;
+    if (!rt?.settings.defaultProvider || !rt?.settings.defaultModelId) return false;
+    const model = rt.models.find(
+      (m) => m.providerId === rt.settings.defaultProvider && m.modelId === rt.settings.defaultModelId,
+    );
+    if (!model?.available) return false;
+    const patterns = rt.settings.enabledModelPatterns;
+    if (patterns.length === 0) return true;
+    return patterns.includes(`${model.providerId}/${model.modelId}`);
+  })();
   const newThreadTargetWorkspace = useMemo(
     () =>
       newThreadTargetWorkspaceId
@@ -240,7 +251,7 @@ export default function App() {
   const persistedComposerDraft = snapshot?.composerDraft ?? "";
   const threadGroups = useMemo(
     () => (snapshot ? buildThreadGroups(snapshot) : []),
-    [snapshot?.workspaces, snapshot?.worktreesByWorkspace],
+    [snapshot?.workspaces, snapshot?.worktreesByWorkspace, snapshot?.workspaceOrder],
   );
   const resetNewThreadWorktreeTarget = () => {
     setNewThreadEnvironment("local");
@@ -792,8 +803,8 @@ export default function App() {
     }
     const modelConfig = {
       prompt: newThreadPrompt,
-      provider: newThreadProvider ?? newThreadRuntime?.settings.defaultProvider,
-      modelId: newThreadModelId ?? newThreadRuntime?.settings.defaultModelId,
+      provider: newThreadProvider ?? (newThreadDefaultEnabled ? newThreadRuntime?.settings.defaultProvider : undefined),
+      modelId: newThreadModelId ?? (newThreadDefaultEnabled ? newThreadRuntime?.settings.defaultModelId : undefined),
       thinkingLevel: newThreadThinkingLevel ?? newThreadRuntime?.settings.defaultThinkingLevel,
     };
     const input: StartThreadInput =
@@ -1057,8 +1068,8 @@ export default function App() {
               environment={newThreadEnvironment}
               currentWorktreeName={newThreadTargetWorkspace?.kind === "worktree" ? newThreadTargetWorkspace.name : undefined}
               prompt={newThreadPrompt}
-              provider={newThreadProvider ?? newThreadRuntime?.settings.defaultProvider}
-              modelId={newThreadModelId ?? newThreadRuntime?.settings.defaultModelId}
+              provider={newThreadProvider ?? (newThreadDefaultEnabled ? newThreadRuntime?.settings.defaultProvider : undefined)}
+              modelId={newThreadModelId ?? (newThreadDefaultEnabled ? newThreadRuntime?.settings.defaultModelId : undefined)}
               thinkingLevel={newThreadThinkingLevel ?? newThreadRuntime?.settings.defaultThinkingLevel}
               onChangePrompt={setNewThreadPrompt}
               onSelectEnvironment={setNewThreadEnvironment}

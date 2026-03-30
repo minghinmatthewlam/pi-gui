@@ -10,6 +10,7 @@ export interface PersistedUiState {
   readonly composerDraftsBySession?: Record<string, string>;
   readonly notificationPreferences?: NotificationPreferences;
   readonly lastViewedAtBySession?: Record<string, string>;
+  readonly workspaceOrder?: readonly string[];
 }
 
 export interface LegacyPersistedUiState extends PersistedUiState {
@@ -30,6 +31,7 @@ export async function readPersistedUiState(uiStateFilePath: string): Promise<Leg
       composerDraftsBySession: parsed.composerDraftsBySession,
       notificationPreferences: parsed.notificationPreferences,
       lastViewedAtBySession: parsed.lastViewedAtBySession,
+      workspaceOrder: Array.isArray(parsed.workspaceOrder) ? parsed.workspaceOrder : undefined,
       composerAttachmentsBySession: parsed.composerAttachmentsBySession,
       transcripts: parsed.transcripts,
     };
