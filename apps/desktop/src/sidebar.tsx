@@ -1,11 +1,11 @@
 import { useState } from "react";
 import {
-  closestCenter,
   DndContext,
   DragOverlay,
   PointerSensor,
   useSensor,
   useSensors,
+  type CollisionDetection,
   type DraggableAttributes,
   type DraggableSyntheticListeners,
   type DragEndEvent,
@@ -71,6 +71,25 @@ export function Sidebar(props: SidebarProps) {
 
   const [activeId, setActiveId] = useState<string | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+
+  // Collision detection based on workspace row headers only (~30px top of each group),
+  // not the full group height including all sessions.
+  const headerCollision: CollisionDetection = (args) => {
+    const pointerY = args.pointerCoordinates?.y;
+    if (pointerY == null) return [];
+
+    let closest: { id: string; distance: number } | null = null;
+    for (const container of args.droppableContainers) {
+      const rect = container.rect.current;
+      if (!rect) continue;
+      const headerCenter = rect.top + 15; // center of the ~30px workspace row header
+      const distance = Math.abs(pointerY - headerCenter);
+      if (!closest || distance < closest.distance) {
+        closest = { id: String(container.id), distance };
+      }
+    }
+    return closest ? [{ id: closest.id, data: { droppableContainer: args.droppableContainers.find((c) => String(c.id) === closest!.id)! } }] : [];
+  };
 
   const rootGroups = threadGroups.filter((g) => g.rootWorkspace.kind === "primary");
   const orphanGroups = threadGroups.filter((g) => g.rootWorkspace.kind !== "primary");
@@ -179,7 +198,7 @@ export function Sidebar(props: SidebarProps) {
             </button>
           </div>
         ) : (
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+          <DndContext sensors={sensors} collisionDetection={headerCollision} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
             <SortableContext items={rootGroupIds} strategy={verticalListSortingStrategy}>
               <div className="workspace-list" data-testid="workspace-list">
                 {rootGroups.map((group) => (
