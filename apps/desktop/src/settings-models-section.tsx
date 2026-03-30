@@ -93,21 +93,6 @@ export function SettingsModelsSection({
               ))}
             </select>
           </label>
-          <div className="settings-pill-row">
-            {enabledAvailableModels.map((model) => {
-              const active = defaultProvider === model.providerId && defaultModelId === model.modelId;
-              return (
-                <button
-                  className={settingsPill(active)}
-                  key={`${model.providerId}:${model.modelId}`}
-                  type="button"
-                  onClick={() => onSetDefaultModel(model.providerId, model.modelId)}
-                >
-                  {model.providerName} · {model.label}
-                </button>
-              );
-            })}
-          </div>
         </div>
       </SettingsCard>
 
