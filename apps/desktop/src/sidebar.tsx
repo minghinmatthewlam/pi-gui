@@ -13,7 +13,7 @@ import {
 import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { AppView, SessionRecord, WorkspaceRecord, WorktreeRecord } from "./desktop-state";
-import { ArchiveIcon, ChevronDownIcon, ExtensionIcon, FolderIcon, GripIcon, PlusIcon, RestoreIcon, SettingsIcon, SkillIcon, WorktreeIcon } from "./icons";
+import { ArchiveIcon, ChevronDownIcon, ExtensionIcon, FolderIcon, PlusIcon, RestoreIcon, SettingsIcon, SkillIcon, WorktreeIcon } from "./icons";
 import type { PiDesktopApi } from "./ipc";
 import { formatRelativeTime } from "./string-utils";
 import type { WorkspaceMenuState } from "./hooks/use-workspace-menu";
@@ -312,20 +312,11 @@ function WorkspaceGroupContent(
     <>
       <div className={`workspace-row ${workspaceActive ? "workspace-row--active" : ""}`}>
         <button
-          className="workspace-row__select"
+          className={`workspace-row__select ${dragHandleProps ? "workspace-row__select--draggable" : ""}`}
           onClick={() => wsMenu.selectWorkspace(rootWorkspace.id)}
           type="button"
+          {...(dragHandleProps ? { ...dragHandleProps.attributes, ...dragHandleProps.listeners } : {})}
         >
-          {dragHandleProps ? (
-            <span
-              className="workspace-row__drag-handle"
-              {...dragHandleProps.attributes}
-              {...dragHandleProps.listeners}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <GripIcon />
-            </span>
-          ) : null}
           <span className="workspace-row__icon" aria-hidden="true">
             <FolderIcon />
           </span>

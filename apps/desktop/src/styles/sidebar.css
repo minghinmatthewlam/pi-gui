@@ -178,33 +178,11 @@
   grid-template-columns: minmax(0, 1fr) auto;
 }
 
-.workspace-row__drag-handle {
-  position: absolute;
-  left: -2px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 18px;
-  height: 18px;
-  display: grid;
-  place-items: center;
-  color: var(--muted-soft);
+.workspace-row__select--draggable {
   cursor: grab;
-  touch-action: none;
-  opacity: 0;
-  transition: opacity 0.15s;
-  z-index: 1;
 }
 
-.workspace-row__drag-handle svg {
-  width: 14px;
-  height: 14px;
-}
-
-.workspace-row:hover .workspace-row__drag-handle {
-  opacity: 1;
-}
-
-.workspace-row__drag-handle:active {
+.workspace-row__select--draggable:active {
   cursor: grabbing;
 }
 
