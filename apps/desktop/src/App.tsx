@@ -821,6 +821,7 @@ export default function App() {
             environment: newThreadEnvironment,
             ...modelConfig,
           };
+    wsMenu.expandWorkspace(newThreadRootWorkspaceId);
     void updateSnapshot(api, setSnapshot, () =>
       api.startThread(input),
     ).then(() => {

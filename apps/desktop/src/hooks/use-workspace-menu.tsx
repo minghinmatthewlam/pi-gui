@@ -33,6 +33,7 @@ export interface WorkspaceMenuState {
   readonly removeWorkspace: (workspace: WorkspaceRecord) => void;
   readonly toggleArchived: (workspaceId: string, open: boolean) => void;
   readonly toggleWorkspaceCollapsed: (workspaceId: string) => void;
+  readonly expandWorkspace: (workspaceId: string) => void;
   readonly createWorktree: (workspaceId: string, fromSessionWorkspaceId?: string, fromSessionId?: string) => void;
   readonly removeWorktree: (workspaceId: string, worktree: WorktreeRecord) => void;
   readonly selectWorkspace: (workspaceId: string) => void;
@@ -150,6 +151,13 @@ export function useWorkspaceMenu(params: UseWorkspaceMenuParams): WorkspaceMenuS
     setCollapsedWorkspaces((current) => ({ ...current, [workspaceId]: !current[workspaceId] }));
   };
 
+  const expandWorkspace = (workspaceId: string) => {
+    setCollapsedWorkspaces((current) => {
+      if (!current[workspaceId]) return current;
+      return { ...current, [workspaceId]: false };
+    });
+  };
+
   const createWorktree = (workspaceId: string, fromSessionWorkspaceId?: string, fromSessionId?: string) => {
     setWorkspaceMenuId(null);
     setEnvironmentMenuOpen(false);
@@ -211,6 +219,7 @@ export function useWorkspaceMenu(params: UseWorkspaceMenuParams): WorkspaceMenuS
     removeWorkspace,
     toggleArchived,
     toggleWorkspaceCollapsed,
+    expandWorkspace,
     createWorktree,
     removeWorktree,
     selectWorkspace,
