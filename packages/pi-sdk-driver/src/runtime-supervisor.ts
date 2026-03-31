@@ -290,7 +290,7 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
           description,
           filePath,
           baseDir: loaded?.baseDir ?? dirname(filePath),
-          source: loaded?.source ?? resource.metadata.source,
+          source: resource.metadata.source,
           enabled: resource.enabled,
           disableModelInvocation,
           slashCommand: skillSlashCommand(name),

@@ -16,7 +16,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@mariozechner/pi-coding-agent": "^0.60.0",
+    "@mariozechner/pi-coding-agent": "^0.62.0",
     "@pi-gui/catalogs": "workspace:*",
     "@pi-gui/session-driver": "workspace:*"
   }
