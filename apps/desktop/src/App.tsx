@@ -1122,6 +1122,7 @@ export default function App() {
               lastError={snapshot.lastError}
               selectedSlashCommand={slashMenu.activeSlashOptionCommand ?? slashMenu.selectedSlashCommand}
               selectedSlashOption={slashMenu.selectedSlashOption}
+              slashOptionEmptyState={slashMenu.slashOptionEmptyState}
               setComposerDraft={setComposerDraft}
               showSlashOptionMenu={slashMenu.showSlashOptionMenu}
               showSlashMenu={slashMenu.showSlashMenu}

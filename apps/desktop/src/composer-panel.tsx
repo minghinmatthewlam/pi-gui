@@ -2,7 +2,12 @@ import { type ClipboardEvent, type Dispatch, type DragEvent, type KeyboardEvent,
 import type { RuntimeSnapshot } from "@pi-gui/session-driver/runtime-types";
 import type { ComposerImageAttachment, SessionRecord } from "./desktop-state";
 import { ArrowUpIcon, ModelIcon, PlusIcon, ReasoningIcon, SettingsIcon, SkillIcon, SparkIcon, StatusIcon, StopSquareIcon } from "./icons";
-import type { ComposerSlashCommand, ComposerSlashCommandSection, ComposerSlashOption } from "./composer-commands";
+import type {
+  ComposerSlashCommand,
+  ComposerSlashCommandSection,
+  ComposerSlashOption,
+  ComposerSlashOptionEmptyState,
+} from "./composer-commands";
 import { ExtensionDock, type ExtensionDockModel } from "./extension-session-ui";
 import { ModelSelector } from "./model-selector";
 
@@ -23,6 +28,7 @@ interface ComposerPanelProps {
   readonly selectedSlashOption?: ComposerSlashOption;
   readonly showSlashMenu: boolean;
   readonly showSlashOptionMenu: boolean;
+  readonly slashOptionEmptyState?: ComposerSlashOptionEmptyState;
   readonly onClearSlashCommand: () => void;
   readonly onComposerKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
   readonly onComposerPaste: (event: ClipboardEvent<HTMLDivElement>) => void;
@@ -60,6 +66,7 @@ export function ComposerPanel({
   selectedSlashOption,
   showSlashMenu,
   showSlashOptionMenu,
+  slashOptionEmptyState,
   onClearSlashCommand,
   onComposerKeyDown,
   onComposerPaste,
@@ -218,17 +225,24 @@ export function ComposerPanel({
                 {showSlashOptionMenu && selectedSlashCommand ? (
                   <div className="slash-menu slash-menu--options" data-testid="slash-options-menu" onWheel={(event) => event.stopPropagation()}>
                     <div className="slash-menu__search">{selectedSlashCommand.title}</div>
-                    {slashOptions.map((option) => (
-                      <button
-                        className={`slash-menu__option ${selectedSlashOption?.value === option.value ? "slash-menu__option--active" : ""}`}
-                        key={option.value}
-                        type="button"
-                        onClick={() => onSelectSlashOption(option)}
-                      >
-                        <span className="slash-menu__option-title">{option.label}</span>
-                        <span className="slash-menu__option-description">{option.description}</span>
-                      </button>
-                    ))}
+                    {slashOptions.length > 0
+                      ? slashOptions.map((option) => (
+                          <button
+                            className={`slash-menu__option ${selectedSlashOption?.value === option.value ? "slash-menu__option--active" : ""}`}
+                            key={option.value}
+                            type="button"
+                            onClick={() => onSelectSlashOption(option)}
+                          >
+                            <span className="slash-menu__option-title">{option.label}</span>
+                            <span className="slash-menu__option-description">{option.description}</span>
+                          </button>
+                        ))
+                      : slashOptionEmptyState ? (
+                          <div className="slash-menu__empty">
+                            <div className="slash-menu__empty-title">{slashOptionEmptyState.title}</div>
+                            <div className="slash-menu__empty-description">{slashOptionEmptyState.description}</div>
+                          </div>
+                        ) : null}
                   </div>
                 ) : null}
               </div>

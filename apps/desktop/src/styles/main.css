@@ -1217,6 +1217,24 @@
   font-size: 13px;
 }
 
+.slash-menu__empty {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  color: var(--muted-soft);
+}
+
+.slash-menu__empty-title {
+  color: var(--text-strong);
+  font-size: 14px;
+  font-weight: 560;
+}
+
+.slash-menu__empty-description {
+  font-size: 13px;
+  line-height: 1.4;
+}
+
 /* Mention menu */
 
 .mention-menu {

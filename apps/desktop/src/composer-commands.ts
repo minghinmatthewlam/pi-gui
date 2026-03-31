@@ -48,6 +48,11 @@ export interface ComposerSlashOption {
   readonly description: string;
 }
 
+export interface ComposerSlashOptionEmptyState {
+  readonly title: string;
+  readonly description: string;
+}
+
 export interface ComposerModelOption extends ComposerSlashOption {
   readonly providerId: string;
   readonly modelId: string;
@@ -406,6 +411,24 @@ export function slashOptionsForCommand(
   }
 
   return [];
+}
+
+export function slashOptionEmptyState(
+  command: ComposerSlashCommand | undefined,
+  runtime?: RuntimeSnapshot,
+): ComposerSlashOptionEmptyState | undefined {
+  if (!command) {
+    return undefined;
+  }
+
+  if (command.kind === "model" && buildModelOptions(runtime).length === 0) {
+    return {
+      title: "No models available",
+      description: "Open Settings to enable a model or log in to a provider.",
+    };
+  }
+
+  return undefined;
 }
 
 function matchesCommand(command: ComposerSlashCommand, normalizedQuery: string): boolean {

@@ -6,9 +6,11 @@ import {
   isExactSlashCommand,
   buildSlashCommandSections,
   flattenSlashSections,
+  slashOptionEmptyState,
   slashOptionsForCommand,
   type ComposerSlashCommand,
   type ComposerSlashCommandSection,
+  type ComposerSlashOptionEmptyState,
   type ComposerSlashOption,
 } from "../composer-commands";
 import type { PiDesktopApi } from "../ipc";
@@ -55,6 +57,7 @@ export interface SlashMenuState {
   readonly selectedSlashCommand: ComposerSlashCommand | undefined;
   readonly selectedSlashOption: ComposerSlashOption | undefined;
   readonly slashOptions: readonly ComposerSlashOption[];
+  readonly slashOptionEmptyState: ComposerSlashOptionEmptyState | undefined;
   readonly activeSlashFlow: ActiveSlashFlow | undefined;
   readonly activeSlashOptionCommand: ComposerSlashCommand | undefined;
   readonly resetSlashUi: () => void;
@@ -109,10 +112,11 @@ export function useSlashMenu(params: UseSlashMenuParams): SlashMenuState {
     activeSlashOptionCommand?.kind === "model"
       ? buildModelOptions(selectedRuntime)
       : slashOptionsForCommand(activeSlashOptionCommand, selectedRuntime);
+  const activeSlashOptionEmptyState = slashOptionEmptyState(activeSlashOptionCommand, selectedRuntime);
   const showSlashOptionMenu =
     !isRunning &&
     Boolean(activeSlashOptionCommand) &&
-    slashOptions.length > 0;
+    (slashOptions.length > 0 || Boolean(activeSlashOptionEmptyState));
   const selectedSlashOption = showSlashOptionMenu ? slashOptions[slashOptionIndex % slashOptions.length] : undefined;
 
   // Reset slashIndex when slashQuery changes
@@ -333,6 +337,7 @@ export function useSlashMenu(params: UseSlashMenuParams): SlashMenuState {
     selectedSlashCommand,
     selectedSlashOption,
     slashOptions,
+    slashOptionEmptyState: activeSlashOptionEmptyState,
     activeSlashFlow,
     activeSlashOptionCommand,
     resetSlashUi,
