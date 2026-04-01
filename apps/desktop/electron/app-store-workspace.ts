@@ -112,14 +112,7 @@ export async function selectSession(store: AppStoreInternals, target: WorkspaceS
     await store.cancelPendingDialogsForSession(currentSessionRef);
   }
 
-  return store.withErrorHandling(async () =>
-    store.refreshState({
-      selectedWorkspaceId: target.workspaceId,
-      selectedSessionId: target.sessionId,
-      clearLastError: true,
-      activeView: "threads",
-    }),
-  );
+  return store.selectSessionFast(target);
 }
 
 export async function archiveSession(

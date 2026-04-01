@@ -1,7 +1,7 @@
 import { sessionKey } from "@pi-gui/pi-sdk-driver";
-import type { SessionDriverEvent } from "@pi-gui/session-driver";
+import type { SessionDriverEvent, SessionSnapshot } from "@pi-gui/session-driver";
 import type { DesktopAppState, SessionRecord, TranscriptMessage } from "../src/desktop-state";
-import { previewFromTranscript } from "./app-store-utils";
+import { cloneTranscriptMessage, hasUnseenSessionUpdate, previewFromTranscript } from "./app-store-utils";
 
 export function applySessionEventState(
   state: DesktopAppState,
@@ -11,7 +11,7 @@ export function applySessionEventState(
   lastViewedAtBySession: Map<string, string>,
 ): DesktopAppState {
   const key = sessionKey(event.sessionRef);
-  const transcript = transcriptCache.get(key) ?? [];
+  const transcript = (transcriptCache.get(key) ?? []).map(cloneTranscriptMessage);
   const preview = previewFromTranscript(transcript);
   const lastViewedAt = lastViewedAtBySession.get(key);
 
@@ -23,13 +23,14 @@ export function applySessionEventState(
             ...workspace,
             sessions: workspace.sessions.map((session) =>
               session.id === event.sessionRef.sessionId
-                ? updateSessionRecord(
-                    session,
-                    event,
+                ? updateSessionRecord(session, {
+                    snapshot: snapshotForEvent(event),
+                    status: statusForEvent(session.status, event),
+                    transcript,
                     preview,
-                    runningSinceBySession.get(key),
+                    runningSince: runningSinceBySession.get(key),
                     lastViewedAt,
-                  )
+                  })
                 : session,
             ),
           }
@@ -39,27 +40,33 @@ export function applySessionEventState(
   };
 }
 
-function updateSessionRecord(
+export function updateSessionRecord(
   session: SessionRecord,
-  event: SessionDriverEvent,
-  preview: string | undefined,
-  runningSince: string | undefined,
-  lastViewedAt: string | undefined,
+  options: {
+    readonly snapshot?: Partial<
+      Pick<SessionSnapshot, "title" | "updatedAt" | "archivedAt" | "preview" | "status" | "config">
+    >;
+    readonly status?: SessionRecord["status"];
+    readonly transcript: readonly TranscriptMessage[];
+    readonly preview: string | undefined;
+    readonly runningSince: string | undefined;
+    readonly lastViewedAt: string | undefined;
+  },
 ): SessionRecord {
-  const snapshot = snapshotForEvent(event);
-  const updatedAt = snapshot?.updatedAt ?? session.updatedAt;
-  const nextStatus = statusForEvent(session.status, event);
+  const updatedAt = options.snapshot?.updatedAt ?? session.updatedAt;
+  const nextStatus = options.status ?? options.snapshot?.status ?? session.status;
   return {
     ...session,
-    title: snapshot?.title ?? session.title,
+    title: options.snapshot?.title ?? session.title,
     updatedAt,
-    lastViewedAt,
-    archivedAt: snapshot?.archivedAt ?? session.archivedAt,
-    preview: preview ?? snapshot?.preview ?? session.preview,
+    lastViewedAt: options.lastViewedAt,
+    archivedAt: options.snapshot?.archivedAt ?? session.archivedAt,
+    preview: options.preview ?? options.snapshot?.preview ?? session.preview,
     status: nextStatus,
-    runningSince,
-    hasUnseenUpdate: nextStatus !== "running" && (!lastViewedAt || updatedAt > lastViewedAt),
-    config: snapshot?.config ?? session.config,
+    runningSince: options.runningSince,
+    hasUnseenUpdate: hasUnseenSessionUpdate(nextStatus, updatedAt, options.lastViewedAt, options.transcript),
+    config: options.snapshot?.config ?? session.config,
+    transcript: options.transcript,
   };
 }
 

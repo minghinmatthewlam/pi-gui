@@ -157,7 +157,6 @@ export function PiGlyphIcon() {
     </Icon>
   );
 }
-
 export function SettingsIcon() {
   return (
     <Icon>

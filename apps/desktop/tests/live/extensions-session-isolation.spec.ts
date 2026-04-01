@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import {
+  clickSession,
   createNamedThread,
   launchDesktop,
   makeUserDataDir,
@@ -38,11 +39,7 @@ test("keeps extension widgets, status, and title scoped to the active session", 
     await createNamedThread(window, "Session A");
     await createNamedThread(window, "Session B");
 
-    const selectSessionRow = async (title: string) => {
-      await window.locator(".session-row__select").filter({ hasText: title }).click();
-    };
-
-    await selectSessionRow("Session A");
+    await clickSession(window, "Session A");
     const composer = window.getByTestId("composer");
     await composer.fill("/mark-ui ");
     await composer.press("Enter");
@@ -53,11 +50,11 @@ test("keeps extension widgets, status, and title scoped to the active session", 
     await expect(window.getByTestId("extension-dock-body")).toContainText("Marked widget");
     await expect(window.getByTestId("extension-dock-body")).toContainText("Marked below");
 
-    await selectSessionRow("Session B");
+    await clickSession(window, "Session B");
     await expect(window.locator(".topbar__session")).toHaveText("Session B");
     await expect(window.getByTestId("extension-dock")).toHaveCount(0);
 
-    await selectSessionRow("Session A");
+    await clickSession(window, "Session A");
     await expect(window.locator(".topbar__session")).toHaveText("Marked by extension");
     await expect(window.getByTestId("extension-dock-summary")).toHaveText("Session marked");
     await expect(window.getByTestId("extension-dock-body")).toContainText("Marked widget");

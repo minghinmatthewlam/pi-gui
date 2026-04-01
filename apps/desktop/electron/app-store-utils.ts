@@ -217,9 +217,33 @@ function buildSessionRecord(
     preview,
     status: session.status,
     runningSince: runningSinceBySession.get(key),
-    hasUnseenUpdate: session.status !== "running" && Boolean(lastViewedAt && session.updatedAt > lastViewedAt),
+    hasUnseenUpdate: hasUnseenSessionUpdate(session.status, session.updatedAt, lastViewedAt, transcript),
     config: sessionConfigBySession.get(key),
   };
+}
+
+export function hasUnseenSessionUpdate(
+  status: "idle" | "running" | "failed",
+  updatedAt: string,
+  lastViewedAt: string | undefined,
+  transcript: readonly TranscriptMessage[],
+): boolean {
+  if (status === "running" || !lastViewedAt) {
+    return false;
+  }
+
+  const activityAt = latestSessionActivityAt(updatedAt, transcript);
+  return activityAt > lastViewedAt;
+}
+
+export function latestSessionActivityAt(updatedAt: string, transcript: readonly TranscriptMessage[]): string {
+  let latest = updatedAt;
+  for (const item of transcript) {
+    if (item.createdAt > latest) {
+      latest = item.createdAt;
+    }
+  }
+  return latest;
 }
 
 export function toSessionRef(target: WorkspaceSessionTarget): SessionRef {
