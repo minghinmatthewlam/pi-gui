@@ -214,6 +214,18 @@
   width: 100%;
 }
 
+.timeline--virtualized {
+  display: block;
+  position: relative;
+}
+
+.timeline__virtual-row {
+  left: 0;
+  position: absolute;
+  top: 0;
+  width: 100%;
+}
+
 .timeline-pane {
   width: 100%;
   min-height: 420px;

@@ -1,4 +1,3 @@
-import { useState } from "react";
 import type { SessionTranscriptMessage } from "@pi-gui/pi-sdk-driver";
 import type { TimelineActivity, TimelineToolCall, TimelineSummary, TranscriptMessage } from "./timeline-types";
 import { MessageMarkdown } from "./message-markdown";
@@ -7,8 +6,12 @@ import { ChevronRightIcon, CopyIcon } from "./icons";
 
 export function TimelineItem({
   item,
+  expandedToolCallIds,
+  onToggleToolCall,
 }: {
   readonly item: TranscriptMessage;
+  readonly expandedToolCallIds?: ReadonlySet<string>;
+  readonly onToggleToolCall?: (callId: string) => void;
 }) {
   switch (item.kind) {
     case "message":
@@ -16,7 +19,13 @@ export function TimelineItem({
     case "activity":
       return <TimelineActivityItem item={item} />;
     case "tool":
-      return <TimelineToolCallItem item={item} />;
+      return (
+        <TimelineToolCallItem
+          item={item}
+          expanded={expandedToolCallIds?.has(item.callId) ?? false}
+          onToggle={onToggleToolCall}
+        />
+      );
     case "summary":
       return <TimelineSummaryItem item={item} />;
     default:
@@ -64,8 +73,15 @@ function TimelineActivityItem({ item }: { readonly item: TimelineActivity }) {
   );
 }
 
-function TimelineToolCallItem({ item }: { readonly item: TimelineToolCall }) {
-  const [expanded, setExpanded] = useState(false);
+function TimelineToolCallItem({
+  item,
+  expanded,
+  onToggle,
+}: {
+  readonly item: TimelineToolCall;
+  readonly expanded: boolean;
+  readonly onToggle?: (callId: string) => void;
+}) {
   const hasContent = item.input !== undefined || item.output !== undefined;
   const diffText = isWriteTool(item.toolName) ? extractDiffFromOutput(item.output) : undefined;
   const diffStats = diffText ? countDiffStats(diffText) : undefined;
@@ -83,7 +99,7 @@ function TimelineToolCallItem({ item }: { readonly item: TimelineToolCall }) {
         type="button"
         aria-expanded={expanded}
         disabled={!hasContent}
-        onClick={() => setExpanded((prev) => !prev)}
+        onClick={() => onToggle?.(item.callId)}
       >
         {hasContent ? (
           <span className={`timeline-tool__chevron ${expanded ? "timeline-tool__chevron--expanded" : ""}`}>

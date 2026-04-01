@@ -8,7 +8,6 @@ import {
   makeToolItem,
   makeTranscriptMessage,
   makeTranscriptMessageWithAttachments,
-  TRANSCRIPT_HISTORY_LIMIT,
 } from "./app-store-utils";
 
 export interface RunMetrics {
@@ -186,7 +185,7 @@ export function applyTimelineEvent(
       break;
   }
 
-  transcriptCache.set(key, trimTranscript(transcript));
+  transcriptCache.set(key, transcript);
 }
 
 function upsertToolRow(
@@ -224,10 +223,6 @@ function upsertToolRow(
   }
 
   transcript.push(next);
-}
-
-function trimTranscript(transcript: TranscriptMessage[]): TranscriptMessage[] {
-  return transcript.slice(-TRANSCRIPT_HISTORY_LIMIT);
 }
 
 function removeWorkingActivity(transcript: TranscriptMessage[], activityId: string | undefined): void {

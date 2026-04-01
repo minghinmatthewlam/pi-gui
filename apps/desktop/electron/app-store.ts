@@ -84,6 +84,24 @@ import { isSessionActivelyViewed } from "./session-visibility";
 type StateListener = (state: DesktopAppState) => void;
 type SelectedTranscriptListener = (payload: SelectedTranscriptRecord | null) => void;
 type SessionEventListener = (event: SessionDriverEvent, state: DesktopAppState) => void | Promise<void>;
+type TranscriptMessageRow = Extract<TranscriptMessage, { kind: "message" }>;
+
+const LEGACY_TRANSCRIPT_HISTORY_LIMIT = 180;
+
+interface PersistedTranscriptRecord {
+  readonly version: 1;
+  readonly transcript: readonly TranscriptMessage[];
+}
+
+type PersistedTranscriptStoreValue = PersistedTranscriptRecord | readonly TranscriptMessage[];
+
+function isPersistedTranscriptRecord(value: PersistedTranscriptStoreValue): value is PersistedTranscriptRecord {
+  if (Array.isArray(value)) {
+    return false;
+  }
+  const candidate = value as { version?: unknown; transcript?: unknown };
+  return candidate.version === 1 && Array.isArray(candidate.transcript);
+}
 
 export interface DesktopAppStoreOptions {
   readonly userDataDir: string;
@@ -100,7 +118,7 @@ export class DesktopAppStore implements AppStoreInternals {
   readonly catalogStore: JsonCatalogStore;
   readonly worktreeManager: GitWorktreeManager;
   private readonly uiStateFilePath: string;
-  private readonly transcriptStore: JsonFileStore<TranscriptMessage[]>;
+  private readonly transcriptStore: JsonFileStore<PersistedTranscriptStoreValue>;
   readonly attachmentStore: JsonFileStore<ComposerImageAttachment[]>;
   readonly sessionState = new SessionStateMap();
   readonly runtimeByWorkspace = new Map<string, RuntimeSnapshot>();
@@ -123,7 +141,7 @@ export class DesktopAppStore implements AppStoreInternals {
     this.catalogStore = new JsonCatalogStore({ catalogFilePath });
     this.worktreeManager = new GitWorktreeManager({ catalogStorage: this.catalogStore });
     this.uiStateFilePath = join(options.userDataDir, "ui-state.json");
-    this.transcriptStore = new JsonFileStore<TranscriptMessage[]>(options.userDataDir, "transcripts");
+    this.transcriptStore = new JsonFileStore<PersistedTranscriptStoreValue>(options.userDataDir, "transcripts");
     this.attachmentStore = new JsonFileStore<ComposerImageAttachment[]>(options.userDataDir, "attachments");
     this.initialWorkspacePaths = options.initialWorkspacePaths;
     this.getWindow = options.getWindow ?? (() => null);
@@ -572,10 +590,13 @@ export class DesktopAppStore implements AppStoreInternals {
     await Promise.all(
       transcriptEntries.map(async ([key, transcript]) => {
         const clonedTranscript = transcript.map((item) => cloneTranscriptMessage(item as TranscriptMessage));
-        this.sessionState.transcriptCache.set(key, clonedTranscript);
         if (clonedTranscript.length > 0) {
+          if (this.isPossiblyTrimmedLegacyTranscript(clonedTranscript)) {
+            return;
+          }
+          this.sessionState.transcriptCache.set(key, clonedTranscript);
           this.sessionState.loadedTranscriptKeys.add(key);
-          await this.transcriptStore.write(key, clonedTranscript);
+          await this.writePersistedTranscript(key, clonedTranscript);
         }
       }),
     );
@@ -741,8 +762,15 @@ export class DesktopAppStore implements AppStoreInternals {
       return;
     }
 
-    const cachedTranscript = await this.transcriptStore.read(key);
-    const transcript = cachedTranscript ?? (await this.driver.getTranscript(sessionRef));
+    const cachedTranscript = await this.readPersistedTranscript(key);
+    const transcript = cachedTranscript
+      ? await this.resolveLoadedTranscript(sessionRef, cachedTranscript)
+      : await this.driver.getTranscript(sessionRef);
+
+    if (!cachedTranscript || cachedTranscript.format === "legacy") {
+      await this.writePersistedTranscript(key, transcript);
+    }
+
     this.sessionState.loadedTranscriptKeys.add(key);
     this.sessionState.transcriptCache.set(key, transcript);
   }
@@ -752,7 +780,7 @@ export class DesktopAppStore implements AppStoreInternals {
     const transcript = await this.driver.getTranscript(sessionRef);
     this.sessionState.loadedTranscriptKeys.add(key);
     this.sessionState.transcriptCache.set(key, transcript);
-    this.persistTranscriptCacheForSession(sessionRef);
+    void this.writePersistedTranscript(key, transcript);
     this.publishSelectedTranscriptFor(sessionRef);
   }
 
@@ -1385,10 +1413,67 @@ export class DesktopAppStore implements AppStoreInternals {
     const timer = setTimeout(() => {
       this.transcriptPersistTimers.delete(key);
       const transcript = (this.sessionState.transcriptCache.get(key) ?? []).map(cloneTranscriptMessage);
-      void this.transcriptStore.write(key, transcript);
+      void this.writePersistedTranscript(key, transcript);
     }, 250);
 
     this.transcriptPersistTimers.set(key, timer);
+  }
+
+  private async readPersistedTranscript(
+    key: string,
+  ): Promise<
+    | {
+        readonly format: "versioned" | "legacy";
+        readonly transcript: TranscriptMessage[];
+      }
+    | null
+  > {
+    const persisted = await this.transcriptStore.read(key);
+    if (!persisted) {
+      return null;
+    }
+
+    if (isPersistedTranscriptRecord(persisted)) {
+      return {
+        format: "versioned",
+        transcript: persisted.transcript.map((item) => cloneTranscriptMessage(item as TranscriptMessage)),
+      };
+    }
+
+    if (Array.isArray(persisted)) {
+      return {
+        format: "legacy",
+        transcript: persisted.map((item) => cloneTranscriptMessage(item as TranscriptMessage)),
+      };
+    }
+
+    return null;
+  }
+
+  private async resolveLoadedTranscript(
+    sessionRef: SessionRef,
+    persisted: {
+      readonly format: "versioned" | "legacy";
+      readonly transcript: TranscriptMessage[];
+    },
+  ): Promise<TranscriptMessage[]> {
+    if (persisted.format !== "legacy" || !this.isPossiblyTrimmedLegacyTranscript(persisted.transcript)) {
+      return persisted.transcript;
+    }
+
+    const driverTranscript = await this.driver.getTranscript(sessionRef);
+    return shouldReplaceLegacyTranscript(persisted.transcript, driverTranscript) ? driverTranscript : persisted.transcript;
+  }
+
+  private isPossiblyTrimmedLegacyTranscript(transcript: readonly TranscriptMessage[]): boolean {
+    return transcript.length === LEGACY_TRANSCRIPT_HISTORY_LIMIT;
+  }
+
+  private async writePersistedTranscript(key: string, transcript: readonly TranscriptMessage[]): Promise<void> {
+    await this.transcriptStore.write(key, {
+      version: 1,
+      transcript: transcript.map(cloneTranscriptMessage),
+    });
   }
 
   schedulePersistUiState(): void {
@@ -1739,6 +1824,44 @@ function resolveSelectedWorkspaceIdFromCatalog(
     return preferredWorkspaceId;
   }
   return workspaces[0]?.workspaceId ?? "";
+}
+
+function shouldReplaceLegacyTranscript(
+  legacyTranscript: readonly TranscriptMessage[],
+  driverTranscript: readonly TranscriptMessageRow[],
+): boolean {
+  if (driverTranscript.length === 0) {
+    return false;
+  }
+
+  const legacyMessages = legacyTranscript.filter(isTranscriptMessageRow);
+  if (driverTranscript.length > legacyMessages.length) {
+    return true;
+  }
+  if (driverTranscript.length < legacyMessages.length) {
+    return false;
+  }
+
+  return !sameTranscriptMessage(legacyMessages[0], driverTranscript[0]) ||
+    !sameTranscriptMessage(legacyMessages.at(-1), driverTranscript.at(-1));
+}
+
+function isTranscriptMessageRow(item: TranscriptMessage): item is TranscriptMessageRow {
+  return item.kind === "message";
+}
+
+function sameTranscriptMessage(
+  left: TranscriptMessageRow | undefined,
+  right: TranscriptMessageRow | undefined,
+): boolean {
+  if (!left || !right) {
+    return left === right;
+  }
+
+  return left.id === right.id &&
+    left.role === right.role &&
+    left.text === right.text &&
+    left.createdAt === right.createdAt;
 }
 
 function resolveSelectedSessionIdFromCatalog(

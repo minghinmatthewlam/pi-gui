@@ -20,13 +20,12 @@ import { desktopCommands, getDesktopCommandFromShortcut, type PiDesktopCommand }
 import { SkillsView } from "./skills-view";
 import { ExtensionsView } from "./extensions-view";
 import { SettingsView, type SettingsSection } from "./settings-view";
-import { TimelineItem } from "./timeline-item";
 import { SecondarySurface } from "./secondary-surface";
 import { NewThreadView } from "./new-thread-view";
 import { buildThreadGroups } from "./thread-groups";
 import { Sidebar } from "./sidebar";
 import { Topbar } from "./topbar";
-import { ThreadSearchBar } from "./thread-search";
+import { ConversationTimeline } from "./conversation-timeline";
 import { useSlashMenu } from "./hooks/use-slash-menu";
 import { useMentionMenu } from "./hooks/use-mention-menu";
 import { useThreadSearch } from "./hooks/use-thread-search";
@@ -633,6 +632,19 @@ export default function App() {
 
     setShowJumpToLatest(true);
   }, [activeTranscript, scrollTimelineToBottom, selectedSession, selectedSessionKey]);
+
+  const handleTimelineContentHeightChange = useCallback(() => {
+    if (!pinnedToBottomRef.current && !preserveBottomOnNextPaneResizeRef.current) {
+      return;
+    }
+
+    window.requestAnimationFrame(() => {
+      if (!pinnedToBottomRef.current && !preserveBottomOnNextPaneResizeRef.current) {
+        return;
+      }
+      scrollTimelineToBottom();
+    });
+  }, [scrollTimelineToBottom]);
 
   if (!api || !snapshot) {
     return (
@@ -1346,36 +1358,16 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="timeline-pane timeline-pane--thread" data-testid="timeline-pane" ref={timelinePaneRef} onScroll={handleTimelineScroll}>
-                  {threadSearch.isOpen ? (
-                    <ThreadSearchBar
-                      query={threadSearch.query}
-                      matchCount={threadSearch.matchCount}
-                      activeIndex={threadSearch.activeIndex}
-                      inputRef={threadSearch.inputRef}
-                      onSearch={threadSearch.search}
-                      onNext={() => threadSearch.goToMatch(1)}
-                      onPrev={() => threadSearch.goToMatch(-1)}
-                      onClose={threadSearch.close}
-                    />
-                  ) : null}
-                  <div className="timeline" data-testid="transcript">
-                    {isTranscriptLoading ? (
-                      <div className="timeline-empty">Loading transcript…</div>
-                    ) : activeTranscript.length === 0 ? (
-                      <div className="timeline-empty">Send a prompt to start the session.</div>
-                    ) : (
-                      activeTranscript.map((item) => (
-                        <TimelineItem item={item} key={item.id} />
-                      ))
-                    )}
-                  </div>
-                  {showJumpToLatest ? (
-                    <button className="timeline-jump" data-testid="timeline-jump" type="button" onClick={jumpToLatest}>
-                      New activity below
-                    </button>
-                  ) : null}
-                </div>
+                <ConversationTimeline
+                  transcript={activeTranscript}
+                  isTranscriptLoading={isTranscriptLoading}
+                  timelinePaneRef={timelinePaneRef}
+                  onTimelineScroll={handleTimelineScroll}
+                  threadSearch={threadSearch}
+                  showJumpToLatest={showJumpToLatest}
+                  onJumpToLatest={jumpToLatest}
+                  onContentHeightChange={handleTimelineContentHeightChange}
+                />
               </div>
             </section>
             <ComposerPanel
