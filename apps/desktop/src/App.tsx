@@ -7,6 +7,7 @@ import {
   type ComposerImageAttachment,
   type DesktopAppState,
   type NewThreadEnvironment,
+  type SelectedTranscriptRecord,
   type StartThreadInput,
   type WorktreeRecord,
   type WorkspaceRecord,
@@ -36,6 +37,7 @@ import { resolveRepoWorkspaceId } from "./workspace-roots";
 
 function useDesktopAppState() {
   const [snapshot, setSnapshot] = useState<DesktopAppState | null>(null);
+  const [selectedTranscript, setSelectedTranscript] = useState<SelectedTranscriptRecord | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -44,25 +46,33 @@ function useDesktopAppState() {
       return undefined;
     }
 
-    void api.getState().then((state) => {
+    void Promise.all([api.getState(), api.getSelectedTranscript()]).then(([state, transcript]) => {
+      if (!active) {
+        return;
+      }
+      setSnapshot(state);
+      setSelectedTranscript(transcript);
+    });
+
+    const unsubscribeState = api.onStateChanged((state) => {
       if (active) {
         setSnapshot(state);
       }
     });
-
-    const unsubscribe = api.onStateChanged((state) => {
+    const unsubscribeTranscript = api.onSelectedTranscriptChanged((payload) => {
       if (active) {
-        setSnapshot(state);
+        setSelectedTranscript(payload);
       }
     });
 
     return () => {
       active = false;
-      unsubscribe();
+      unsubscribeState();
+      unsubscribeTranscript();
     };
   }, []);
 
-  return [snapshot, setSnapshot] as const;
+  return [snapshot, setSnapshot, selectedTranscript] as const;
 }
 
 function updateSnapshot(
@@ -114,7 +124,7 @@ function formatRunningLabel(startedAt: string | undefined): string {
 }
 
 export default function App() {
-  const [snapshot, setSnapshot] = useDesktopAppState();
+  const [snapshot, setSnapshot, selectedTranscript] = useDesktopAppState();
   const [composerDraft, setComposerDraft] = useState("");
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("general");
   const [settingsWorkspaceId, setSettingsWorkspaceId] = useState("");
@@ -239,6 +249,19 @@ export default function App() {
   const composerAttachments = attachmentsClearedOnSubmit ? [] : (snapshot?.composerAttachments ?? []);
   const runningLabel = useRunningLabel(selectedSession?.status === "running" ? selectedSession.runningSince : undefined);
   const selectedSessionKey = `${selectedWorkspace?.id ?? ""}:${selectedSession?.id ?? ""}`;
+  const activeTranscript =
+    selectedTranscript &&
+    selectedWorkspace &&
+    selectedSession &&
+    selectedTranscript.workspaceId === selectedWorkspace.id &&
+    selectedTranscript.sessionId === selectedSession.id
+      ? selectedTranscript.transcript
+      : [];
+  const isTranscriptLoading = Boolean(selectedSession) && activeTranscript.length === 0 && (
+    !selectedTranscript ||
+    selectedTranscript.workspaceId !== selectedWorkspace?.id ||
+    selectedTranscript.sessionId !== selectedSession?.id
+  );
   const selectedSessionCommands = selectedSession ? snapshot?.sessionCommandsBySession[selectedSessionKey] ?? [] : [];
   const selectedExtensionUi = selectedSession ? snapshot?.sessionExtensionUiBySession[selectedSessionKey] : undefined;
   const selectedWorkspaceCommandCompatibility = selectedWorkspace
@@ -518,7 +541,7 @@ export default function App() {
       return;
     }
 
-    const marker = `${selectedSessionKey}:${selectedSession.transcript.length}:${selectedSession.transcript.at(-1)?.id ?? ""}`;
+    const marker = `${selectedSessionKey}:${activeTranscript.length}:${activeTranscript.at(-1)?.id ?? ""}`;
     if (marker === lastTranscriptMarkerRef.current) {
       return;
     }
@@ -531,7 +554,7 @@ export default function App() {
     }
 
     setShowJumpToLatest(true);
-  }, [selectedSession, selectedSessionKey]);
+  }, [activeTranscript, selectedSession, selectedSessionKey]);
 
   if (!api || !snapshot) {
     return (
@@ -1247,10 +1270,12 @@ export default function App() {
                     />
                   ) : null}
                   <div className="timeline" data-testid="transcript">
-                    {selectedSession.transcript.length === 0 ? (
+                    {isTranscriptLoading ? (
+                      <div className="timeline-empty">Loading transcript…</div>
+                    ) : activeTranscript.length === 0 ? (
                       <div className="timeline-empty">Send a prompt to start the session.</div>
                     ) : (
-                      selectedSession.transcript.map((item) => (
+                      activeTranscript.map((item) => (
                         <TimelineItem item={item} key={item.id} />
                       ))
                     )}

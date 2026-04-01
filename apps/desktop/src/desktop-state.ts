@@ -35,7 +35,13 @@ export interface SessionRecord {
   readonly runningSince?: string;
   readonly hasUnseenUpdate: boolean;
   readonly config?: SessionConfig;
+}
+
+export interface SelectedTranscriptRecord {
+  readonly workspaceId: string;
+  readonly sessionId: string;
   readonly transcript: readonly TranscriptMessage[];
+  readonly revision: number;
 }
 
 export interface WorktreeRecord {

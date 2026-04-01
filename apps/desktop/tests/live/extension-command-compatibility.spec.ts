@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import {
   createSessionViaIpc,
   getDesktopState,
+  getSelectedTranscript,
   launchDesktop,
   makeUserDataDir,
   makeWorkspace,
@@ -93,10 +94,7 @@ test("fails fast for unsupported handoff-like commands and learns terminal-only 
     await composer.fill("/handoff-g");
     await expect(window.getByTestId("slash-menu")).toContainText("Terminal-only");
 
-    const transcriptCountBeforeSecondAttempt =
-      (await getDesktopState(window)).workspaces
-        .find((entry) => entry.id === workspace.id)
-        ?.sessions.find((session) => session.title === "Compatibility session")?.transcript.length ?? 0;
+    const transcriptCountBeforeSecondAttempt = (await getSelectedTranscript(window))?.transcript.length ?? 0;
     await composer.fill("/handoff-gui-test local block");
     await composer.press("Enter");
     await expect(composerError).toContainText(
@@ -105,9 +103,7 @@ test("fails fast for unsupported handoff-like commands and learns terminal-only 
     await expect
       .poll(
         async () =>
-          (await getDesktopState(window)).workspaces
-            .find((entry) => entry.id === workspace.id)
-            ?.sessions.find((session) => session.title === "Compatibility session")?.transcript.length ?? 0,
+          (await getSelectedTranscript(window))?.transcript.length ?? 0,
       )
       .toBe(transcriptCountBeforeSecondAttempt);
 

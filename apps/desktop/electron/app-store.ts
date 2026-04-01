@@ -35,6 +35,7 @@ import {
   type DesktopAppState,
   type NotificationPreferences,
   type RemoveWorktreeInput,
+  type SelectedTranscriptRecord,
   type StartThreadInput,
   type TranscriptMessage,
   type WorkspaceSessionTarget,
@@ -79,6 +80,7 @@ import * as worktree from "./app-store-worktree";
 import * as composer from "./app-store-composer";
 
 type StateListener = (state: DesktopAppState) => void;
+type SelectedTranscriptListener = (payload: SelectedTranscriptRecord | null) => void;
 type SessionEventListener = (event: SessionDriverEvent, state: DesktopAppState) => void | Promise<void>;
 
 export interface DesktopAppStoreOptions {
@@ -89,6 +91,7 @@ export interface DesktopAppStoreOptions {
 export class DesktopAppStore implements AppStoreInternals {
   state = createEmptyDesktopAppState();
   private readonly listeners = new Set<StateListener>();
+  private readonly selectedTranscriptListeners = new Set<SelectedTranscriptListener>();
   private readonly sessionEventListeners = new Set<SessionEventListener>();
   readonly driver: PiSdkDriver;
   readonly catalogStore: JsonCatalogStore;
@@ -104,6 +107,7 @@ export class DesktopAppStore implements AppStoreInternals {
   private readonly initialWorkspacePaths: readonly string[];
   private persistUiStateTimer: NodeJS.Timeout | undefined;
   private readonly transcriptPersistTimers = new Map<string, NodeJS.Timeout>();
+  private selectedTranscriptRevision = 0;
   private initPromise: Promise<void> | undefined;
 
   constructor(options: DesktopAppStoreOptions) {
@@ -135,11 +139,34 @@ export class DesktopAppStore implements AppStoreInternals {
     return structuredClone(this.state);
   }
 
+  async getSelectedTranscript(): Promise<SelectedTranscriptRecord | null> {
+    await this.initialize();
+    const sessionRef = this.selectedSessionRef();
+    if (!sessionRef) {
+      return null;
+    }
+    await this.ensureTranscriptLoaded(sessionRef);
+    return this.buildSelectedTranscriptRecord(sessionRef, this.selectedTranscriptRevision);
+  }
+
+  async emitTestSessionEvent(event: SessionDriverEvent): Promise<void> {
+    await this.initialize();
+    await this.handleSessionEvent(event);
+  }
+
   subscribe(listener: StateListener): () => void {
     this.listeners.add(listener);
     void this.getState().then(listener).catch(() => undefined);
     return () => {
       this.listeners.delete(listener);
+    };
+  }
+
+  subscribeToSelectedTranscript(listener: SelectedTranscriptListener): () => void {
+    this.selectedTranscriptListeners.add(listener);
+    void this.getSelectedTranscript().then(listener).catch(() => undefined);
+    return () => {
+      this.selectedTranscriptListeners.delete(listener);
     };
   }
 
@@ -562,6 +589,7 @@ export class DesktopAppStore implements AppStoreInternals {
   }
 
   async refreshState(options: RefreshStateOptions = {}): Promise<DesktopAppState> {
+    const previousSelectedKey = this.currentSelectedSessionKey();
     const [workspacesSnapshot, sessionsSnapshot] = await Promise.all([
       this.driver.listWorkspaces(),
       this.driver.listSessions(),
@@ -666,7 +694,11 @@ export class DesktopAppStore implements AppStoreInternals {
     this.markSelectedSessionViewedIfVisible();
 
     await this.persistUiState();
-    return this.emit();
+    const snapshot = this.emit();
+    if (this.currentSelectedSessionKey() !== previousSelectedKey) {
+      this.publishSelectedTranscript();
+    }
+    return snapshot;
   }
 
   private async pruneStaleSessionSubscriptions(sessions: readonly SessionCatalogEntry[]): Promise<void> {
@@ -679,18 +711,22 @@ export class DesktopAppStore implements AppStoreInternals {
       if (session.status !== "running") {
         continue;
       }
-      await this.ensureSessionReady(session.sessionRef);
+      await this.ensureSessionSubscription(session.sessionRef);
     }
   }
 
   async ensureSessionReady(sessionRef: SessionRef): Promise<void> {
     await this.ensureTranscriptLoaded(sessionRef);
+    await this.ensureSessionSubscription(sessionRef);
+    await this.refreshSessionCommands(sessionRef);
+  }
+
+  async ensureSessionSubscription(sessionRef: SessionRef): Promise<void> {
     if (!this.sessionState.sessionSubscriptions.has(sessionKey(sessionRef))) {
       const snapshot = await this.driver.openSession(sessionRef);
       this.updateSessionConfig(sessionRef, snapshot.config);
     }
     await this.ensureSessionSubscribed(sessionRef);
-    await this.refreshSessionCommands(sessionRef);
   }
 
   private async ensureTranscriptLoaded(sessionRef: SessionRef): Promise<void> {
@@ -711,6 +747,7 @@ export class DesktopAppStore implements AppStoreInternals {
     this.sessionState.loadedTranscriptKeys.add(key);
     this.sessionState.transcriptCache.set(key, transcript);
     this.persistTranscriptCacheForSession(sessionRef);
+    this.publishSelectedTranscriptFor(sessionRef);
   }
 
   private async ensureComposerAttachmentsLoaded(sessionRef: SessionRef): Promise<void> {
@@ -1090,6 +1127,7 @@ export class DesktopAppStore implements AppStoreInternals {
       this.schedulePersistUiState();
     }
     const snapshot = this.emit();
+    this.publishSelectedTranscriptFor(event.sessionRef);
     await this.emitSessionEvent(event, snapshot);
   }
 
@@ -1365,12 +1403,55 @@ export class DesktopAppStore implements AppStoreInternals {
     }, 250);
   }
 
+  private currentSelectedSessionKey(): string {
+    return this.state.selectedWorkspaceId && this.state.selectedSessionId
+      ? sessionKey({
+          workspaceId: this.state.selectedWorkspaceId,
+          sessionId: this.state.selectedSessionId,
+        })
+      : "";
+  }
+
+  private isSelectedSession(sessionRef: SessionRef): boolean {
+    return (
+      this.state.selectedWorkspaceId === sessionRef.workspaceId &&
+      this.state.selectedSessionId === sessionRef.sessionId
+    );
+  }
+
+  private buildSelectedTranscriptRecord(
+    sessionRef: SessionRef,
+    revision: number,
+  ): SelectedTranscriptRecord {
+    return {
+      workspaceId: sessionRef.workspaceId,
+      sessionId: sessionRef.sessionId,
+      transcript: (this.sessionState.transcriptCache.get(sessionKey(sessionRef)) ?? []).map(cloneTranscriptMessage),
+      revision,
+    };
+  }
+
   emit(): DesktopAppState {
     const snapshot = structuredClone(this.state);
     for (const listener of this.listeners) {
       listener(snapshot);
     }
     return snapshot;
+  }
+
+  publishSelectedTranscript(): void {
+    const sessionRef = this.selectedSessionRef();
+    const payload = sessionRef ? this.buildSelectedTranscriptRecord(sessionRef, ++this.selectedTranscriptRevision) : null;
+    for (const listener of this.selectedTranscriptListeners) {
+      listener(payload);
+    }
+  }
+
+  publishSelectedTranscriptFor(sessionRef: SessionRef): void {
+    if (!this.isSelectedSession(sessionRef)) {
+      return;
+    }
+    this.publishSelectedTranscript();
   }
 
   private async emitSessionEvent(event: SessionDriverEvent, snapshot: DesktopAppState): Promise<void> {

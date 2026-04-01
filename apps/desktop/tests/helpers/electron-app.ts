@@ -6,7 +6,14 @@ import { promisify } from "node:util";
 import { expect, type Page } from "@playwright/test";
 import { _electron as electron, type ElectronApplication } from "playwright";
 import type { PiDesktopApi } from "../../src/ipc";
-import type { DesktopAppState, NewThreadEnvironment, SessionRecord, WorkspaceRecord } from "../../src/desktop-state";
+import type {
+  DesktopAppState,
+  NewThreadEnvironment,
+  SelectedTranscriptRecord,
+  SessionRecord,
+  WorkspaceRecord,
+} from "../../src/desktop-state";
+import type { SessionDriverEvent } from "@pi-gui/session-driver";
 
 const desktopDir = resolve(__dirname, "..", "..");
 const execFileAsync = promisify(execFile);
@@ -191,6 +198,31 @@ export async function getDesktopState(window: Page): Promise<DesktopAppState> {
   }
 
   return state;
+}
+
+export async function getSelectedTranscript(window: Page): Promise<SelectedTranscriptRecord | null> {
+  return window.evaluate(async () => {
+    const app = (window as PiAppWindow).piApp;
+    if (!app) {
+      throw new Error("piApp IPC bridge is unavailable");
+    }
+    return app.getSelectedTranscript();
+  });
+}
+
+export async function emitTestSessionEvent(
+  harness: DesktopHarness,
+  event: SessionDriverEvent,
+): Promise<void> {
+  await harness.electronApp.evaluate(async (_, payload) => {
+    const hooks = (globalThis as {
+      __PI_APP_TEST_HOOKS?: { emitSessionEvent?: (event: SessionDriverEvent) => Promise<void> };
+    }).__PI_APP_TEST_HOOKS;
+    if (!hooks?.emitSessionEvent) {
+      throw new Error("Test session-event hook is unavailable");
+    }
+    await hooks.emitSessionEvent(payload);
+  }, event);
 }
 
 export function assertExists<T>(value: T | undefined | null, message: string): asserts value is T {

@@ -30,6 +30,7 @@
     "test:core:composer-controls": "pnpm build && cross-env PI_APP_TEST_MODE=background pnpm --dir ../.. exec playwright test -c apps/desktop/playwright.config.ts apps/desktop/tests/core/composer-controls.spec.ts",
     "test:core:mentions-diff": "pnpm build && cross-env PI_APP_TEST_MODE=background pnpm --dir ../.. exec playwright test -c apps/desktop/playwright.config.ts apps/desktop/tests/core/mentions-diff.spec.ts",
     "test:core:persistence": "pnpm build && cross-env PI_APP_TEST_MODE=background pnpm --dir ../.. exec playwright test -c apps/desktop/playwright.config.ts apps/desktop/tests/core/persistence.spec.ts",
+    "test:core:reopen-state": "pnpm build && cross-env PI_APP_TEST_MODE=background pnpm --dir ../.. exec playwright test -c apps/desktop/playwright.config.ts apps/desktop/tests/core/reopen-state.spec.ts",
     "test:core:skills-settings": "pnpm build && cross-env PI_APP_TEST_MODE=background pnpm --dir ../.. exec playwright test -c apps/desktop/playwright.config.ts apps/desktop/tests/core/skills-settings.spec.ts",
     "test:core:workspace-menu": "pnpm build && cross-env PI_APP_TEST_MODE=background pnpm --dir ../.. exec playwright test -c apps/desktop/playwright.config.ts apps/desktop/tests/core/workspace-menu.spec.ts",
     "test:core:worktrees": "pnpm build && cross-env PI_APP_TEST_MODE=background pnpm --dir ../.. exec playwright test -c apps/desktop/playwright.config.ts apps/desktop/tests/core/worktrees.spec.ts",

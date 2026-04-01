@@ -20,6 +20,7 @@ import type {
   StartThreadInput,
   WorkspaceSessionTarget,
 } from "../src/desktop-state";
+import type { SessionDriverEvent } from "@pi-gui/session-driver";
 
 const isDev = Boolean(process.env.ELECTRON_RENDERER_URL);
 const windowTestMode = resolveWindowTestMode();
@@ -28,6 +29,7 @@ let store: DesktopAppStore;
 const themeManager = new ThemeManager();
 let mainWindow: BrowserWindow | null = null;
 let stopPublishingState: (() => void) | undefined;
+let stopPublishingSelectedTranscript: (() => void) | undefined;
 let stopNotifications: (() => void) | undefined;
 let stopUpdateChecker: (() => void) | undefined;
 
@@ -97,18 +99,36 @@ function createWindow(): BrowserWindow {
 
 function attachStatePublisher(window: BrowserWindow): void {
   stopPublishingState?.();
+  stopPublishingSelectedTranscript?.();
   stopPublishingState = store.subscribe((state) => {
-    if (!window.isDestroyed()) {
+    if (canPublishToWindow(window)) {
       window.webContents.send(desktopIpc.stateChanged, state);
     }
+  });
+  stopPublishingSelectedTranscript = store.subscribeToSelectedTranscript((payload) => {
+    if (canPublishToWindow(window)) {
+      window.webContents.send(desktopIpc.selectedTranscriptChanged, payload);
+    }
+  });
+  window.webContents.once("render-process-gone", () => {
+    stopPublishingState?.();
+    stopPublishingState = undefined;
+    stopPublishingSelectedTranscript?.();
+    stopPublishingSelectedTranscript = undefined;
   });
   window.once("closed", () => {
     stopPublishingState?.();
     stopPublishingState = undefined;
+    stopPublishingSelectedTranscript?.();
+    stopPublishingSelectedTranscript = undefined;
     if (mainWindow === window) {
       mainWindow = null;
     }
   });
+}
+
+function canPublishToWindow(window: BrowserWindow): boolean {
+  return !window.isDestroyed() && !window.webContents.isDestroyed() && !window.webContents.isCrashed();
 }
 
 app.setName("pi");
@@ -120,6 +140,13 @@ app.whenReady().then(async () => {
     initialWorkspacePaths: resolveInitialWorkspacePaths(),
   });
   await store.initialize();
+  if (process.env.PI_APP_TEST_MODE) {
+    Object.assign(globalThis, {
+      __PI_APP_TEST_HOOKS: {
+        emitSessionEvent: (event: SessionDriverEvent) => store.emitTestSessionEvent(event),
+      },
+    });
+  }
   stopNotifications = new NotificationManager(store, () => mainWindow).start();
   if (!isDev) {
     stopUpdateChecker = initUpdateChecker();
@@ -142,6 +169,7 @@ app.whenReady().then(async () => {
     return shell.openExternal(url);
   });
   ipcMain.handle(desktopIpc.stateRequest, () => store.getState());
+  ipcMain.handle(desktopIpc.selectedTranscriptRequest, () => store.getSelectedTranscript());
   ipcMain.handle(desktopIpc.addWorkspacePath, (_event, workspacePath: string) => store.addWorkspace(workspacePath));
   ipcMain.handle(desktopIpc.pickWorkspace, async () => {
     const result = await dialog.showOpenDialog({

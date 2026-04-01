@@ -1,9 +1,10 @@
-import { readFile } from "node:fs/promises";
+import { readFile, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 import {
   createNamedThread,
   getDesktopState,
+  getSelectedTranscript,
   launchDesktop,
   makeUserDataDir,
   makeWorkspace,
@@ -66,8 +67,8 @@ test("persists transcript storage separately from ui state and restores the curr
 
     await expect
       .poll(async () => {
-        const state = await getDesktopState(window);
-        return state.workspaces[0]?.sessions[0]?.transcript.length ?? 0;
+        const transcript = await getSelectedTranscript(window);
+        return transcript?.transcript.length ?? 0;
       })
       .toBeGreaterThan(0);
 
@@ -113,16 +114,138 @@ test("persists transcript storage separately from ui state and restores the curr
     await expect
       .poll(async () => {
         const state = await getDesktopState(window);
-        const workspace = state.workspaces[0];
-        const session = workspace?.sessions[0];
+        const transcript = await getSelectedTranscript(window);
         return {
           attachments: state.composerAttachments.length,
-          transcriptLines: session?.transcript.length ?? 0,
+          transcriptLines: transcript?.transcript.length ?? 0,
         };
       })
       .toMatchObject({
         attachments: 1,
       });
+  } finally {
+    await secondRun.close();
+  }
+});
+
+test("migrates legacy inline transcript and attachment persistence into file-backed stores", async () => {
+  test.setTimeout(90_000);
+  const userDataDir = await makeUserDataDir();
+  const workspacePath = await makeWorkspace("legacy-persistence-workspace");
+
+  const firstRun = await launchDesktop(userDataDir, {
+    initialWorkspaces: [workspacePath],
+    testMode: "background",
+  });
+
+  let workspaceId = "";
+  let sessionId = "";
+  try {
+    const window = await firstRun.firstWindow();
+    await createNamedThread(window, "Legacy persistence session");
+
+    const composer = window.getByTestId("composer");
+    await pasteTinyPng(window);
+    await composer.fill("/status");
+    await composer.press("Enter");
+    await expect(window.getByTestId("transcript")).toContainText(/Model |No session overrides set/);
+
+    await composer.fill("legacy draft");
+    await expect(composer).toHaveValue("legacy draft");
+
+    const state = await getDesktopState(window);
+    workspaceId = state.selectedWorkspaceId;
+    sessionId = state.selectedSessionId;
+    const encodedSessionKey = encodeURIComponent(`${workspaceId}:${sessionId}`);
+    const transcriptPath = join(userDataDir, "transcripts", `${encodedSessionKey}.json`);
+    const attachmentPath = join(userDataDir, "attachments", `${encodedSessionKey}.json`);
+    await expect
+      .poll(async () => {
+        try {
+          return await readFile(transcriptPath, "utf8");
+        } catch {
+          return "";
+        }
+      })
+      .toContain("\"kind\": \"activity\"");
+    await expect
+      .poll(async () => {
+        try {
+          return await readFile(attachmentPath, "utf8");
+        } catch {
+          return "";
+        }
+      })
+      .toContain("\"mimeType\": \"image/png\"");
+  } finally {
+    await firstRun.close();
+  }
+
+  const sessionKey = `${workspaceId}:${sessionId}`;
+  const encodedSessionKey = encodeURIComponent(sessionKey);
+  const transcriptPath = join(userDataDir, "transcripts", `${encodedSessionKey}.json`);
+  const attachmentPath = join(userDataDir, "attachments", `${encodedSessionKey}.json`);
+  const [transcriptRaw, attachmentRaw, uiStateRaw] = await Promise.all([
+    readFile(transcriptPath, "utf8"),
+    readFile(attachmentPath, "utf8"),
+    readFile(join(userDataDir, "ui-state.json"), "utf8"),
+  ]);
+
+  const uiState = JSON.parse(uiStateRaw) as Record<string, unknown>;
+  await Promise.all([unlink(transcriptPath), unlink(attachmentPath)]);
+  await writeFile(
+    join(userDataDir, "ui-state.json"),
+    `${JSON.stringify(
+      {
+        ...uiState,
+        transcripts: {
+          [sessionKey]: JSON.parse(transcriptRaw),
+        },
+        composerAttachmentsBySession: {
+          [sessionKey]: JSON.parse(attachmentRaw),
+        },
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
+
+  const secondRun = await launchDesktop(userDataDir, { testMode: "background" });
+  try {
+    const window = await secondRun.firstWindow();
+    await expect(window.getByTestId("composer")).toHaveValue("legacy draft");
+    await expect(window.locator(".composer-attachment")).toHaveCount(1);
+    await expect(window.getByTestId("transcript")).toContainText(/Model |No session overrides set/);
+
+    await expect
+      .poll(async () => {
+        const transcript = await getSelectedTranscript(window);
+        return transcript?.transcript.length ?? 0;
+      })
+      .toBeGreaterThan(0);
+
+    const rewrittenUiState = JSON.parse(await readFile(join(userDataDir, "ui-state.json"), "utf8")) as Record<string, unknown>;
+    expect(rewrittenUiState.transcripts).toBeUndefined();
+    expect(rewrittenUiState.composerAttachmentsBySession).toBeUndefined();
+    await expect
+      .poll(async () => {
+        try {
+          return await readFile(transcriptPath, "utf8");
+        } catch {
+          return "";
+        }
+      })
+      .toContain("\"kind\": \"activity\"");
+    await expect
+      .poll(async () => {
+        try {
+          return await readFile(attachmentPath, "utf8");
+        } catch {
+          return "";
+        }
+      })
+      .toContain("\"mimeType\": \"image/png\"");
   } finally {
     await secondRun.close();
   }

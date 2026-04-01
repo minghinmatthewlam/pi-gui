@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import {
   createNamedThread,
   getDesktopState,
+  getSelectedTranscript,
   launchDesktop,
   makeUserDataDir,
   makeWorkspace,
@@ -103,13 +104,8 @@ test("runs two sessions in parallel without sidebar status bleed", async () => {
     await expect(window.getByTestId("composer")).toBeFocused();
     await expect(sessionARow).toHaveAttribute("data-sidebar-indicator", "none");
 
-    const state = await getDesktopState(window);
-    const workspace = state.workspaces[0];
-    const sessionA = workspace?.sessions.find((session) => session.title === "Session A");
-    const sessionB = workspace?.sessions.find((session) => session.title === "Session B");
-
-    const summarize = (sessionTranscript: typeof sessionA) =>
-      (sessionTranscript?.transcript ?? []).map((item) => {
+    const summarize = (transcript: Awaited<ReturnType<typeof getSelectedTranscript>>) =>
+      (transcript?.transcript ?? []).map((item) => {
         switch (item.kind) {
           case "message":
             return `${item.role}:${item.text}`;
@@ -122,8 +118,11 @@ test("runs two sessions in parallel without sidebar status bleed", async () => {
         }
       });
 
-    const sessionALines = summarize(sessionA);
-    const sessionBLines = summarize(sessionB);
+    const sessionATranscript = await getSelectedTranscript(window);
+    const sessionALines = summarize(sessionATranscript);
+    await selectSession(window, "Session B");
+    const sessionBTranscript = await getSelectedTranscript(window);
+    const sessionBLines = summarize(sessionBTranscript);
     expect(sessionALines.some((line) => line.includes("A complete"))).toBe(true);
     expect(sessionBLines.some((line) => line.includes("B complete"))).toBe(true);
     expect(sessionALines.some((line) => line.includes("B complete"))).toBe(false);

@@ -8,6 +8,7 @@ import type {
   ModelSettingsScopeMode,
   NotificationPreferences,
   RemoveWorktreeInput,
+  SelectedTranscriptRecord,
   StartThreadInput,
   WorkspaceSessionTarget,
 } from "./desktop-state";
@@ -15,6 +16,8 @@ import type {
 export const desktopIpc = {
   stateRequest: "pi-gui:state-request",
   stateChanged: "pi-gui:state-changed",
+  selectedTranscriptRequest: "pi-gui:selected-transcript-request",
+  selectedTranscriptChanged: "pi-gui:selected-transcript-changed",
   appCommand: "pi-gui:app-command",
   addWorkspacePath: "pi-gui:add-workspace-path",
   pickWorkspace: "pi-gui:pick-workspace",
@@ -73,6 +76,7 @@ export const desktopCommands = {
 } as const;
 
 export type PiDesktopStateListener = (state: DesktopAppState) => void;
+export type PiDesktopSelectedTranscriptListener = (payload: SelectedTranscriptRecord | null) => void;
 export type PiDesktopCommand = (typeof desktopCommands)[keyof typeof desktopCommands];
 
 export interface DesktopShortcutInput {
@@ -108,6 +112,8 @@ export interface PiDesktopApi {
   ping(): Promise<string>;
   getState(): Promise<DesktopAppState>;
   onStateChanged(listener: PiDesktopStateListener): () => void;
+  getSelectedTranscript(): Promise<SelectedTranscriptRecord | null>;
+  onSelectedTranscriptChanged(listener: PiDesktopSelectedTranscriptListener): () => void;
   onCommand(listener: (command: PiDesktopCommand) => void): () => void;
   addWorkspacePath(path: string): Promise<DesktopAppState>;
   pickWorkspace(): Promise<DesktopAppState>;

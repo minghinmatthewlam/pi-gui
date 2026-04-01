@@ -12,7 +12,6 @@ import {
 import { appendUserMessage, clearActiveAssistantMessage } from "./app-store-timeline";
 import {
   cloneComposerImageAttachments,
-  cloneTranscriptMessage,
   makeActivityItem,
   previewFromTranscript,
   toSessionAttachments,
@@ -243,6 +242,7 @@ export async function sendMessageToSession(
     text,
     toTranscriptAttachments(attachments),
   );
+  store.publishSelectedTranscriptFor(sessionRef);
   store.persistTranscriptCacheForSession(sessionRef);
   clearActiveAssistantMessage(store.sessionState.activeAssistantMessageBySession, sessionRef);
   store.sessionState.sessionErrorsBySession.delete(key);
@@ -257,6 +257,7 @@ export async function sendMessageToSession(
   } catch (error) {
     const transcript = store.sessionState.transcriptCache.get(key) ?? [];
     store.sessionState.transcriptCache.set(key, transcript.slice(0, -1));
+    store.publishSelectedTranscriptFor(sessionRef);
     store.persistTranscriptCacheForSession(sessionRef);
     throw error;
   }
@@ -358,7 +359,7 @@ function finishComposerCommand(
   store.sessionState.composerDraftsBySession.delete(key);
   store.sessionState.composerAttachmentsBySession.delete(key);
   appendLocalActivity(store, sessionRef, label);
-  const transcript = (store.sessionState.transcriptCache.get(key) ?? []).map(cloneTranscriptMessage);
+  const transcript = store.sessionState.transcriptCache.get(key) ?? [];
   const preview = previewFromTranscript(transcript);
   store.state = {
     ...store.state,
@@ -372,7 +373,6 @@ function finishComposerCommand(
                     ...session,
                     preview: preview ?? session.preview,
                     config: store.sessionState.sessionConfigBySession.get(key),
-                    transcript,
                   }
                 : session,
             ),
@@ -385,5 +385,7 @@ function finishComposerCommand(
     revision: store.state.revision + 1,
   };
   store.schedulePersistUiState();
-  return store.emit();
+  const snapshot = store.emit();
+  store.publishSelectedTranscriptFor(sessionRef);
+  return snapshot;
 }

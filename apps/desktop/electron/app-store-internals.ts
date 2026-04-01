@@ -43,6 +43,7 @@ export interface AppStoreInternals {
   getExtensionFilePath(workspaceId: string, filePath: string): string | undefined;
   sessionFromState(sessionRef: SessionRef): { archivedAt?: string; updatedAt: string; title: string; status: string } | undefined;
   ensureSessionReady(sessionRef: SessionRef): Promise<void>;
+  ensureSessionSubscription(sessionRef: SessionRef): Promise<void>;
   ensureSessionSubscribed(sessionRef: SessionRef): Promise<void>;
   refreshSessionCommandsFor(sessionRef: SessionRef): Promise<void>;
   getLearnedRuntimeCommandCompatibility(
@@ -59,6 +60,8 @@ export interface AppStoreInternals {
   schedulePersistUiState(): void;
   updateSessionConfig(sessionRef: SessionRef, config: SessionConfig | undefined): void;
   reloadTranscriptFromDriver(sessionRef: SessionRef): Promise<void>;
+  publishSelectedTranscript(): void;
+  publishSelectedTranscriptFor(sessionRef: SessionRef): void;
   buildCreateSessionOptions(workspaceId: string): Promise<CreateSessionOptions | undefined>;
 }
 

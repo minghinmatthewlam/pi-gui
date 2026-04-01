@@ -1,7 +1,7 @@
 import { sessionKey } from "@pi-gui/pi-sdk-driver";
 import type { SessionDriverEvent } from "@pi-gui/session-driver";
 import type { DesktopAppState, SessionRecord, TranscriptMessage } from "../src/desktop-state";
-import { cloneTranscriptMessage, previewFromTranscript } from "./app-store-utils";
+import { previewFromTranscript } from "./app-store-utils";
 
 export function applySessionEventState(
   state: DesktopAppState,
@@ -11,7 +11,7 @@ export function applySessionEventState(
   lastViewedAtBySession: Map<string, string>,
 ): DesktopAppState {
   const key = sessionKey(event.sessionRef);
-  const transcript = (transcriptCache.get(key) ?? []).map(cloneTranscriptMessage);
+  const transcript = transcriptCache.get(key) ?? [];
   const preview = previewFromTranscript(transcript);
   const lastViewedAt = lastViewedAtBySession.get(key);
 
@@ -26,7 +26,6 @@ export function applySessionEventState(
                 ? updateSessionRecord(
                     session,
                     event,
-                    transcript,
                     preview,
                     runningSinceBySession.get(key),
                     lastViewedAt,
@@ -43,7 +42,6 @@ export function applySessionEventState(
 function updateSessionRecord(
   session: SessionRecord,
   event: SessionDriverEvent,
-  transcript: readonly TranscriptMessage[],
   preview: string | undefined,
   runningSince: string | undefined,
   lastViewedAt: string | undefined,
@@ -62,7 +60,6 @@ function updateSessionRecord(
     runningSince,
     hasUnseenUpdate: nextStatus !== "running" && Boolean(lastViewedAt && updatedAt > lastViewedAt),
     config: snapshot?.config ?? session.config,
-    transcript,
   };
 }
 

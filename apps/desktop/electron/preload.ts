@@ -11,6 +11,7 @@ import type {
   DesktopAppState,
   NotificationPreferences,
   RemoveWorktreeInput,
+  SelectedTranscriptRecord,
   StartThreadInput,
   WorkspaceSessionTarget,
 } from "../src/desktop-state";
@@ -45,6 +46,17 @@ contextBridge.exposeInMainWorld("piApp", {
     ipcRenderer.on(desktopIpc.stateChanged, handle);
     return () => {
       ipcRenderer.removeListener(desktopIpc.stateChanged, handle);
+    };
+  },
+  getSelectedTranscript: () =>
+    ipcRenderer.invoke(desktopIpc.selectedTranscriptRequest) as Promise<SelectedTranscriptRecord | null>,
+  onSelectedTranscriptChanged: (listener: (payload: SelectedTranscriptRecord | null) => void) => {
+    const handle = (_event: Electron.IpcRendererEvent, payload: SelectedTranscriptRecord | null) => {
+      listener(payload);
+    };
+    ipcRenderer.on(desktopIpc.selectedTranscriptChanged, handle);
+    return () => {
+      ipcRenderer.removeListener(desktopIpc.selectedTranscriptChanged, handle);
     };
   },
   onCommand: (listener: (command: PiDesktopCommand) => void) => {

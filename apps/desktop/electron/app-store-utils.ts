@@ -219,7 +219,6 @@ function buildSessionRecord(
     runningSince: runningSinceBySession.get(key),
     hasUnseenUpdate: session.status !== "running" && Boolean(lastViewedAt && session.updatedAt > lastViewedAt),
     config: sessionConfigBySession.get(key),
-    transcript: transcript.map(cloneTranscriptMessage),
   };
 }
 
