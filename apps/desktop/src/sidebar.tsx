@@ -523,9 +523,12 @@ function WorkspaceGroupContent(
 
 /* ── Thread session row ────────────────────────────────── */
 
-function sessionIndicatorVariant(thread: ThreadListEntry): "running" | "unseen" | "none" {
+function sessionIndicatorVariant(active: boolean, thread: ThreadListEntry): "running" | "unseen" | "none" {
   if (thread.session.status === "running") {
     return "running";
+  }
+  if (active) {
+    return "none";
   }
   if (thread.session.hasUnseenUpdate) {
     return "unseen";
@@ -546,7 +549,7 @@ function ThreadSessionRow({
   readonly onAction: () => void;
   readonly onSelect: () => void;
 }) {
-  const indicatorVariant = sessionIndicatorVariant(thread);
+  const indicatorVariant = sessionIndicatorVariant(active, thread);
   return (
     <div
       className={`session-row ${active ? "session-row--active" : ""}`}

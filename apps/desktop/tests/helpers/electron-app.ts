@@ -547,8 +547,12 @@ export async function waitForSessionByTitle(
 }
 
 export async function selectSession(window: Page, sessionTitle: string): Promise<void> {
-  await window.locator(".session-row__select", { hasText: sessionTitle }).click();
+  await clickSession(window, sessionTitle);
   await expect(window.locator(".topbar__session")).toHaveText(sessionTitle);
+}
+
+export async function clickSession(window: Page, sessionTitle: string): Promise<void> {
+  await window.locator(".session-row__select", { hasText: sessionTitle }).click();
 }
 
 export async function openNewThread(window: Page): Promise<void> {

@@ -1,5 +1,5 @@
 import type { PiSdkDriver, JsonCatalogStore } from "@pi-gui/pi-sdk-driver";
-import type { CreateSessionOptions, SessionConfig, SessionRef, WorkspaceRef } from "@pi-gui/session-driver";
+import type { CreateSessionOptions, SessionConfig, SessionRef, SessionSnapshot, WorkspaceRef } from "@pi-gui/session-driver";
 import type { RuntimeCommandRecord, RuntimeSnapshot } from "@pi-gui/session-driver/runtime-types";
 import type {
   AppView,
@@ -7,6 +7,7 @@ import type {
   DesktopAppState,
   ExtensionCommandCompatibilityRecord,
   TranscriptMessage,
+  WorkspaceSessionTarget,
 } from "../src/desktop-state";
 import type { SessionStateMap } from "./session-state-map";
 import type { GitWorktreeManager } from "./worktree-manager";
@@ -38,11 +39,12 @@ export interface AppStoreInternals {
   emit(): DesktopAppState;
   withError(error: unknown): Promise<DesktopAppState>;
   withErrorHandling(fn: () => Promise<DesktopAppState>): Promise<DesktopAppState>;
+  selectSessionFast(target: WorkspaceSessionTarget): Promise<DesktopAppState>;
   workspaceRefFromState(workspaceId: string): WorkspaceRef | undefined;
   selectedSessionRef(): SessionRef | undefined;
   getExtensionFilePath(workspaceId: string, filePath: string): string | undefined;
   sessionFromState(sessionRef: SessionRef): { archivedAt?: string; updatedAt: string; title: string; status: string } | undefined;
-  ensureSessionReady(sessionRef: SessionRef): Promise<void>;
+  ensureSessionReady(sessionRef: SessionRef): Promise<SessionSnapshot | undefined>;
   ensureSessionSubscription(sessionRef: SessionRef): Promise<void>;
   ensureSessionSubscribed(sessionRef: SessionRef): Promise<void>;
   refreshSessionCommandsFor(sessionRef: SessionRef): Promise<void>;
