@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
+import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from "electron";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
@@ -40,6 +40,32 @@ const SUPPORTED_IMAGE_TYPES = [
   { extension: "gif", mimeType: "image/gif" },
   { extension: "webp", mimeType: "image/webp" },
 ] as const;
+const MAX_CLIPBOARD_IMAGE_BYTES = 10 * 1024 * 1024;
+const MAX_CLIPBOARD_IMAGE_DIMENSION = 8_192;
+
+function readClipboardImageAttachment(): ComposerImageAttachment | null {
+  const image = clipboard.readImage();
+  if (image.isEmpty()) {
+    return null;
+  }
+
+  const size = image.getSize();
+  if (size.width > MAX_CLIPBOARD_IMAGE_DIMENSION || size.height > MAX_CLIPBOARD_IMAGE_DIMENSION) {
+    return null;
+  }
+
+  const png = image.toPNG();
+  if (png.length === 0 || png.length > MAX_CLIPBOARD_IMAGE_BYTES) {
+    return null;
+  }
+
+  return {
+    id: randomUUID(),
+    name: "pasted-image.png",
+    mimeType: "image/png",
+    data: png.toString("base64"),
+  };
+}
 
 function createWindow(): BrowserWindow {
   const backgroundTestMode = windowTestMode === "background";
@@ -287,6 +313,9 @@ app.whenReady().then(async () => {
     }
     const attachments = await Promise.all(result.filePaths.map(readComposerImage));
     return store.addComposerImages(attachments);
+  });
+  ipcMain.on(desktopIpc.readClipboardImage, (event) => {
+    event.returnValue = readClipboardImageAttachment();
   });
   ipcMain.handle(desktopIpc.addComposerImages, (_event, attachments: readonly ComposerImageAttachment[]) => {
     const allowedMimeTypes: Set<string> = new Set(SUPPORTED_IMAGE_TYPES.map((t) => t.mimeType));

@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { launchDesktop, makeUserDataDir, makeWorkspace, openNewThread, pasteTinyPng } from "../helpers/electron-app";
+import { launchDesktop, makeUserDataDir, makeWorkspace, openNewThread, pasteTinyPngFromClipboardFiles } from "../helpers/electron-app";
 
 test("new thread reuses composer behaviors for slash commands, image previews, and branding", async () => {
   test.setTimeout(60_000);
@@ -28,7 +28,7 @@ test("new thread reuses composer behaviors for slash commands, image previews, a
     await expect(composer).toHaveValue("/status");
 
     await composer.fill("");
-    await pasteTinyPng(window, "new-thread-image.png", "new-thread-composer");
+    await pasteTinyPngFromClipboardFiles(window, "new-thread-image.png", "new-thread-composer");
     const chip = window.locator(".composer-attachment");
     await expect(chip).toBeVisible();
     await expect(chip.locator(".composer-attachment__preview")).toBeVisible();

@@ -53,6 +53,7 @@ export const desktopIpc = {
   respondToHostUiRequest: "pi-gui:respond-to-host-ui-request",
   setNotificationPreferences: "pi-gui:set-notification-preferences",
   pickComposerImages: "pi-gui:pick-composer-images",
+  readClipboardImage: "pi-gui:read-clipboard-image",
   addComposerImages: "pi-gui:add-composer-images",
   removeComposerImage: "pi-gui:remove-composer-image",
   updateComposerDraft: "pi-gui:update-composer-draft",
@@ -168,6 +169,7 @@ export interface PiDesktopApi {
   ): Promise<DesktopAppState>;
   setNotificationPreferences(preferences: Partial<NotificationPreferences>): Promise<DesktopAppState>;
   pickComposerImages(): Promise<DesktopAppState>;
+  readClipboardImage(): ComposerImageAttachment | null;
   addComposerImages(attachments: readonly ComposerImageAttachment[]): Promise<DesktopAppState>;
   removeComposerImage(attachmentId: string): Promise<DesktopAppState>;
   updateComposerDraft(composerDraft: string): Promise<DesktopAppState>;

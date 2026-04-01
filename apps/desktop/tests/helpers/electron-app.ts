@@ -130,19 +130,47 @@ export function desktopShortcut(keyChord: string): string {
   return `${desktopModifierKey}+${keyChord}`;
 }
 
-export async function pasteTinyPngViaClipboard(harness: DesktopHarness, window: Page): Promise<void> {
-  const composer = window.getByTestId("composer");
+export async function pasteTinyPngViaClipboard(
+  harness: DesktopHarness,
+  window: Page,
+  composerTestId = "composer",
+): Promise<void> {
+  const composer = window.getByTestId(composerTestId);
   await composer.click();
   await expect(composer).toBeFocused();
   await harness.electronApp.evaluate(({ clipboard, nativeImage }, encodedPng) => {
     clipboard.writeImage(nativeImage.createFromDataURL(`data:image/png;base64,${encodedPng}`));
   }, TINY_PNG_BASE64);
-  await harness.electronApp.evaluate(({ BrowserWindow }) => {
-    const appWindow = BrowserWindow.getAllWindows()[0];
-    appWindow?.webContents.focus();
-    appWindow?.webContents.paste();
-  });
+  await composer.press(desktopShortcut("V"));
   await expect(window.locator(".composer-attachment")).toBeVisible();
+}
+
+export async function pasteTinyPngFromClipboardFiles(
+  window: Page,
+  fileName = "screenshot.png",
+  composerTestId = "composer",
+): Promise<void> {
+  await window.evaluate(({ encodedPng, name, testId }) => {
+    const composer = document.querySelector<HTMLTextAreaElement>(`[data-testid='${testId}']`);
+    if (!composer) {
+      throw new Error(`Composer was unavailable for test id: ${testId}`);
+    }
+
+    const bytes = Uint8Array.from(atob(encodedPng), (char) => char.charCodeAt(0));
+    const file = new File([bytes], name, { type: "image/png" });
+    const event = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "clipboardData", {
+      configurable: true,
+      value: {
+        items: [],
+        files: [file],
+        types: ["Files"],
+      },
+    });
+
+    composer.focus();
+    composer.dispatchEvent(event);
+  }, { encodedPng: TINY_PNG_BASE64, name: fileName, testId: composerTestId });
 }
 
 export async function pasteTinyPng(

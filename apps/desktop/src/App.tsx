@@ -34,6 +34,11 @@ import { useWorkspaceMenu } from "./hooks/use-workspace-menu";
 import { buildExtensionDockModel, ExtensionDialog, hasExtensionDockContent } from "./extension-session-ui";
 import { getEffectiveModelRuntime } from "./model-settings";
 import { resolveRepoWorkspaceId } from "./workspace-roots";
+import {
+  extractImageFilesFromClipboardData,
+  extractImageFilesFromDataTransfer,
+  readComposerAttachmentsFromFiles,
+} from "./composer-images";
 
 function useDesktopAppState() {
   const [snapshot, setSnapshot] = useState<DesktopAppState | null>(null);
@@ -667,73 +672,43 @@ export default function App() {
     setNewThreadAttachments((current) => current.filter((attachment) => attachment.id !== attachmentId));
   };
 
-  const handleComposerPaste = (event: ClipboardEvent<HTMLDivElement>) => {
-    const items = event.clipboardData?.items;
-    if (!items) {
-      return;
-    }
-    const imageItems = Array.from(items).filter((item) => item.type.startsWith("image/"));
-    if (imageItems.length === 0) {
+  const handleImagePaste = (event: ClipboardEvent<HTMLDivElement>, onFiles: (files: File[]) => void) => {
+    const files = extractImageFilesFromClipboardData(event.clipboardData);
+    if (files.length === 0) {
       return;
     }
     event.preventDefault();
-    void addImagesToSessionComposer(imageItems.map((item) => item.getAsFile()).filter(Boolean) as File[]);
+    onFiles(files);
+  };
+
+  const handleImageDrop = (event: DragEvent<HTMLDivElement>, onFiles: (files: File[]) => void) => {
+    event.preventDefault();
+    const files = extractImageFilesFromDataTransfer(event.dataTransfer);
+    if (files.length === 0) {
+      return;
+    }
+    onFiles(files);
+  };
+
+  const handleComposerPaste = (event: ClipboardEvent<HTMLDivElement>) => {
+    handleImagePaste(event, (files) => {
+      void addImagesToSessionComposer(files);
+    });
   };
 
   const handleNewThreadComposerPaste = (event: ClipboardEvent<HTMLDivElement>) => {
-    const items = event.clipboardData?.items;
-    if (!items) {
-      return;
-    }
-    const imageItems = Array.from(items).filter((item) => item.type.startsWith("image/"));
-    if (imageItems.length === 0) {
-      return;
-    }
-    event.preventDefault();
-    handleNewThreadAddImages(imageItems.map((item) => item.getAsFile()).filter(Boolean) as File[]);
+    handleImagePaste(event, handleNewThreadAddImages);
   };
 
   const handleComposerDrop = (event: DragEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    const files = Array.from(event.dataTransfer.files).filter((file) => file.type.startsWith("image/"));
-    if (files.length === 0) {
-      return;
-    }
-    void addImagesToSessionComposer(files);
+    handleImageDrop(event, (files) => {
+      void addImagesToSessionComposer(files);
+    });
   };
 
   const handleNewThreadComposerDrop = (event: DragEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    const files = Array.from(event.dataTransfer.files).filter((file) => file.type.startsWith("image/"));
-    if (files.length === 0) {
-      return;
-    }
-    handleNewThreadAddImages(files);
+    handleImageDrop(event, handleNewThreadAddImages);
   };
-
-  async function readComposerAttachmentsFromFiles(files: File[]): Promise<ComposerImageAttachment[]> {
-    const attachments = await Promise.all(
-      files.map(
-        (file) =>
-          new Promise<ComposerImageAttachment | null>((resolve) => {
-            const reader = new FileReader();
-            reader.onload = () => {
-              const dataUrl = reader.result as string;
-              const commaIndex = dataUrl.indexOf(",");
-              resolve({
-                id: crypto.randomUUID(),
-                name: file.name || "pasted-image.png",
-                mimeType: file.type || "image/png",
-                data: dataUrl.slice(commaIndex + 1),
-              });
-            };
-            reader.onerror = () => resolve(null);
-            reader.readAsDataURL(file);
-          }),
-      ),
-    );
-    return attachments.filter(Boolean) as ComposerImageAttachment[];
-  }
 
   async function addImagesToSessionComposer(files: File[]) {
     if (!api) {
@@ -745,6 +720,24 @@ export default function App() {
     }
     void updateSnapshot(api, setSnapshot, () => api.addComposerImages(valid));
   }
+
+  const handleClipboardImageShortcut = (
+    event: KeyboardEvent<HTMLTextAreaElement>,
+    onImage: (attachment: ComposerImageAttachment) => void,
+  ): boolean => {
+    if (!(event.metaKey || event.ctrlKey) || event.shiftKey || event.key.toLowerCase() !== "v") {
+      return false;
+    }
+
+    const clipboardImage = api?.readClipboardImage();
+    if (!clipboardImage) {
+      return false;
+    }
+
+    event.preventDefault();
+    onImage(clipboardImage);
+    return true;
+  };
 
   const handleSetSessionModel = (provider: string, modelId: string) => {
     if (!selectedWorkspace || !selectedSession) {
@@ -963,6 +956,12 @@ export default function App() {
   };
 
   const handleComposerKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (handleClipboardImageShortcut(event, (clipboardImage) => {
+      void updateSnapshot(api, setSnapshot, () => api.addComposerImages([clipboardImage]));
+    })) {
+      return;
+    }
+
     if (mentionMenu.handleMentionKeyDown(event)) {
       return;
     }
@@ -990,6 +989,12 @@ export default function App() {
   };
 
   const handleNewThreadComposerKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (handleClipboardImageShortcut(event, (clipboardImage) => {
+      setNewThreadAttachments((current) => [...current, clipboardImage]);
+    })) {
+      return;
+    }
+
     if (newThreadMentionMenu.handleMentionKeyDown(event)) {
       return;
     }
