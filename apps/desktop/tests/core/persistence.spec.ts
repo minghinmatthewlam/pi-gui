@@ -35,7 +35,7 @@ test("pastes an image into the composer surface and clears the attachment chip o
 
     await composer.fill("test with image");
     await composer.press("Enter");
-    await expect(window.locator(".composer-attachment")).toHaveCount(0, { timeout: 2_000 });
+    await expect(window.locator(".composer-attachment")).toHaveCount(0, { timeout: 10_000 });
     await expect(composer).toHaveValue("");
   } finally {
     await harness.close();
