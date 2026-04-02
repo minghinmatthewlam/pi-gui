@@ -186,7 +186,26 @@ async function waitForComposerReadyForNextSubmit(window: Page): Promise<void> {
   }
 
   const stopButton = window.getByRole("button", { name: "Stop run" });
-  await expect(stopButton).toBeVisible({ timeout: 15_000 });
-  await stopButton.click();
+  await expect
+    .poll(async () => {
+      if (await sendButton.isVisible().catch(() => false)) {
+        return "send";
+      }
+      if (await stopButton.isVisible().catch(() => false)) {
+        return "stop";
+      }
+      return "pending";
+    }, { timeout: 15_000 })
+    .not.toBe("pending");
+  if (await sendButton.isVisible().catch(() => false)) {
+    return;
+  }
+  try {
+    await stopButton.click({ timeout: 5_000 });
+  } catch (error) {
+    if (!(await sendButton.isVisible().catch(() => false))) {
+      throw error;
+    }
+  }
   await expect(sendButton).toBeVisible({ timeout: 15_000 });
 }
