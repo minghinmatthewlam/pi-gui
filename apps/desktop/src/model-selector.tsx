@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { RuntimeSnapshot } from "@pi-gui/session-driver/runtime-types";
-import { buildModelOptions, THINKING_OPTIONS, type ComposerModelOption } from "./composer-commands";
+import {
+  buildModelOptions,
+  MODEL_OPTIONS_EMPTY_DESCRIPTION,
+  MODEL_OPTIONS_EMPTY_TITLE,
+  THINKING_OPTIONS,
+  type ComposerModelOption,
+} from "./composer-commands";
 
 interface ModelSelectorProps {
   readonly runtime: RuntimeSnapshot | undefined;
@@ -9,6 +15,9 @@ interface ModelSelectorProps {
   readonly thinkingLevel: string | undefined;
   readonly disabled?: boolean;
   readonly dropdownPlacement?: "above" | "below";
+  readonly showEmptyModelControl?: boolean;
+  readonly emptyModelLabel?: string;
+  readonly emptyModelDescription?: string;
   readonly onSetModel: (provider: string, modelId: string) => void;
   readonly onSetThinking: (level: string) => void;
 }
@@ -22,6 +31,9 @@ export function ModelSelector({
   thinkingLevel,
   disabled,
   dropdownPlacement = "above",
+  showEmptyModelControl = false,
+  emptyModelLabel = "Choose model",
+  emptyModelDescription = MODEL_OPTIONS_EMPTY_DESCRIPTION,
   onSetModel,
   onSetThinking,
 }: ModelSelectorProps) {
@@ -30,6 +42,8 @@ export function ModelSelector({
 
   const groupedModels = useMemo(() => groupByProvider(buildModelOptions(runtime)), [runtime]);
   const hasModelControl = Boolean(provider && modelId) || groupedModels.length > 0;
+  const shouldRenderModelControl = hasModelControl || showEmptyModelControl;
+  const modelBadgeLabel = provider && modelId ? `${provider}:${modelId}` : groupedModels.length > 0 ? "Choose model" : emptyModelLabel;
 
   useEffect(() => {
     if (open === "none") return undefined;
@@ -54,13 +68,13 @@ export function ModelSelector({
     };
   }, [open]);
 
-  if (!hasModelControl && !thinkingLevel) {
+  if (!shouldRenderModelControl && !thinkingLevel) {
     return null;
   }
 
   return (
     <span className="model-selector" ref={containerRef}>
-      {hasModelControl ? (
+      {shouldRenderModelControl ? (
         <span className="model-selector__anchor">
           <button
             className="model-selector__badge"
@@ -68,7 +82,7 @@ export function ModelSelector({
             disabled={disabled}
             onClick={() => setOpen(open === "model" ? "none" : "model")}
           >
-            {provider && modelId ? `${provider}:${modelId}` : "Choose model"}
+            {modelBadgeLabel}
           </button>
           {open === "model" ? (
             <div
@@ -100,7 +114,10 @@ export function ModelSelector({
                 </div>
               ))}
               {groupedModels.length === 0 ? (
-                <div className="model-selector__group-title">No models available</div>
+                <>
+                  <div className="model-selector__group-title">{MODEL_OPTIONS_EMPTY_TITLE}</div>
+                  <div className="model-selector__empty">{emptyModelDescription}</div>
+                </>
               ) : null}
             </div>
           ) : null}

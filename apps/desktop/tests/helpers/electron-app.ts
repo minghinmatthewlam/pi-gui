@@ -103,6 +103,35 @@ export async function makeUserDataDir(prefix = "pi-gui-user-data-"): Promise<str
   return mkdtemp(join(tmpdir(), prefix));
 }
 
+export async function seedAgentDir(agentDir: string): Promise<void> {
+  await mkdir(agentDir, { recursive: true });
+  await writeFile(
+    join(agentDir, "auth.json"),
+    `${JSON.stringify(
+      {
+        openai: { type: "api_key", key: "test-openai-key" },
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
+  await writeFile(
+    join(agentDir, "settings.json"),
+    `${JSON.stringify(
+      {
+        defaultProvider: "openai",
+        defaultModel: "gpt-5",
+        defaultThinkingLevel: "medium",
+        enabledModels: ["openai/gpt-5", "openai/gpt-4o"],
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
+}
+
 export async function makeWorkspace(name: string): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), "pi-gui-workspace-"));
   const workspacePath = join(root, name);

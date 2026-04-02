@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { join } from "node:path";
 import {
   createNamedThread,
   desktopShortcut,
@@ -6,14 +7,18 @@ import {
   launchDesktop,
   makeUserDataDir,
   makeWorkspace,
+  seedAgentDir,
   selectSession,
 } from "../helpers/electron-app";
 
 test("supports keyboard shortcuts, slash menus, and topbar controls through the user surface", async () => {
   test.setTimeout(60_000);
   const userDataDir = await makeUserDataDir();
+  const agentDir = join(userDataDir, "agent");
   const workspacePath = await makeWorkspace("controls-workspace");
+  await seedAgentDir(agentDir);
   const harness = await launchDesktop(userDataDir, {
+    agentDir,
     initialWorkspaces: [workspacePath],
     testMode: "background",
   });

@@ -901,6 +901,13 @@
   letter-spacing: 0.04em;
 }
 
+.model-selector__empty {
+  padding: 0 10px 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
 .model-selector__item {
   display: flex;
   align-items: center;

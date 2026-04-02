@@ -1,11 +1,15 @@
 import { expect, test } from "@playwright/test";
-import { launchDesktop, makeUserDataDir, makeWorkspace, openNewThread, pasteTinyPng } from "../helpers/electron-app";
+import { join } from "node:path";
+import { getDesktopState, launchDesktop, makeUserDataDir, makeWorkspace, openNewThread, pasteTinyPng, seedAgentDir } from "../helpers/electron-app";
 
 test("new thread reuses composer behaviors for slash commands, image previews, and branding", async () => {
   test.setTimeout(60_000);
   const userDataDir = await makeUserDataDir();
+  const agentDir = join(userDataDir, "agent");
   const workspacePath = await makeWorkspace("new-thread-composer-workspace");
+  await seedAgentDir(agentDir);
   const harness = await launchDesktop(userDataDir, {
+    agentDir,
     initialWorkspaces: [workspacePath],
     testMode: "background",
   });
@@ -43,6 +47,47 @@ test("new thread reuses composer behaviors for slash commands, image previews, a
     await expect(window.getByTestId("composer")).toBeVisible({ timeout: 15_000 });
     await expect(window.locator(".timeline-item__attachment")).toBeVisible({ timeout: 15_000 });
     await expect(window.locator(".composer-attachment")).toHaveCount(0);
+  } finally {
+    await harness.close();
+  }
+});
+
+test("new thread shows an explicit model empty state when no enabled models remain", async () => {
+  test.setTimeout(60_000);
+  const userDataDir = await makeUserDataDir();
+  const agentDir = join(userDataDir, "agent");
+  const workspacePath = await makeWorkspace("new-thread-empty-models-workspace");
+  await seedAgentDir(agentDir);
+  const harness = await launchDesktop(userDataDir, {
+    agentDir,
+    initialWorkspaces: [workspacePath],
+    testMode: "background",
+  });
+
+  try {
+    const window = await harness.firstWindow();
+    await openNewThread(window);
+
+    const selectedWorkspaceId = (await getDesktopState(window)).selectedWorkspaceId;
+    expect(selectedWorkspaceId).toBeTruthy();
+
+    await window.evaluate(async ({ workspaceId }) => {
+      const app = window.piApp;
+      if (!app) {
+        throw new Error("piApp IPC bridge is unavailable");
+      }
+      await app.setScopedModelPatterns(workspaceId, ["fake-provider/fake-model"]);
+    }, { workspaceId: selectedWorkspaceId });
+
+    const modelBadge = window.locator(".new-thread__hint .model-selector__badge").first();
+    await expect(modelBadge).toBeVisible();
+    await expect(modelBadge).toHaveText("No models available");
+
+    await modelBadge.click();
+    const dropdown = window.locator(".new-thread__hint .model-selector__dropdown").first();
+    await expect(dropdown).toBeVisible();
+    await expect(dropdown).toContainText("No models available");
+    await expect(dropdown).toContainText("Open Settings to enable a model or log in to a provider.");
   } finally {
     await harness.close();
   }

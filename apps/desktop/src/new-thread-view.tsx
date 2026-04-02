@@ -3,7 +3,7 @@ import type { RuntimeSnapshot } from "@pi-gui/session-driver/runtime-types";
 import type { ComposerImageAttachment, NewThreadEnvironment, WorkspaceRecord } from "./desktop-state";
 import { ArrowUpIcon, PiLogoMark, PlusIcon } from "./icons";
 import {
-  buildModelOptions,
+  MODEL_OPTIONS_EMPTY_TITLE,
   type ComposerSlashCommand,
   type ComposerSlashCommandSection,
   type ComposerSlashOption,
@@ -230,8 +230,6 @@ function NewThreadComposerFooter({
   onAddImages,
   onSubmit,
 }: NewThreadComposerFooterProps) {
-  const showModelSelector = Boolean(thinkingLevel) || Boolean(provider && modelId) || buildModelOptions(runtime).length > 0;
-
   return (
     <>
       <div className="composer__hint new-thread__hint">
@@ -251,18 +249,18 @@ function NewThreadComposerFooter({
             <span>Worktree</span>
           </button>
         </div>
-        {showModelSelector ? <span className="new-thread__hint-separator">·</span> : null}
-        {showModelSelector ? (
-          <ModelSelector
-            runtime={runtime}
-            provider={provider}
-            modelId={modelId}
-            thinkingLevel={thinkingLevel}
-            dropdownPlacement="below"
-            onSetModel={onSetModel}
-            onSetThinking={onSetThinking}
-          />
-        ) : null}
+        <span className="new-thread__hint-separator">·</span>
+        <ModelSelector
+          runtime={runtime}
+          provider={provider}
+          modelId={modelId}
+          thinkingLevel={thinkingLevel}
+          dropdownPlacement="below"
+          showEmptyModelControl
+          emptyModelLabel={MODEL_OPTIONS_EMPTY_TITLE}
+          onSetModel={onSetModel}
+          onSetThinking={onSetThinking}
+        />
       </div>
 
       <div className="composer__actions">

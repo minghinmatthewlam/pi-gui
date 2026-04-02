@@ -62,6 +62,9 @@ export interface ComposerProviderOption extends ComposerSlashOption {
   readonly providerId: string;
 }
 
+export const MODEL_OPTIONS_EMPTY_TITLE = "No models available";
+export const MODEL_OPTIONS_EMPTY_DESCRIPTION = "Open Settings to enable a model or log in to a provider.";
+
 export type ParsedComposerCommand =
   | { type: "model"; provider: string; modelId: string }
   | { type: "thinking"; thinkingLevel: string }
@@ -256,8 +259,8 @@ export function buildSlashCommandSections(
       id: "host",
       title: hostMatches.length > 0 ? "Host Actions" : undefined,
       items: hostMatches,
-    },
-  ];
+  },
+];
 
   return sections.filter((section) => section.items.length > 0);
 }
@@ -423,8 +426,8 @@ export function slashOptionEmptyState(
 
   if (command.kind === "model" && buildModelOptions(runtime).length === 0) {
     return {
-      title: "No models available",
-      description: "Open Settings to enable a model or log in to a provider.",
+      title: MODEL_OPTIONS_EMPTY_TITLE,
+      description: MODEL_OPTIONS_EMPTY_DESCRIPTION,
     };
   }
 
