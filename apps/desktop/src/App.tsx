@@ -17,6 +17,7 @@ import { ComposerPanel } from "./composer-panel";
 import { DiffPanel } from "./diff-panel";
 import { buildModelOptions } from "./composer-commands";
 import { desktopCommands, getDesktopCommandFromShortcut, type PiDesktopCommand } from "./ipc";
+import { deriveModelOnboardingState } from "./model-onboarding";
 import { SkillsView } from "./skills-view";
 import { ExtensionsView } from "./extensions-view";
 import { SettingsView, type SettingsSection } from "./settings-view";
@@ -251,9 +252,28 @@ export default function App() {
   const newThreadDefaultEnabled = buildModelOptions(newThreadRuntime).some(
     (m) => m.providerId === newThreadRuntime?.settings.defaultProvider && m.modelId === newThreadRuntime?.settings.defaultModelId,
   );
+  const selectedDefaultEnabled = buildModelOptions(selectedModelRuntime).some(
+    (m) => m.providerId === selectedModelRuntime?.settings.defaultProvider && m.modelId === selectedModelRuntime?.settings.defaultModelId,
+  );
+  const resolvedSessionProvider =
+    selectedSession?.config?.provider ??
+    (selectedDefaultEnabled ? selectedModelRuntime?.settings.defaultProvider : undefined);
+  const resolvedSessionModelId =
+    selectedSession?.config?.modelId ??
+    (selectedDefaultEnabled ? selectedModelRuntime?.settings.defaultModelId : undefined);
+  const resolvedSessionThinkingLevel =
+    selectedSession?.config?.thinkingLevel ?? selectedModelRuntime?.settings.defaultThinkingLevel;
   const resolvedNewThreadProvider = newThreadProvider ?? (newThreadDefaultEnabled ? newThreadRuntime?.settings.defaultProvider : undefined);
   const resolvedNewThreadModelId = newThreadModelId ?? (newThreadDefaultEnabled ? newThreadRuntime?.settings.defaultModelId : undefined);
   const resolvedNewThreadThinkingLevel = newThreadThinkingLevel ?? newThreadRuntime?.settings.defaultThinkingLevel;
+  const selectedSessionModelOnboarding = deriveModelOnboardingState(selectedModelRuntime, {
+    provider: resolvedSessionProvider,
+    modelId: resolvedSessionModelId,
+  });
+  const newThreadModelOnboarding = deriveModelOnboardingState(newThreadRuntime, {
+    provider: resolvedNewThreadProvider,
+    modelId: resolvedNewThreadModelId,
+  });
   const [attachmentsClearedOnSubmit, setAttachmentsClearedOnSubmit] = useState(false);
   const composerAttachments = attachmentsClearedOnSubmit ? [] : (snapshot?.composerAttachments ?? []);
   const runningLabel = useRunningLabel(selectedSession?.status === "running" ? selectedSession.runningSince : undefined);
@@ -550,7 +570,6 @@ export default function App() {
       rootWorkspaceOptions.some((workspace) => workspace.id === current) ? current : (current || rootWorkspaceOptions[0]?.id || ""),
     );
   }, [rootWorkspaceOptions]);
-
 
   useEffect(() => {
     const handleCommand = (command: PiDesktopCommand) => {
@@ -857,6 +876,9 @@ export default function App() {
     if (!composerDraft.trim() && composerAttachments.length === 0) {
       return;
     }
+    if (selectedSessionModelOnboarding.requiresModelSelection) {
+      return;
+    }
 
     const previousDraft = composerDraft;
     setComposerDraft("");
@@ -1141,6 +1163,9 @@ export default function App() {
     if (!newThreadRootWorkspaceId || (!newThreadPrompt.trim() && newThreadAttachments.length === 0)) {
       return;
     }
+    if (newThreadModelOnboarding.requiresModelSelection) {
+      return;
+    }
     const modelConfig = {
       prompt: newThreadPrompt,
       attachments: newThreadAttachments,
@@ -1218,6 +1243,9 @@ export default function App() {
     if (!composerDraft.trim() && composerAttachments.length === 0) {
       return;
     }
+    if (selectedSessionModelOnboarding.requiresModelSelection) {
+      return;
+    }
 
     submitComposerDraft();
   };
@@ -1243,6 +1271,9 @@ export default function App() {
 
     event.preventDefault();
     if (!newThreadPrompt.trim() && newThreadAttachments.length === 0) {
+      return;
+    }
+    if (newThreadModelOnboarding.requiresModelSelection) {
       return;
     }
 
@@ -1435,6 +1466,7 @@ export default function App() {
               provider={resolvedNewThreadProvider}
               modelId={resolvedNewThreadModelId}
               thinkingLevel={resolvedNewThreadThinkingLevel}
+              modelOnboarding={newThreadModelOnboarding}
               composerRef={newThreadComposerRef}
               activeSlashCommand={newThreadSlashMenu.activeSlashFlow?.command}
               activeSlashCommandMeta={newThreadSlashMenu.activeSlashFlow?.command?.description}
@@ -1453,6 +1485,7 @@ export default function App() {
               onSelectWorkspace={handleSelectNewThreadWorkspace}
               onSetModel={(provider, modelId) => { setNewThreadProvider(provider); setNewThreadModelId(modelId); }}
               onSetThinking={setNewThreadThinkingLevel}
+              onOpenModelSettings={(section) => openSettings(newThreadWorkspace?.id, section)}
               onComposerKeyDown={handleNewThreadComposerKeyDown}
               onComposerPaste={handleNewThreadComposerPaste}
               onComposerDrop={handleNewThreadComposerDrop}
@@ -1516,6 +1549,9 @@ export default function App() {
               composerDraft={composerDraft}
               composerRef={composerRef}
               runtime={selectedModelRuntime}
+              provider={resolvedSessionProvider}
+              modelId={resolvedSessionModelId}
+              thinkingLevel={resolvedSessionThinkingLevel}
               onClearSlashCommand={slashMenu.resetSlashUi}
               onComposerKeyDown={handleComposerKeyDown}
               onComposerPaste={handleComposerPaste}
@@ -1530,6 +1566,10 @@ export default function App() {
               }}
               onSetModel={handleSetSessionModel}
               onSetThinking={handleSetSessionThinking}
+              modelOnboarding={selectedSessionModelOnboarding}
+              onOpenModelSettings={(section) =>
+                openSettings(selectedWorkspace?.rootWorkspaceId ?? selectedWorkspace?.id, section)
+              }
               onSubmit={submitComposerDraft}
               runningLabel={runningLabel}
               selectedSession={selectedSession}

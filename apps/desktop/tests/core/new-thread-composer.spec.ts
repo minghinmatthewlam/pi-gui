@@ -59,7 +59,54 @@ test("new thread reuses composer behaviors for slash commands, image previews, a
   }
 });
 
-test("new thread shows an explicit model empty state when no enabled models remain", async () => {
+test("new thread keeps onboarding notice visible until a default model is set", async () => {
+  test.setTimeout(60_000);
+  const userDataDir = await makeUserDataDir();
+  const agentDir = join(userDataDir, "agent");
+  const workspacePath = await makeWorkspace("new-thread-no-default-workspace");
+  await seedAgentDir(agentDir, { withDefaultModel: false });
+  const harness = await launchDesktop(userDataDir, {
+    agentDir,
+    initialWorkspaces: [workspacePath],
+    testMode: "background",
+  });
+
+  try {
+    const window = await harness.firstWindow();
+    await openNewThread(window);
+
+    const notice = window.getByTestId("model-onboarding-notice");
+    const startButton = window.getByRole("button", { name: "Start thread" });
+    const modelBadge = window.locator(".new-thread__hint .model-selector__badge").first();
+
+    await window.getByTestId("new-thread-composer").fill("start a thread without a default");
+    await expect(notice).toContainText("No default model set");
+    await expect(modelBadge).toHaveText("No default model");
+    await expect(startButton).toBeDisabled();
+
+    await modelBadge.click();
+    const dropdown = window.locator(".new-thread__hint .model-selector__dropdown").first();
+    await expect(dropdown).toContainText("GPT-5");
+    await expect(dropdown).toContainText("GPT-4o");
+    await dropdown.getByRole("button", { name: /GPT-5/ }).click();
+
+    await expect(modelBadge).toHaveText("openai:gpt-5");
+    await expect(startButton).toBeEnabled();
+
+    await startButton.click();
+
+    await expect(window.getByTestId("composer")).toBeVisible({ timeout: 15_000 });
+    await expect(window.getByTestId("model-onboarding-notice")).toContainText("No default model set");
+
+    const composer = window.getByTestId("composer");
+    await composer.fill("continue");
+    await expect(window.getByTestId("send")).toBeEnabled();
+  } finally {
+    await harness.close();
+  }
+});
+
+test("new thread routes disabled-model recovery to settings models", async () => {
   test.setTimeout(60_000);
   const userDataDir = await makeUserDataDir();
   const agentDir = join(userDataDir, "agent");
@@ -86,15 +133,22 @@ test("new thread shows an explicit model empty state when no enabled models rema
       await app.setScopedModelPatterns(workspaceId, ["fake-provider/fake-model"]);
     }, { workspaceId: selectedWorkspaceId });
 
+    await window.getByTestId("new-thread-composer").fill("try to start with all models disabled");
     const modelBadge = window.locator(".new-thread__hint .model-selector__badge").first();
     await expect(modelBadge).toBeVisible();
     await expect(modelBadge).toHaveText("No models available");
+    await expect(window.getByTestId("model-onboarding-notice")).toContainText("Settings > Models");
+    await expect(window.getByRole("button", { name: "Start thread" })).toBeDisabled();
 
     await modelBadge.click();
     const dropdown = window.locator(".new-thread__hint .model-selector__dropdown").first();
     await expect(dropdown).toBeVisible();
     await expect(dropdown).toContainText("No models available");
-    await expect(dropdown).toContainText("Open Settings to enable a model or log in to a provider.");
+    await expect(dropdown).toContainText("Open Settings > Models to enable a model and choose a default.");
+
+    await window.getByTestId("model-onboarding-notice").getByRole("button", { name: "Open Settings > Models" }).click();
+    await expect(window.getByTestId("settings-surface")).toBeVisible();
+    await expect(window.locator(".view-header__title")).toHaveText("Models");
   } finally {
     await harness.close();
   }

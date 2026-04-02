@@ -121,9 +121,20 @@ test("supports keyboard shortcuts, slash menus, and topbar controls through the 
     await composer.fill("/model");
     await expect(optionsMenu).toBeVisible();
     await expect(optionsMenu).toContainText("No models available");
-    await expect(optionsMenu).toContainText("Open Settings to enable a model or log in to a provider.");
+    await expect(optionsMenu).toContainText("Open Settings > Models to enable a model and choose a default.");
     await composer.fill("continue");
     await expect(optionsMenu).toHaveCount(0);
+
+    const onboardingNotice = window.getByTestId("model-onboarding-notice");
+    await expect(onboardingNotice).toContainText("No models available");
+    await expect(onboardingNotice).toContainText("Settings > Models");
+    await expect(window.getByTestId("send")).toBeDisabled();
+
+    await onboardingNotice.getByRole("button", { name: "Open Settings > Models" }).click();
+    await expect(window.getByTestId("settings-surface")).toBeVisible();
+    await expect(window.locator(".view-header__title")).toHaveText("Models");
+    await window.getByRole("button", { name: "Back to app", exact: true }).click();
+    await expect(window.getByTestId("send")).toBeDisabled();
 
     const appRegions = await window.evaluate(() => {
       const topbar = document.querySelector<HTMLElement>("[data-testid='topbar']");

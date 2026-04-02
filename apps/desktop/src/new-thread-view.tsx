@@ -11,6 +11,8 @@ import {
 } from "./composer-commands";
 import { ComposerSurface } from "./composer-surface";
 import { COMPOSER_IMAGE_FILE_INPUT_ACCEPT } from "./composer-images";
+import { ModelOnboardingNoticeBanner } from "./model-onboarding-notice";
+import type { ModelOnboardingState, ModelOnboardingSettingsSection } from "./model-onboarding";
 import { ModelSelector } from "./model-selector";
 
 interface NewThreadViewProps {
@@ -23,6 +25,7 @@ interface NewThreadViewProps {
   readonly provider: string | undefined;
   readonly modelId: string | undefined;
   readonly thinkingLevel: string | undefined;
+  readonly modelOnboarding: ModelOnboardingState;
   readonly composerRef: RefObject<HTMLTextAreaElement | null>;
   readonly activeSlashCommand?: ComposerSlashCommand;
   readonly activeSlashCommandMeta?: string;
@@ -41,6 +44,7 @@ interface NewThreadViewProps {
   readonly onSelectWorkspace: (workspaceId: string) => void;
   readonly onSetModel: (provider: string, modelId: string) => void;
   readonly onSetThinking: (level: string) => void;
+  readonly onOpenModelSettings: (section: ModelOnboardingSettingsSection) => void;
   readonly onComposerKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
   readonly onComposerPaste: (event: ClipboardEvent<HTMLDivElement>) => void;
   readonly onComposerDrop: (event: DragEvent<HTMLDivElement>) => void;
@@ -63,6 +67,7 @@ export function NewThreadView({
   provider,
   modelId,
   thinkingLevel,
+  modelOnboarding,
   composerRef,
   activeSlashCommand,
   activeSlashCommandMeta,
@@ -81,6 +86,7 @@ export function NewThreadView({
   onSelectWorkspace,
   onSetModel,
   onSetThinking,
+  onOpenModelSettings,
   onComposerKeyDown,
   onComposerPaste,
   onComposerDrop,
@@ -184,11 +190,13 @@ export function NewThreadView({
                   provider={provider}
                   modelId={modelId}
                   thinkingLevel={thinkingLevel}
+                  modelOnboarding={modelOnboarding}
                   hasContent={Boolean(prompt.trim() || attachments.length > 0)}
                   fileInputRef={fileInputRef}
                   onSelectEnvironment={onSelectEnvironment}
                   onSetModel={onSetModel}
                   onSetThinking={onSetThinking}
+                  onOpenModelSettings={onOpenModelSettings}
                   onAddImages={onAddImages}
                   onSubmit={onSubmit}
                 />
@@ -207,11 +215,13 @@ interface NewThreadComposerFooterProps {
   readonly provider: string | undefined;
   readonly modelId: string | undefined;
   readonly thinkingLevel: string | undefined;
+  readonly modelOnboarding: ModelOnboardingState;
   readonly hasContent: boolean;
   readonly fileInputRef: RefObject<HTMLInputElement | null>;
   readonly onSelectEnvironment: (environment: NewThreadEnvironment) => void;
   readonly onSetModel: (provider: string, modelId: string) => void;
   readonly onSetThinking: (level: string) => void;
+  readonly onOpenModelSettings: (section: ModelOnboardingSettingsSection) => void;
   readonly onAddImages: (files: File[]) => void;
   readonly onSubmit: () => void;
 }
@@ -222,79 +232,89 @@ function NewThreadComposerFooter({
   provider,
   modelId,
   thinkingLevel,
+  modelOnboarding,
   hasContent,
   fileInputRef,
   onSelectEnvironment,
   onSetModel,
   onSetThinking,
+  onOpenModelSettings,
   onAddImages,
   onSubmit,
 }: NewThreadComposerFooterProps) {
   return (
     <>
-      <div className="composer__hint new-thread__hint">
-        <div className="new-thread__environment-group">
-          <button
-            className={`new-thread__environment ${environment === "local" ? "new-thread__environment--active" : ""}`}
-            type="button"
-            onClick={() => onSelectEnvironment("local")}
-          >
-            <span>Local</span>
-          </button>
-          <button
-            className={`new-thread__environment ${environment === "worktree" ? "new-thread__environment--active" : ""}`}
-            type="button"
-            onClick={() => onSelectEnvironment("worktree")}
-          >
-            <span>Worktree</span>
-          </button>
-        </div>
-        <span className="new-thread__hint-separator">·</span>
-        <ModelSelector
-          runtime={runtime}
-          provider={provider}
-          modelId={modelId}
-          thinkingLevel={thinkingLevel}
-          dropdownPlacement="below"
-          showEmptyModelControl
-          emptyModelLabel={MODEL_OPTIONS_EMPTY_TITLE}
-          onSetModel={onSetModel}
-          onSetThinking={onSetThinking}
-        />
-      </div>
+      <div className="composer__footer">
+        <ModelOnboardingNoticeBanner notice={modelOnboarding.notice} onOpenSettings={onOpenModelSettings} />
+        <div className="composer__footer-row">
+          <div className="composer__hint new-thread__hint">
+            <div className="new-thread__environment-group">
+              <button
+                className={`new-thread__environment ${environment === "local" ? "new-thread__environment--active" : ""}`}
+                type="button"
+                onClick={() => onSelectEnvironment("local")}
+              >
+                <span>Local</span>
+              </button>
+              <button
+                className={`new-thread__environment ${environment === "worktree" ? "new-thread__environment--active" : ""}`}
+                type="button"
+                onClick={() => onSelectEnvironment("worktree")}
+              >
+                <span>Worktree</span>
+              </button>
+            </div>
+            <span className="new-thread__hint-separator">·</span>
+            <ModelSelector
+              runtime={runtime}
+              provider={provider}
+              modelId={modelId}
+              thinkingLevel={thinkingLevel}
+              dropdownPlacement="below"
+              showEmptyModelControl
+              unselectedModelLabel={modelOnboarding.unselectedModelLabel}
+              emptyModelLabel={MODEL_OPTIONS_EMPTY_TITLE}
+              emptyModelTitle={modelOnboarding.emptyModelTitle}
+              emptyModelDescription={modelOnboarding.emptyModelDescription}
+              onSetModel={onSetModel}
+              onSetThinking={onSetThinking}
+            />
+          </div>
 
-      <div className="composer__actions">
-        <input
-          ref={fileInputRef}
-          hidden
-          type="file"
-          accept={COMPOSER_IMAGE_FILE_INPUT_ACCEPT}
-          multiple
-          onChange={(event) => {
-            const files = Array.from(event.target.files ?? []);
-            if (files.length > 0) {
-              onAddImages(files);
-            }
-            event.currentTarget.value = "";
-          }}
-        />
-        <button
-          aria-label="Attach image"
-          className="icon-button composer__attach"
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-        >
-          <PlusIcon />
-        </button>
-        <button
-          aria-label="Start thread"
-          className="button button--primary button--cta-icon"
-          type="button"
-          disabled={!hasContent}
-          onClick={onSubmit}
-        >
-          <ArrowUpIcon />
-        </button>
+          <div className="composer__actions">
+            <input
+              ref={fileInputRef}
+              hidden
+              type="file"
+              accept={COMPOSER_IMAGE_FILE_INPUT_ACCEPT}
+              multiple
+              onChange={(event) => {
+                const files = Array.from(event.target.files ?? []);
+                if (files.length > 0) {
+                  onAddImages(files);
+                }
+                event.currentTarget.value = "";
+              }}
+            />
+            <button
+              aria-label="Attach image"
+              className="icon-button composer__attach"
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <PlusIcon />
+            </button>
+            <button
+              aria-label="Start thread"
+              className="button button--primary button--cta-icon"
+              type="button"
+              disabled={!hasContent || modelOnboarding.requiresModelSelection}
+              onClick={onSubmit}
+            >
+              <ArrowUpIcon />
+            </button>
+          </div>
+        </div>
       </div>
     </>
   );

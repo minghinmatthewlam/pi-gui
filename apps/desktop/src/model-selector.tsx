@@ -16,7 +16,9 @@ interface ModelSelectorProps {
   readonly disabled?: boolean;
   readonly dropdownPlacement?: "above" | "below";
   readonly showEmptyModelControl?: boolean;
+  readonly unselectedModelLabel?: string;
   readonly emptyModelLabel?: string;
+  readonly emptyModelTitle?: string;
   readonly emptyModelDescription?: string;
   readonly onSetModel: (provider: string, modelId: string) => void;
   readonly onSetThinking: (level: string) => void;
@@ -32,7 +34,9 @@ export function ModelSelector({
   disabled,
   dropdownPlacement = "above",
   showEmptyModelControl = false,
+  unselectedModelLabel = "Choose model",
   emptyModelLabel = "Choose model",
+  emptyModelTitle = MODEL_OPTIONS_EMPTY_TITLE,
   emptyModelDescription = MODEL_OPTIONS_EMPTY_DESCRIPTION,
   onSetModel,
   onSetThinking,
@@ -43,7 +47,7 @@ export function ModelSelector({
   const groupedModels = useMemo(() => groupByProvider(buildModelOptions(runtime)), [runtime]);
   const hasModelControl = Boolean(provider && modelId) || groupedModels.length > 0;
   const shouldRenderModelControl = hasModelControl || showEmptyModelControl;
-  const modelBadgeLabel = provider && modelId ? `${provider}:${modelId}` : groupedModels.length > 0 ? "Choose model" : emptyModelLabel;
+  const modelBadgeLabel = provider && modelId ? `${provider}:${modelId}` : groupedModels.length > 0 ? unselectedModelLabel : emptyModelLabel;
 
   useEffect(() => {
     if (open === "none") return undefined;
@@ -115,7 +119,7 @@ export function ModelSelector({
               ))}
               {groupedModels.length === 0 ? (
                 <>
-                  <div className="model-selector__group-title">{MODEL_OPTIONS_EMPTY_TITLE}</div>
+                  <div className="model-selector__group-title">{emptyModelTitle}</div>
                   <div className="model-selector__empty">{emptyModelDescription}</div>
                 </>
               ) : null}

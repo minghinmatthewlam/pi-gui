@@ -9,6 +9,8 @@ import type {
   ComposerSlashOptionEmptyState,
 } from "./composer-commands";
 import { ComposerSurface } from "./composer-surface";
+import { ModelOnboardingNoticeBanner } from "./model-onboarding-notice";
+import type { ModelOnboardingState, ModelOnboardingSettingsSection } from "./model-onboarding";
 import { ModelSelector } from "./model-selector";
 import type { ExtensionDockModel } from "./extension-session-ui";
 
@@ -23,6 +25,9 @@ interface ComposerPanelProps {
   readonly composerRef: RefObject<HTMLTextAreaElement | null>;
   readonly runningLabel: string;
   readonly attachments: readonly ComposerImageAttachment[];
+  readonly provider: string | undefined;
+  readonly modelId: string | undefined;
+  readonly thinkingLevel: string | undefined;
   readonly slashSections: readonly ComposerSlashCommandSection[];
   readonly slashOptions: readonly ComposerSlashOption[];
   readonly selectedSlashCommand?: ComposerSlashCommand;
@@ -40,6 +45,8 @@ interface ComposerPanelProps {
   readonly onSelectSlashOption: (option: ComposerSlashOption) => void;
   readonly onSetModel: (provider: string, modelId: string) => void;
   readonly onSetThinking: (level: string) => void;
+  readonly modelOnboarding: ModelOnboardingState;
+  readonly onOpenModelSettings: (section: ModelOnboardingSettingsSection) => void;
   readonly onSubmit: () => void;
   readonly showMentionMenu: boolean;
   readonly mentionOptions: readonly string[];
@@ -61,6 +68,9 @@ export function ComposerPanel({
   composerRef,
   runningLabel,
   attachments,
+  provider,
+  modelId,
+  thinkingLevel,
   slashSections,
   slashOptions,
   selectedSlashCommand,
@@ -78,6 +88,8 @@ export function ComposerPanel({
   onSelectSlashOption,
   onSetModel,
   onSetThinking,
+  modelOnboarding,
+  onOpenModelSettings,
   onSubmit,
   showMentionMenu,
   mentionOptions,
@@ -123,42 +135,51 @@ export function ComposerPanel({
           extensionDockExpanded={extensionDockExpanded}
           onToggleExtensionDock={onToggleExtensionDock}
           footer={(
-            <>
-              <div className="composer__hint">
-                {selectedSession.status === "running" ? runningLabel : "Enter to send · Shift+Enter for newline"}
-                {" · "}
-                <ModelSelector
-                  runtime={runtime}
-                  provider={selectedSession.config?.provider}
-                  modelId={selectedSession.config?.modelId}
-                  thinkingLevel={selectedSession.config?.thinkingLevel}
-                  disabled={selectedSession.status === "running"}
-                  onSetModel={onSetModel}
-                  onSetThinking={onSetThinking}
-                />
+            <div className="composer__footer">
+              <ModelOnboardingNoticeBanner notice={modelOnboarding.notice} onOpenSettings={onOpenModelSettings} />
+              <div className="composer__footer-row">
+                <div className="composer__hint">
+                  {selectedSession.status === "running" ? runningLabel : "Enter to send · Shift+Enter for newline"}
+                  {" · "}
+                  <ModelSelector
+                    runtime={runtime}
+                    provider={provider}
+                    modelId={modelId}
+                    thinkingLevel={thinkingLevel}
+                    disabled={selectedSession.status === "running"}
+                    unselectedModelLabel={modelOnboarding.unselectedModelLabel}
+                    emptyModelTitle={modelOnboarding.emptyModelTitle}
+                    emptyModelDescription={modelOnboarding.emptyModelDescription}
+                    onSetModel={onSetModel}
+                    onSetThinking={onSetThinking}
+                  />
+                </div>
+                <div className="composer__actions">
+                  <button
+                    aria-label="Attach image"
+                    className="icon-button composer__attach"
+                    type="button"
+                    disabled={selectedSession.status === "running"}
+                    onClick={onPickImages}
+                  >
+                    <PlusIcon />
+                  </button>
+                  <button
+                    aria-label={selectedSession.status === "running" ? "Stop run" : "Send message"}
+                    className="button button--primary button--cta-icon"
+                    data-testid="send"
+                    type="button"
+                    disabled={
+                      selectedSession.status !== "running" &&
+                      ((!composerDraft.trim() && attachments.length === 0) || modelOnboarding.requiresModelSelection)
+                    }
+                    onClick={onSubmit}
+                  >
+                    {selectedSession.status === "running" ? <StopSquareIcon /> : <ArrowUpIcon />}
+                  </button>
+                </div>
               </div>
-              <div className="composer__actions">
-                <button
-                  aria-label="Attach image"
-                  className="icon-button composer__attach"
-                  type="button"
-                  disabled={selectedSession.status === "running"}
-                  onClick={onPickImages}
-                >
-                  <PlusIcon />
-                </button>
-                <button
-                  aria-label={selectedSession.status === "running" ? "Stop run" : "Send message"}
-                  className="button button--primary button--cta-icon"
-                  data-testid="send"
-                  type="button"
-                  disabled={!composerDraft.trim() && attachments.length === 0 && selectedSession.status !== "running"}
-                  onClick={onSubmit}
-                >
-                  {selectedSession.status === "running" ? <StopSquareIcon /> : <ArrowUpIcon />}
-                </button>
-              </div>
-            </>
+            </div>
           )}
         />
       </div>

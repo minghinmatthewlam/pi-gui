@@ -14,6 +14,7 @@ import {
   type ComposerSlashOption,
 } from "../composer-commands";
 import type { PiDesktopApi } from "../ipc";
+import { deriveModelOnboardingState } from "../model-onboarding";
 import type { SettingsSection } from "../settings-view";
 
 interface ActiveSlashFlow {
@@ -148,12 +149,27 @@ export function useSlashMenu(params: UseSlashMenuParams): SlashMenuState {
       : slashOptionsForCommand(activeSlashOptionCommand, selectedRuntime);
   const activeSlashOptionEmptyState = slashOptionEmptyState(
     activeSlashOptionCommand,
-    activeSlashOptionCommand?.kind === "model" ? selectedModelRuntime : selectedRuntime,
+    activeSlashOptionCommand?.kind === "model"
+      ? undefined
+      : selectedRuntime,
   );
+  const modelSlashEmptyState =
+    activeSlashOptionCommand?.kind === "model" && slashOptions.length === 0
+      ? (() => {
+          const state = deriveModelOnboardingState(selectedModelRuntime, {
+            provider: undefined,
+            modelId: undefined,
+          });
+          return {
+            title: state.emptyModelTitle,
+            description: state.emptyModelDescription,
+          };
+        })()
+      : undefined;
   const showSlashOptionMenu =
     !isRunning &&
     Boolean(activeSlashOptionCommand) &&
-    (slashOptions.length > 0 || Boolean(activeSlashOptionEmptyState));
+    (slashOptions.length > 0 || Boolean(modelSlashEmptyState ?? activeSlashOptionEmptyState));
   const selectedSlashOption = showSlashOptionMenu ? slashOptions[slashOptionIndex % slashOptions.length] : undefined;
 
   useEffect(() => {
@@ -405,7 +421,7 @@ export function useSlashMenu(params: UseSlashMenuParams): SlashMenuState {
     selectedSlashCommand,
     selectedSlashOption,
     slashOptions,
-    slashOptionEmptyState: activeSlashOptionEmptyState,
+    slashOptionEmptyState: modelSlashEmptyState ?? activeSlashOptionEmptyState,
     activeSlashFlow,
     activeSlashOptionCommand,
     resetSlashUi,

@@ -39,6 +39,12 @@ export interface LaunchDesktopOptions {
   readonly agentDir?: string;
 }
 
+export interface SeedAgentDirOptions {
+  readonly withOpenAiAuth?: boolean;
+  readonly withDefaultModel?: boolean;
+  readonly enabledModels?: readonly string[];
+}
+
 export async function launchDesktop(
   userDataDir: string,
   options: readonly string[] | LaunchDesktopOptions = [],
@@ -103,14 +109,21 @@ export async function makeUserDataDir(prefix = "pi-gui-user-data-"): Promise<str
   return mkdtemp(join(tmpdir(), prefix));
 }
 
-export async function seedAgentDir(agentDir: string): Promise<void> {
+export async function seedAgentDir(agentDir: string, options: SeedAgentDirOptions = {}): Promise<void> {
+  const {
+    withOpenAiAuth = true,
+    withDefaultModel = true,
+    enabledModels = ["openai/gpt-5", "openai/gpt-4o"],
+  } = options;
   await mkdir(agentDir, { recursive: true });
   await writeFile(
     join(agentDir, "auth.json"),
     `${JSON.stringify(
-      {
-        openai: { type: "api_key", key: "test-openai-key" },
-      },
+      withOpenAiAuth
+        ? {
+            openai: { type: "api_key", key: "test-openai-key" },
+          }
+        : {},
       null,
       2,
     )}\n`,
@@ -120,10 +133,9 @@ export async function seedAgentDir(agentDir: string): Promise<void> {
     join(agentDir, "settings.json"),
     `${JSON.stringify(
       {
-        defaultProvider: "openai",
-        defaultModel: "gpt-5",
+        ...(withDefaultModel ? { defaultProvider: "openai", defaultModel: "gpt-5" } : {}),
         defaultThinkingLevel: "medium",
-        enabledModels: ["openai/gpt-5", "openai/gpt-4o"],
+        enabledModels,
       },
       null,
       2,
