@@ -410,7 +410,10 @@ export function slashOptionsForCommand(
     return buildProviderOptions(runtime?.providers ?? [], (provider) => provider.oauthSupported);
   }
   if (command.kind === "logout") {
-    return buildProviderOptions(runtime?.providers ?? [], (provider) => provider.hasAuth);
+    return buildProviderOptions(
+      runtime?.providers ?? [],
+      (provider) => provider.authSource === "oauth" || provider.authSource === "auth_file",
+    );
   }
 
   return [];
@@ -474,13 +477,25 @@ function buildSlashSearchAliases(command: ComposerSlashCommand): readonly string
 }
 
 function describeProvider(provider: RuntimeProviderRecord): string {
+  if (provider.authSource === "oauth") {
+    return "OAuth connected";
+  }
+  if (provider.authSource === "auth_file") {
+    return "Saved API key";
+  }
+  if (provider.authSource === "env") {
+    return "Configured via environment";
+  }
+  if (provider.authSource === "external") {
+    return "Configured externally";
+  }
   if (provider.oauthSupported) {
-    return provider.hasAuth ? "OAuth connected" : "OAuth available";
+    return "OAuth available";
   }
-  if (provider.hasAuth) {
-    return "Configured";
+  if (provider.apiKeySetupSupported) {
+    return "Needs API key";
   }
-  return provider.authType === "api_key" ? "Needs API key" : "Available";
+  return "Available";
 }
 
 function compareProviders(left: RuntimeProviderRecord, right: RuntimeProviderRecord): number {

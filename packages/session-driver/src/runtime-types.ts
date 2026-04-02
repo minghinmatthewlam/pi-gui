@@ -1,6 +1,7 @@
 import type { WorkspaceRef } from "./types.js";
 
 export type RuntimeAuthType = "oauth" | "api_key" | "none";
+export type RuntimeProviderAuthSource = "none" | "oauth" | "auth_file" | "env" | "external";
 export type RuntimeSourceScope = "user" | "project" | "temporary";
 export type RuntimeSourceOrigin = "package" | "top-level";
 export type RuntimeCommandSource = "extension" | "prompt" | "skill";
@@ -18,7 +19,9 @@ export interface RuntimeProviderRecord {
   readonly name: string;
   readonly hasAuth: boolean;
   readonly authType: RuntimeAuthType;
+  readonly authSource: RuntimeProviderAuthSource;
   readonly oauthSupported: boolean;
+  readonly apiKeySetupSupported: boolean;
 }
 
 export interface RuntimeModelRecord {
@@ -132,6 +135,7 @@ export interface RuntimeResourceDriver {
   refreshRuntime(workspace: WorkspaceRef): Promise<RuntimeSnapshot>;
   login(workspace: WorkspaceRef, providerId: string, callbacks: RuntimeLoginCallbacks): Promise<RuntimeSnapshot>;
   logout(workspace: WorkspaceRef, providerId: string): Promise<RuntimeSnapshot>;
+  setProviderApiKey(workspace: WorkspaceRef, providerId: string, apiKey: string): Promise<RuntimeSnapshot>;
   setDefaultModel(
     workspace: WorkspaceRef,
     selection: {

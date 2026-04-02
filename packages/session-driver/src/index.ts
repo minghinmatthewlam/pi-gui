@@ -42,6 +42,7 @@ export type {
   RuntimeLoginCallbacks,
   RuntimeLoginPrompt,
   RuntimeModelRecord,
+  RuntimeProviderAuthSource,
   RuntimeProviderRecord,
   RuntimeResourceDriver,
   RuntimeSettingsSnapshot,

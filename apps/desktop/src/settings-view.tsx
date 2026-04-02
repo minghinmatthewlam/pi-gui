@@ -25,6 +25,8 @@ interface SettingsViewProps {
   readonly onSetScopedModelPatterns: (patterns: readonly string[]) => void;
   readonly onLoginProvider: (providerId: string) => void;
   readonly onLogoutProvider: (providerId: string) => void;
+  readonly onSetProviderApiKey: (providerId: string, apiKey: string) => Promise<string | undefined>;
+  readonly onRemoveProviderApiKey: (providerId: string) => Promise<string | undefined>;
   readonly onSetNotificationPreferences: (preferences: Partial<NotificationPreferences>) => void;
   readonly onSetThemeMode: (mode: "system" | "light" | "dark") => void;
 }
@@ -44,6 +46,8 @@ export function SettingsView({
   onSetScopedModelPatterns,
   onLoginProvider,
   onLogoutProvider,
+  onSetProviderApiKey,
+  onRemoveProviderApiKey,
   onSetNotificationPreferences,
   onSetThemeMode,
 }: SettingsViewProps) {
@@ -98,6 +102,8 @@ export function SettingsView({
               runtime={runtime}
               onLoginProvider={onLoginProvider}
               onLogoutProvider={onLogoutProvider}
+              onSetProviderApiKey={onSetProviderApiKey}
+              onRemoveProviderApiKey={onRemoveProviderApiKey}
             />
           ) : null}
 

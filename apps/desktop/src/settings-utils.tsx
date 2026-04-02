@@ -136,29 +136,91 @@ export function ProviderRow({
   provider,
   onLoginProvider,
   onLogoutProvider,
+  onConfigureApiKey,
 }: {
   readonly provider: RuntimeSnapshot["providers"][number];
   readonly onLoginProvider: (providerId: string) => void;
   readonly onLogoutProvider: (providerId: string) => void;
+  readonly onConfigureApiKey: (provider: RuntimeSnapshot["providers"][number]) => void;
 }) {
+  const action = resolveProviderAction(provider, onLoginProvider, onLogoutProvider, onConfigureApiKey);
   return (
     <div className="settings-row">
       <div className="settings-row__label">
         <div className="settings-row__title">{provider.name}</div>
-        <div className="settings-row__description">
-          {provider.oauthSupported ? "OAuth" : provider.authType === "api_key" ? "API key" : "Built in"}
-          {provider.hasAuth ? " · connected" : ""}
-        </div>
+        <div className="settings-row__description">{describeProviderStatus(provider)}</div>
       </div>
       <div className="settings-row__control">
         <button
           className="button button--secondary"
+          disabled={action.disabled}
           type="button"
-          onClick={() => (provider.hasAuth ? onLogoutProvider(provider.id) : onLoginProvider(provider.id))}
+          onClick={action.onClick}
         >
-          {provider.hasAuth ? "Logout" : provider.oauthSupported ? "Login" : "Configure externally"}
+          {action.label}
         </button>
       </div>
     </div>
   );
+}
+
+function describeProviderStatus(provider: RuntimeSnapshot["providers"][number]): string {
+  switch (provider.authSource) {
+    case "oauth":
+      return "OAuth · connected";
+    case "auth_file":
+      return "API key · connected";
+    case "env":
+      return "Environment variable · connected";
+    case "external":
+      return provider.hasAuth ? "Configured externally · connected" : "Configure externally";
+    default:
+      if (provider.oauthSupported) {
+        return "OAuth";
+      }
+      if (provider.apiKeySetupSupported) {
+        return "API key";
+      }
+      return provider.authType === "api_key" ? "API key" : "Built in";
+  }
+}
+
+function resolveProviderAction(
+  provider: RuntimeSnapshot["providers"][number],
+  onLoginProvider: (providerId: string) => void,
+  onLogoutProvider: (providerId: string) => void,
+  onConfigureApiKey: (provider: RuntimeSnapshot["providers"][number]) => void,
+): {
+  readonly disabled: boolean;
+  readonly label: string;
+  readonly onClick?: () => void;
+} {
+  if (provider.authSource === "oauth") {
+    return {
+      disabled: false,
+      label: "Logout",
+      onClick: () => onLogoutProvider(provider.id),
+    };
+  }
+
+  if (provider.oauthSupported && provider.authSource === "none") {
+    return {
+      disabled: false,
+      label: "Login",
+      onClick: () => onLoginProvider(provider.id),
+    };
+  }
+
+  if (provider.apiKeySetupSupported && (provider.authSource === "none" || provider.authSource === "auth_file")) {
+    return {
+      disabled: false,
+      label: provider.authSource === "auth_file" ? "Manage" : "Set API key",
+      onClick: () => onConfigureApiKey(provider),
+    };
+  }
+
+  return {
+    disabled: true,
+    label: provider.authSource === "env" || provider.authSource === "external" ? "Managed externally" : "Configure externally",
+  };
 }

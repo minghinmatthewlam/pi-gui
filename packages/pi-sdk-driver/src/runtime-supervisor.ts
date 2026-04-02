@@ -100,6 +100,22 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
     return this.buildSnapshot(context);
   }
 
+  async setProviderApiKey(workspace: WorkspaceRef, providerId: string, apiKey: string): Promise<RuntimeSnapshot> {
+    const context = await this.ensureContext(workspace);
+    const normalized = apiKey.trim();
+    if (!normalized) {
+      throw new Error("API key is required.");
+    }
+    if (!providerSupportsDesktopApiKeySetup(providerId)) {
+      throw new Error(`API key setup is not supported for ${providerId}.`);
+    }
+    this.authStorage.set(providerId, { type: "api_key", key: normalized });
+    this.modelRegistry.refresh();
+    await context.resourceLoader.reload();
+    await this.autoEnableModelsForAuthenticatedProviders(context, [providerId]);
+    return this.buildSnapshot(context);
+  }
+
   async setDefaultModel(
     workspace: WorkspaceRef,
     selection: {
@@ -339,12 +355,21 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
       .map((providerId) => {
         const auth = this.authStorage.get(providerId);
         const oauthProvider = oauthProviders.get(providerId);
+        const apiKeySetupSupported = providerSupportsDesktopApiKeySetup(providerId);
+        const hasAuth = this.authStorage.hasAuth(providerId);
         return {
           id: providerId,
           name: oauthProvider?.name ?? providerId,
-          hasAuth: this.authStorage.hasAuth(providerId),
+          hasAuth,
           authType: auth?.type ?? "none",
+          authSource: inferProviderAuthSource(
+            auth,
+            hasAuth,
+            apiKeySetupSupported,
+            providerHasModelConfigApiKey(this.modelRegistry, providerId),
+          ),
           oauthSupported: Boolean(oauthProvider),
+          apiKeySetupSupported,
         };
       });
   }
@@ -658,6 +683,57 @@ function inferSkillName(filePath: string): string {
 
 function inferExtensionName(filePath: string): string {
   return basename(filePath).replace(/\.(c|m)?(t|j)sx?$/i, "");
+}
+
+const DESKTOP_API_KEY_PROVIDER_IDS = new Set([
+  "azure-openai-responses",
+  "cerebras",
+  "google",
+  "groq",
+  "huggingface",
+  "kimi-coding",
+  "minimax",
+  "minimax-cn",
+  "mistral",
+  "openai",
+  "opencode",
+  "opencode-go",
+  "openrouter",
+  "vercel-ai-gateway",
+  "xai",
+  "zai",
+]);
+
+function providerSupportsDesktopApiKeySetup(providerId: string): boolean {
+  return DESKTOP_API_KEY_PROVIDER_IDS.has(providerId);
+}
+
+function inferProviderAuthSource(
+  auth: { readonly type: "oauth" | "api_key" } | undefined,
+  hasAuth: boolean,
+  apiKeySetupSupported: boolean,
+  hasModelConfigApiKey: boolean,
+): "none" | "oauth" | "auth_file" | "env" | "external" {
+  if (auth?.type === "oauth") {
+    return "oauth";
+  }
+  if (auth?.type === "api_key") {
+    return "auth_file";
+  }
+  if (!hasAuth) {
+    return "none";
+  }
+  if (hasModelConfigApiKey) {
+    return "external";
+  }
+  return apiKeySetupSupported ? "env" : "external";
+}
+
+function providerHasModelConfigApiKey(modelRegistry: ModelRegistry, providerId: string): boolean {
+  const customProviderApiKeys = (
+    modelRegistry as unknown as { customProviderApiKeys?: ReadonlyMap<string, unknown> }
+  ).customProviderApiKeys;
+  return customProviderApiKeys?.has(providerId) ?? false;
 }
 
 function toRuntimeSourceInfo(path: string, metadata: PathMetadata): RuntimeSourceInfo {

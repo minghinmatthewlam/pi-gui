@@ -1104,6 +1104,26 @@ export default function App() {
     void updateSnapshot(api, setSnapshot, () => api.logoutProvider(settingsWorkspace.id, providerId));
   };
 
+  const handleSetProviderApiKey = async (providerId: string, apiKey: string): Promise<string | undefined> => {
+    if (!api || !settingsWorkspace) {
+      return "Select a workspace first.";
+    }
+    const state = await updateSnapshot(api, setSnapshot, () =>
+      api.setProviderApiKey(settingsWorkspace.id, providerId, apiKey),
+    );
+    return state.lastError;
+  };
+
+  const handleRemoveProviderApiKey = async (providerId: string): Promise<string | undefined> => {
+    if (!api || !settingsWorkspace) {
+      return "Select a workspace first.";
+    }
+    const state = await updateSnapshot(api, setSnapshot, () =>
+      api.logoutProvider(settingsWorkspace.id, providerId),
+    );
+    return state.lastError;
+  };
+
   const handleToggleSkill = (filePath: string, enabled: boolean) => {
     if (!skillsWorkspace) {
       return;
@@ -1354,6 +1374,8 @@ export default function App() {
           themeMode={themeMode}
           onLoginProvider={handleLoginProvider}
           onLogoutProvider={handleLogoutProvider}
+          onSetProviderApiKey={handleSetProviderApiKey}
+          onRemoveProviderApiKey={handleRemoveProviderApiKey}
           onRefresh={handleRefreshRuntime}
           onSetModelSettingsScopeMode={handleSetModelSettingsScopeMode}
           onSetDefaultModel={handleSetDefaultModel}

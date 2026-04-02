@@ -359,6 +359,9 @@ app.whenReady().then(async () => {
   ipcMain.handle(desktopIpc.logoutProvider, (_event, workspaceId: string, providerId: string) =>
     store.logoutProvider(workspaceId, providerId),
   );
+  ipcMain.handle(desktopIpc.setProviderApiKey, (_event, workspaceId: string, providerId: string, apiKey: string) =>
+    store.setProviderApiKey(workspaceId, providerId, apiKey),
+  );
   ipcMain.handle(desktopIpc.setEnableSkillCommands, (_event, workspaceId: string, enabled: boolean) =>
     store.setEnableSkillCommands(workspaceId, enabled),
   );
