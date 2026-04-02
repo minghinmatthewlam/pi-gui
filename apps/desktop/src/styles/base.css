@@ -35,6 +35,14 @@
   --border: var(--line);
   --ink: var(--text);
   --ink-strong: var(--text-strong);
+  --button-primary-bg: var(--text-strong);
+  --button-primary-border: var(--text-strong);
+  --button-primary-ink: #ffffff;
+  --button-primary-hover-bg: #31384d;
+  --button-primary-hover-border: #31384d;
+  --button-primary-disabled-bg: #b7becc;
+  --button-primary-disabled-border: #b7becc;
+  --button-primary-disabled-ink: #ffffff;
 }
 
 :root.dark {
@@ -61,6 +69,14 @@
   --border: var(--line);
   --ink: var(--text);
   --ink-strong: var(--text-strong);
+  --button-primary-bg: #f4f4f5;
+  --button-primary-border: #f4f4f5;
+  --button-primary-ink: #1f2638;
+  --button-primary-hover-bg: #d4d4d8;
+  --button-primary-hover-border: #d4d4d8;
+  --button-primary-disabled-bg: #5f636b;
+  --button-primary-disabled-border: #5f636b;
+  --button-primary-disabled-ink: #f4f4f5;
 }
 
 * {
@@ -180,9 +196,9 @@ svg {
 }
 
 .button--primary {
-  background: var(--text-strong);
-  border-color: var(--text-strong);
-  color: white;
+  background: var(--button-primary-bg);
+  border-color: var(--button-primary-border);
+  color: var(--button-primary-ink);
 }
 
 .button--ghost {
@@ -201,8 +217,15 @@ svg {
 }
 
 .button--primary:hover:not(:disabled) {
-  background: #31384d;
-  border-color: #31384d;
+  background: var(--button-primary-hover-bg);
+  border-color: var(--button-primary-hover-border);
+}
+
+.button--primary:disabled {
+  opacity: 1;
+  background: var(--button-primary-disabled-bg);
+  border-color: var(--button-primary-disabled-border);
+  color: var(--button-primary-disabled-ink);
 }
 
 .button--cta-icon {
@@ -250,11 +273,6 @@ svg {
 :root.dark .button:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.1);
   border-color: rgba(255, 255, 255, 0.12);
-}
-
-:root.dark .button--primary:hover:not(:disabled) {
-  background: #d4d4d8;
-  border-color: #d4d4d8;
 }
 
 :root.dark .meta-chip {

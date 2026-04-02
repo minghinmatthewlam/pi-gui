@@ -43,9 +43,10 @@ export function extractImageFilesFromClipboardData(clipboardData: DataTransfer |
   }
 
   const itemFiles = Array.from(clipboardData.items ?? [])
-    .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
+    .filter((item) => item.kind === "file" && isImageFile(item))
     .map((item) => item.getAsFile())
-    .filter((file): file is File => Boolean(file));
+    .filter((file): file is File => Boolean(file))
+    .filter(isImageFile);
   const clipboardFiles = Array.from(clipboardData.files ?? []).filter(isImageFile);
   return dedupeFiles([...itemFiles, ...clipboardFiles]);
 }
