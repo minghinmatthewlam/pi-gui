@@ -21,7 +21,6 @@ test("creates and selects a worktree-backed workspace from the desktop UI", asyn
 
   try {
     const window = await harness.firstWindow();
-    await harness.focusWindow();
     const rootWorkspace = await waitForWorkspaceByPath(window, workspacePath);
 
     await window.getByRole("button", { name: `Workspace actions for ${rootWorkspace.name}` }).click();
@@ -68,7 +67,6 @@ test("shows a worktree icon in the sidebar without a local text badge", async ()
 
   try {
     const window = await harness.firstWindow();
-    await harness.focusWindow();
     const rootWorkspace = await waitForWorkspaceByPath(window, workspacePath);
 
     await createNamedThread(window, "Local thread");

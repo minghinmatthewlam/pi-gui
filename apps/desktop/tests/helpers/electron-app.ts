@@ -739,19 +739,35 @@ export async function setDeferredThreadTitleMode(harness: DesktopHarness): Promi
   });
 }
 
-export async function resolveDeferredThreadTitle(harness: DesktopHarness, title: string): Promise<void> {
+export async function resolveDeferredThreadTitleEventually(
+  harness: DesktopHarness,
+  title: string,
+  timeout = 15_000,
+): Promise<void> {
+  let resolved = false;
   await expect
     .poll(
-      () =>
-        harness.electronApp.evaluate(() => {
-          const hooks = (globalThis as {
-            __PI_APP_TEST_HOOKS?: { hasDeferredThreadTitle?: () => boolean };
-          }).__PI_APP_TEST_HOOKS;
-          return hooks?.hasDeferredThreadTitle?.() ?? false;
-        }),
-      { timeout: 15_000 },
+      async () => {
+        if (resolved) {
+          return "resolved";
+        }
+        try {
+          await resolveDeferredThreadTitle(harness, title);
+          resolved = true;
+          return "resolved";
+        } catch (error) {
+          if (String(error).includes("Deferred thread-title request is unavailable")) {
+            return "pending";
+          }
+          throw error;
+        }
+      },
+      { timeout },
     )
-    .toBe(true);
+    .toBe("resolved");
+}
+
+export async function resolveDeferredThreadTitle(harness: DesktopHarness, title: string): Promise<void> {
   await harness.electronApp.evaluate(async (_, nextTitle) => {
     const hooks = (globalThis as {
       __PI_APP_TEST_HOOKS?: { resolveDeferredThreadTitle?: (title: string) => void };
@@ -764,18 +780,6 @@ export async function resolveDeferredThreadTitle(harness: DesktopHarness, title:
 }
 
 export async function rejectDeferredThreadTitle(harness: DesktopHarness): Promise<void> {
-  await expect
-    .poll(
-      () =>
-        harness.electronApp.evaluate(() => {
-          const hooks = (globalThis as {
-            __PI_APP_TEST_HOOKS?: { hasDeferredThreadTitle?: () => boolean };
-          }).__PI_APP_TEST_HOOKS;
-          return hooks?.hasDeferredThreadTitle?.() ?? false;
-        }),
-      { timeout: 15_000 },
-    )
-    .toBe(true);
   await harness.electronApp.evaluate(async () => {
     const hooks = (globalThis as {
       __PI_APP_TEST_HOOKS?: { rejectDeferredThreadTitle?: () => void };
@@ -1074,12 +1078,72 @@ export async function startThreadFromSurface(
   } else {
     await window.getByRole("button", { name: "Local", exact: true }).click();
   }
+  const startButton = window.getByRole("button", { name: "Start thread" });
   if (prompt) {
     await window.getByLabel("New thread prompt").fill(prompt);
   }
-  await window.getByRole("button", { name: "Start thread" }).click();
+  await expect(startButton).toBeEnabled({ timeout: 15_000 });
+  await startButton.click();
   await expect(window.getByTestId("composer")).toBeVisible({ timeout: 15_000 });
   await expect(window.getByTestId("composer")).toBeFocused({ timeout: 15_000 });
+}
+
+export async function startThreadViaIpc(
+  window: Page,
+  options: {
+    readonly environment?: NewThreadEnvironment;
+    readonly prompt?: string;
+    readonly workspaceName?: string;
+  } = {},
+): Promise<void> {
+  const {
+    environment = "local",
+    prompt = "Start thread",
+    workspaceName,
+  } = options;
+
+  const rootWorkspaceId = await window.evaluate(
+    async ({ requestedWorkspaceName }) => {
+      const app = (window as PiAppWindow).piApp;
+      if (!app) {
+        throw new Error("piApp IPC bridge is unavailable");
+      }
+
+      const state = await app.getState();
+      const targetWorkspace = requestedWorkspaceName
+        ? state.workspaces.find((workspace) => workspace.name === requestedWorkspaceName)
+        : state.workspaces.find((workspace) => workspace.id === state.selectedWorkspaceId);
+      if (!targetWorkspace) {
+        throw new Error(
+          requestedWorkspaceName
+            ? `Workspace not found: ${requestedWorkspaceName}`
+            : "No selected workspace while starting thread",
+        );
+      }
+      return targetWorkspace.rootWorkspaceId ?? targetWorkspace.id;
+    },
+    { requestedWorkspaceName: workspaceName },
+  );
+
+  await window.evaluate(
+    async ({ rootWorkspaceId, nextEnvironment, nextPrompt }) => {
+      const app = (window as PiAppWindow).piApp;
+      if (!app) {
+        throw new Error("piApp IPC bridge is unavailable");
+      }
+      await app.startThread({
+        rootWorkspaceId,
+        environment: nextEnvironment,
+        prompt: nextPrompt,
+      });
+    },
+    {
+      rootWorkspaceId,
+      nextEnvironment: environment,
+      nextPrompt: prompt,
+    },
+  );
+  await expect(window.getByTestId("composer")).toBeVisible({ timeout: 15_000 });
 }
 
 export async function createNamedThread(

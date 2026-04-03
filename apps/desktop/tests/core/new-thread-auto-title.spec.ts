@@ -7,9 +7,10 @@ import {
   makeUserDataDir,
   makeWorkspace,
   resolveDeferredThreadTitle,
+  resolveDeferredThreadTitleEventually,
   selectSession,
   setDeferredThreadTitleMode,
-  startThreadFromSurface,
+  startThreadViaIpc,
   waitForWorkspaceByPath,
 } from "../helpers/electron-app";
 
@@ -25,7 +26,7 @@ test("auto-titles a brand-new local thread after showing the placeholder first",
     const window = await harness.firstWindow();
     await setDeferredThreadTitleMode(harness);
 
-    await startThreadFromSurface(window, {
+    await startThreadViaIpc(window, {
       prompt: "Refactor the session title flow and keep sidebar state in sync",
     });
 
@@ -33,7 +34,7 @@ test("auto-titles a brand-new local thread after showing the placeholder first",
     await expect(window.locator(".topbar__session")).toHaveText("New thread");
     await expect(placeholderRow).toBeVisible();
 
-    await resolveDeferredThreadTitle(harness, "Refactor title flow");
+    await resolveDeferredThreadTitleEventually(harness, "Refactor title flow");
 
     await expect(window.locator(".topbar__session")).toHaveText("Refactor title flow");
     await expect(window.locator(".session-row__select", { hasText: "Refactor title flow" }).first()).toBeVisible();
@@ -57,7 +58,7 @@ test("auto-titles a brand-new worktree thread after showing the placeholder firs
     const rootWorkspace = await waitForWorkspaceByPath(window, workspacePath);
     await setDeferredThreadTitleMode(harness);
 
-    await startThreadFromSurface(window, {
+    await startThreadViaIpc(window, {
       environment: "worktree",
       workspaceName: rootWorkspace.name,
       prompt: "Fix the worktree rename race before shipping",
@@ -67,7 +68,7 @@ test("auto-titles a brand-new worktree thread after showing the placeholder firs
     await expect(window.locator(".topbar__session")).toHaveText("New thread");
     await expect(placeholderRow).toBeVisible();
 
-    await resolveDeferredThreadTitle(harness, "Fix worktree rename");
+    await resolveDeferredThreadTitleEventually(harness, "Fix worktree rename");
 
     await expect(window.locator(".topbar__session")).toHaveText("Fix worktree rename");
     await expect(window.locator(".session-row__select", { hasText: "Fix worktree rename" }).first()).toBeVisible();
@@ -90,7 +91,7 @@ test("switching away does not cancel a pending auto-title", async () => {
     await createNamedThread(window, "Existing thread");
     await setDeferredThreadTitleMode(harness);
 
-    await startThreadFromSurface(window, {
+    await startThreadViaIpc(window, {
       prompt: "Keep auto title alive after switching views",
     });
 
@@ -98,7 +99,7 @@ test("switching away does not cancel a pending auto-title", async () => {
     await selectSession(window, "Existing thread");
     await expect.poll(async () => (await getDesktopState(window)).selectedWorkspaceId).toBe(workspace.id);
 
-    await resolveDeferredThreadTitle(harness, "Keep title after nav");
+    await resolveDeferredThreadTitleEventually(harness, "Keep title after nav");
 
     await expect(window.locator(".session-row__select", { hasText: "Keep title after nav" }).first()).toBeVisible();
     await window.locator(".session-row__select", { hasText: "Keep title after nav" }).first().click();
@@ -120,7 +121,7 @@ test("manual rename beats a delayed auto-title result", async () => {
     const window = await harness.firstWindow();
     await setDeferredThreadTitleMode(harness);
 
-    await startThreadFromSurface(window, {
+    await startThreadViaIpc(window, {
       prompt: "Build a deferred thread title test seam",
     });
 
@@ -135,7 +136,7 @@ test("manual rename beats a delayed auto-title result", async () => {
     await expect(window.locator(".topbar__session")).toHaveText("Manual title wins");
     await expect(window.locator(".session-row__select", { hasText: "Manual title wins" }).first()).toBeVisible();
 
-    await resolveDeferredThreadTitle(harness, "Ignored generated title");
+    await resolveDeferredThreadTitleEventually(harness, "Ignored generated title");
 
     await expect(window.locator(".topbar__session")).toHaveText("Manual title wins");
     await expect(window.locator(".session-row__select", { hasText: "Manual title wins" }).first()).toBeVisible();
@@ -157,12 +158,12 @@ test("later sends do not retrigger auto-title generation", async () => {
     const window = await harness.firstWindow();
     await setDeferredThreadTitleMode(harness);
 
-    await startThreadFromSurface(window, {
+    await startThreadViaIpc(window, {
       prompt: "Track a one-shot title request token",
     });
 
     await expect(window.locator(".topbar__session")).toHaveText("New thread");
-    await resolveDeferredThreadTitle(harness, "Track title token");
+    await resolveDeferredThreadTitleEventually(harness, "Track title token");
     await expect(window.locator(".topbar__session")).toHaveText("Track title token");
     await expect(window.locator(".session-row__select", { hasText: "Track title token" }).first()).toBeVisible();
     await waitForComposerReadyForNextSubmit(window);
