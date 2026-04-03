@@ -135,7 +135,9 @@ export async function startThread(store: AppStoreInternals, input: StartThreadIn
     // Fire message in background — assistantDelta events flow through
     // handleSessionEvent → emit() and update React while on the thread view
     if (prompt || attachments.length > 0) {
-      void sendMessageToSession(store, session.ref, prompt, attachments).catch((error) => {
+      void sendMessageToSession(store, session.ref, prompt, attachments, {
+        rollbackOptimisticMessageOnError: false,
+      }).catch((error) => {
         void store.withError(error);
       });
     }

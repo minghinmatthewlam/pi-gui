@@ -229,8 +229,12 @@ export async function sendMessageToSession(
   sessionRef: SessionRef,
   text: string,
   attachments: readonly ComposerAttachment[],
+  options: {
+    readonly rollbackOptimisticMessageOnError?: boolean;
+  } = {},
 ): Promise<void> {
   const key = sessionKey(sessionRef);
+  const rollbackOptimisticMessageOnError = options.rollbackOptimisticMessageOnError ?? true;
   if (!store.sessionState.loadedTranscriptKeys.has(key)) {
     await store.ensureSessionReady(sessionRef);
   }
@@ -256,10 +260,12 @@ export async function sendMessageToSession(
       attachments: toSessionAttachments(attachments),
     });
   } catch (error) {
-    const transcript = store.sessionState.transcriptCache.get(key) ?? [];
-    store.sessionState.transcriptCache.set(key, transcript.slice(0, -1));
-    store.publishSelectedTranscriptFor(sessionRef);
-    store.persistTranscriptCacheForSession(sessionRef);
+    if (rollbackOptimisticMessageOnError) {
+      const transcript = store.sessionState.transcriptCache.get(key) ?? [];
+      store.sessionState.transcriptCache.set(key, transcript.slice(0, -1));
+      store.publishSelectedTranscriptFor(sessionRef);
+      store.persistTranscriptCacheForSession(sessionRef);
+    }
     throw error;
   }
 }
