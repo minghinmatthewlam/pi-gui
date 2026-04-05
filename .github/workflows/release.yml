@@ -67,6 +67,9 @@ jobs:
             --publish never \
             "-c.extraMetadata.version=${GITHUB_REF_NAME#v}"
 
+      - name: Verify packaged runtime dependencies
+        run: pnpm --dir apps/desktop run verify:packaged-runtime-deps
+
       - name: Staple macOS artifacts
         run: |
           xcrun stapler staple apps/desktop/release/*.dmg

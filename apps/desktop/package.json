@@ -15,6 +15,7 @@
     "package": "pnpm run build && electron-builder --mac",
     "package:dir": "pnpm run build && electron-builder --mac --dir",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.electron.json --noEmit",
+    "verify:packaged-runtime-deps": "node scripts/assert-packaged-runtime-deps.mjs",
     "test": "pnpm run test:e2e",
     "test:e2e": "pnpm run test:e2e:core",
     "test:e2e:all": "pnpm run test:e2e:core && pnpm run test:e2e:live && pnpm run test:e2e:native",
@@ -54,6 +55,10 @@
   "dependencies": {
     "@pi-gui/pi-sdk-driver": "workspace:*",
     "@pi-gui/session-driver": "workspace:*",
+    "chalk": "^5.5.0",
+    "glob": "^13.0.1",
+    "hosted-git-info": "^9.0.2",
+    "minimatch": "^10.2.3",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-markdown": "^10.1.0",
