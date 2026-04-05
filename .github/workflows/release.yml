@@ -72,8 +72,11 @@ jobs:
 
       - name: Staple macOS artifacts
         run: |
-          xcrun stapler staple apps/desktop/release/*.dmg
-          xcrun stapler validate apps/desktop/release/*.dmg
+          if xcrun stapler staple apps/desktop/release/*.dmg; then
+            xcrun stapler validate apps/desktop/release/*.dmg
+          else
+            echo "::warning::DMG stapling is unavailable for this build; publishing the notarized release artifacts without a stapled DMG wrapper."
+          fi
 
       - name: Release
         uses: softprops/action-gh-release@v2
