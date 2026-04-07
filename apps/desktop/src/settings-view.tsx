@@ -1,6 +1,5 @@
 import type { RuntimeSettingsSnapshot, RuntimeSnapshot } from "@pi-gui/session-driver/runtime-types";
 import type { ModelSettingsScopeMode, NotificationPreferences, WorkspaceRecord } from "./desktop-state";
-import { RefreshIcon } from "./icons";
 import { SettingsAppearanceSection } from "./settings-appearance-section";
 import { SettingsGeneralSection } from "./settings-general-section";
 import { SettingsModelsSection } from "./settings-models-section";
@@ -17,7 +16,6 @@ interface SettingsViewProps {
   readonly notificationPreferences: NotificationPreferences;
   readonly modelSettingsScopeMode: ModelSettingsScopeMode;
   readonly themeMode: "system" | "light" | "dark";
-  readonly onRefresh: () => void;
   readonly onSetModelSettingsScopeMode: (mode: ModelSettingsScopeMode) => void;
   readonly onSetDefaultModel: (provider: string, modelId: string) => void;
   readonly onSetThinkingLevel: (thinkingLevel: RuntimeSettingsSnapshot["defaultThinkingLevel"]) => void;
@@ -38,7 +36,6 @@ export function SettingsView({
   notificationPreferences,
   modelSettingsScopeMode,
   themeMode,
-  onRefresh,
   onSetModelSettingsScopeMode,
   onSetDefaultModel,
   onSetThinkingLevel,
@@ -74,10 +71,6 @@ export function SettingsView({
               {sectionDescription(section, workspace?.name ?? "this workspace")}
             </p>
           </div>
-          <button className="button button--secondary" type="button" onClick={onRefresh}>
-            <RefreshIcon />
-            <span>Refresh</span>
-          </button>
         </header>
 
         <div className="settings-grid">

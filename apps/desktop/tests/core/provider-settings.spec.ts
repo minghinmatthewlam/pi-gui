@@ -7,6 +7,7 @@ import {
   makeUserDataDir,
   makeWorkspace,
   seedAgentDir,
+  stubNextOpenDialog,
 } from "../helpers/electron-app";
 
 test("settings lets the user save an API key for a built-in provider", async () => {
@@ -162,6 +163,60 @@ test("settings keeps models.json provider overrides in the external-config state
     });
     await expect(openAiRow).toContainText("Configured externally");
     await expect(openAiRow.getByRole("button", { name: "Managed externally" })).toBeDisabled();
+  } finally {
+    await harness.close();
+  }
+});
+
+test("opening the first workspace from the empty state hydrates provider and model settings without refresh", async () => {
+  test.setTimeout(60_000);
+  const userDataDir = await makeUserDataDir();
+  const agentDir = join(userDataDir, "agent");
+  const workspacePath = await makeWorkspace("provider-settings-first-workspace");
+  await seedAgentDir(agentDir, {
+    enabledModels: ["openai/gpt-5", "openai/gpt-4o"],
+  });
+
+  const harness = await launchDesktop(userDataDir, {
+    agentDir,
+    scrubProviderEnv: true,
+    testMode: "background",
+  });
+
+  try {
+    const window = await harness.firstWindow();
+    const emptyState = window.getByTestId("empty-state");
+    await expect(emptyState).toBeVisible();
+
+    await stubNextOpenDialog(harness, [workspacePath]);
+    await emptyState.getByRole("button", { name: "Open first folder" }).click();
+
+    await expect(emptyState).toHaveCount(0);
+    await expect(window.getByTestId("workspace-list")).toContainText("provider-settings-first-workspace");
+    await expect(window.getByTestId("new-thread-composer")).toBeVisible();
+
+    await window.keyboard.press(desktopShortcut(","));
+    const settingsSurface = window.getByTestId("settings-surface");
+    await expect(settingsSurface).toBeVisible();
+    await expect(settingsSurface.getByRole("button", { name: "Refresh", exact: true })).toHaveCount(0);
+
+    await window.getByRole("button", { name: "Providers", exact: true }).click();
+    await expect(window.locator(".view-header__title")).toHaveText("Providers");
+
+    const connectedProviders = window.locator(".settings-section", {
+      has: window.locator(".settings-section__title", { hasText: "Connected" }),
+    });
+    await expect(connectedProviders).toContainText("openai");
+    await expect(connectedProviders).toContainText("API key");
+
+    await window.getByRole("button", { name: "Models", exact: true }).click();
+    await expect(window.locator(".view-header__title")).toHaveText("Models");
+
+    const enabledModels = window.locator(".settings-section", {
+      has: window.locator(".settings-section__title", { hasText: "Enabled models" }),
+    });
+    await expect(enabledModels).toContainText("openai/gpt-5");
+    await expect(enabledModels).toContainText("openai/gpt-4o");
   } finally {
     await harness.close();
   }

@@ -1048,13 +1048,6 @@ export default function App() {
     );
   };
 
-  const handleRefreshRuntime = () => {
-    if (!settingsWorkspace) {
-      return;
-    }
-    void updateSnapshot(api, setSnapshot, () => api.refreshRuntime(settingsWorkspace.id));
-  };
-
   const handleSetDefaultModel = (provider: string, modelId: string) => {
     if (!settingsWorkspace) {
       return;
@@ -1376,7 +1369,6 @@ export default function App() {
           onLogoutProvider={handleLogoutProvider}
           onSetProviderApiKey={handleSetProviderApiKey}
           onRemoveProviderApiKey={handleRemoveProviderApiKey}
-          onRefresh={handleRefreshRuntime}
           onSetModelSettingsScopeMode={handleSetModelSettingsScopeMode}
           onSetDefaultModel={handleSetDefaultModel}
           onSetNotificationPreferences={handleSetNotificationPreferences}

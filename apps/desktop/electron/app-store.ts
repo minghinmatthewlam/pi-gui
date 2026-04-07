@@ -941,7 +941,7 @@ export class DesktopAppStore implements AppStoreInternals {
       return;
     }
 
-    const snapshot = await this.driver.runtimeSupervisor.getRuntimeSnapshot({
+    const snapshot = await this.driver.runtimeSupervisor.refreshRuntime({
       workspaceId: ws.workspaceId,
       path: ws.path,
       displayName: ws.displayName,
