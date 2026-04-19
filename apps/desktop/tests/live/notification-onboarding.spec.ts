@@ -4,25 +4,13 @@ import { getDesktopState, launchDesktop, makeUserDataDir, makeWorkspace } from "
 import { emitRunningEvent, readOptionalLog } from "../helpers/notification-events";
 import { createThread, selectSessionByTitle, setSessionVisibilityOverride } from "./session-event-test-helpers";
 
-type NotificationTestApi = {
-  setNotificationPreferences: (preferences: {
-    backgroundCompletion: boolean;
-    backgroundFailure: boolean;
-    attentionNeeded: boolean;
-  }) => Promise<unknown>;
-};
+async function openNotificationSettings(window: Page): Promise<void> {
+  await window.getByRole("button", { name: "Settings", exact: true }).click();
+  await window.getByRole("button", { name: "Notifications", exact: true }).click();
+}
 
-async function setNotificationPreferences(
-  window: Page,
-  preferences: { backgroundCompletion: boolean; backgroundFailure: boolean; attentionNeeded: boolean },
-): Promise<void> {
-  await window.evaluate(async (nextPreferences) => {
-    const app = (window as Window & { piApp?: NotificationTestApi }).piApp;
-    if (!app) {
-      throw new Error("piApp IPC bridge is unavailable");
-    }
-    await app.setNotificationPreferences(nextPreferences);
-  }, preferences);
+async function returnToThreads(window: Page): Promise<void> {
+  await window.getByRole("button", { name: "Back to app", exact: true }).click();
 }
 
 test("requests notification permission when the user switches away from a running session", async () => {
@@ -50,9 +38,13 @@ test("requests notification permission when the user switches away from a runnin
     await expect.poll(() => readOptionalLog(requestLogPath), { timeout: 5_000 }).toBe("");
     await selectSessionByTitle(window, "Onboarding Session B");
     await expect.poll(() => readOptionalLog(requestLogPath), { timeout: 5_000 }).not.toBe("");
+    const firstPromptLog = await readOptionalLog(requestLogPath);
 
-    await window.getByRole("button", { name: "Settings", exact: true }).click();
-    await window.getByRole("button", { name: "Notifications", exact: true }).click();
+    await selectSessionByTitle(window, "Onboarding Session A");
+    await selectSessionByTitle(window, "Onboarding Session B");
+    await expect.poll(() => readOptionalLog(requestLogPath), { timeout: 5_000 }).toBe(firstPromptLog);
+
+    await openNotificationSettings(window);
     await expect(window.locator(".settings-view")).toContainText("Enabled");
   } finally {
     await harness.close();
@@ -138,9 +130,11 @@ test("requests notification permission after a backgrounded session later flips 
     const window = await harness.firstWindow();
     const sessionA = await createThread(window, "Late Running Session A");
     await createThread(window, "Late Running Session B");
+    await createThread(window, "Late Running Session C");
     await setSessionVisibilityOverride(harness, "active");
     await selectSessionByTitle(window, "Late Running Session A");
     await selectSessionByTitle(window, "Late Running Session B");
+    await selectSessionByTitle(window, "Late Running Session C");
 
     await expect.poll(() => readOptionalLog(requestLogPath), { timeout: 5_000 }).toBe("");
     await emitRunningEvent(harness, sessionA, "LateRunning");
@@ -169,11 +163,17 @@ test("does not request notification permission when all notification categories 
     const sessionA = await createThread(window, "Disabled Session A");
     await createThread(window, "Disabled Session B");
     await setSessionVisibilityOverride(harness, "active");
-    await setNotificationPreferences(window, {
-      backgroundCompletion: false,
-      backgroundFailure: false,
-      attentionNeeded: false,
-    });
+    await openNotificationSettings(window);
+    const backgroundCompletion = window.getByLabel("Background completion", { exact: true });
+    const backgroundFailure = window.getByLabel("Background failures", { exact: true });
+    const attentionNeeded = window.getByLabel("Needs input or approval", { exact: true });
+    await backgroundCompletion.click();
+    await backgroundFailure.click();
+    await attentionNeeded.click();
+    await expect(backgroundCompletion).not.toBeChecked();
+    await expect(backgroundFailure).not.toBeChecked();
+    await expect(attentionNeeded).not.toBeChecked();
+    await returnToThreads(window);
     await selectSessionByTitle(window, "Disabled Session A");
     await emitRunningEvent(harness, sessionA, "Disabled");
     await selectSessionByTitle(window, "Disabled Session B");
@@ -181,6 +181,43 @@ test("does not request notification permission when all notification categories 
     await expect.poll(() => readOptionalLog(requestLogPath), { timeout: 5_000 }).toBe("");
   } finally {
     await harness.close();
+  }
+});
+
+test("does not request notification permission twice after macOS decides during this launch", async () => {
+  for (const status of ["denied", "granted"] as const) {
+    const userDataDir = await makeUserDataDir(`pi-gui-notification-decides-${status}-`);
+    const requestLogPath = join(userDataDir, `notification-onboarding-decides-${status}.log`);
+    const workspacePath = await makeWorkspace(`notification-onboarding-decides-${status}-workspace`);
+    const harness = await launchDesktop(userDataDir, {
+      initialWorkspaces: [workspacePath],
+      testMode: "background",
+      envOverrides: {
+        PI_APP_TEST_NOTIFICATION_PERMISSION_STATUS: "default",
+        PI_APP_TEST_NOTIFICATION_PERMISSION_REQUEST_RESULT: status,
+        PI_APP_TEST_NOTIFICATION_PERMISSION_REQUEST_LOG_PATH: requestLogPath,
+      },
+    });
+
+    try {
+      const window = await harness.firstWindow();
+      const sessionA = await createThread(window, `${status} Decides Session A`);
+      await createThread(window, `${status} Decides Session B`);
+      await setSessionVisibilityOverride(harness, "active");
+      await selectSessionByTitle(window, `${status} Decides Session A`);
+      await emitRunningEvent(harness, sessionA, `${status}Decides`);
+
+      await expect.poll(() => readOptionalLog(requestLogPath), { timeout: 5_000 }).toBe("");
+      await selectSessionByTitle(window, `${status} Decides Session B`);
+      await expect.poll(() => readOptionalLog(requestLogPath), { timeout: 5_000 }).not.toBe("");
+      const firstPromptLog = await readOptionalLog(requestLogPath);
+
+      await selectSessionByTitle(window, `${status} Decides Session A`);
+      await selectSessionByTitle(window, `${status} Decides Session B`);
+      await expect.poll(() => readOptionalLog(requestLogPath), { timeout: 5_000 }).toBe(firstPromptLog);
+    } finally {
+      await harness.close();
+    }
   }
 });
 

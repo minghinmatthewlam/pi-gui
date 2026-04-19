@@ -8,7 +8,6 @@ const execFileAsync = promisify(execFile);
 const TEST_STATUS_ENV = "PI_APP_TEST_NOTIFICATION_PERMISSION_STATUS";
 const TEST_REQUEST_RESULT_ENV = "PI_APP_TEST_NOTIFICATION_PERMISSION_REQUEST_RESULT";
 const TEST_REQUEST_LOG_PATH_ENV = "PI_APP_TEST_NOTIFICATION_PERMISSION_REQUEST_LOG_PATH";
-const TEST_RENDERER_REQUEST_LOG_PATH_ENV = "PI_APP_TEST_NOTIFICATION_PERMISSION_RENDERER_LOG_PATH";
 const TEST_SETTINGS_LOG_PATH_ENV = "PI_APP_TEST_NOTIFICATION_SETTINGS_LOG_PATH";
 
 let testPermissionStatus = normalizePermissionStatus(process.env[TEST_STATUS_ENV]);
@@ -42,7 +41,6 @@ export async function requestNotificationPermission(
         : `globalThis.Notification ? Notification.requestPermission() : Promise.resolve("unsupported")`,
       true,
     );
-    await logRendererPermissionRequest();
     const normalized = normalizePermissionStatus(value) ?? "unknown";
     if (override) {
       testPermissionStatus = normalized;
@@ -112,15 +110,6 @@ async function readRendererNotificationPermission(
 
 async function logPermissionRequestAttempt(): Promise<void> {
   const testLogPath = process.env[TEST_REQUEST_LOG_PATH_ENV]?.trim();
-  if (!testLogPath) {
-    return;
-  }
-
-  await appendFile(testLogPath, `${new Date().toISOString()}\n`, "utf8");
-}
-
-async function logRendererPermissionRequest(): Promise<void> {
-  const testLogPath = process.env[TEST_RENDERER_REQUEST_LOG_PATH_ENV]?.trim();
   if (!testLogPath) {
     return;
   }

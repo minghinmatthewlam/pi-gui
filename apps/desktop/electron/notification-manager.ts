@@ -16,7 +16,7 @@ export class NotificationManager {
   private trackedWindow: BrowserWindow | null = null;
   private stopTrackingWindow: (() => void) | undefined;
   private lastActivelyViewedSession: SessionRef | undefined;
-  private backgroundCandidateSession: SessionRef | undefined;
+  private backgroundCandidateSessions: SessionRef[] = [];
   private permissionRequestPending = false;
 
   constructor(
@@ -69,14 +69,14 @@ export class NotificationManager {
     if (!window) {
       this.trackedWindow = null;
       this.lastActivelyViewedSession = undefined;
-      this.backgroundCandidateSession = undefined;
+      this.backgroundCandidateSessions = [];
       return;
     }
 
     this.trackedWindow = window && !window.isDestroyed() ? window : null;
     if (!this.trackedWindow) {
       this.lastActivelyViewedSession = undefined;
-      this.backgroundCandidateSession = undefined;
+      this.backgroundCandidateSessions = [];
       return;
     }
 
@@ -168,14 +168,14 @@ export class NotificationManager {
     }
     if (!Notification.isSupported()) {
       this.lastActivelyViewedSession = undefined;
-      this.backgroundCandidateSession = undefined;
+      this.backgroundCandidateSessions = [];
       return;
     }
 
     const state = this.latestState;
     if (!state) {
       this.lastActivelyViewedSession = undefined;
-      this.backgroundCandidateSession = undefined;
+      this.backgroundCandidateSessions = [];
       return;
     }
 
@@ -185,7 +185,12 @@ export class NotificationManager {
     this.lastActivelyViewedSession = nextActivelyViewedSession;
 
     if (previousActivelyViewedSession && !sameSessionRef(previousActivelyViewedSession, nextActivelyViewedSession)) {
-      this.backgroundCandidateSession = previousActivelyViewedSession;
+      this.enqueueBackgroundCandidate(previousActivelyViewedSession);
+    }
+    if (nextActivelyViewedSession) {
+      this.backgroundCandidateSessions = this.backgroundCandidateSessions.filter(
+        (candidateSessionRef) => !sameSessionRef(candidateSessionRef, nextActivelyViewedSession),
+      );
     }
 
     await this.maybeRequestNotificationPermission(state, window);
@@ -199,23 +204,18 @@ export class NotificationManager {
       return;
     }
 
-    const candidateSessionRef = this.backgroundCandidateSession;
-    if (!candidateSessionRef) {
-      return;
-    }
+    this.backgroundCandidateSessions = this.backgroundCandidateSessions.filter((candidateSessionRef) => {
+      if (isSessionActivelyViewed(state, candidateSessionRef, window)) {
+        return false;
+      }
+      return Boolean(this.sessionFromLatestState(candidateSessionRef));
+    });
 
-    const candidateSession = this.sessionFromLatestState(candidateSessionRef);
-    if (!candidateSession) {
-      this.backgroundCandidateSession = undefined;
-      return;
-    }
-
-    if (isSessionActivelyViewed(state, candidateSessionRef, window)) {
-      this.backgroundCandidateSession = undefined;
-      return;
-    }
-
-    if (candidateSession.status !== "running") {
+    const nextRunnableCandidate = this.backgroundCandidateSessions.find((candidateSessionRef) => {
+      const candidateSession = this.sessionFromLatestState(candidateSessionRef);
+      return candidateSession?.status === "running";
+    });
+    if (!nextRunnableCandidate) {
       return;
     }
 
@@ -227,9 +227,16 @@ export class NotificationManager {
     try {
       await ensureNotificationPermission(window);
     } finally {
-      this.backgroundCandidateSession = undefined;
+      this.backgroundCandidateSessions = [];
       this.permissionRequestPending = false;
     }
+  }
+
+  private enqueueBackgroundCandidate(sessionRef: SessionRef): void {
+    if (this.backgroundCandidateSessions.some((candidateSessionRef) => sameSessionRef(candidateSessionRef, sessionRef))) {
+      return;
+    }
+    this.backgroundCandidateSessions.push(sessionRef);
   }
 
   private async showNotification(sessionRef: SessionRef, title: string, body: string): Promise<void> {
