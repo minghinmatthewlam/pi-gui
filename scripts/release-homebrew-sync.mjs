@@ -13,11 +13,6 @@ async function git(tapDir, args) {
   return execFile("git", ["-C", tapDir, ...args], { encoding: "utf8" });
 }
 
-async function getChangedFiles(tapDir, caskPath) {
-  const { stdout } = await git(tapDir, ["status", "--short", "--", caskPath]);
-  return stdout.trim();
-}
-
 async function main() {
   const { values } = parseArgs({
     args: process.argv.slice(2),
@@ -64,6 +59,7 @@ async function main() {
   const result = await applyHomebrewTapUpdate({
     assetUrl,
     caskToken: values["cask-token"],
+    dryRun: values["dry-run"],
     sha256,
     tapDir: values["tap-dir"],
     version: values.version,
@@ -78,13 +74,12 @@ async function main() {
   const shouldPush = values.push;
 
   if (values["dry-run"]) {
-    const changed = await getChangedFiles(values["tap-dir"], result.caskPath);
     process.stdout.write(
       `${JSON.stringify(
         {
           assetUrl,
           caskPath: result.caskPath,
-          changed: Boolean(changed),
+          changed: result.changed,
           dryRun: true,
           sha256,
         },
