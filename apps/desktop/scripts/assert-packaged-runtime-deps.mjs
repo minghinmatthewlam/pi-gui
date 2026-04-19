@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -15,7 +15,8 @@ const requiredPackages = [
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const desktopDir = path.resolve(scriptDir, "..");
-const asarPath = path.join(desktopDir, "release", "mac-arm64", "pi-gui.app", "Contents", "Resources", "app.asar");
+const packagePlatform = (process.env.PI_APP_PACKAGE_PLATFORM ?? process.platform).trim().toLowerCase();
+const asarPath = resolveAsarPath(desktopDir, packagePlatform);
 const pnpmBinary = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 
 if (!existsSync(asarPath)) {
@@ -38,3 +39,25 @@ if (missingPackages.length > 0) {
 }
 
 console.log(`Verified packaged runtime dependencies in ${asarPath}`);
+
+function resolveAsarPath(desktopDir, packagePlatform) {
+  if (packagePlatform === "darwin") {
+    return path.join(desktopDir, "release", "mac-arm64", "pi-gui.app", "Contents", "Resources", "app.asar");
+  }
+
+  if (packagePlatform === "linux") {
+    const releaseDir = path.join(desktopDir, "release");
+    const unpackedAsarPath = readdirSync(releaseDir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && /^linux(?:-[\w]+)?-unpacked$/.test(entry.name))
+      .map((entry) => path.join(releaseDir, entry.name, "resources", "app.asar"))
+      .find((candidatePath) => existsSync(candidatePath));
+
+    if (unpackedAsarPath) {
+      return unpackedAsarPath;
+    }
+
+    return path.join(releaseDir, "linux-unpacked", "resources", "app.asar");
+  }
+
+  throw new Error(`Unsupported packaged runtime dependency target: ${packagePlatform}`);
+}

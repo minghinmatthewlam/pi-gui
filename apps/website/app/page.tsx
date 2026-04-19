@@ -15,7 +15,7 @@ const softwareApplicationJsonLd = {
   "@type": "SoftwareApplication",
   name: SITE_NAME,
   applicationCategory: "DeveloperApplication",
-  operatingSystem: "macOS",
+  operatingSystem: "macOS, Linux",
   description: SITE_DESCRIPTION,
   url: SITE_URL,
   sameAs: [GITHUB_URL],
@@ -130,7 +130,7 @@ export default function Page() {
               AI coding agents
             </h1>
             <p className="hero-subtitle">
-              pi-gui is a Codex-style macOS desktop app for the{" "}
+              pi-gui is a Codex-style macOS and Linux desktop app for the{" "}
               <a
                 href={PI_MONO_URL}
                 target="_blank"

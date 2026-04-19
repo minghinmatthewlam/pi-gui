@@ -2,13 +2,14 @@
 
 Codex-style Electron shell for `pi`, with Playwright E2E coverage organized by test lane.
 
-macOS is the supported desktop target today. Keep generic repo checks on Linux if useful, but treat macOS as the source of truth for desktop CI and product verification.
+macOS remains the source of truth for desktop UI verification. Linux is supported for packaging and manual validation, with CI packaging checks to catch AppImage regressions.
 
 ## Setup
 
 Install workspace dependencies once:
 
 ```bash
+corepack enable
 pnpm install
 ```
 
@@ -30,6 +31,12 @@ Run the built app locally without packaging:
 
 ```bash
 pnpm --filter @pi-gui/desktop preview
+```
+
+Package a Linux AppImage locally:
+
+```bash
+pnpm --filter @pi-gui/desktop run package:linux
 ```
 
 Live agent tests use your existing `pi` runtime and provider auth. If local `pi` runs do not work, the `live` lane will not be meaningful either.
@@ -81,6 +88,13 @@ For mac-first CI, use:
 
 ```bash
 pnpm --filter @pi-gui/desktop run test:e2e:ci:mac
+```
+
+Linux CI currently validates packaging via:
+
+```bash
+pnpm --filter @pi-gui/desktop run package:linux
+pnpm --dir apps/desktop run verify:packaged-runtime-deps:linux
 ```
 
 ## Focus And Foreground Rules

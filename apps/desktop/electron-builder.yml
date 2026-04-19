@@ -36,6 +36,15 @@ mac:
       arch: arm64
   darkModeSupport: true
 
+linux:
+  category: Development
+  executableName: pi-gui
+  target:
+    - target: AppImage
+
+toolsets:
+  appimage: "1.0.2"
+
 dmg:
   contents:
     - x: 130

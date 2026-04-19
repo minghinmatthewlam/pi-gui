@@ -132,13 +132,14 @@ function createWindow(): BrowserWindow {
     }
 
     const lowerKey = input.key.toLowerCase();
-    if (process.platform === "darwin" && input.meta && !input.shift && lowerKey === "o") {
+    const platformModifier = process.platform === "darwin" ? input.meta : input.control;
+    if (platformModifier && !input.shift && lowerKey === "o") {
       event.preventDefault();
       void pickWorkspaceViaDialog();
       return;
     }
 
-    if ((process.platform === "darwin" ? input.meta : input.control) && !input.shift && lowerKey === "v") {
+    if (platformModifier && !input.shift && lowerKey === "v") {
       const clipboardImage = readClipboardImageAttachment();
       if (clipboardImage) {
         event.preventDefault();

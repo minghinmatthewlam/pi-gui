@@ -375,7 +375,7 @@ function WorkspaceGroupContent(
                   })
                 }
               >
-                Open in Finder
+                Open folder
               </button>
               {linkedWorktree ? (
                 <button

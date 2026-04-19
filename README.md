@@ -8,16 +8,18 @@ This repo packages a desktop UI around `@mariozechner/pi-coding-agent`. It is no
 
 ## Status
 
-- Beta (macOS, arm64)
+- Beta (macOS arm64, Linux AppImage)
 - Public source repo
 
 ## Install
 
 ### From GitHub Releases
 
-Download the latest `.dmg` from [Releases](https://github.com/minghinmatthewlam/pi-gui/releases).
+Download the latest `.dmg` or `.AppImage` from [Releases](https://github.com/minghinmatthewlam/pi-gui/releases).
 
 Signed and notarized beta releases are the primary direct install path. Drag `pi-gui.app` into `/Applications`, then launch it normally.
+
+Linux releases ship as AppImages.
 
 To update a DMG install, download the latest release and replace the app in `/Applications`.
 
@@ -60,6 +62,7 @@ On first launch, go to **Settings > Providers** to connect your AI provider via 
 Install dependencies:
 
 ```bash
+corepack enable
 pnpm install
 ```
 
@@ -82,6 +85,12 @@ pnpm test
 ```
 
 Desktop E2E lanes and setup are documented in [`apps/desktop/README.md`](./apps/desktop/README.md). The default desktop test command runs the `core` lane; use `pnpm --filter @pi-gui/desktop run test:e2e:all` when you need `core`, `live`, and `native`.
+
+Package a Linux AppImage locally:
+
+```bash
+pnpm --filter @pi-gui/desktop run package:linux
+```
 
 Production-like packaged-app checks:
 
