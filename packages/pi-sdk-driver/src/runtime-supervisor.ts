@@ -215,8 +215,8 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
   }
 
   async getCurrentModelSettings(workspace: WorkspaceRef): Promise<ModelSettingsSnapshot> {
-    const globalSettings = await readSettingsRecord(join(this.agentDir, "settings.json"));
-    const projectSettings = await readSettingsRecord(join(workspace.path, ".pi", "settings.json"));
+    const globalSettings = await readJsonRecord(join(this.agentDir, "settings.json"));
+    const projectSettings = await readJsonRecord(join(workspace.path, ".pi", "settings.json"));
     const globalModelSettings = toModelSettingsSnapshot(globalSettings);
     const projectModelSettings = toModelSettingsSnapshot(projectSettings);
     const snapshot: {
@@ -544,6 +544,7 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
     resolvedExtensions: readonly ResolvedResource[],
   ): Promise<readonly RuntimeExtensionRecord[]> {
     const loadedResult = context.resourceLoader.getExtensions();
+    const packageDisplayNameCache = new Map<string, Promise<string | undefined>>();
     const loadedByPath = new Map(
       loadedResult.extensions.map((extension) => [resolve(extension.resolvedPath || extension.path), extension] as const),
     );
@@ -559,25 +560,27 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
       diagnosticsByPath.set(resolve(error.path), diagnostics);
     }
 
-    const records = resolvedExtensions.map<RuntimeExtensionRecord>((resource) => {
-      const path = resolve(resource.path);
-      const loaded = loadedByPath.get(path);
-      return {
-        path,
-        displayName: inferExtensionName(path),
-        enabled: resource.enabled,
-        sourceInfo: toRuntimeSourceInfo(path, resource.metadata),
-        commands: loaded ? [...loaded.commands.keys()].sort((left, right) => left.localeCompare(right)) : [],
-        tools: loaded
-          ? [...loaded.tools.values()]
-              .map((tool) => tool.definition.name)
-              .sort((left, right) => left.localeCompare(right))
-          : [],
-        flags: loaded ? [...loaded.flags.keys()].sort((left, right) => left.localeCompare(right)) : [],
-        shortcuts: loaded ? [...loaded.shortcuts.keys()].sort((left, right) => left.localeCompare(right)) : [],
-        diagnostics: diagnosticsByPath.get(path) ?? [],
-      };
-    });
+    const records = await Promise.all(
+      resolvedExtensions.map<Promise<RuntimeExtensionRecord>>(async (resource) => {
+        const path = resolve(resource.path);
+        const loaded = loadedByPath.get(path);
+        return {
+          path,
+          displayName: await inferExtensionDisplayName(path, resource.metadata, packageDisplayNameCache),
+          enabled: resource.enabled,
+          sourceInfo: toRuntimeSourceInfo(path, resource.metadata),
+          commands: loaded ? [...loaded.commands.keys()].sort((left, right) => left.localeCompare(right)) : [],
+          tools: loaded
+            ? [...loaded.tools.values()]
+                .map((tool) => tool.definition.name)
+                .sort((left, right) => left.localeCompare(right))
+            : [],
+          flags: loaded ? [...loaded.flags.keys()].sort((left, right) => left.localeCompare(right)) : [],
+          shortcuts: loaded ? [...loaded.shortcuts.keys()].sort((left, right) => left.localeCompare(right)) : [],
+          diagnostics: diagnosticsByPath.get(path) ?? [],
+        };
+      }),
+    );
 
     return records.sort((left, right) =>
       left.displayName === right.displayName
@@ -683,7 +686,7 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
   }
 }
 
-async function readSettingsRecord(filePath: string): Promise<Record<string, unknown>> {
+async function readJsonRecord(filePath: string): Promise<Record<string, unknown>> {
   try {
     const raw = await readFile(filePath, "utf8");
     const parsed = JSON.parse(raw);
@@ -741,8 +744,50 @@ function inferSkillName(filePath: string): string {
   return basename(filePath).replace(/\.md$/i, "");
 }
 
-function inferExtensionName(filePath: string): string {
+async function inferExtensionDisplayName(
+  filePath: string,
+  metadata: PathMetadata,
+  packageDisplayNameCache: Map<string, Promise<string | undefined>>,
+): Promise<string> {
+  if (metadata.origin === "package" && metadata.baseDir) {
+    const packageDisplayName = await inferPackageDisplayName(metadata.baseDir, packageDisplayNameCache);
+    if (packageDisplayName) {
+      return packageDisplayName;
+    }
+  }
+
+  return inferExtensionEntryName(filePath);
+}
+
+function inferExtensionEntryName(filePath: string): string {
   return basename(filePath).replace(/\.(c|m)?(t|j)sx?$/i, "");
+}
+
+async function inferPackageDisplayName(
+  packageRoot: string,
+  packageDisplayNameCache: Map<string, Promise<string | undefined>>,
+): Promise<string | undefined> {
+  const normalizedRoot = resolve(packageRoot);
+  const cached = packageDisplayNameCache.get(normalizedRoot);
+  if (cached) {
+    return cached;
+  }
+
+  const pending = readPackageDisplayName(normalizedRoot);
+  packageDisplayNameCache.set(normalizedRoot, pending);
+  return pending;
+}
+
+async function readPackageDisplayName(packageRoot: string): Promise<string | undefined> {
+  const folderName = basename(packageRoot).trim();
+  const packageJson = await readJsonRecord(join(packageRoot, "package.json")) as {
+    readonly displayName?: unknown;
+  };
+  if (typeof packageJson.displayName === "string" && packageJson.displayName.trim()) {
+    return packageJson.displayName.trim();
+  }
+
+  return folderName || undefined;
 }
 
 const DESKTOP_API_KEY_PROVIDER_IDS = new Set([

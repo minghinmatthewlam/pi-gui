@@ -12,6 +12,7 @@ import {
   makeUserDataDir,
   makeWorkspace,
   scrollTimelineAwayFromBottom,
+  selectSession,
   seedTranscriptMessages,
   streamAssistantDeltas,
 } from "../helpers/electron-app";
@@ -220,6 +221,55 @@ test("restores bottom pinning after leaving and returning to the thread surface"
     await expectRowVisibleAboveComposer(window, finalRow, composerShell);
     await expect.poll(async () => (await getTimelineScrollMetrics(window)).remainingFromBottom).toBeLessThanOrEqual(16);
     await expect(window.getByTestId("timeline-jump")).toHaveCount(0);
+  } finally {
+    await harness.close();
+  }
+});
+
+test("restores the true bottom when reopening a virtualized thread with oversized late rows", async () => {
+  test.setTimeout(90_000);
+  const userDataDir = await makeUserDataDir();
+  const workspacePath = await makeWorkspace("timeline-pinning-virtualized-reopen");
+  let harness = await launchDesktop(userDataDir, {
+    initialWorkspaces: [workspacePath],
+    testMode: "background",
+  });
+
+  try {
+    let window = await harness.firstWindow();
+    const targetTitle = "Virtualized restore target";
+    await createTimelineSession(window, targetTitle);
+
+    const finalMarker = "VIRTUALIZED_RESTORE_FINAL_ROW";
+    const oversizedLateRow = `VIRTUALIZED_RESTORE_OVERSIZED ${"wrapped restore content ".repeat(420)}`;
+    await seedTranscriptMessages(harness, window, {
+      count: 110,
+      textFactory: (index) => {
+        if (index === 94 || index === 103) {
+          return oversizedLateRow;
+        }
+        if (index === 109) {
+          return `${finalMarker} ${"should stay visible at the real bottom ".repeat(8)}`;
+        }
+        return `Virtualized restore row ${index} `.repeat(8);
+      },
+    });
+
+    await harness.close();
+
+    harness = await launchDesktop(userDataDir, { testMode: "background" });
+    window = await harness.firstWindow();
+    await expect(window.locator(".topbar__session")).toHaveText(targetTitle);
+    await expect(window.locator(".timeline-item--assistant", { hasText: finalMarker })).toBeVisible();
+    await expect.poll(async () => (await getTimelineScrollMetrics(window)).remainingFromBottom).toBeLessThanOrEqual(16);
+
+    await createTimelineSession(window, "Neighbor session");
+    await expect(window.locator(".topbar__session")).toHaveText("Neighbor session");
+
+    await selectSession(window, targetTitle);
+    const finalRow = window.locator(".timeline-item--assistant", { hasText: finalMarker });
+    await expect(finalRow).toBeVisible();
+    await expect.poll(async () => (await getTimelineScrollMetrics(window)).remainingFromBottom).toBeLessThanOrEqual(16);
   } finally {
     await harness.close();
   }

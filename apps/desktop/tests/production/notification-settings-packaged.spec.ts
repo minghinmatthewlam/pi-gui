@@ -31,6 +31,9 @@ test("shows notification recovery actions in the packaged app", async () => {
     await window.getByRole("button", { name: "Notifications", exact: true }).click();
 
     await expect(window.locator(".settings-view")).toContainText("macOS notifications are turned off for pi-gui");
+    await expect(window.locator(".settings-view")).toContainText(
+      "pi-gui asks macOS when active work first moves into the background",
+    );
     await window.getByRole("button", { name: "Open System Settings", exact: true }).click();
     await expect.poll(() => readSettingsLog(settingsLogPath), { timeout: 5_000 }).not.toBe("");
 

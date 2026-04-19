@@ -10,7 +10,11 @@
     "typecheck": "pnpm --filter @pi-gui/session-driver build && pnpm --filter @pi-gui/catalogs build && pnpm --filter @pi-gui/pi-sdk-driver build && pnpm -r --if-present typecheck",
     "lint": "pnpm -r --if-present lint",
     "test": "pnpm -r --if-present test",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "test:homebrew-tap": "node scripts/test-update-homebrew-tap.mjs",
+    "verify:install-copy": "node scripts/verify-install-copy.mjs",
+    "verify:homebrew-flow": "node scripts/verify-homebrew-flow.mjs",
+    "release:homebrew-sync": "node scripts/release-homebrew-sync.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.52.0",

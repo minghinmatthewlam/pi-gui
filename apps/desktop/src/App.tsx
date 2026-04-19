@@ -34,7 +34,7 @@ import { NewThreadView } from "./new-thread-view";
 import { buildThreadGroups } from "./thread-groups";
 import { Sidebar } from "./sidebar";
 import { Topbar } from "./topbar";
-import { ConversationTimeline } from "./conversation-timeline";
+import { ConversationTimeline, VIRTUALIZATION_THRESHOLD } from "./conversation-timeline";
 import { useSlashMenu } from "./hooks/use-slash-menu";
 import { useMentionMenu } from "./hooks/use-mention-menu";
 import { useThreadSearch } from "./hooks/use-thread-search";
@@ -184,6 +184,7 @@ export default function App() {
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const [showDiffPanel, setShowDiffPanel] = useState(false);
   const [timelinePaneMountVersion, setTimelinePaneMountVersion] = useState(0);
+  const [disableTimelineVirtualization, setDisableTimelineVirtualization] = useState(true);
   const threadSearch = useThreadSearch(timelinePaneRef);
   const api = window.piApp;
 
@@ -382,6 +383,12 @@ export default function App() {
       return;
     }
 
+    if (activeTranscript.length > VIRTUALIZATION_THRESHOLD && !disableTimelineVirtualization) {
+      preserveBottomOnNextPaneResizeRef.current = true;
+      setDisableTimelineVirtualization(true);
+      return;
+    }
+
     const align = (remainingChecks: number) => {
       if (behavior === "auto") {
         pane.scrollTop = pane.scrollHeight;
@@ -406,7 +413,29 @@ export default function App() {
     };
 
     align(6);
-  }, [selectedSessionKey]);
+  }, [activeTranscript.length, disableTimelineVirtualization, selectedSessionKey]);
+
+  const finalizeTimelineVirtualizationDisable = useCallback(() => {
+    const pane = timelinePaneRef.current;
+    if (!pane || snapshot?.activeView !== "threads") {
+      setDisableTimelineVirtualization(false);
+      return;
+    }
+
+    if (pinnedToBottomRef.current || preserveBottomOnNextPaneResizeRef.current) {
+      scrollTimelineToBottom();
+    }
+
+    window.requestAnimationFrame(() => {
+      if (timelinePaneRef.current !== pane) {
+        return;
+      }
+      if (pinnedToBottomRef.current || preserveBottomOnNextPaneResizeRef.current) {
+        scrollTimelineToBottom();
+      }
+      setDisableTimelineVirtualization(false);
+    });
+  }, [scrollTimelineToBottom, snapshot?.activeView]);
 
   const setTimelinePaneElement = useCallback((node: HTMLDivElement | null) => {
     timelinePaneRef.current = node;
@@ -420,6 +449,7 @@ export default function App() {
     const savedScrollTop = lastTimelineScrollTopBySessionRef.current.get(selectedSessionKey);
 
     if (!selectedSessionKey || snapshot?.activeView !== "threads") {
+      setDisableTimelineVirtualization(false);
       return;
     }
 
@@ -439,12 +469,19 @@ export default function App() {
     }
 
     if (savedScrollTop == null) {
+      setDisableTimelineVirtualization(false);
       return;
     }
 
     node.scrollTop = savedScrollTop;
     pinnedToBottomRef.current = false;
     lastTimelinePinnedBySessionRef.current.set(selectedSessionKey, false);
+    window.requestAnimationFrame(() => {
+      if (timelinePaneRef.current !== node) {
+        return;
+      }
+      setDisableTimelineVirtualization(false);
+    });
   }, [scrollTimelineToBottom, selectedSessionKey, snapshot?.activeView]);
 
   const schedulePinnedBottomRealignment = useCallback((delayFrames = 0) => {
@@ -830,12 +867,13 @@ export default function App() {
     };
   }, [selectedWorkspace?.id, selectedWorkspace?.rootWorkspaceId, threadSearch, api, toggleDiffPanel]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     setShowJumpToLatest(false);
     lastTranscriptMarkerRef.current = "";
     pinnedToBottomRef.current = true;
     previousTimelinePaneSizeRef.current = null;
     preserveBottomOnNextPaneResizeRef.current = false;
+    setDisableTimelineVirtualization(Boolean(selectedSessionKey));
   }, [selectedSessionKey]);
 
   useEffect(() => {
@@ -1843,6 +1881,8 @@ export default function App() {
                   isTranscriptLoading={isTranscriptLoading}
                   timelinePaneRef={timelinePaneRef}
                   timelinePaneElementRef={setTimelinePaneElement}
+                  disableVirtualization={disableTimelineVirtualization}
+                  onDisableVirtualizationReady={finalizeTimelineVirtualizationDisable}
                   onTimelineScroll={handleTimelineScroll}
                   threadSearch={threadSearch}
                   showJumpToLatest={showJumpToLatest}

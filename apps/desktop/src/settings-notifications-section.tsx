@@ -32,7 +32,7 @@ export function SettingsNotificationsSection({
         {showRecoveryActions ? (
           <SettingsRow
             title="Turn on notifications"
-            description="pi-gui will ask macOS the first time a background thread needs to notify you. You can also ask now, or open System Settings if macOS already turned notifications off."
+            description="pi-gui asks macOS when active work first moves into the background. You can also ask now, or open System Settings if notifications were already denied."
           >
             <div className="settings-row__actions">
               <button
@@ -108,7 +108,7 @@ function descriptionForPermissionStatus(status: DesktopNotificationPermissionSta
     case "denied":
       return "macOS notifications are turned off for pi-gui. Enable them in System Settings to receive background completion alerts.";
     case "default":
-      return "pi-gui has not sent a desktop notification yet, or macOS has not granted access yet.";
+      return "pi-gui has not asked macOS for desktop notification access yet.";
     case "unsupported":
       return "Desktop notifications are unavailable on this system.";
     default:

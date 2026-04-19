@@ -5,7 +5,7 @@ import { TimelineItem } from "./timeline-item";
 
 const OVERSCAN_PX = 720;
 const ROW_GAP_PX = 14;
-const VIRTUALIZATION_THRESHOLD = 80;
+export const VIRTUALIZATION_THRESHOLD = 80;
 
 interface ThreadSearchModel {
   readonly isOpen: boolean;
@@ -23,6 +23,8 @@ interface ConversationTimelineProps {
   readonly isTranscriptLoading: boolean;
   readonly timelinePaneRef: MutableRefObject<HTMLDivElement | null>;
   readonly timelinePaneElementRef?: RefCallback<HTMLDivElement>;
+  readonly disableVirtualization?: boolean;
+  readonly onDisableVirtualizationReady?: () => void;
   readonly onTimelineScroll: () => void;
   readonly threadSearch: ThreadSearchModel;
   readonly showJumpToLatest: boolean;
@@ -35,14 +37,27 @@ export function ConversationTimeline({
   isTranscriptLoading,
   timelinePaneRef,
   timelinePaneElementRef,
+  disableVirtualization = false,
+  onDisableVirtualizationReady,
   onTimelineScroll,
   threadSearch,
   showJumpToLatest,
   onJumpToLatest,
   onContentHeightChange,
 }: ConversationTimelineProps) {
-  const shouldVirtualize = !threadSearch.isOpen && transcript.length > VIRTUALIZATION_THRESHOLD;
+  // Giant prose blocks and attachment-heavy rows routinely blow past the estimator,
+  // so keep those transcripts on the exact DOM path instead of restoring to a fake bottom.
+  const hasUnreliableVirtualizedHeights = transcript.some(
+    (item) => item.kind === "message" && (item.text.length > 2000 || Boolean(item.attachments?.length)),
+  );
+  const shouldVirtualize =
+    !threadSearch.isOpen &&
+    transcript.length > VIRTUALIZATION_THRESHOLD &&
+    !disableVirtualization &&
+    !hasUnreliableVirtualizedHeights;
   const [expandedToolCallIds, setExpandedToolCallIds] = useState<Set<string>>(() => new Set());
+  const measuredHeightsRef = useRef(new Map<string, number>());
+  const [measurementVersion, setMeasurementVersion] = useState(0);
 
   useLayoutEffect(() => {
     const availableToolCallIds = new Set(
@@ -65,6 +80,32 @@ export function ConversationTimeline({
     });
   }, [transcript]);
 
+  useLayoutEffect(() => {
+    const knownIds = new Set(transcript.map((item) => item.id));
+    let removedAny = false;
+    for (const id of measuredHeightsRef.current.keys()) {
+      if (knownIds.has(id)) {
+        continue;
+      }
+      measuredHeightsRef.current.delete(id);
+      removedAny = true;
+    }
+    if (removedAny) {
+      setMeasurementVersion((current) => current + 1);
+    }
+  }, [transcript]);
+
+  useLayoutEffect(() => {
+    if (!disableVirtualization || isTranscriptLoading || transcript.length === 0) {
+      return;
+    }
+    const allRowsMeasured = transcript.every((item) => measuredHeightsRef.current.has(item.id));
+    if (!allRowsMeasured) {
+      return;
+    }
+    onDisableVirtualizationReady?.();
+  }, [disableVirtualization, isTranscriptLoading, measurementVersion, onDisableVirtualizationReady, transcript]);
+
   const toggleToolCall = useCallback((callId: string) => {
     setExpandedToolCallIds((current) => {
       const next = new Set(current);
@@ -75,6 +116,16 @@ export function ConversationTimeline({
       }
       return next;
     });
+  }, []);
+
+  const updateMeasuredHeight = useCallback((id: string, height: number) => {
+    const nextHeight = Math.max(1, Math.ceil(height));
+    const currentHeight = measuredHeightsRef.current.get(id);
+    if (currentHeight === nextHeight) {
+      return;
+    }
+    measuredHeightsRef.current.set(id, nextHeight);
+    setMeasurementVersion((current) => current + 1);
   }, []);
 
   const assignTimelinePaneRef = useCallback((node: HTMLDivElement | null) => {
@@ -114,15 +165,19 @@ export function ConversationTimeline({
           transcript={transcript}
           timelinePaneRef={timelinePaneRef}
           onContentHeightChange={onContentHeightChange}
+          measuredHeightsRef={measuredHeightsRef}
+          measurementVersion={measurementVersion}
           expandedToolCallIds={expandedToolCallIds}
+          onHeightChange={updateMeasuredHeight}
           onToggleToolCall={toggleToolCall}
         />
       ) : (
         <div className="timeline" data-testid="transcript">
           {transcript.map((item) => (
-            <TimelineItem
+            <MeasuredTimelineItem
               item={item}
               key={item.id}
+              onHeightChange={updateMeasuredHeight}
               expandedToolCallIds={expandedToolCallIds}
               onToggleToolCall={toggleToolCall}
             />
@@ -142,34 +197,24 @@ function VirtualizedTranscriptList({
   transcript,
   timelinePaneRef,
   onContentHeightChange,
+  measuredHeightsRef,
+  measurementVersion,
   expandedToolCallIds,
+  onHeightChange,
   onToggleToolCall,
 }: {
   readonly transcript: readonly TranscriptMessage[];
   readonly timelinePaneRef: MutableRefObject<HTMLDivElement | null>;
   readonly onContentHeightChange: () => void;
+  readonly measuredHeightsRef: MutableRefObject<Map<string, number>>;
+  readonly measurementVersion: number;
   readonly expandedToolCallIds: ReadonlySet<string>;
+  readonly onHeightChange: (id: string, height: number) => void;
   readonly onToggleToolCall: (callId: string) => void;
 }) {
-  const measuredHeightsRef = useRef(new Map<string, number>());
-  const [, setMeasurementVersion] = useState(0);
   const [viewport, setViewport] = useState({ scrollTop: 0, height: 0 });
   const previousTotalHeightRef = useRef(0);
-
-  useLayoutEffect(() => {
-    const knownIds = new Set(transcript.map((item) => item.id));
-    let removedAny = false;
-    for (const id of measuredHeightsRef.current.keys()) {
-      if (knownIds.has(id)) {
-        continue;
-      }
-      measuredHeightsRef.current.delete(id);
-      removedAny = true;
-    }
-    if (removedAny) {
-      setMeasurementVersion((current) => current + 1);
-    }
-  }, [transcript]);
+  void measurementVersion;
 
   useLayoutEffect(() => {
     const pane = timelinePaneRef.current;
@@ -200,16 +245,6 @@ function VirtualizedTranscriptList({
     };
   }, [timelinePaneRef]);
 
-  const updateMeasuredHeight = useCallback((id: string, height: number) => {
-    const nextHeight = Math.max(1, Math.ceil(height));
-    const currentHeight = measuredHeightsRef.current.get(id);
-    if (currentHeight === nextHeight) {
-      return;
-    }
-    measuredHeightsRef.current.set(id, nextHeight);
-    setMeasurementVersion((current) => current + 1);
-  }, []);
-
   const rowHeights = transcript.map((item) => measuredHeightsRef.current.get(item.id) ?? estimateTimelineItemHeight(item));
   const rowOffsets: number[] = [];
   let totalHeight = 0;
@@ -239,11 +274,12 @@ function VirtualizedTranscriptList({
       {transcript.slice(startIndex, endIndex).map((item, offsetIndex) => {
         const index = startIndex + offsetIndex;
         return (
-          <MeasuredTimelineRow
+          <MeasuredTimelineItem
             item={item}
             key={item.id}
+            className="timeline__virtual-row"
             top={rowOffsets[index] ?? 0}
-            onHeightChange={updateMeasuredHeight}
+            onHeightChange={onHeightChange}
             expandedToolCallIds={expandedToolCallIds}
             onToggleToolCall={onToggleToolCall}
           />
@@ -253,15 +289,17 @@ function VirtualizedTranscriptList({
   );
 }
 
-function MeasuredTimelineRow({
+function MeasuredTimelineItem({
   item,
+  className,
   top,
   onHeightChange,
   expandedToolCallIds,
   onToggleToolCall,
 }: {
   readonly item: TranscriptMessage;
-  readonly top: number;
+  readonly className?: string;
+  readonly top?: number;
   readonly onHeightChange: (id: string, height: number) => void;
   readonly expandedToolCallIds: ReadonlySet<string>;
   readonly onToggleToolCall: (callId: string) => void;
@@ -290,7 +328,11 @@ function MeasuredTimelineRow({
   }, [item.id, onHeightChange]);
 
   return (
-    <div className="timeline__virtual-row" ref={rowRef} style={{ transform: `translateY(${top}px)` }}>
+    <div
+      className={className}
+      ref={rowRef}
+      style={top == null ? undefined : { transform: `translateY(${top}px)` }}
+    >
       <TimelineItem
         item={item}
         expandedToolCallIds={expandedToolCallIds}

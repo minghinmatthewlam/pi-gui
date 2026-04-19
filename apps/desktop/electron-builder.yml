@@ -20,6 +20,8 @@ asarUnpack:
   - "**/*.node"
   - "**/*.wasm"
 
+artifactName: ${productName}-${version}-${arch}.${ext}
+
 mac:
   category: public.app-category.developer-tools
   hardenedRuntime: true

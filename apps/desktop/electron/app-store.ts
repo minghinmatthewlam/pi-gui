@@ -79,6 +79,7 @@ import {
   cloneComposerAttachment,
   cloneComposerAttachments,
   cloneTranscriptMessage,
+  latestSessionActivityAt,
   mergeQueuedComposerMessages,
   mapToRecord,
   previewFromTranscript,
@@ -1825,7 +1826,7 @@ export class DesktopAppStore implements AppStoreInternals {
       lastError: undefined,
       revision: this.state.revision + 1,
     };
-    this.markSessionViewed(sessionRef, new Date().toISOString());
+    this.markSessionViewed(sessionRef);
     this.schedulePersistUiState();
     const snapshot = this.emit();
     if (this.sessionState.loadedTranscriptKeys.has(sessionKey(sessionRef))) {
@@ -1851,9 +1852,9 @@ export class DesktopAppStore implements AppStoreInternals {
       return;
     }
 
-    this.markSessionViewed(sessionRef, new Date().toISOString());
     this.clearSessionError(sessionRef);
     this.state = this.syncSelectedSessionHydrationState(this.state, sessionRef, snapshot, runtimeByWorkspace);
+    this.markSessionViewed(sessionRef);
     this.schedulePersistUiState();
     this.emit();
     this.publishSelectedTranscriptFor(sessionRef);
@@ -1895,7 +1896,7 @@ export class DesktopAppStore implements AppStoreInternals {
       return;
     }
 
-    this.markSessionViewed(sessionRef, new Date().toISOString());
+    this.markSessionViewed(sessionRef);
   }
 
   private markSessionViewedIfActivelyViewed(sessionRef: SessionRef): boolean {
@@ -1904,11 +1905,12 @@ export class DesktopAppStore implements AppStoreInternals {
       return false;
     }
 
-    return this.markSessionViewed(sessionRef, new Date().toISOString());
+    return this.markSessionViewed(sessionRef);
   }
 
-  private markSessionViewed(sessionRef: SessionRef, viewedAt: string): boolean {
+  private markSessionViewed(sessionRef: SessionRef, fallbackViewedAt = new Date().toISOString()): boolean {
     const key = sessionKey(sessionRef);
+    const viewedAt = this.resolveViewedAt(sessionRef, fallbackViewedAt);
     const current = this.sessionState.lastViewedAtBySession.get(key);
     if (current && current >= viewedAt) {
       return false;
@@ -1936,6 +1938,25 @@ export class DesktopAppStore implements AppStoreInternals {
       lastViewedAtBySession: mapToRecord(this.sessionState.lastViewedAtBySession),
     };
     return true;
+  }
+
+  private resolveViewedAt(sessionRef: SessionRef, fallbackViewedAt: string): string {
+    const session = this.findSessionRecord(sessionRef);
+    if (!session) {
+      return fallbackViewedAt;
+    }
+
+    const activityAt = latestSessionActivityAt(
+      session.updatedAt,
+      this.sessionState.transcriptCache.get(sessionKey(sessionRef)) ?? [],
+    );
+    return activityAt > fallbackViewedAt ? activityAt : fallbackViewedAt;
+  }
+
+  private findSessionRecord(sessionRef: SessionRef) {
+    return this.state.workspaces
+      .find((workspace) => workspace.id === sessionRef.workspaceId)
+      ?.sessions.find((session) => session.id === sessionRef.sessionId);
   }
 
   private clearSessionError(sessionRef: SessionRef): void {

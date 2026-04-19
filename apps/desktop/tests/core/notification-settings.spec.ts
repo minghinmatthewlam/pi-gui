@@ -35,6 +35,9 @@ test("shows macOS notification status and recovery actions", async () => {
     await expect(window.locator(".settings-view")).toContainText(
       "macOS notifications are turned off for pi-gui",
     );
+    await expect(window.locator(".settings-view")).toContainText(
+      "pi-gui asks macOS when active work first moves into the background",
+    );
 
     await window.getByRole("button", { name: "Open System Settings", exact: true }).click();
     await expect.poll(() => readSettingsLog(settingsLogPath), { timeout: 5_000 }).not.toBe("");

@@ -1,3 +1,5 @@
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import {
   createSessionViaIpc,
@@ -5,6 +7,7 @@ import {
   launchDesktop,
   makeUserDataDir,
   makeWorkspace,
+  seedAgentDir,
   writeProjectExtension,
 } from "../helpers/electron-app";
 
@@ -77,11 +80,85 @@ export default function newSessionExtension(pi) {
 }
 `;
 
+const packageExtensionSource = String.raw`
+export default function packageNamedExtension(pi) {
+  pi.registerCommand("package-named-command", {
+    description: "Command from a package-backed extension",
+    handler: async (_args, ctx) => {
+      ctx.ui.notify("package-backed extension", "info");
+    },
+  });
+}
+`;
+
 async function expandDock(window: Page) {
   const toggle = window.getByTestId("extension-dock-toggle");
   await toggle.click();
   return window.getByTestId("extension-dock-body");
 }
+
+async function writePackageBackedExtension(packagePath: string) {
+  const extensionDir = join(packagePath, "extension");
+  await mkdir(extensionDir, { recursive: true });
+  await writeFile(
+    join(packagePath, "package.json"),
+    `${JSON.stringify(
+      {
+        name: "unrelated-package-name",
+        type: "module",
+        pi: {
+          extensions: ["./extension/index.ts"],
+        },
+      },
+      null,
+      2,
+    )}\n`,
+  );
+  await writeFile(join(extensionDir, "index.ts"), `${packageExtensionSource}\n`);
+}
+
+async function installPackageBackedExtension(agentDir: string, packagePath: string) {
+  await writePackageBackedExtension(packagePath);
+  const settingsPath = join(agentDir, "settings.json");
+  const settings = JSON.parse(await readFile(settingsPath, "utf8")) as Record<string, unknown>;
+  settings.packages = [packagePath];
+  await writeFile(settingsPath, `${JSON.stringify(settings, null, 2)}\n`, "utf8");
+}
+
+test("labels local package extensions by package root instead of index entrypoints", async () => {
+  test.setTimeout(60_000);
+  const userDataDir = await makeUserDataDir();
+  const workspacePath = await makeWorkspace("extensions-package-name-workspace");
+  const packagePath = await makeWorkspace("local-package-extension");
+
+  const agentDir = join(userDataDir, "agent");
+  await seedAgentDir(agentDir);
+  await installPackageBackedExtension(agentDir, packagePath);
+
+  const harness = await launchDesktop(userDataDir, {
+    agentDir,
+    initialWorkspaces: [workspacePath],
+    testMode: "background",
+  });
+
+  try {
+    const window = await harness.firstWindow();
+    await window.getByRole("button", { name: "Extensions", exact: true }).click();
+    await expect(window.getByTestId("extensions-surface")).toBeVisible();
+
+    const extensionCard = window.getByTestId("extensions-list").getByRole("button", {
+      name: /local-package-extension/i,
+    });
+    await expect(extensionCard).toBeVisible();
+    await extensionCard.click();
+
+    await expect(window.locator(".skill-detail h2")).toHaveText("local-package-extension");
+    await expect(window.locator(".skill-detail")).toContainText("package-named-command");
+    await expect(window.locator(".skill-detail")).toContainText(packagePath);
+  } finally {
+    await harness.close();
+  }
+});
 
 test("manages extensions and prefers runtime commands over colliding host actions", async () => {
   test.setTimeout(60_000);

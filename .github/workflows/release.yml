@@ -32,8 +32,9 @@ jobs:
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         run: |
-          for var in CSC_LINK CSC_KEY_PASSWORD APPLE_API_KEY APPLE_API_KEY_ID APPLE_API_ISSUER; do
+          for var in CSC_LINK CSC_KEY_PASSWORD APPLE_API_KEY APPLE_API_KEY_ID APPLE_API_ISSUER HOMEBREW_TAP_TOKEN; do
             if [ -z "${!var}" ]; then
               echo "Missing required release secret: $var" >&2
               exit 1
@@ -50,6 +51,12 @@ jobs:
 
       - name: Typecheck
         run: pnpm typecheck
+
+      - name: Verify install copy
+        run: pnpm verify:install-copy
+
+      - name: Build website
+        run: pnpm --filter @pi-gui/website run build
 
       - name: Build
         run: pnpm --filter @pi-gui/desktop run build
@@ -70,6 +77,9 @@ jobs:
       - name: Verify packaged runtime dependencies
         run: pnpm --dir apps/desktop run verify:packaged-runtime-deps
 
+      - name: Verify Homebrew tap rewrite
+        run: pnpm test:homebrew-tap
+
       - name: Smoke test the packaged release zip
         run: pnpm --dir apps/desktop run test:prod:release-zip-smoke:ci
 
@@ -82,6 +92,7 @@ jobs:
           fi
 
       - name: Release
+        id: release
         uses: softprops/action-gh-release@v2
         with:
           files: |
@@ -90,3 +101,25 @@ jobs:
             apps/desktop/release/latest-mac.yml
           prerelease: ${{ contains(github.ref_name, 'beta') || contains(github.ref_name, 'alpha') || contains(github.ref_name, 'rc') }}
           generate_release_notes: true
+
+      - name: Checkout Homebrew tap
+        uses: actions/checkout@v4
+        with:
+          repository: minghinmatthewlam/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: homebrew-tap
+          fetch-depth: 0
+
+      - name: Sync Homebrew tap
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          pnpm release:homebrew-sync \
+            --tap-dir "$PWD/homebrew-tap" \
+            --version "${GITHUB_REF_NAME#v}" \
+            --tag "${GITHUB_REF_NAME}" \
+            --github-repo "${GITHUB_REPOSITORY}" \
+            --asset-name "pi-gui-${GITHUB_REF_NAME#v}-arm64.dmg" \
+            --dmg-path "$PWD/apps/desktop/release/pi-gui-${GITHUB_REF_NAME#v}-arm64.dmg" \
+            --commit \
+            --push
