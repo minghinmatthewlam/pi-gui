@@ -146,7 +146,8 @@ jobs:
       - name: Package Linux AppImage
         run: |
           cd apps/desktop
-          pnpm run package:linux -- \
+          pnpm run build
+          pnpm exec electron-builder --linux AppImage \
             --publish never \
             "-c.extraMetadata.version=${GITHUB_REF_NAME#v}"
 
