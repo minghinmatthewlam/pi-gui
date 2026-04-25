@@ -1156,7 +1156,7 @@
 .queued-composer-message__header {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
   gap: 12px;
 }
 
@@ -1164,11 +1164,14 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  flex-wrap: wrap;
+  flex-shrink: 0;
+  flex-wrap: nowrap;
   justify-content: flex-end;
 }
 
 .queued-composer-message__text {
+  min-width: 0;
+  flex: 1;
   color: var(--text-strong);
   font-size: 14px;
   line-height: 1.45;
