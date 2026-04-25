@@ -150,16 +150,18 @@ export function ProviderRow({
         <div className="settings-row__title">{provider.name}</div>
         <div className="settings-row__description">{describeProviderStatus(provider)}</div>
       </div>
-      <div className="settings-row__control">
-        <button
-          className="button button--secondary"
-          disabled={action.disabled}
-          type="button"
-          onClick={action.onClick}
-        >
-          {action.label}
-        </button>
-      </div>
+      {action ? (
+        <div className="settings-row__control">
+          <button
+            className="button button--secondary"
+            disabled={action.disabled}
+            type="button"
+            onClick={action.onClick}
+          >
+            {action.label}
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -190,11 +192,13 @@ function resolveProviderAction(
   onLoginProvider: (providerId: string) => void,
   onLogoutProvider: (providerId: string) => void,
   onConfigureApiKey: (provider: RuntimeSnapshot["providers"][number]) => void,
-): {
-  readonly disabled: boolean;
-  readonly label: string;
-  readonly onClick?: () => void;
-} {
+):
+  | {
+      readonly disabled: boolean;
+      readonly label: string;
+      readonly onClick?: () => void;
+    }
+  | undefined {
   if (provider.authSource === "oauth") {
     return {
       disabled: false,
@@ -219,8 +223,12 @@ function resolveProviderAction(
     };
   }
 
+  if (provider.authSource === "env" || provider.authSource === "external") {
+    return undefined;
+  }
+
   return {
     disabled: true,
-    label: provider.authSource === "env" || provider.authSource === "external" ? "Managed externally" : "Configure externally",
+    label: "Configure externally",
   };
 }

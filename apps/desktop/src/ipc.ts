@@ -26,6 +26,27 @@ export type DesktopNotificationPermissionStatus =
   | "unsupported"
   | "unknown";
 
+export interface CustomProviderModelConfig {
+  readonly id: string;
+  readonly contextWindow?: number;
+}
+
+export interface CustomProviderConfig {
+  readonly providerId: string;
+  readonly baseUrl: string;
+  readonly apiKey?: string;
+  readonly models: readonly CustomProviderModelConfig[];
+}
+
+export interface CustomProviderProbeInput {
+  readonly baseUrl: string;
+  readonly apiKey?: string;
+}
+
+export type CustomProviderProbeResult =
+  | { readonly ok: true; readonly models: readonly string[] }
+  | { readonly ok: false; readonly error: string };
+
 export const desktopIpc = {
   stateRequest: "pi-gui:state-request",
   stateChanged: "pi-gui:state-changed",
@@ -62,6 +83,10 @@ export const desktopIpc = {
   loginProvider: "pi-gui:login-provider",
   logoutProvider: "pi-gui:logout-provider",
   setProviderApiKey: "pi-gui:set-provider-api-key",
+  listCustomProviders: "pi-gui:list-custom-providers",
+  setCustomProvider: "pi-gui:set-custom-provider",
+  deleteCustomProvider: "pi-gui:delete-custom-provider",
+  probeCustomProviderModels: "pi-gui:probe-custom-provider-models",
   setEnableSkillCommands: "pi-gui:set-enable-skill-commands",
   setScopedModelPatterns: "pi-gui:set-scoped-model-patterns",
   setSkillEnabled: "pi-gui:set-skill-enabled",
@@ -185,6 +210,10 @@ export interface PiDesktopApi {
   loginProvider(workspaceId: string, providerId: string): Promise<DesktopAppState>;
   logoutProvider(workspaceId: string, providerId: string): Promise<DesktopAppState>;
   setProviderApiKey(workspaceId: string, providerId: string, apiKey: string): Promise<DesktopAppState>;
+  listCustomProviders(): Promise<readonly CustomProviderConfig[]>;
+  setCustomProvider(workspaceId: string, config: CustomProviderConfig): Promise<DesktopAppState>;
+  deleteCustomProvider(workspaceId: string, providerId: string): Promise<DesktopAppState>;
+  probeCustomProviderModels(input: CustomProviderProbeInput): Promise<CustomProviderProbeResult>;
   setEnableSkillCommands(workspaceId: string, enabled: boolean): Promise<DesktopAppState>;
   setScopedModelPatterns(workspaceId: string, patterns: readonly string[]): Promise<DesktopAppState>;
   setSkillEnabled(workspaceId: string, filePath: string, enabled: boolean): Promise<DesktopAppState>;

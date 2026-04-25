@@ -1,6 +1,13 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 import { PRELOAD_DEV_RELOAD_MARKER } from "./dev-reload-preload-probe";
-import { desktopIpc, type DesktopNotificationPermissionStatus, type PiDesktopCommand } from "../src/ipc";
+import {
+  desktopIpc,
+  type CustomProviderConfig,
+  type CustomProviderProbeInput,
+  type CustomProviderProbeResult,
+  type DesktopNotificationPermissionStatus,
+  type PiDesktopCommand,
+} from "../src/ipc";
 import type {
   NavigateSessionTreeOptions,
   NavigateSessionTreeResult,
@@ -149,6 +156,14 @@ contextBridge.exposeInMainWorld("piApp", {
     ipcRenderer.invoke(desktopIpc.logoutProvider, workspaceId, providerId) as Promise<DesktopAppState>,
   setProviderApiKey: (workspaceId: string, providerId: string, apiKey: string) =>
     ipcRenderer.invoke(desktopIpc.setProviderApiKey, workspaceId, providerId, apiKey) as Promise<DesktopAppState>,
+  listCustomProviders: () =>
+    ipcRenderer.invoke(desktopIpc.listCustomProviders) as Promise<readonly CustomProviderConfig[]>,
+  setCustomProvider: (workspaceId: string, config: CustomProviderConfig) =>
+    ipcRenderer.invoke(desktopIpc.setCustomProvider, workspaceId, config) as Promise<DesktopAppState>,
+  deleteCustomProvider: (workspaceId: string, providerId: string) =>
+    ipcRenderer.invoke(desktopIpc.deleteCustomProvider, workspaceId, providerId) as Promise<DesktopAppState>,
+  probeCustomProviderModels: (input: CustomProviderProbeInput) =>
+    ipcRenderer.invoke(desktopIpc.probeCustomProviderModels, input) as Promise<CustomProviderProbeResult>,
   setEnableSkillCommands: (workspaceId: string, enabled: boolean) =>
     ipcRenderer.invoke(desktopIpc.setEnableSkillCommands, workspaceId, enabled) as Promise<DesktopAppState>,
   setScopedModelPatterns: (workspaceId: string, patterns: readonly string[]) =>

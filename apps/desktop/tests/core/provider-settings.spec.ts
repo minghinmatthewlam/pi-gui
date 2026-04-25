@@ -103,7 +103,7 @@ test("settings shows environment-configured providers as managed externally", as
       has: window.locator(".settings-row__title", { hasText: /^openai$/ }),
     });
     await expect(openAiRow).toContainText("Environment variable");
-    await expect(openAiRow.getByRole("button", { name: "Managed externally" })).toBeDisabled();
+    await expect(openAiRow.locator(".settings-row__control")).toHaveCount(0);
   } finally {
     await harness.close();
     if (previousOpenAiKey === undefined) {
@@ -162,7 +162,7 @@ test("settings keeps models.json provider overrides in the external-config state
       has: window.locator(".settings-row__title", { hasText: /^openai$/ }),
     });
     await expect(openAiRow).toContainText("Configured externally");
-    await expect(openAiRow.getByRole("button", { name: "Managed externally" })).toBeDisabled();
+    await expect(openAiRow.locator(".settings-row__control")).toHaveCount(0);
   } finally {
     await harness.close();
   }

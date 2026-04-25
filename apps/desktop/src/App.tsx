@@ -22,6 +22,7 @@ import { parseTreeComposerCommand } from "./composer-commands";
 import {
   desktopCommands,
   getDesktopCommandFromShortcut,
+  type CustomProviderConfig,
   type DesktopNotificationPermissionStatus,
   type PiDesktopCommand,
 } from "./ipc";
@@ -1471,6 +1472,26 @@ export default function App() {
     return state.lastError;
   };
 
+  const handleSaveCustomProvider = async (config: CustomProviderConfig): Promise<string | undefined> => {
+    if (!api || !settingsWorkspace) {
+      return "Select a workspace first.";
+    }
+    const state = await updateSnapshot(api, setSnapshot, () =>
+      api.setCustomProvider(settingsWorkspace.id, config),
+    );
+    return state.lastError;
+  };
+
+  const handleDeleteCustomProvider = async (providerId: string): Promise<string | undefined> => {
+    if (!api || !settingsWorkspace) {
+      return "Select a workspace first.";
+    }
+    const state = await updateSnapshot(api, setSnapshot, () =>
+      api.deleteCustomProvider(settingsWorkspace.id, providerId),
+    );
+    return state.lastError;
+  };
+
   const handleToggleSkill = (filePath: string, enabled: boolean) => {
     if (!skillsWorkspace) {
       return;
@@ -1761,6 +1782,8 @@ export default function App() {
           onLogoutProvider={handleLogoutProvider}
           onSetProviderApiKey={handleSetProviderApiKey}
           onRemoveProviderApiKey={handleRemoveProviderApiKey}
+          onSaveCustomProvider={handleSaveCustomProvider}
+          onDeleteCustomProvider={handleDeleteCustomProvider}
           onSetModelSettingsScopeMode={handleSetModelSettingsScopeMode}
           onSetDefaultModel={handleSetDefaultModel}
           onSetNotificationPreferences={handleSetNotificationPreferences}

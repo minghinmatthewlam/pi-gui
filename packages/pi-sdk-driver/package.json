@@ -9,6 +9,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./custom-provider-types": {
+      "types": "./dist/custom-provider-types.d.ts",
+      "default": "./dist/custom-provider-types.js"
     }
   },
   "files": [

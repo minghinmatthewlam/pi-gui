@@ -1,5 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { RuntimeSnapshot } from "@pi-gui/session-driver/runtime-types";
+import type { CustomProviderConfig } from "./ipc";
+import { SettingsCustomEndpointsSection } from "./settings-custom-endpoints-section";
 import { filterProviders, ProviderRow, SettingsGroup } from "./settings-utils";
 
 interface SettingsProvidersSectionProps {
@@ -8,6 +10,8 @@ interface SettingsProvidersSectionProps {
   readonly onLogoutProvider: (providerId: string) => void;
   readonly onSetProviderApiKey: (providerId: string, apiKey: string) => Promise<string | undefined>;
   readonly onRemoveProviderApiKey: (providerId: string) => Promise<string | undefined>;
+  readonly onSaveCustomProvider: (config: CustomProviderConfig) => Promise<string | undefined>;
+  readonly onDeleteCustomProvider: (providerId: string) => Promise<string | undefined>;
 }
 
 export function SettingsProvidersSection({
@@ -16,6 +20,8 @@ export function SettingsProvidersSection({
   onLogoutProvider,
   onSetProviderApiKey,
   onRemoveProviderApiKey,
+  onSaveCustomProvider,
+  onDeleteCustomProvider,
 }: SettingsProvidersSectionProps) {
   const [providerQuery, setProviderQuery] = useState("");
   const [apiKeyProviderId, setApiKeyProviderId] = useState<string | undefined>();
@@ -28,6 +34,7 @@ export function SettingsProvidersSection({
   const oauthProviders = providers.filter((p) => p.oauthSupported);
   const filteredProviders = filterProviders(providers, providerQuery);
   const apiKeyProvider = apiKeyProviderId ? providers.find((provider) => provider.id === apiKeyProviderId) : undefined;
+  const existingProviderIds = useMemo(() => providers.map((provider) => provider.id), [providers]);
 
   useEffect(() => {
     setApiKeyDraft("");
@@ -103,6 +110,12 @@ export function SettingsProvidersSection({
           />
         ))}
       </SettingsGroup>
+
+      <SettingsCustomEndpointsSection
+        existingProviderIds={existingProviderIds}
+        onSaveCustomProvider={onSaveCustomProvider}
+        onDeleteCustomProvider={onDeleteCustomProvider}
+      />
 
       <SettingsGroup title="All providers" description="Browse the full provider inventory.">
         <details className="settings-disclosure">

@@ -3,6 +3,7 @@
     "baseUrl": ".",
     "paths": {
       "@pi-gui/pi-sdk-driver": ["../../packages/pi-sdk-driver/src/index.ts"],
+      "@pi-gui/pi-sdk-driver/custom-provider-types": ["../../packages/pi-sdk-driver/src/custom-provider-types.ts"],
       "@pi-gui/pi-sdk-driver/dev-reload-probe": ["../../packages/pi-sdk-driver/src/dev-reload-probe.ts"],
       "@pi-gui/catalogs": ["../../packages/catalogs/src/index.ts"],
       "@pi-gui/catalogs/dev-reload-probe": ["../../packages/catalogs/src/dev-reload-probe.ts"],

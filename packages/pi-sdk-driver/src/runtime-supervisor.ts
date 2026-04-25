@@ -28,6 +28,14 @@ import { createRuntimeDependencies } from "./runtime-deps.js";
 import { createSettingsManagerWithoutNpmPackages, isGlobalNpmLookupError } from "./npm-package-fallback.js";
 import { skillSlashCommand } from "./runtime-command-utils.js";
 import type { AuthStorage, ModelRegistry } from "@mariozechner/pi-coding-agent";
+import { CustomProviderStore, type CustomProviderEntry, type CustomProviderInput } from "./custom-provider-store.js";
+
+export {
+  CUSTOM_PROVIDER_ID_PATTERN,
+  isValidHttpBaseUrl,
+  OPENAI_COMPLETIONS_API,
+} from "./custom-provider-store.js";
+export type { CustomProviderEntry, CustomProviderInput, CustomProviderModelInput } from "./custom-provider-store.js";
 
 interface ModelSettingsSnapshot {
   readonly defaultProvider?: string;
@@ -52,6 +60,7 @@ export interface RuntimeSupervisorOptions {
   readonly agentDir?: string;
   readonly authStorage?: AuthStorage;
   readonly modelRegistry?: ModelRegistry;
+  readonly customProviderStore?: CustomProviderStore;
 }
 
 type ResourceScope = "user" | "project";
@@ -61,6 +70,7 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
   private readonly agentDir: string;
   private readonly authStorage: AuthStorage;
   private readonly modelRegistry: ModelRegistry;
+  private readonly customProviderStore: CustomProviderStore;
   private readonly contexts = new Map<string, RuntimeContext>();
 
   constructor(options: RuntimeSupervisorOptions = {}) {
@@ -68,6 +78,7 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
     this.agentDir = deps.agentDir;
     this.authStorage = deps.authStorage;
     this.modelRegistry = deps.modelRegistry;
+    this.customProviderStore = deps.customProviderStore;
   }
 
   async getRuntimeSnapshot(workspace: WorkspaceRef): Promise<RuntimeSnapshot> {
@@ -115,6 +126,33 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
     this.modelRegistry.refresh();
     await context.resourceLoader.reload();
     await this.autoEnableModelsForAuthenticatedProviders(context, [providerId]);
+    return this.buildSnapshot(context);
+  }
+
+  async listCustomProviders(): Promise<readonly CustomProviderEntry[]> {
+    return this.customProviderStore.list();
+  }
+
+  async setCustomProvider(workspace: WorkspaceRef, input: CustomProviderInput): Promise<RuntimeSnapshot> {
+    const oauthProviderIds = new Set(this.authStorage.getOAuthProviders().map((provider) => provider.id));
+    if (providerSupportsDesktopApiKeySetup(input.providerId) || oauthProviderIds.has(input.providerId)) {
+      throw new Error(
+        `Provider ID "${input.providerId}" conflicts with a built-in provider. Pick a unique ID.`,
+      );
+    }
+    const context = await this.ensureContext(workspace);
+    await this.customProviderStore.set(input);
+    this.modelRegistry.refresh();
+    await context.resourceLoader.reload();
+    await this.autoEnableModelsForAuthenticatedProviders(context, [input.providerId]);
+    return this.buildSnapshot(context);
+  }
+
+  async deleteCustomProvider(workspace: WorkspaceRef, providerId: string): Promise<RuntimeSnapshot> {
+    const context = await this.ensureContext(workspace);
+    await this.customProviderStore.delete(providerId);
+    this.modelRegistry.refresh();
+    await context.resourceLoader.reload();
     return this.buildSnapshot(context);
   }
 

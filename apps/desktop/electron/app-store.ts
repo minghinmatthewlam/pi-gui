@@ -86,6 +86,7 @@ import {
   toSessionQueuedMessages,
   toSessionRef,
 } from "./app-store-utils";
+import type { CustomProviderConfig } from "../src/ipc";
 import { resolveRepoWorkspaceId } from "../src/workspace-roots";
 import { SessionStateMap, type QueuedComposerEditState } from "./session-state-map";
 import { createEmptyExtensionUiState, serializeExtensionUiState } from "./session-state-map";
@@ -583,6 +584,40 @@ export class DesktopAppStore implements AppStoreInternals {
   async setProviderApiKey(workspaceId: string, providerId: string, apiKey: string): Promise<DesktopAppState> {
     return this.withRuntimeUpdate(workspaceId, (ws) =>
       this.driver.runtimeSupervisor.setProviderApiKey(ws, providerId, apiKey),
+    );
+  }
+
+  async listCustomProviders(): Promise<readonly CustomProviderConfig[]> {
+    await this.initialize();
+    const entries = await this.driver.runtimeSupervisor.listCustomProviders();
+    return entries.map((entry) => ({
+      providerId: entry.providerId,
+      baseUrl: entry.baseUrl,
+      ...(entry.apiKey !== undefined ? { apiKey: entry.apiKey } : {}),
+      models: entry.models.map((model) => ({
+        id: model.id,
+        ...(model.contextWindow !== undefined ? { contextWindow: model.contextWindow } : {}),
+      })),
+    }));
+  }
+
+  async setCustomProvider(workspaceId: string, config: CustomProviderConfig): Promise<DesktopAppState> {
+    return this.withRuntimeUpdate(workspaceId, (ws) =>
+      this.driver.runtimeSupervisor.setCustomProvider(ws, {
+        providerId: config.providerId,
+        baseUrl: config.baseUrl,
+        ...(config.apiKey !== undefined ? { apiKey: config.apiKey } : {}),
+        models: config.models.map((model) => ({
+          id: model.id,
+          ...(model.contextWindow !== undefined ? { contextWindow: model.contextWindow } : {}),
+        })),
+      }),
+    );
+  }
+
+  async deleteCustomProvider(workspaceId: string, providerId: string): Promise<DesktopAppState> {
+    return this.withRuntimeUpdate(workspaceId, (ws) =>
+      this.driver.runtimeSupervisor.deleteCustomProvider(ws, providerId),
     );
   }
 
