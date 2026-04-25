@@ -25,7 +25,7 @@ export function saveReviewed(
 ): void {
   const key = reviewedFilesKey(workspaceId, sessionId);
   if (reviewed.size === 0) {
-    writeStorage(key, "[]");
+    removeStorage(key);
     return;
   }
   writeStorage(key, JSON.stringify([...reviewed].sort()));
@@ -59,6 +59,14 @@ function readStorage(key: string): string | null {
 function writeStorage(key: string, value: string): void {
   try {
     globalThis.localStorage?.setItem(key, value);
+  } catch {
+    // localStorage unavailable; skip persistence
+  }
+}
+
+function removeStorage(key: string): void {
+  try {
+    globalThis.localStorage?.removeItem(key);
   } catch {
     // localStorage unavailable; skip persistence
   }

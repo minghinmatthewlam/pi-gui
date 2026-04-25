@@ -1,10 +1,5 @@
-import { useMemo } from "react";
-import {
-  MAX_HIGHLIGHTED_LINES,
-  highlightLine,
-  type HighlightLine,
-  type HighlightTokenChild,
-} from "./syntax-highlight";
+import { useMemo, type ReactNode } from "react";
+import { MAX_HIGHLIGHTED_LINES, highlightLine, type HighlightLine } from "./syntax-highlight";
 
 interface DiffLine {
   readonly type: "added" | "removed" | "context" | "header";
@@ -59,27 +54,18 @@ function HighlightedContent({
   readonly language: string;
 }) {
   const tokens = useMemo(() => highlightLine(content, language), [content, language]);
-  return <RenderTokens tokens={tokens} />;
+  return <>{renderTokens(tokens)}</>;
 }
 
-function RenderTokens({ tokens }: { readonly tokens: HighlightLine }) {
-  return (
-    <>
-      {tokens.map((token, index) => (
-        <RenderToken key={index} token={token} />
-      ))}
-    </>
-  );
-}
-
-function RenderToken({ token }: { readonly token: HighlightTokenChild }) {
-  if (typeof token === "string") {
-    return <>{token}</>;
-  }
-  return (
-    <span className={token.className}>
-      <RenderTokens tokens={token.children} />
-    </span>
+function renderTokens(tokens: HighlightLine): ReactNode {
+  return tokens.map((token, index) =>
+    typeof token === "string" ? (
+      token
+    ) : (
+      <span className={token.className} key={index}>
+        {renderTokens(token.children)}
+      </span>
+    ),
   );
 }
 

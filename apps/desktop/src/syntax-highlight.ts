@@ -14,10 +14,10 @@ hljs.registerLanguage("bash", bash);
 
 export const MAX_HIGHLIGHTED_LINES = 500;
 
-export type HighlightToken = {
+interface HighlightToken {
   readonly className?: string;
-  readonly children: readonly HighlightTokenChild[];
-};
+  readonly children: HighlightLine;
+}
 
 export type HighlightTokenChild = string | HighlightToken;
 
@@ -58,7 +58,7 @@ export function highlightLine(line: string, language: string): HighlightLine {
   return tokens;
 }
 
-export function parseHljsHtml(html: string): HighlightLine {
+function parseHljsHtml(html: string): HighlightLine {
   const parser = new HljsHtmlParser(html);
   return parser.parseChildren(null);
 }

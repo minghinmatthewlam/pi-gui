@@ -1,4 +1,4 @@
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PiDesktopApi } from "./ipc";
 import { InlineDiff } from "./diff-inline";
 import { RefreshIcon } from "./icons";
@@ -10,21 +10,26 @@ interface ChangedFile {
   readonly status: "added" | "modified" | "deleted" | "untracked";
 }
 
+export interface DiffPanelFileRequest {
+  readonly path: string;
+  readonly nonce: number;
+}
+
 interface DiffPanelProps {
   readonly workspaceId: string;
   readonly sessionId: string;
   readonly api: PiDesktopApi;
   readonly sessionStatus: string | undefined;
+  readonly fileRequest?: DiffPanelFileRequest | null;
 }
 
-export interface DiffPanelHandle {
-  selectFile(path: string): Promise<void>;
-}
-
-export const DiffPanel = forwardRef<DiffPanelHandle, DiffPanelProps>(function DiffPanel(
-  { workspaceId, sessionId, api, sessionStatus },
-  ref,
-) {
+export function DiffPanel({
+  workspaceId,
+  sessionId,
+  api,
+  sessionStatus,
+  fileRequest,
+}: DiffPanelProps) {
   const [files, setFiles] = useState<readonly ChangedFile[]>([]);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [diffText, setDiffText] = useState("");
@@ -35,54 +40,23 @@ export const DiffPanel = forwardRef<DiffPanelHandle, DiffPanelProps>(function Di
     setReviewed(loadReviewed(workspaceId, sessionId));
   }, [workspaceId, sessionId]);
 
-  const fetchFiles = useCallback(async (): Promise<readonly ChangedFile[]> => {
-    setLoading(true);
-    const result = await api.getChangedFiles(workspaceId);
-    setFiles(result);
-    setReviewed((current) => {
-      const pruned = pruneReviewed(current, result.map((f) => f.path));
-      if (pruned !== current) {
-        saveReviewed(workspaceId, sessionId, pruned);
-      }
-      return pruned;
-    });
-    setLoading(false);
-    return result;
-  }, [api, workspaceId, sessionId]);
-
   const refresh = useCallback(() => {
-    void fetchFiles().then((result) => {
+    setLoading(true);
+    void api.getChangedFiles(workspaceId).then((result) => {
+      setFiles(result);
       setSelectedFile((current) =>
         current && !result.some((f) => f.path === current) ? null : current,
       );
+      setReviewed((current) => {
+        const pruned = pruneReviewed(current, result.map((f) => f.path));
+        if (pruned !== current) {
+          saveReviewed(workspaceId, sessionId, pruned);
+        }
+        return pruned;
+      });
+      setLoading(false);
     });
-  }, [fetchFiles]);
-
-  const fileListRef = useRef<HTMLDivElement | null>(null);
-  const pendingScrollPathRef = useRef<string | null>(null);
-
-  useImperativeHandle(
-    ref,
-    () => ({
-      async selectFile(path: string) {
-        await fetchFiles();
-        pendingScrollPathRef.current = path;
-        setSelectedFile(path);
-      },
-    }),
-    [fetchFiles],
-  );
-
-  useEffect(() => {
-    const target = pendingScrollPathRef.current;
-    if (!target || target !== selectedFile) return;
-    pendingScrollPathRef.current = null;
-    const list = fileListRef.current;
-    if (!list) return;
-    const safeAttr = CSS.escape(target);
-    const row = list.querySelector<HTMLElement>(`[data-file-path="${safeAttr}"]`);
-    row?.scrollIntoView({ block: "nearest", behavior: "auto" });
-  }, [selectedFile, files]);
+  }, [api, workspaceId, sessionId]);
 
   const prevStatusRef = useRef(sessionStatus);
   useEffect(() => {
@@ -98,12 +72,26 @@ export const DiffPanel = forwardRef<DiffPanelHandle, DiffPanelProps>(function Di
   }, [workspaceId]);
 
   useEffect(() => {
+    if (!fileRequest) return;
+    setSelectedFile(fileRequest.path);
+  }, [fileRequest]);
+
+  useEffect(() => {
     if (!selectedFile) {
       setDiffText("");
       return;
     }
     void api.getFileDiff(workspaceId, selectedFile).then(setDiffText);
   }, [api, workspaceId, selectedFile]);
+
+  const fileListRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!selectedFile) return;
+    const row = fileListRef.current?.querySelector<HTMLElement>(
+      `[data-file-path="${CSS.escape(selectedFile)}"]`,
+    );
+    row?.scrollIntoView({ block: "nearest", behavior: "auto" });
+  }, [selectedFile]);
 
   const handleStage = (filePath: string) => {
     void api.stageFile(workspaceId, filePath).then(refresh);
@@ -205,4 +193,4 @@ export const DiffPanel = forwardRef<DiffPanelHandle, DiffPanelProps>(function Di
       )}
     </aside>
   );
-});
+}

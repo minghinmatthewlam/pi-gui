@@ -116,9 +116,8 @@ function TimelineToolCallItem({
   const diffText = isWriteTool(item.toolName) ? extractDiffFromOutput(item.output) : undefined;
   const diffStats = diffText ? countDiffStats(diffText) : undefined;
   const compactLabel = buildCompactLabel(item, diffStats);
-  const filePath = isWriteTool(item.toolName) ? extractFilename(item.input) : "";
-  const diffLanguage = diffText ? extensionToLanguage(filePath) : undefined;
-  const showViewInDiff = Boolean(filePath) && Boolean(onViewFileInDiff);
+  const filePath = isWriteTool(item.toolName) ? extractFilename(item.input) || undefined : undefined;
+  const diffLanguage = diffText && filePath ? extensionToLanguage(filePath) : undefined;
 
   const handleCopy = () => {
     const text = diffText ?? formatToolContent(item.input, item.output);
@@ -150,7 +149,7 @@ function TimelineToolCallItem({
           ) : null}
           <span className="timeline-tool__meta-inline">{`${item.toolName} \u00b7 ${statusLabel(item.status)}`}</span>
         </button>
-        {showViewInDiff ? (
+        {filePath && onViewFileInDiff ? (
           <button
             aria-label={`View ${filePath} in changes`}
             className="icon-button timeline-tool__view-in-diff"
@@ -158,7 +157,7 @@ function TimelineToolCallItem({
             type="button"
             onClick={(event) => {
               event.stopPropagation();
-              onViewFileInDiff?.(filePath);
+              onViewFileInDiff(filePath);
             }}
           >
             <PanelRightIcon />

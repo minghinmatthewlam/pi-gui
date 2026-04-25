@@ -1,7 +1,10 @@
+import { execFile } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
+import { promisify } from "node:util";
 import { join } from "node:path";
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import type { SessionDriverEvent, SessionRef } from "@pi-gui/session-driver";
+import { reviewedFilesKey } from "../../src/reviewed-files-store";
 import {
   commitAllInGitRepo,
   createNamedThread,
@@ -14,7 +17,14 @@ import {
   makeWorkspace,
 } from "../helpers/electron-app";
 
-async function selectedSessionRef(window: Parameters<typeof getDesktopState>[0]): Promise<SessionRef> {
+const execFileAsync = promisify(execFile);
+
+async function commitFiles(workspacePath: string, paths: readonly string[], message: string): Promise<void> {
+  await execFileAsync("git", ["add", "--", ...paths], { cwd: workspacePath });
+  await execFileAsync("git", ["commit", "-m", message], { cwd: workspacePath });
+}
+
+async function selectedSessionRef(window: Page): Promise<SessionRef> {
   const state = await getDesktopState(window);
   if (!state.selectedWorkspaceId || !state.selectedSessionId) {
     throw new Error("Expected a selected session");
@@ -45,19 +55,27 @@ async function seedThreeFileWorkspace(): Promise<string> {
   return workspacePath;
 }
 
-test("syntax-highlights known languages and leaves unknown extensions plain", async () => {
-  test.setTimeout(45_000);
+async function launchSeeded(threadTitle: string): Promise<{
+  readonly harness: Awaited<ReturnType<typeof launchDesktop>>;
+  readonly window: Page;
+  readonly userDataDir: string;
+  readonly workspacePath: string;
+}> {
   const userDataDir = await makeUserDataDir();
   const workspacePath = await seedThreeFileWorkspace();
-
   const harness = await launchDesktop(userDataDir, {
     initialWorkspaces: [workspacePath],
     testMode: "background",
   });
-  try {
-    const window = await harness.firstWindow();
-    await createNamedThread(window, "Review UX highlight");
+  const window = await harness.firstWindow();
+  await createNamedThread(window, threadTitle);
+  return { harness, window, userDataDir, workspacePath };
+}
 
+test("syntax-highlights known languages and leaves unknown extensions plain", async () => {
+  test.setTimeout(45_000);
+  const { harness, window } = await launchSeeded("Review UX highlight");
+  try {
     await window.keyboard.press(desktopShortcut("D"));
     const diffPanel = window.locator(".diff-panel");
     await expect(diffPanel).toBeVisible();
@@ -86,92 +104,73 @@ test("syntax-highlights known languages and leaves unknown extensions plain", as
 
 test("reviewed checkboxes update counter, prune on changes, and survive relaunch", async () => {
   test.setTimeout(60_000);
-  const userDataDir = await makeUserDataDir();
-  const workspacePath = await seedThreeFileWorkspace();
+  const { harness, window: firstWindow, userDataDir, workspacePath } = await launchSeeded(
+    "Review UX checkboxes",
+  );
+  const sessionRef = await selectedSessionRef(firstWindow);
+  const storageKey = reviewedFilesKey(sessionRef.workspaceId, sessionRef.sessionId);
 
-  const harness = await launchDesktop(userDataDir, {
-    initialWorkspaces: [workspacePath],
-    testMode: "background",
-  });
+  await firstWindow.keyboard.press(desktopShortcut("D"));
+  const diffPanel = firstWindow.locator(".diff-panel");
+  await expect(diffPanel).toBeVisible();
+  await expect(diffPanel.locator(".diff-panel__file")).toHaveCount(3);
 
+  const counter = diffPanel.getByTestId("diff-panel-counter");
+  await expect(counter).toHaveText("Reviewed 0 of 3");
+
+  await diffPanel.getByTestId("diff-panel-reviewed-src/foo.ts").check();
+  await expect(counter).toHaveText("Reviewed 1 of 3");
+  await expect(diffPanel.locator('.diff-panel__file[data-file-path="src/foo.ts"]')).toHaveClass(
+    /diff-panel__file--reviewed/,
+  );
+
+  expect(
+    await firstWindow.evaluate((key) => globalThis.localStorage.getItem(key), storageKey),
+  ).toBe(JSON.stringify(["src/foo.ts"]));
+
+  await diffPanel.getByTestId("diff-panel-reviewed-src/foo.ts").uncheck();
+  await expect(counter).toHaveText("Reviewed 0 of 3");
+  await expect(
+    diffPanel.locator('.diff-panel__file[data-file-path="src/foo.ts"]'),
+  ).not.toHaveClass(/diff-panel__file--reviewed/);
+  expect(
+    await firstWindow.evaluate((key) => globalThis.localStorage.getItem(key), storageKey),
+  ).toBeNull();
+
+  await diffPanel.getByTestId("diff-panel-reviewed-src/foo.ts").check();
+  await diffPanel.getByTestId("diff-panel-reviewed-script.py").check();
+  await expect(counter).toHaveText("Reviewed 2 of 3");
+
+  await harness.close();
+
+  const reopened = await launchDesktop(userDataDir, { testMode: "background" });
+  const window = await reopened.firstWindow();
   try {
-    let window = await harness.firstWindow();
-    await createNamedThread(window, "Review UX checkboxes");
-    const sessionRef = await selectedSessionRef(window);
-
     await window.keyboard.press(desktopShortcut("D"));
-    const diffPanel = window.locator(".diff-panel");
-    await expect(diffPanel).toBeVisible();
-    await expect(diffPanel.locator(".diff-panel__file")).toHaveCount(3);
+    const reopenedPanel = window.locator(".diff-panel");
+    await expect(reopenedPanel).toBeVisible();
+    await expect(reopenedPanel.getByTestId("diff-panel-counter")).toHaveText("Reviewed 2 of 3");
+    await expect(reopenedPanel.getByTestId("diff-panel-reviewed-src/foo.ts")).toBeChecked();
+    await expect(reopenedPanel.getByTestId("diff-panel-reviewed-script.py")).toBeChecked();
+    await expect(reopenedPanel.getByTestId("diff-panel-reviewed-notes.md")).not.toBeChecked();
 
-    const counter = diffPanel.getByTestId("diff-panel-counter");
-    await expect(counter).toHaveText("Reviewed 0 of 3");
+    await commitFiles(workspacePath, ["src/foo.ts"], "land foo");
+    await reopenedPanel.locator('button[aria-label="Refresh"]').click();
+    await expect(reopenedPanel.locator(".diff-panel__file")).toHaveCount(2);
+    await expect(reopenedPanel.getByTestId("diff-panel-counter")).toHaveText("Reviewed 1 of 2");
 
-    await diffPanel.getByTestId("diff-panel-reviewed-src/foo.ts").check();
-    await expect(counter).toHaveText("Reviewed 1 of 3");
-    await expect(diffPanel.locator('.diff-panel__file[data-file-path="src/foo.ts"]')).toHaveClass(
-      /diff-panel__file--reviewed/,
-    );
-
-    const storageKey = `pi-gui:reviewed-files:v1:${sessionRef.workspaceId}:${sessionRef.sessionId}`;
-    const stored = await window.evaluate((key) => globalThis.localStorage.getItem(key), storageKey);
-    expect(stored).toBe(JSON.stringify(["src/foo.ts"]));
-
-    await diffPanel.getByTestId("diff-panel-reviewed-src/foo.ts").uncheck();
-    await expect(counter).toHaveText("Reviewed 0 of 3");
-    await expect(
-      diffPanel.locator('.diff-panel__file[data-file-path="src/foo.ts"]'),
-    ).not.toHaveClass(/diff-panel__file--reviewed/);
-
-    await diffPanel.getByTestId("diff-panel-reviewed-src/foo.ts").check();
-    await diffPanel.getByTestId("diff-panel-reviewed-script.py").check();
-    await expect(counter).toHaveText("Reviewed 2 of 3");
-
-    await harness.close();
-
-    const reopened = await launchDesktop(userDataDir, { testMode: "background" });
-    window = await reopened.firstWindow();
-    try {
-      await window.keyboard.press(desktopShortcut("D"));
-      const reopenedPanel = window.locator(".diff-panel");
-      await expect(reopenedPanel).toBeVisible();
-      await expect(reopenedPanel.getByTestId("diff-panel-counter")).toHaveText("Reviewed 2 of 3");
-      await expect(reopenedPanel.getByTestId("diff-panel-reviewed-src/foo.ts")).toBeChecked();
-      await expect(reopenedPanel.getByTestId("diff-panel-reviewed-script.py")).toBeChecked();
-      await expect(reopenedPanel.getByTestId("diff-panel-reviewed-notes.md")).not.toBeChecked();
-
-      await commitAllInGitRepo(workspacePath, "land foo");
-      await reopenedPanel.locator('button[aria-label="Refresh"]').click();
-      await expect(reopenedPanel.locator(".diff-panel__file")).toHaveCount(2);
-      await expect(reopenedPanel.getByTestId("diff-panel-counter")).toHaveText("Reviewed 1 of 2");
-
-      const prunedStored = await window.evaluate(
-        (key) => globalThis.localStorage.getItem(key),
-        storageKey,
-      );
-      expect(prunedStored).toBe(JSON.stringify(["script.py"]));
-    } finally {
-      await reopened.close();
-    }
+    expect(
+      await window.evaluate((key) => globalThis.localStorage.getItem(key), storageKey),
+    ).toBe(JSON.stringify(["script.py"]));
   } finally {
-    // best-effort if a relaunch failed mid-test
-    if (!harness.electronApp.windows().length) return;
-    await harness.close().catch(() => undefined);
+    await reopened.close();
   }
 });
 
 test("view-in-changes button on a write tool row opens the diff panel without toggling expand", async () => {
   test.setTimeout(45_000);
-  const userDataDir = await makeUserDataDir();
-  const workspacePath = await seedThreeFileWorkspace();
-
-  const harness = await launchDesktop(userDataDir, {
-    initialWorkspaces: [workspacePath],
-    testMode: "background",
-  });
+  const { harness, window } = await launchSeeded("Review UX tool link");
   try {
-    const window = await harness.firstWindow();
-    await createNamedThread(window, "Review UX tool link");
     const sessionRef = await selectedSessionRef(window);
 
     const diffPanel = window.locator(".diff-panel");
@@ -220,16 +219,8 @@ test("view-in-changes button on a write tool row opens the diff panel without to
 
 test("highlighting tokens swap palettes when the dark class flips", async () => {
   test.setTimeout(45_000);
-  const userDataDir = await makeUserDataDir();
-  const workspacePath = await seedThreeFileWorkspace();
-
-  const harness = await launchDesktop(userDataDir, {
-    initialWorkspaces: [workspacePath],
-    testMode: "background",
-  });
+  const { harness, window } = await launchSeeded("Review UX theme");
   try {
-    const window = await harness.firstWindow();
-    await createNamedThread(window, "Review UX theme");
     await window.keyboard.press(desktopShortcut("D"));
 
     const diffPanel = window.locator(".diff-panel");
@@ -242,7 +233,6 @@ test("highlighting tokens swap palettes when the dark class flips", async () => 
     const initiallyDark = await window.evaluate(() =>
       document.documentElement.classList.contains("dark"),
     );
-
     const colorBefore = await token.evaluate((el) => getComputedStyle(el).color);
 
     await window.evaluate((wasDark) => {
