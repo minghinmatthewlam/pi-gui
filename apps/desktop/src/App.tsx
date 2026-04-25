@@ -573,10 +573,23 @@ export default function App() {
     waitForFrames(delayFrames);
   }, [requestPinnedBottomAlignment]);
 
+  const pendingDiffSelectionRef = useRef<string | null>(null);
   const handleViewFileInDiff = useCallback((path: string) => {
+    if (diffPanelRef.current) {
+      void diffPanelRef.current.selectFile(path);
+    } else {
+      pendingDiffSelectionRef.current = path;
+    }
     setShowDiffPanel(true);
-    void diffPanelRef.current?.selectFile(path);
   }, []);
+
+  useEffect(() => {
+    if (!showDiffPanel) return;
+    const pending = pendingDiffSelectionRef.current;
+    if (!pending) return;
+    pendingDiffSelectionRef.current = null;
+    void diffPanelRef.current?.selectFile(pending);
+  }, [showDiffPanel]);
 
   const toggleDiffPanel = useCallback(() => {
     const pane = timelinePaneRef.current;
