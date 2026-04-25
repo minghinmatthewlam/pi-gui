@@ -24,6 +24,7 @@ import {
 } from "./notification-permission";
 import { checkForUpdate, initUpdateChecker } from "./update-checker";
 import { ThemeManager } from "./theme-manager";
+import { TerminalService } from "./terminal-service";
 import type { DesktopAppState, ThemeMode } from "../src/desktop-state";
 import { desktopIpc, getDesktopCommandFromShortcut } from "../src/ipc";
 import { SUPPORTED_COMPOSER_IMAGE_TYPES } from "../src/composer-attachments";
@@ -49,11 +50,16 @@ const themeManager = new ThemeManager();
 let mainWindow: BrowserWindow | null = null;
 let notificationManager: NotificationManager | undefined;
 let notificationPermissionService: NotificationPermissionService | undefined;
+let terminalService: TerminalService | undefined;
+let integratedTerminalShell = "";
 let stopPublishingState: (() => void) | undefined;
 let stopPublishingSelectedTranscript: (() => void) | undefined;
 let stopTrackingWindowActivation: (() => void) | undefined;
 let stopNotifications: (() => void) | undefined;
 let stopUpdateChecker: (() => void) | undefined;
+let stopPruningTerminals: (() => void) | undefined;
+let retainedTerminalWorkspacePathSignature = "";
+const terminalFocusedWebContentsIds = new Set<number>();
 let quittingAfterStoreFlush = false;
 
 const SUPPORTED_IMAGE_TYPES = SUPPORTED_COMPOSER_IMAGE_TYPES;
@@ -62,6 +68,17 @@ const OPEN_FOLDER_MENU_ITEM_ID = "file.open-folder";
 const CHECK_FOR_UPDATES_MENU_ITEM_ID = "app.check-for-updates";
 const MAX_CLIPBOARD_IMAGE_BYTES = 10 * 1024 * 1024;
 const MAX_CLIPBOARD_IMAGE_DIMENSION = 8_192;
+
+function getTerminalService(): TerminalService {
+  if (!terminalService) {
+    terminalService = new TerminalService({
+      getWorkspacePath: (workspaceId) => store.getWorkspacePath(workspaceId),
+      getIntegratedTerminalShell: () => integratedTerminalShell,
+      isPackaged: app.isPackaged,
+    });
+  }
+  return terminalService;
+}
 
 // Resolve the bundled application icon. In dev the repo's `resources/icon.png`
 // sits two levels up from the compiled `out/main/main.js`; in a packaged build
@@ -133,6 +150,10 @@ function createWindow(): BrowserWindow {
 
     const lowerKey = input.key.toLowerCase();
     const platformModifier = process.platform === "darwin" ? input.meta : input.control;
+    const terminalFocused = terminalFocusedWebContentsIds.has(window.webContents.id);
+    if (terminalFocused) {
+      return;
+    }
     if (platformModifier && !input.shift && lowerKey === "o") {
       event.preventDefault();
       void pickWorkspaceViaDialog();
@@ -174,6 +195,7 @@ function createWindow(): BrowserWindow {
 }
 
 function attachStatePublisher(window: BrowserWindow): void {
+  const webContentsId = window.webContents.id;
   stopPublishingState?.();
   stopPublishingSelectedTranscript?.();
   stopPublishingState = store.subscribe((state) => {
@@ -200,6 +222,8 @@ function attachStatePublisher(window: BrowserWindow): void {
     if (mainWindow === window) {
       mainWindow = null;
     }
+    terminalFocusedWebContentsIds.delete(webContentsId);
+    terminalService?.dispose();
   });
 }
 
@@ -398,6 +422,16 @@ app.whenReady().then(async () => {
     generateThreadTitleOverride: async (workspace, options) => generateThreadTitleOverride?.(workspace, options),
   });
   await store.initialize();
+  integratedTerminalShell = (await store.getState()).integratedTerminalShell;
+  stopPruningTerminals = store.subscribe((state) => {
+    integratedTerminalShell = state.integratedTerminalShell;
+    const workspacePaths = state.workspaces.map((workspace) => workspace.path);
+    const workspacePathSignature = workspacePaths.join("\0");
+    if (workspacePathSignature !== retainedTerminalWorkspacePathSignature) {
+      retainedTerminalWorkspacePathSignature = workspacePathSignature;
+      terminalService?.retainWorkspacePaths(workspacePaths);
+    }
+  });
   installApplicationMenu();
   if (process.env.PI_APP_TEST_MODE) {
     Object.assign(globalThis, {
@@ -535,6 +569,40 @@ app.whenReady().then(async () => {
   ipcMain.handle(desktopIpc.setNotificationPreferences, (_event, preferences) =>
     store.setNotificationPreferences(preferences),
   );
+  ipcMain.handle(desktopIpc.setIntegratedTerminalShell, (_event, shellPath: string) =>
+    store.setIntegratedTerminalShell(shellPath),
+  );
+  ipcMain.handle(desktopIpc.terminalEnsurePanel, (event, workspaceId: string, size) => {
+    return getTerminalService().ensurePanel(event.sender, workspaceId, size);
+  });
+  ipcMain.handle(desktopIpc.terminalCreateSession, (event, workspaceId: string, size) => {
+    return getTerminalService().createSession(event.sender, workspaceId, size);
+  });
+  ipcMain.handle(desktopIpc.terminalSetActiveSession, (event, workspaceId: string, terminalId: string) => {
+    return getTerminalService().setActiveSession(event.sender, workspaceId, terminalId);
+  });
+  ipcMain.handle(desktopIpc.terminalWrite, (event, terminalId: string, data: string) => {
+    terminalService?.write(event.sender, terminalId, data);
+  });
+  ipcMain.handle(desktopIpc.terminalResize, (event, terminalId: string, size) => {
+    terminalService?.resize(event.sender, terminalId, size);
+  });
+  ipcMain.handle(desktopIpc.terminalRestartSession, (event, terminalId: string, size) => {
+    return getTerminalService().restart(event.sender, terminalId, size);
+  });
+  ipcMain.handle(desktopIpc.terminalCloseSession, (event, terminalId: string) => {
+    return getTerminalService().close(event.sender, terminalId);
+  });
+  ipcMain.handle(desktopIpc.terminalSetTitle, (event, terminalId: string, title: string) => {
+    terminalService?.setTitle(event.sender, terminalId, title);
+  });
+  ipcMain.on(desktopIpc.terminalSetFocused, (event, focused: boolean) => {
+    if (focused) {
+      terminalFocusedWebContentsIds.add(event.sender.id);
+    } else {
+      terminalFocusedWebContentsIds.delete(event.sender.id);
+    }
+  });
   ipcMain.handle(desktopIpc.getNotificationPermissionStatus, () =>
     notificationPermissionService?.getCurrentStatus() ?? Promise.resolve("unknown"),
   );
@@ -683,6 +751,10 @@ app.on("window-all-closed", () => {
     notificationPermissionService = undefined;
     stopUpdateChecker?.();
     stopUpdateChecker = undefined;
+    stopPruningTerminals?.();
+    stopPruningTerminals = undefined;
+    terminalService?.dispose();
+    terminalService = undefined;
     app.quit();
   }
 });
@@ -695,6 +767,10 @@ app.on("before-quit", (event) => {
   notificationPermissionService = undefined;
   stopUpdateChecker?.();
   stopUpdateChecker = undefined;
+  stopPruningTerminals?.();
+  stopPruningTerminals = undefined;
+  terminalService?.dispose();
+  terminalService = undefined;
   if (quittingAfterStoreFlush || !store) {
     return;
   }

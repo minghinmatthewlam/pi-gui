@@ -1,11 +1,16 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { constants, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { access } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { fileURLToPath } from "node:url";
 
 const requiredPackages = [
+  "@xterm/addon-clipboard",
+  "@xterm/addon-fit",
+  "@xterm/addon-web-links",
+  "@xterm/xterm",
   "balanced-match",
   "brace-expansion",
   "chalk",
@@ -13,6 +18,7 @@ const requiredPackages = [
   "hosted-git-info",
   "lru-cache",
   "minimatch",
+  "node-pty",
 ];
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
@@ -49,6 +55,7 @@ if (notificationHelperPath && !existsSync(notificationHelperPath)) {
   throw new Error(`Packaged app is missing notification helper: ${notificationHelperPath}`);
 }
 
+await verifyNativeNodePty(asarPath);
 await verifyPackagedPiRuntime(asarPath);
 
 console.log(`Verified packaged runtime dependencies in ${asarPath}`);
@@ -101,4 +108,46 @@ async function verifyPackagedPiRuntime(asarPath) {
   } finally {
     rmSync(extractedDir, { recursive: true, force: true });
   }
+}
+
+async function verifyNativeNodePty(asarPath) {
+  const unpackedResourcesDir = `${asarPath}.unpacked`;
+  const nodePtyDir = path.join(unpackedResourcesDir, "node_modules", "node-pty");
+  if (!existsSync(nodePtyDir) || !hasFileWithExtension(nodePtyDir, ".node")) {
+    throw new Error(`Packaged app is missing unpacked node-pty native module under ${nodePtyDir}`);
+  }
+  const helperPath = findFileNamed(nodePtyDir, "spawn-helper");
+  if (!helperPath) {
+    throw new Error(`Packaged app is missing unpacked node-pty spawn-helper under ${nodePtyDir}`);
+  }
+  await access(helperPath, constants.X_OK);
+}
+
+function hasFileWithExtension(directoryPath, extension) {
+  for (const entry of readdirSync(directoryPath, { withFileTypes: true })) {
+    const entryPath = path.join(directoryPath, entry.name);
+    if (entry.isFile() && entry.name.endsWith(extension)) {
+      return true;
+    }
+    if (entry.isDirectory() && hasFileWithExtension(entryPath, extension)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function findFileNamed(directoryPath, fileName) {
+  for (const entry of readdirSync(directoryPath, { withFileTypes: true })) {
+    const entryPath = path.join(directoryPath, entry.name);
+    if (entry.isFile() && entry.name === fileName) {
+      return entryPath;
+    }
+    if (entry.isDirectory()) {
+      const nestedMatch = findFileNamed(entryPath, fileName);
+      if (nestedMatch) {
+        return nestedMatch;
+      }
+    }
+  }
+  return undefined;
 }

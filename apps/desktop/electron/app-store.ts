@@ -462,6 +462,22 @@ export class DesktopAppStore implements AppStoreInternals {
     return this.emit();
   }
 
+  async setIntegratedTerminalShell(integratedTerminalShell: string): Promise<DesktopAppState> {
+    await this.initialize();
+    const normalizedShell = integratedTerminalShell.trim();
+    if (this.state.integratedTerminalShell === normalizedShell) {
+      return this.emit();
+    }
+    this.state = {
+      ...this.state,
+      integratedTerminalShell: normalizedShell,
+      lastError: undefined,
+      revision: this.state.revision + 1,
+    };
+    await this.persistUiState();
+    return this.emit();
+  }
+
   async setModelSettingsScopeMode(modelSettingsScopeMode: ModelSettingsScopeMode): Promise<DesktopAppState> {
     await this.initialize();
     if (this.state.modelSettingsScopeMode === modelSettingsScopeMode) {
@@ -711,6 +727,7 @@ export class DesktopAppStore implements AppStoreInternals {
           ...this.state.notificationPreferences,
           ...persisted.notificationPreferences,
         },
+        integratedTerminalShell: persisted.integratedTerminalShell ?? this.state.integratedTerminalShell,
         lastViewedAtBySession: persisted.lastViewedAtBySession ?? {},
         workspaceOrder: persisted.workspaceOrder ?? [],
       };
@@ -1650,6 +1667,7 @@ export class DesktopAppStore implements AppStoreInternals {
       composerDraftsBySession: mapToRecord(this.sessionState.composerDraftsBySession),
       extensionCommandCompatibilityByWorkspace: serializeCompatibilityByWorkspace(this.extensionCommandCompatibilityByWorkspace),
       notificationPreferences: this.state.notificationPreferences,
+      integratedTerminalShell: this.state.integratedTerminalShell || undefined,
       lastViewedAtBySession: mapToRecord(this.sessionState.lastViewedAtBySession),
       workspaceOrder: this.state.workspaceOrder.length > 0 ? this.state.workspaceOrder : undefined,
       modelSettingsScopeMode: this.state.modelSettingsScopeMode,

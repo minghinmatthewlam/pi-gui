@@ -19,6 +19,8 @@ asar: true
 asarUnpack:
   - "**/*.node"
   - "**/*.wasm"
+  - "**/node_modules/node-pty/**/*"
+  - "**/node_modules/.pnpm/node-pty*/node_modules/node-pty/**/*"
 
 artifactName: ${productName}-${version}-${arch}.${ext}
 

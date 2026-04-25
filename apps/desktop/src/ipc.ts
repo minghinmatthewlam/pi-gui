@@ -68,6 +68,19 @@ export const desktopIpc = {
   setExtensionEnabled: "pi-gui:set-extension-enabled",
   respondToHostUiRequest: "pi-gui:respond-to-host-ui-request",
   setNotificationPreferences: "pi-gui:set-notification-preferences",
+  setIntegratedTerminalShell: "pi-gui:set-integrated-terminal-shell",
+  terminalEnsurePanel: "pi-gui:terminal-ensure-panel",
+  terminalCreateSession: "pi-gui:terminal-create-session",
+  terminalSetActiveSession: "pi-gui:terminal-set-active-session",
+  terminalWrite: "pi-gui:terminal-write",
+  terminalResize: "pi-gui:terminal-resize",
+  terminalRestartSession: "pi-gui:terminal-restart-session",
+  terminalCloseSession: "pi-gui:terminal-close-session",
+  terminalSetTitle: "pi-gui:terminal-set-title",
+  terminalSetFocused: "pi-gui:terminal-set-focused",
+  terminalData: "pi-gui:terminal-data",
+  terminalExit: "pi-gui:terminal-exit",
+  terminalError: "pi-gui:terminal-error",
   getNotificationPermissionStatus: "pi-gui:get-notification-permission-status",
   requestNotificationPermission: "pi-gui:request-notification-permission",
   openSystemNotificationSettings: "pi-gui:open-system-notification-settings",
@@ -100,11 +113,55 @@ export const desktopIpc = {
 export const desktopCommands = {
   openSettings: "open-settings",
   openNewThread: "open-new-thread",
+  toggleTerminal: "toggle-terminal",
 } as const;
 
 export type PiDesktopStateListener = (state: DesktopAppState) => void;
 export type PiDesktopSelectedTranscriptListener = (payload: SelectedTranscriptRecord | null) => void;
 export type PiDesktopCommand = (typeof desktopCommands)[keyof typeof desktopCommands];
+
+export interface TerminalSize {
+  readonly cols: number;
+  readonly rows: number;
+}
+
+export type TerminalSessionStatus = "running" | "exited" | "error";
+
+export interface TerminalSessionSnapshot {
+  readonly id: string;
+  readonly workspaceId: string;
+  readonly cwd: string;
+  readonly shell: string;
+  readonly title: string;
+  readonly status: TerminalSessionStatus;
+  readonly replay: string;
+  readonly truncated: boolean;
+  readonly exitCode?: number;
+  readonly signal?: number;
+}
+
+export interface TerminalPanelSnapshot {
+  readonly workspaceId: string;
+  readonly rootKey: string;
+  readonly activeSessionId: string;
+  readonly sessions: readonly TerminalSessionSnapshot[];
+}
+
+export interface TerminalDataEvent {
+  readonly terminalId: string;
+  readonly data: string;
+}
+
+export interface TerminalExitEvent {
+  readonly terminalId: string;
+  readonly exitCode?: number;
+  readonly signal?: number;
+}
+
+export interface TerminalErrorEvent {
+  readonly terminalId: string;
+  readonly message: string;
+}
 
 export interface DesktopShortcutInput {
   readonly modifier: boolean;
@@ -120,10 +177,15 @@ export function getDesktopCommandFromShortcut(input: DesktopShortcutInput): PiDe
 
   const lowerKey = input.key.toLowerCase();
   const isComma = input.key === "," || input.code === "Comma";
+  const isJ = lowerKey === "j" || input.code === "KeyJ";
   const isShiftO = input.shift && (lowerKey === "o" || input.code === "KeyO");
 
   if (!input.shift && isComma) {
     return desktopCommands.openSettings;
+  }
+
+  if (!input.shift && isJ) {
+    return desktopCommands.toggleTerminal;
   }
 
   if (isShiftO) {
@@ -198,6 +260,19 @@ export interface PiDesktopApi {
       | { readonly requestId: string; readonly cancelled: true },
   ): Promise<DesktopAppState>;
   setNotificationPreferences(preferences: Partial<NotificationPreferences>): Promise<DesktopAppState>;
+  setIntegratedTerminalShell(shell: string): Promise<DesktopAppState>;
+  ensureTerminalPanel(workspaceId: string, size?: Partial<TerminalSize>): Promise<TerminalPanelSnapshot>;
+  createTerminalSession(workspaceId: string, size?: Partial<TerminalSize>): Promise<TerminalPanelSnapshot>;
+  setActiveTerminalSession(workspaceId: string, terminalId: string): Promise<TerminalPanelSnapshot>;
+  writeTerminal(terminalId: string, data: string): Promise<void>;
+  resizeTerminal(terminalId: string, size: TerminalSize): Promise<void>;
+  restartTerminalSession(terminalId: string, size?: Partial<TerminalSize>): Promise<TerminalPanelSnapshot>;
+  closeTerminalSession(terminalId: string): Promise<TerminalPanelSnapshot | null>;
+  setTerminalTitle(terminalId: string, title: string): Promise<void>;
+  setTerminalFocused(focused: boolean): Promise<void>;
+  onTerminalData(listener: (event: TerminalDataEvent) => void): () => void;
+  onTerminalExit(listener: (event: TerminalExitEvent) => void): () => void;
+  onTerminalError(listener: (event: TerminalErrorEvent) => void): () => void;
   getNotificationPermissionStatus(): Promise<DesktopNotificationPermissionStatus>;
   requestNotificationPermission(): Promise<DesktopNotificationPermissionStatus>;
   openSystemNotificationSettings(): Promise<void>;
