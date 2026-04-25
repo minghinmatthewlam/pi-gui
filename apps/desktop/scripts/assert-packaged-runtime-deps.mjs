@@ -116,6 +116,9 @@ async function verifyNativeNodePty(asarPath) {
   if (!existsSync(nodePtyDir) || !hasFileWithExtension(nodePtyDir, ".node")) {
     throw new Error(`Packaged app is missing unpacked node-pty native module under ${nodePtyDir}`);
   }
+  if (packagePlatform !== "darwin") {
+    return;
+  }
   const helperPath = findFileNamed(nodePtyDir, "spawn-helper");
   if (!helperPath) {
     throw new Error(`Packaged app is missing unpacked node-pty spawn-helper under ${nodePtyDir}`);
