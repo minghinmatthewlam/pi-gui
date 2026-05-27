@@ -689,21 +689,8 @@
   color: var(--muted-settings);
 }
 
-@media (max-width: 1180px) {
-  .shell {
-    grid-template-columns: 272px minmax(0, 1fr);
-  }
-}
+/* Media queries for small viewports are disabled to prevent DevTools from breaking desktop shell grids */
 
-@media (max-width: 980px) {
-  .shell {
-    grid-template-columns: 1fr;
-  }
-
-  .sidebar {
-    min-height: 360px;
-  }
-}
 
 /* ---------- Dark mode overrides ---------- */
 

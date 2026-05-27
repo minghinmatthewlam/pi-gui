@@ -2027,13 +2027,6 @@ export default function App() {
 
   return (
     <div className={shellClassName}>
-      {primarySidebarToggleVisible ? (
-        <SidebarToggleButton
-          collapsed={snapshot.sidebarCollapsed}
-          shortcutLabel={sidebarToggleShortcutLabel}
-          onToggle={handleTogglePrimarySidebar}
-        />
-      ) : null}
       {!snapshot.sidebarCollapsed ? (
         <Sidebar
           activeView={snapshot.activeView}
@@ -2076,6 +2069,10 @@ export default function App() {
           onToggleTerminal={toggleTerminal}
           showDiffPanel={showDiffPanel}
           onToggleDiffPanel={toggleDiffPanel}
+          primarySidebarToggleVisible={primarySidebarToggleVisible}
+          sidebarCollapsed={snapshot.sidebarCollapsed}
+          sidebarToggleShortcutLabel={sidebarToggleShortcutLabel}
+          onTogglePrimarySidebar={handleTogglePrimarySidebar}
         />
 
         {showTerminalTakeover ? (

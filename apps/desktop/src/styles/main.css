@@ -181,10 +181,14 @@
 
 .sidebar-toggle {
   -webkit-app-region: no-drag;
-  position: absolute;
+  position: fixed;
   top: 11px;
   left: var(--titlebar-toggle-left);
   z-index: 80;
+}
+
+.shell:not(.shell--sidebar-collapsed) .sidebar-toggle {
+  left: var(--titlebar-toggle-left);
 }
 
 .sidebar-toggle__button {
@@ -2953,35 +2957,6 @@
   margin: 0;
 }
 
-@media (max-width: 980px) {
-  .topbar,
-  .composer,
-  .canvas {
-    padding-left: 18px;
-    padding-right: 18px;
-  }
-
-  .topbar,
-  .composer__bar,
-  .chat-header__row,
-  .view-header,
-  .tree-modal__footer {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .topbar__actions {
-    justify-content: flex-start;
-  }
-
-  .skills-layout {
-    grid-template-columns: 1fr;
-  }
-
-  .skills-grid {
-    grid-template-columns: 1fr;
-  }
-}
 
 /* Thread search */
 

@@ -1,4 +1,5 @@
 import type { MouseEvent as ReactMouseEvent, Dispatch, SetStateAction } from "react";
+import { SidebarToggleButton } from "./sidebar-toggle-button";
 import type { AppView, DesktopAppState, SessionRecord, WorkspaceRecord, WorktreeRecord } from "./desktop-state";
 import { DiffIcon, FolderIcon, TerminalIcon } from "./icons";
 import { getDesktopShortcutLabel, type PiDesktopApi } from "./ipc";
@@ -26,6 +27,10 @@ interface TopbarProps {
   readonly onToggleTerminal: () => void;
   readonly showDiffPanel: boolean;
   readonly onToggleDiffPanel: () => void;
+  readonly primarySidebarToggleVisible: boolean;
+  readonly sidebarCollapsed: boolean;
+  readonly sidebarToggleShortcutLabel: string;
+  readonly onTogglePrimarySidebar: () => void;
 }
 
 export function Topbar(props: TopbarProps) {
@@ -47,7 +52,12 @@ export function Topbar(props: TopbarProps) {
     onToggleTerminal,
     showDiffPanel,
     onToggleDiffPanel,
+    primarySidebarToggleVisible,
+    sidebarCollapsed,
+    sidebarToggleShortcutLabel,
+    onTogglePrimarySidebar,
   } = props;
+
   const terminalShortcut = getDesktopShortcutLabel(api.platform, "J");
   const diffShortcut = getDesktopShortcutLabel(api.platform, "D");
 
@@ -65,114 +75,124 @@ export function Topbar(props: TopbarProps) {
   };
 
   return (
-    <header className="topbar" data-testid="topbar" onDoubleClick={handleDoubleClick}>
-      <div className="topbar__title">
-        <span className="topbar__workspace">
-          {rootWorkspace ? rootWorkspace.name : "Open a folder to begin"}
-        </span>
-        {selectedWorkspace && activeView === "threads" ? (
-          <>
-            <span className="topbar__separator">/</span>
-            <div className="environment-picker" ref={wsMenu.environmentMenuRef}>
-              <button
-                aria-expanded={wsMenu.environmentMenuOpen}
-                aria-haspopup="menu"
-                className="environment-picker__button"
-                type="button"
-                onClick={() => wsMenu.setEnvironmentMenuOpen((current) => !current)}
-              >
-                {selectedWorkspace.kind === "worktree" ? selectedWorktree?.name ?? selectedWorkspace.name : "Local"}
-              </button>
-              {wsMenu.environmentMenuOpen && rootWorkspace ? (
-                <div className="workspace-menu environment-picker__menu">
-                  <button
-                    className="workspace-menu__item"
-                    type="button"
-                    onClick={() => wsMenu.selectWorkspace(rootWorkspace.id)}
-                  >
-                    Local
-                  </button>
-                  {activeWorktrees.map((worktree) => {
-                    const linkedWorkspace = workspaces.find(
-                      (workspace) => workspace.id === worktree.linkedWorkspaceId,
-                    );
-                    const worktreeSelectable = Boolean(linkedWorkspace) && worktree.status === "ready";
-                    return (
-                      <button
-                        className="workspace-menu__item"
-                        key={worktree.id}
-                        type="button"
-                        disabled={!worktreeSelectable}
-                        onClick={() => {
-                          if (worktreeSelectable && linkedWorkspace) {
-                            wsMenu.selectWorkspace(linkedWorkspace.id);
-                          }
-                        }}
-                      >
-                        {worktree.name}
-                        {!worktreeSelectable ? ` (${worktree.status !== "ready" ? worktree.status : "unavailable"})` : ""}
-                      </button>
-                    );
-                  })}
-                </div>
-              ) : null}
-            </div>
-          </>
-        ) : null}
-        {selectedWorkspace && activeView === "threads" && selectedSession ? (
-          <>
-            <span className="topbar__separator">/</span>
-            <span className="topbar__session">{selectedSessionTitle ?? selectedSession.title}</span>
-          </>
-        ) : activeView === "new-thread" && rootWorkspace ? (
-          <>
-            <span className="topbar__separator">/</span>
-            <span className="topbar__session">New thread</span>
-          </>
-        ) : null}
-      </div>
+    <>
+      <header className="topbar" data-testid="topbar" onDoubleClick={handleDoubleClick}>
+        <div className="topbar__title">
+          <span className="topbar__workspace">
+            {rootWorkspace ? rootWorkspace.name : "Open a folder to begin"}
+          </span>
+          {selectedWorkspace && activeView === "threads" ? (
+            <>
+              <span className="topbar__separator">/</span>
+              <div className="environment-picker" ref={wsMenu.environmentMenuRef}>
+                <button
+                  aria-expanded={wsMenu.environmentMenuOpen}
+                  aria-haspopup="menu"
+                  className="environment-picker__button"
+                  type="button"
+                  onClick={() => wsMenu.setEnvironmentMenuOpen((current) => !current)}
+                >
+                  {selectedWorkspace.kind === "worktree" ? selectedWorktree?.name ?? selectedWorkspace.name : "Local"}
+                </button>
+                {wsMenu.environmentMenuOpen && rootWorkspace ? (
+                  <div className="workspace-menu environment-picker__menu">
+                    <button
+                      className="workspace-menu__item"
+                      type="button"
+                      onClick={() => wsMenu.selectWorkspace(rootWorkspace.id)}
+                    >
+                      Local
+                    </button>
+                    {activeWorktrees.map((worktree) => {
+                      const linkedWorkspace = workspaces.find(
+                        (workspace) => workspace.id === worktree.linkedWorkspaceId,
+                      );
+                      const worktreeSelectable = Boolean(linkedWorkspace) && worktree.status === "ready";
+                      return (
+                        <button
+                          className="workspace-menu__item"
+                          key={worktree.id}
+                          type="button"
+                          disabled={!worktreeSelectable}
+                          onClick={() => {
+                            if (worktreeSelectable && linkedWorkspace) {
+                              wsMenu.selectWorkspace(linkedWorkspace.id);
+                            }
+                          }}
+                        >
+                          {worktree.name}
+                          {!worktreeSelectable ? ` (${worktree.status !== "ready" ? worktree.status : "unavailable"})` : ""}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : null}
+              </div>
+            </>
+          ) : null}
+          {selectedWorkspace && activeView === "threads" && selectedSession ? (
+            <>
+              <span className="topbar__separator">/</span>
+              <span className="topbar__session">{selectedSessionTitle ?? selectedSession.title}</span>
+            </>
+          ) : activeView === "new-thread" && rootWorkspace ? (
+            <>
+              <span className="topbar__separator">/</span>
+              <span className="topbar__session">New thread</span>
+            </>
+          ) : null}
+        </div>
 
-      <div className="topbar__actions">
-        <div className="shortcut-tooltip-wrap topbar__tooltip-wrap">
+        <div className="topbar__actions">
+          <div className="shortcut-tooltip-wrap topbar__tooltip-wrap">
+            <button
+              aria-label="Toggle terminal"
+              className={`icon-button topbar__icon ${terminalVisible ? "icon-button--active" : ""}`}
+              type="button"
+              disabled={!terminalAvailable}
+              onClick={onToggleTerminal}
+            >
+              <TerminalIcon />
+            </button>
+            <span className="shortcut-tooltip topbar__tooltip" role="tooltip">
+              <span>Toggle terminal</span>
+              <kbd>{terminalShortcut}</kbd>
+            </span>
+          </div>
+          <div className="shortcut-tooltip-wrap topbar__tooltip-wrap">
+            <button
+              aria-label="Toggle changes"
+              className={`icon-button topbar__icon ${showDiffPanel ? "icon-button--active" : ""}`}
+              type="button"
+              onClick={onToggleDiffPanel}
+            >
+              <DiffIcon />
+            </button>
+            <span className="shortcut-tooltip topbar__tooltip" role="tooltip">
+              <span>Toggle changes</span>
+              <kbd>{diffShortcut}</kbd>
+            </span>
+          </div>
           <button
-            aria-label="Toggle terminal"
-            className={`icon-button topbar__icon ${terminalVisible ? "icon-button--active" : ""}`}
+            aria-label="Add folder"
+            className="icon-button topbar__icon"
             type="button"
-            disabled={!terminalAvailable}
-            onClick={onToggleTerminal}
+            onClick={() => {
+              void updateSnapshot(api, setSnapshot, () => api.pickWorkspace());
+            }}
           >
-            <TerminalIcon />
+            <FolderIcon />
           </button>
-          <span className="shortcut-tooltip topbar__tooltip" role="tooltip">
-            <span>Toggle terminal</span>
-            <kbd>{terminalShortcut}</kbd>
-          </span>
         </div>
-        <div className="shortcut-tooltip-wrap topbar__tooltip-wrap">
-          <button
-            aria-label="Toggle changes"
-            className={`icon-button topbar__icon ${showDiffPanel ? "icon-button--active" : ""}`}
-            type="button"
-            onClick={onToggleDiffPanel}
-          >
-            <DiffIcon />
-          </button>
-          <span className="shortcut-tooltip topbar__tooltip" role="tooltip">
-            <span>Toggle changes</span>
-            <kbd>{diffShortcut}</kbd>
-          </span>
-        </div>
-        <button
-          aria-label="Add folder"
-          className="icon-button topbar__icon"
-          type="button"
-          onClick={() => {
-            void updateSnapshot(api, setSnapshot, () => api.pickWorkspace());
-          }}
-        >
-          <FolderIcon />
-        </button>
-      </div>
-    </header>
+      </header>
+
+      {primarySidebarToggleVisible && (
+        <SidebarToggleButton
+          collapsed={sidebarCollapsed}
+          shortcutLabel={sidebarToggleShortcutLabel}
+          onToggle={onTogglePrimarySidebar}
+        />
+      )}
+    </>
   );
 }

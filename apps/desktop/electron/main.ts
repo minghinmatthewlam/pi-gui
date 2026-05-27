@@ -397,7 +397,7 @@ function getPersistedAllowMultiple(): boolean {
 }
 
 const hasSingleInstanceLock = getPersistedAllowMultiple() || app.requestSingleInstanceLock();
-if (!hasSingleInstanceLock) {
+if (!hasSingleInstanceLock && !getPersistedAllowMultiple()) {
   app.quit();
 }
 
@@ -413,7 +413,7 @@ app.on("second-instance", async () => {
 });
 
 app.whenReady().then(async () => {
-  if (!hasSingleInstanceLock) {
+  if (!hasSingleInstanceLock && !getPersistedAllowMultiple()) {
     return;
   }
 
