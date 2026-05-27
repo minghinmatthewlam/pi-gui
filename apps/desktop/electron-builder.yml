@@ -1,7 +1,7 @@
 appId: com.pi-gui.desktop
 productName: pi-gui
 copyright: Copyright 2026 Matthew Lam
-electronVersion: 34.5.8
+electronVersion: 42.2.0
 
 directories:
   output: release

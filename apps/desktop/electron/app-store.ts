@@ -777,6 +777,7 @@ export class DesktopAppStore implements AppStoreInternals {
         workspaceOrder: persisted.workspaceOrder ?? [],
         sidebarCollapsed: persisted.sidebarCollapsed ?? this.state.sidebarCollapsed,
         allowMultiple: persisted.allowMultiple ?? this.state.allowMultiple,
+        enableTransparency: persisted.enableTransparency ?? this.state.enableTransparency,
       };
       await this.migrateLegacyPersistence(persisted);
       this.sessionState.lastViewedAtBySession.clear();

@@ -1,10 +1,15 @@
 {
   "name": "pi-gui",
   "private": true,
+  "trustedDependencies": [
+    "electron",
+    "node-pty"
+  ],
   "version": "0.1.0",
   "license": "MIT",
   "packageManager": "pnpm@10.25.0",
   "scripts": {
+    "postinstall": "node node_modules/electron/install.js",
     "dev": "pnpm --filter @pi-gui/desktop dev",
     "bun:dev": "cd apps/desktop && bun run dev",
     "build": "pnpm -r --if-present build",

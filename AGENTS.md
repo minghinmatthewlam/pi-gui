@@ -8,6 +8,7 @@ These rules apply for the full session.
 - Do not create or switch to new branches to start work unless the user explicitly asks; respect the current branch or worktree as intentional.
 - Commit in small focused checkpoints; don’t batch unrelated changes.
 - Run `simplify` before closing non-trivial implementation work.
+- Avoid broad `grep` searches; keep them focused on specific directories or patterns to maintain performance.
 
 ## Product
 - This repo is building a Codex-style desktop app for `pi`; preserve that product direction.
