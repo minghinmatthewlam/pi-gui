@@ -81,7 +81,7 @@
   },
   "dependencies": {
     "@aws-sdk/token-providers": "^3.1036.0",
-    "@earendil-works/pi-coding-agent": "^0.74.0",
+    "@earendil-works/pi-coding-agent": "^0.75.5",
     "@pi-gui/pi-sdk-driver": "workspace:*",
     "@pi-gui/session-driver": "workspace:*",
     "@smithy/is-array-buffer": "^2.2.0",

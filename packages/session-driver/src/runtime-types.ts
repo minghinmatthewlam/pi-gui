@@ -1,4 +1,5 @@
 import type { WorkspaceRef } from "./types.js";
+import type { OAuthLoginCallbacks } from "@earendil-works/pi-ai";
 
 export type RuntimeAuthType = "oauth" | "api_key" | "none";
 export type RuntimeProviderAuthSource = "none" | "oauth" | "auth_file" | "env" | "external";
@@ -122,13 +123,7 @@ export interface RuntimeLoginPrompt {
   readonly allowEmpty?: boolean;
 }
 
-export interface RuntimeLoginCallbacks {
-  readonly onAuth: (info: RuntimeLoginAuthInfo) => void | Promise<void>;
-  readonly onPrompt: (prompt: RuntimeLoginPrompt) => Promise<string>;
-  readonly onProgress?: (message: string) => void | Promise<void>;
-  readonly onManualCodeInput?: () => Promise<string>;
-  readonly signal?: AbortSignal;
-}
+export type RuntimeLoginCallbacks = OAuthLoginCallbacks;
 
 export interface RuntimeResourceDriver {
   getRuntimeSnapshot(workspace: WorkspaceRef): Promise<RuntimeSnapshot>;

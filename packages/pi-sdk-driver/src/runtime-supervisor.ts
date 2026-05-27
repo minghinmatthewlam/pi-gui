@@ -11,6 +11,7 @@ import {
   type ResolvedPaths,
   type ResolvedResource,
 } from "@earendil-works/pi-coding-agent";
+import type { OAuthLoginCallbacks } from "@earendil-works/pi-ai";
 import type {
   RuntimeLoginCallbacks,
   RuntimeExtensionDiagnostic,
@@ -87,7 +88,7 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
 
   async login(workspace: WorkspaceRef, providerId: string, callbacks: RuntimeLoginCallbacks): Promise<RuntimeSnapshot> {
     const context = await this.ensureContext(workspace);
-    await this.authStorage.login(providerId, callbacks);
+    await this.authStorage.login(providerId, callbacks as OAuthLoginCallbacks);
     this.modelRegistry.refresh();
     await context.resourceLoader.reload();
     await this.autoEnableModelsForAuthenticatedProviders(context, [providerId]);
