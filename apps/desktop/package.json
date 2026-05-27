@@ -3,7 +3,11 @@
   "private": true,
   "trustedDependencies": ["electron", "node-pty"],
   "version": "0.1.0",
-  "author": "Matthew Lam",
+  "author": {
+    "name": "Matthew Lam",
+    "email": "lochois@gmail.com"
+  },
+  "homepage": "https://github.com/minghinmatthewlam/pi-gui",
   "license": "MIT",
   "description": "Codex-style desktop shell for pi",
   "main": "out/main/main.js",
@@ -21,8 +25,8 @@
     "bun:package": "bun run bun:build && bun run scripts/bun-package-wrapper.mjs electron-builder --mac",
     "package:dir": "pnpm run build && electron-builder --mac --dir",
     "bun:package:dir": "bun run bun:build && bun run scripts/bun-package-wrapper.mjs electron-builder --mac --dir",
-    "package:linux": "pnpm run build && electron-builder --linux AppImage",
-    "bun:package:linux": "bun run bun:build && bun run scripts/bun-package-wrapper.mjs electron-builder --linux AppImage",
+    "package:linux": "pnpm run build && electron-builder --linux AppImage deb",
+    "bun:package:linux": "bun run bun:build && bun run scripts/bun-package-wrapper.mjs electron-builder --linux AppImage deb",
     "package:linux:dir": "pnpm run build && electron-builder --linux --dir",
     "bun:package:linux:dir": "bun run bun:build && bun run scripts/bun-package-wrapper.mjs electron-builder --linux --dir",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.electron.json --noEmit",

@@ -61,7 +61,7 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
-      - name: Package Linux AppImage
+      - name: Package Linux AppImage and deb
         run: pnpm --filter @pi-gui/desktop run package:linux
 
       - name: Verify packaged runtime dependencies
