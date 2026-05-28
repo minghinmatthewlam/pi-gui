@@ -240,17 +240,54 @@ export function transcriptFromMessages(messages: readonly unknown[], fallbackTim
       }
     }
 
+    const reasoningText = extractReasoning(message);
+    if (reasoningText) {
+      console.log(`[pi-sdk-driver] Extracted reasoning for message ${message.id || 'unknown'}: ${reasoningText.slice(0, 100)}...`);
+    }
+
     transcript.push({
       kind: "message",
       id: typeof message.id === "string" ? message.id : `${role}-${index}`,
       role,
       text,
       ...(attachments.length > 0 ? { attachments } : {}),
+      ...(reasoningText ? { reasoning: reasoningText } : {}),
       createdAt: typeof message.createdAt === "string" ? message.createdAt : fallbackTimestamp,
     });
   }
 
   return transcript;
+}
+
+function extractReasoning(message: Record<string, unknown>): string | undefined {
+  const { content } = message;
+  if (Array.isArray(content)) {
+    const thinkingPart = content.find((part) => isRecord(part) && (part.type === "thinking" || part.type === "reasoning"));
+    if (thinkingPart) {
+      return (
+        (thinkingPart as any).thinking ||
+        (thinkingPart as any).text ||
+        (thinkingPart as any).content ||
+        (thinkingPart as any).reasoning
+      ) as string | undefined;
+    }
+  }
+
+  if (typeof message.thought === "string") return message.thought;
+  if (typeof message.reasoning === "string") {
+    return message.reasoning;
+  }
+
+  // Debug: Dump the message structure if it's an assistant message and we haven't found reasoning yet
+  if (message.role === 'assistant') {
+    console.log(`[pi-sdk-driver] MESSAGE DUMP for ${message.id || 'unknown'}:`);
+    console.log(JSON.stringify(message, null, 2));
+  }
+
+  if (typeof content === 'string' && content.includes('thinking')) {
+     console.log(`[pi-sdk-driver] Found 'thinking' keyword in string content for message ${message.id || 'unknown'}`);
+  }
+  return undefined;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -48,6 +48,7 @@ export class SessionStateMap {
   readonly sessionCommandsBySession = new Map<string, RuntimeCommandRecord[]>();
   readonly extensionUiBySession = new Map<string, MutableSessionExtensionUiState>();
   readonly pendingAutoTitleBySession = new Map<string, PendingAutoTitle>();
+  readonly reasoningStreamingMessageIdBySession = new Map<string, string | null>();
   readonly loadedTranscriptKeys = new Set<string>();
 
   /**
@@ -81,6 +82,7 @@ export class SessionStateMap {
     this.sessionCommandsBySession.delete(key);
     this.extensionUiBySession.delete(key);
     this.pendingAutoTitleBySession.delete(key);
+    this.reasoningStreamingMessageIdBySession.delete(key);
     pendingAutoTitle?.cancel();
     this.loadedTranscriptKeys.delete(key);
     this.transcriptCache.delete(key);

@@ -54,6 +54,7 @@ import {
 import {
   applyTimelineEvent,
   appendAssistantDelta,
+  appendAssistantThinkingDelta,
   clearActiveAssistantMessage,
 } from "./app-store-timeline";
 import { applySessionEventState, updateSessionRecord } from "./app-store-session-state";
@@ -187,6 +188,7 @@ export class DesktopAppStore implements AppStoreInternals {
   async getSelectedTranscript(): Promise<SelectedTranscriptRecord | null> {
     await this.initialize();
     const sessionRef = this.selectedSessionRef();
+    console.log(`[pi-gui] getSelectedTranscript called for session: ${sessionRef ? JSON.stringify(sessionRef) : 'none'}`);
     if (!sessionRef) {
       return null;
     }
@@ -1045,6 +1047,7 @@ export class DesktopAppStore implements AppStoreInternals {
   private async ensureTranscriptLoaded(sessionRef: SessionRef): Promise<void> {
     const key = sessionKey(sessionRef);
     if (this.sessionState.loadedTranscriptKeys.has(key)) {
+      console.log(`[pi-gui] ensureTranscriptLoaded: cache hit for session: ${key}`);
       return;
     }
 
@@ -1054,6 +1057,8 @@ export class DesktopAppStore implements AppStoreInternals {
       : await this.driver.getTranscript(sessionRef);
 
     if (!cachedTranscript || cachedTranscript.format === "legacy") {
+    console.log(`[pi-gui] ensureTranscriptLoaded: cache miss, fetched transcript for session: ${key}`);
+
       await this.writePersistedTranscript(key, transcript);
     }
 
@@ -1376,6 +1381,44 @@ export class DesktopAppStore implements AppStoreInternals {
     }
 
     switch (event.type) {
+      case "assistantThinkingStarted": {
+        const key = sessionKey(event.sessionRef);
+        this.sessionState.reasoningStreamingMessageIdBySession.set(key, null);
+        this.state = {
+          ...this.state,
+          reasoningStreamingMessageIdBySession: {
+            ...this.state.reasoningStreamingMessageIdBySession,
+            [key]: null,
+          },
+        };
+        break;
+      }
+      case "assistantThinkingFinished": {
+        const key = sessionKey(event.sessionRef);
+        this.sessionState.reasoningStreamingMessageIdBySession.set(key, null);
+        this.state = {
+          ...this.state,
+          reasoningStreamingMessageIdBySession: {
+            ...this.state.reasoningStreamingMessageIdBySession,
+            [key]: null,
+          },
+        };
+        break;
+      }
+      case "assistantThinkingDelta": {
+        const key = sessionKey(event.sessionRef);
+        appendAssistantThinkingDelta(this.sessionState.transcriptCache, this.sessionState.activeAssistantMessageBySession, event.sessionRef, event.text);
+        const activeId = this.sessionState.activeAssistantMessageBySession.get(key);
+        this.sessionState.reasoningStreamingMessageIdBySession.set(key, activeId ?? null);
+        this.state = {
+          ...this.state,
+          reasoningStreamingMessageIdBySession: {
+            ...this.state.reasoningStreamingMessageIdBySession,
+            [key]: activeId ?? null,
+          },
+        };
+        break;
+      }
       case "assistantDelta":
         appendAssistantDelta(this.sessionState.transcriptCache, this.sessionState.activeAssistantMessageBySession, event.sessionRef, event.text);
         break;

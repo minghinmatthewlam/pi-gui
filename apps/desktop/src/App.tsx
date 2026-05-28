@@ -2166,6 +2166,7 @@ export default function App() {
                   showJumpToLatest={showJumpToLatest}
                   onJumpToLatest={jumpToLatest}
                   onContentHeightChange={handleTimelineContentHeightChange}
+                  reasoningStreamingMessageId={snapshot?.reasoningStreamingMessageIdBySession[selectedSessionKey] ?? null}
                   onViewFileInDiff={handleViewFileInDiff}
                 />
               </div>

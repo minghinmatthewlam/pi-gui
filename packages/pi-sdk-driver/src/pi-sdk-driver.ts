@@ -5,8 +5,6 @@ import type {
   NavigateSessionTreeResult,
   SessionQueuedMessage,
   SessionTreeSnapshot,
-} from "@pi-gui/session-driver/types";
-import type {
   CreateSessionOptions,
   HostUiResponse,
   SessionDriver,
@@ -17,7 +15,8 @@ import type {
   SessionMessageInput,
   Unsubscribe,
   WorkspaceRef,
-} from "@pi-gui/session-driver";
+} from "@pi-gui/session-driver/types";
+import type { } from "@pi-gui/session-driver";
 import {
   SessionSupervisor,
   type PiSdkDriverOptions,

@@ -9,16 +9,18 @@ export function TimelineItem({
   item,
   expandedToolCallIds,
   onToggleToolCall,
+  reasoningStreamingMessageId,
   onViewFileInDiff,
 }: {
   readonly item: TranscriptMessage;
   readonly expandedToolCallIds?: ReadonlySet<string>;
   readonly onToggleToolCall?: (callId: string) => void;
+  readonly reasoningStreamingMessageId?: string | null;
   readonly onViewFileInDiff?: (path: string) => void;
 }) {
   switch (item.kind) {
     case "message":
-      return <TimelineMessage item={item} />;
+      return <TimelineMessage item={item} reasoningStreamingMessageId={reasoningStreamingMessageId} />;
     case "activity":
       return <TimelineActivityItem item={item} />;
     case "tool":
@@ -37,7 +39,7 @@ export function TimelineItem({
   }
 }
 
-function TimelineMessage({ item }: { readonly item: SessionTranscriptMessage }) {
+function TimelineMessage({ item, reasoningStreamingMessageId }: { readonly item: SessionTranscriptMessage; readonly reasoningStreamingMessageId?: string | null }) {
   if (item.role === "user") {
     return (
       <article className="timeline-item timeline-item--user">
@@ -86,6 +88,14 @@ function TimelineMessage({ item }: { readonly item: SessionTranscriptMessage }) 
 
   return (
     <article className="timeline-item timeline-item--assistant">
+      {item.reasoning ? (
+        <details className="timeline-item__reasoning" open={item.id === reasoningStreamingMessageId}>
+          <summary className="timeline-item__reasoning-summary">Reasoning</summary>
+          <div className="timeline-item__reasoning-content">
+            <MessageMarkdown text={item.reasoning} />
+          </div>
+        </details>
+      ) : null}
       <MessageMarkdown text={item.text} />
     </article>
   );

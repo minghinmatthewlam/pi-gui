@@ -1,4 +1,38 @@
 .sr-only {
+.timeline-item__reasoning {
+  margin-bottom: 0.75rem;
+  border-left: 2px solid var(--line);
+  padding-left: 0.5rem;
+  color: var(--muted-soft);
+  transition: opacity 0.2s ease;
+}
+
+.timeline-item__reasoning-summary {
+  cursor: pointer;
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--muted-soft);
+  user-select: none;
+  margin-bottom: 0.15rem;
+  outline: none;
+  transition: color 0.15s ease;
+}
+.timeline-item__reasoning-summary:hover {
+  color: var(--muted-strong);
+}
+
+.timeline-item__reasoning-content {
+  transition: all 0.2s ease;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  margin-top: 0.2rem;
+  animation: reasoning-fade-in 0.3s ease-out;
+}
+
+@keyframes reasoning-fade-in {
+  from { opacity: 0; transform: translateY(-2px); }
+  to { opacity: 1; transform: translateY(0); }
+}
   position: absolute;
   width: 1px;
   height: 1px;
@@ -3402,3 +3436,4 @@ mark.thread-find-active {
   background: rgba(224, 84, 103, 0.12);
   border-color: rgba(224, 84, 103, 0.2);
 }
+.timeline-item__reasoning .message__content { color: var(--muted-soft); font-size: 0.8rem; }

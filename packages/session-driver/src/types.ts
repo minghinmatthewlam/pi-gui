@@ -143,6 +143,19 @@ export interface AssistantDeltaEvent extends SessionEventBase {
   readonly text: string;
 }
 
+export interface AssistantThinkingDeltaEvent extends SessionEventBase {
+  readonly type: "assistantThinkingDelta";
+  readonly text: string;
+}
+
+export interface AssistantThinkingStartedEvent extends SessionEventBase {
+  readonly type: "assistantThinkingStarted";
+}
+
+export interface AssistantThinkingFinishedEvent extends SessionEventBase {
+  readonly type: "assistantThinkingFinished";
+}
+
 export interface QueuedMessageStartedEvent extends SessionEventBase {
   readonly type: "queuedMessageStarted";
   readonly message: SessionQueuedMessage;
@@ -291,6 +304,9 @@ export type SessionDriverEvent =
   | SessionOpenedEvent
   | SessionUpdatedEvent
   | AssistantDeltaEvent
+  | AssistantThinkingStartedEvent
+  | AssistantThinkingFinishedEvent
+  | AssistantThinkingDeltaEvent
   | QueuedMessageStartedEvent
   | ToolStartedEvent
   | ToolUpdatedEvent

@@ -22,13 +22,10 @@ import type {
   SessionQueuedMessage,
   SessionTreeNodeSnapshot,
   SessionTreeSnapshot,
-} from "@pi-gui/session-driver/types";
-import type {
   CreateSessionOptions,
   HostUiRequest,
   HostUiResponse,
   SessionConfig,
-  SessionDriverEvent,
   SessionEventListener,
   SessionModelSelection,
   SessionRef,
@@ -37,7 +34,9 @@ import type {
   Unsubscribe,
   WorkspaceId,
   WorkspaceRef,
-} from "@pi-gui/session-driver";
+} from "@pi-gui/session-driver/types";
+import type { SessionDriverEvent } from "@pi-gui/session-driver/types";
+import type { } from "@pi-gui/session-driver";
 import type { RuntimeCommandRecord } from "@pi-gui/session-driver/runtime-types";
 import { JsonCatalogStore, type SessionFileCatalogStorage } from "./json-catalog-store.js";
 import {
@@ -1314,13 +1313,39 @@ export class SessionSupervisor {
         return [sessionUpdatedEvent(record)];
       case "message_update":
         this.updatePreviewFromMessage(record, event.message);
-        if (event.message.role === "assistant" && event.assistantMessageEvent.type === "text_delta") {
-          return toDriverEvents({
-            type: "assistantDelta" as const,
-            sessionRef: record.ref,
-            timestamp,
-            text: event.assistantMessageEvent.delta ?? "",
-          }, record);
+        if (event.message.role === "assistant") {
+          if (event.assistantMessageEvent.type === "thinking_start") {
+            return toDriverEvents({
+              type: "assistantThinkingStarted" as const,
+              sessionRef: record.ref,
+              timestamp,
+            }, record);
+          }
+          if (event.assistantMessageEvent.type === "thinking_end") {
+            return toDriverEvents({
+              type: "assistantThinkingFinished" as const,
+              sessionRef: record.ref,
+              timestamp,
+            }, record);
+          }
+        }
+        if (event.message.role === "assistant") {
+          if (event.assistantMessageEvent.type === "thinking_delta") {
+            return toDriverEvents({
+              type: "assistantThinkingDelta" as const,
+              sessionRef: record.ref,
+              timestamp,
+              text: event.assistantMessageEvent.delta ?? "",
+            }, record);
+          }
+          if (event.assistantMessageEvent.type === "text_delta") {
+            return toDriverEvents({
+              type: "assistantDelta" as const,
+              sessionRef: record.ref,
+              timestamp,
+              text: event.assistantMessageEvent.delta ?? "",
+            }, record);
+          }
         }
         return [sessionUpdatedEvent(record)];
       case "tool_execution_start":

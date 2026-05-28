@@ -167,6 +167,7 @@ export interface DesktopAppState {
   readonly sessionCommandsBySession: Readonly<Record<string, readonly RuntimeCommandRecord[]>>;
   readonly sessionExtensionUiBySession: Readonly<Record<string, SessionExtensionUiStateRecord>>;
   readonly extensionCommandCompatibilityByWorkspace: Readonly<Record<string, readonly ExtensionCommandCompatibilityRecord[]>>;
+  readonly reasoningStreamingMessageIdBySession: Readonly<Record<string, string | null>>;
   readonly notificationPreferences: NotificationPreferences;
   readonly integratedTerminalShell: string;
   readonly allowMultiple: boolean;
@@ -206,6 +207,7 @@ export function createEmptyDesktopAppState(): DesktopAppState {
     sessionCommandsBySession: {},
     sessionExtensionUiBySession: {},
     extensionCommandCompatibilityByWorkspace: {},
+    reasoningStreamingMessageIdBySession: {},
     notificationPreferences: {
       backgroundCompletion: true,
       backgroundFailure: true,

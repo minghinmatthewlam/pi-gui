@@ -68,6 +68,40 @@ export function appendQueuedUserMessage(
   transcriptCache.set(key, transcript);
 }
 
+export function appendAssistantThinkingDelta(
+  transcriptCache: Map<string, TranscriptMessage[]>,
+  activeAssistantMessageBySession: Map<string, string>,
+  sessionRef: SessionRef,
+  text: string,
+): void {
+  const key = sessionKey(sessionRef);
+  const transcript = [...(transcriptCache.get(key) ?? [])];
+  const activeId = activeAssistantMessageBySession.get(key);
+
+  if (activeId) {
+    const index = transcript.findIndex((message) => message.id === activeId);
+    const current = index >= 0 ? transcript[index] : undefined;
+    if (current?.kind === "message") {
+      transcript[index] = {
+        ...(current as any),
+        reasoning: `${(current as any).reasoning ?? ""}${text}`,
+      };
+    } else {
+      const message = makeTranscriptMessage("assistant", "");
+      (message as any).reasoning = text;
+      transcript.push(message);
+      activeAssistantMessageBySession.set(key, message.id);
+    }
+  } else {
+    const message = makeTranscriptMessage("assistant", "");
+    (message as any).reasoning = text;
+    transcript.push(message);
+    activeAssistantMessageBySession.set(key, message.id);
+  }
+
+  transcriptCache.set(key, transcript);
+}
+
 export function appendAssistantDelta(
   transcriptCache: Map<string, TranscriptMessage[]>,
   activeAssistantMessageBySession: Map<string, string>,
