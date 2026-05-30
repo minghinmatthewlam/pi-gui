@@ -15,6 +15,32 @@ import { readFileSync } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { existsSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+
+function inheritShellPath() {
+  const shell = process.env.SHELL || "/bin/zsh";
+  try {
+    const result = spawnSync(shell, ["-l", "-c", "printenv PATH"], { encoding: "utf8" });
+    if (result.stdout && result.stdout.trim()) {
+      const shellPath = result.stdout.trim();
+      if (shellPath !== process.env.PATH) {
+        process.env.PATH = shellPath;
+      }
+    }
+  } catch (e) {
+    console.error(`[pi-gui] Failed to inherit PATH from shell ${shell}:`, e);
+    // Fallback to safe defaults if shell resolution fails
+    const fallbacks = ["/opt/homebrew/bin", "/usr/local/bin"];
+    for (const p of fallbacks) {
+      if (existsSync(p) && !process.env.PATH.includes(p)) {
+        process.env.PATH = `${p}${path.delimiter}${process.env.PATH}`;
+      }
+    }
+  }
+}
+inheritShellPath();
+
 import { DesktopAppStore } from "./app-store";
 import { getChangedFiles, getFileDiff, stageFile } from "./app-store-diff";
 import { listWorkspaceFiles } from "./app-store-files";
