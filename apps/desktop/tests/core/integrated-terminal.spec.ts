@@ -121,3 +121,52 @@ test("persists the integrated terminal shell setting", async () => {
     await harness.close();
   }
 });
+
+test("pastes clipboard text into the integrated terminal once", async () => {
+  const userDataDir = await makeUserDataDir();
+  const workspacePath = await makeWorkspace("terminal-paste-once");
+  const harness = await launchDesktop(userDataDir, {
+    initialWorkspaces: [workspacePath],
+    testMode: "background",
+  });
+
+  try {
+    const window = await harness.firstWindow();
+    await waitForWorkspaceByPath(window, workspacePath);
+    await createNamedThread(window, "Terminal paste thread");
+
+    await window.getByLabel("Toggle terminal").click();
+    const terminal = window.getByTestId("integrated-terminal");
+    await expect(terminal).toBeVisible();
+    await terminal.locator(".xterm").click();
+    await expect(terminal.locator(".xterm-rows")).toContainText(
+      new RegExp(`${escapeRegExp(basename(workspacePath))}|[#$%]\\s*$`),
+      { timeout: 15_000 },
+    );
+
+    await harness.electronApp.evaluate(({ clipboard }) => {
+      clipboard.writeText("PI_TERMINAL_PASTE_ONCE");
+    });
+    await window.keyboard.press(desktopShortcut("V"));
+
+    await expect
+      .poll(async () => countOccurrences((await terminal.locator(".xterm-rows").innerText()) ?? "", "PI_TERMINAL_PASTE_ONCE"))
+      .toBe(1);
+  } finally {
+    await harness.close();
+  }
+});
+
+function countOccurrences(value: string, needle: string): number {
+  let count = 0;
+  let index = value.indexOf(needle);
+  while (index !== -1) {
+    count += 1;
+    index = value.indexOf(needle, index + needle.length);
+  }
+  return count;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}

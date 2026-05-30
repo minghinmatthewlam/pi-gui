@@ -37,13 +37,14 @@ export function SettingsAppearanceSection({
 
       <SettingsGroup title="Visuals">
         <SettingsRow
-          title="Enable Transparency"
-          description="Enable blur and transparency for a glassmorphism effect"
+          title="Window transparency"
+          description="Let desktop colors show through supported surfaces."
         >
           <input
+            aria-label="Window transparency"
             type="checkbox"
             checked={enableTransparency}
-            onChange={(e) => onSetEnableTransparency(e.target.checked)}
+            onChange={(event) => onSetEnableTransparency(event.currentTarget.checked)}
           />
         </SettingsRow>
       </SettingsGroup>

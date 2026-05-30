@@ -174,7 +174,6 @@ export function ComposerPanel({
                     disabled={selectedSession.status === "running"}
                     unselectedModelLabel={modelOnboarding.unselectedModelLabel}
                     emptyModelTitle={modelOnboarding.emptyModelTitle}
-                    emptyModelDescription={modelOnboarding.emptyModelDescription}
                     onSetModel={onSetModel}
                     onSetThinking={onSetThinking}
                   />

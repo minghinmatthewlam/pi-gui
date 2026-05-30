@@ -109,9 +109,17 @@ test("new thread hides the onboarding notice after picking a thread model", asyn
     const dropdown = window.locator(".new-thread__hint .model-selector__dropdown").first();
     await expect(dropdown).toContainText("GPT-5");
     await expect(dropdown).toContainText("GPT-4o");
-    await dropdown.getByRole("button", { name: /GPT-5/ }).click();
+    const modelFilter = dropdown.locator(".model-selector__filter-input");
+    await expect(modelFilter).toBeFocused();
+    await modelFilter.fill("definitely-no-model");
+    await expect(dropdown).toContainText("No matching models");
+    await expect(modelBadge).toHaveText("Pick a model");
+    await modelFilter.fill("4o");
+    await expect(dropdown).toContainText("GPT-4o");
+    await expect(dropdown).not.toContainText("GPT-5");
+    await dropdown.getByRole("button", { name: /GPT-4o/ }).click();
 
-    await expect(modelBadge).toHaveText("openai:gpt-5");
+    await expect(modelBadge).toHaveText("openai:gpt-4o");
     await expect(startButton).toBeEnabled();
     await expect(notice).toHaveCount(0);
 

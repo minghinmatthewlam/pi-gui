@@ -19,7 +19,6 @@ interface SettingsViewProps {
   readonly notificationPermissionPending: boolean;
   readonly modelSettingsScopeMode: ModelSettingsScopeMode;
   readonly integratedTerminalShell: string;
-  readonly allowMultiple: boolean;
   readonly themeMode: "system" | "light" | "dark";
   readonly enableTransparency: boolean;
   readonly onSetModelSettingsScopeMode: (mode: ModelSettingsScopeMode) => void;
@@ -33,7 +32,6 @@ interface SettingsViewProps {
   readonly onRemoveProviderApiKey: (providerId: string) => Promise<string | undefined>;
   readonly onSetNotificationPreferences: (preferences: Partial<NotificationPreferences>) => void;
   readonly onSetIntegratedTerminalShell: (shellPath: string) => void;
-  readonly onToggleAllowMultiple: (enabled: boolean) => void;
   readonly onRequestNotificationPermission: () => void;
   readonly onOpenSystemNotificationSettings: () => void;
   readonly onSetThemeMode: (mode: "system" | "light" | "dark") => void;
@@ -49,7 +47,6 @@ export function SettingsView({
   notificationPermissionPending,
   modelSettingsScopeMode,
   integratedTerminalShell,
-  allowMultiple,
   themeMode,
   enableTransparency,
   onSetModelSettingsScopeMode,
@@ -63,7 +60,6 @@ export function SettingsView({
   onRemoveProviderApiKey,
   onSetNotificationPreferences,
   onSetIntegratedTerminalShell,
-  onToggleAllowMultiple,
   onRequestNotificationPermission,
   onOpenSystemNotificationSettings,
   onSetThemeMode,
@@ -109,10 +105,8 @@ export function SettingsView({
               runtime={runtime}
               modelSettingsScopeMode={modelSettingsScopeMode}
               integratedTerminalShell={integratedTerminalShell}
-              allowMultiple={allowMultiple}
               onSetModelSettingsScopeMode={onSetModelSettingsScopeMode}
               onSetIntegratedTerminalShell={onSetIntegratedTerminalShell}
-              onToggleAllowMultiple={onToggleAllowMultiple}
               onToggleSkillCommands={onToggleSkillCommands}
             />
           ) : null}

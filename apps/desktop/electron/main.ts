@@ -12,7 +12,6 @@ import {
 } from "electron";
 import { randomUUID } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
-import { readFileSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { DesktopAppStore } from "./app-store";
@@ -125,10 +124,10 @@ function createWindow(): BrowserWindow {
     height: 980,
     minWidth: 1200,
     minHeight: 760,
-    transparent: true,
+    transparent: enableTransparency,
     vibrancy: process.platform === "darwin" && enableTransparency ? "under-window" : undefined,
     titleBarStyle: "hiddenInset",
-    backgroundColor: '#00000000',
+    backgroundColor: enableTransparency ? "#00000000" : "#f3f4f8",
     trafficLightPosition: { x: 18, y: 18 },
     show: false,
     icon: appIcon,
@@ -593,10 +592,7 @@ app.whenReady().then(async () => {
   ipcMain.handle(desktopIpc.setIntegratedTerminalShell, (_event, shellPath: string) =>
     store.setIntegratedTerminalShell(shellPath),
   );
-  ipcMain.handle(desktopIpc.setAllowMultiple, (_event, allowMultiple: boolean) =>
-    store.setAllowMultiple(allowMultiple),
-  );
-  ipcMain.handle(desktopIpc.setAppearanceEffects, async (_event, enabled: boolean) => {
+  ipcMain.handle(desktopIpc.setEnableTransparency, async (_event, enabled: boolean) => {
     const nextState = await store.setEnableTransparency(enabled);
     if (mainWindow && !mainWindow.isDestroyed()) {
       if (process.platform === "darwin") {

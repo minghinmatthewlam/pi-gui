@@ -1,5 +1,6 @@
-import { execFile } from "node:child_process";
+import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { copyFile, cp, mkdir, mkdtemp, readFile, readdir, realpath, rename, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { basename, delimiter, dirname, extname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { promisify } from "node:util";
@@ -19,6 +20,8 @@ const desktopDir = resolve(__dirname, "..", "..");
 const packagedReleaseDir = join(desktopDir, "release");
 const nativeClipboardImagePath = resolve(__dirname, "..", "..", "..", "website", "public", "og.png");
 const execFileAsync = promisify(execFile);
+const require = createRequire(__filename);
+const electronExecutablePath = require("electron") as string;
 const REAL_AUTH_ENV_VAR = "PI_APP_REAL_AUTH";
 const REAL_AUTH_SOURCE_DIR_ENV_VAR = "PI_APP_REAL_AUTH_SOURCE_DIR";
 const REQUIRED_REAL_AUTH_FILES = ["auth.json"] as const;
@@ -106,6 +109,20 @@ export async function launchDesktop(
   });
 
   return createDesktopHarness(electronApp);
+}
+
+export async function spawnDesktopProcess(
+  userDataDir: string,
+  options: readonly string[] | LaunchDesktopOptions = [],
+): Promise<ChildProcess> {
+  const normalized = Array.isArray(options) ? { initialWorkspaces: options } : options;
+  const agentDir = await prepareAgentDir(userDataDir, normalized);
+  const env = buildDesktopLaunchEnv(userDataDir, agentDir, normalized);
+  return spawn(electronExecutablePath, [desktopDir], {
+    cwd: desktopDir,
+    env,
+    stdio: "ignore",
+  });
 }
 
 export async function launchPackagedDesktop(
