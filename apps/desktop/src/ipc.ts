@@ -68,6 +68,7 @@ export const desktopIpc = {
   setSkillEnabled: "pi-gui:set-skill-enabled",
   setExtensionEnabled: "pi-gui:set-extension-enabled",
   respondToHostUiRequest: "pi-gui:respond-to-host-ui-request",
+  setAllowMultiple: "pi-gui:set-allow-multiple",
   setNotificationPreferences: "pi-gui:set-notification-preferences",
   setIntegratedTerminalShell: "pi-gui:set-integrated-terminal-shell",
   setEnableTransparency: "pi-gui:set-enable-transparency",
@@ -273,6 +274,7 @@ export interface PiDesktopApi {
       | { readonly requestId: string; readonly cancelled: true },
   ): Promise<DesktopAppState>;
   setNotificationPreferences(preferences: Partial<NotificationPreferences>): Promise<DesktopAppState>;
+  setAllowMultiple(allowMultiple: boolean): Promise<DesktopAppState>;
   setIntegratedTerminalShell(shell: string): Promise<DesktopAppState>;
   setEnableTransparency(enabled: boolean): Promise<DesktopAppState>;
   ensureTerminalPanel(

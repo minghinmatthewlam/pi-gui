@@ -5,7 +5,9 @@ import { SettingsGroup, SettingsInfoRow, SettingsRow } from "./settings-utils";
 
 interface SettingsGeneralSectionProps {
   readonly runtime?: RuntimeSnapshot;
+  readonly allowMultiple: boolean;
   readonly modelSettingsScopeMode: ModelSettingsScopeMode;
+  readonly onToggleAllowMultiple: (enabled: boolean) => void;
   readonly integratedTerminalShell: string;
   readonly onSetModelSettingsScopeMode: (mode: ModelSettingsScopeMode) => void;
   readonly onSetIntegratedTerminalShell: (shellPath: string) => void;
@@ -16,6 +18,8 @@ export function SettingsGeneralSection({
   runtime,
   modelSettingsScopeMode,
   integratedTerminalShell,
+  allowMultiple,
+  onToggleAllowMultiple,
   onSetModelSettingsScopeMode,
   onSetIntegratedTerminalShell,
   onToggleSkillCommands,
@@ -88,6 +92,14 @@ export function SettingsGeneralSection({
         </SettingsRow>
       </SettingsGroup>
 
+        <SettingsRow title="Allow multiple app instances" description="Allow launching multiple windows of the app.">
+          <input
+            aria-label="Allow multiple app instances"
+            checked={allowMultiple}
+            type="checkbox"
+            onChange={(event) => onToggleAllowMultiple(event.target.checked)}
+          />
+        </SettingsRow>
       <SettingsGroup title="Shortcuts">
         <SettingsInfoRow label="New thread" value="Cmd+Shift+O" />
         <SettingsInfoRow label="Open settings" value="Cmd+," />

@@ -495,7 +495,6 @@ export class DesktopAppStore implements AppStoreInternals {
     await this.persistUiState();
     return this.emit();
   }
-
   async setEnableTransparency(enabled: boolean): Promise<DesktopAppState> {
     await this.initialize();
     if (this.state.enableTransparency === enabled) {
@@ -511,11 +510,23 @@ export class DesktopAppStore implements AppStoreInternals {
     return this.emit();
   }
 
-  async setModelSettingsScopeMode(modelSettingsScopeMode: ModelSettingsScopeMode): Promise<DesktopAppState> {
+  async setAllowMultiple(allowMultiple: boolean): Promise<DesktopAppState> {
     await this.initialize();
-    if (this.state.modelSettingsScopeMode === modelSettingsScopeMode) {
+    if (this.state.allowMultiple === allowMultiple) {
       return this.emit();
     }
+    this.state = {
+      ...this.state,
+      allowMultiple,
+      lastError: undefined,
+      revision: this.state.revision + 1,
+    };
+    await this.persistUiState();
+    return this.emit();
+  }
+
+  async setModelSettingsScopeMode(modelSettingsScopeMode: ModelSettingsScopeMode): Promise<DesktopAppState> {
+    await this.initialize();
     if (modelSettingsScopeMode === "app-global") {
       await this.restoreGlobalModelSettings(this.state.globalModelSettings);
     }

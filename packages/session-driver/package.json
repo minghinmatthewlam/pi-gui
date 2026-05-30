@@ -25,5 +25,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@earendil-works/pi-ai": "^0.75.5"
   }
 }

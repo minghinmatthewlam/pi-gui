@@ -1648,6 +1648,10 @@ export default function App() {
 
   const handleSetIntegratedTerminalShell = (shellPath: string) => {
     void updateSnapshot(api, setSnapshot, () => api.setIntegratedTerminalShell(shellPath));
+  const handleToggleAllowMultiple = (enabled: boolean) => {
+    void updateSnapshot(api, setSnapshot, () => api.setAllowMultiple(enabled));
+  };
+
   };
 
   const handleRequestNotificationPermission = () => {
@@ -1897,6 +1901,7 @@ export default function App() {
           integratedTerminalShell={snapshot.integratedTerminalShell}
           themeMode={themeMode}
           enableTransparency={snapshot.enableTransparency}
+          allowMultiple={snapshot.allowMultiple}
           onLoginProvider={handleLoginProvider}
           onLogoutProvider={handleLogoutProvider}
           onSetProviderApiKey={handleSetProviderApiKey}
@@ -1908,6 +1913,7 @@ export default function App() {
           onRequestNotificationPermission={handleRequestNotificationPermission}
           onOpenSystemNotificationSettings={handleOpenSystemNotificationSettings}
           onSetScopedModelPatterns={handleSetScopedModelPatterns}
+          onToggleAllowMultiple={handleToggleAllowMultiple}
           onSetThemeMode={handleSetThemeMode}
           onSetThinkingLevel={handleSetThinkingLevel}
           onToggleSkillCommands={handleToggleSkillCommands}

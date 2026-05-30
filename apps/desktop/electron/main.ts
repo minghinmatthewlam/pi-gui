@@ -10,8 +10,8 @@ import {
   type MenuItemConstructorOptions,
   type MessageBoxOptions,
 } from "electron";
-import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -580,6 +580,9 @@ app.whenReady().then(async () => {
   );
   ipcMain.handle(desktopIpc.setDefaultModel, (_event, workspaceId: string, provider: string, modelId: string) =>
     store.setDefaultModel(workspaceId, provider, modelId),
+  );
+  ipcMain.handle(desktopIpc.setAllowMultiple, (_event, allowMultiple: boolean) =>
+    store.setAllowMultiple(allowMultiple),
   );
   ipcMain.handle(
     desktopIpc.setDefaultThinkingLevel,

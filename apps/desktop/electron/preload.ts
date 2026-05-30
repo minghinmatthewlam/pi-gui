@@ -180,6 +180,8 @@ contextBridge.exposeInMainWorld("piApp", {
     ipcRenderer.invoke(desktopIpc.respondToHostUiRequest, workspaceId, sessionId, response) as Promise<DesktopAppState>,
   setNotificationPreferences: (preferences: Partial<NotificationPreferences>) =>
     ipcRenderer.invoke(desktopIpc.setNotificationPreferences, preferences) as Promise<DesktopAppState>,
+  setAllowMultiple: (allowMultiple: boolean) =>
+    ipcRenderer.invoke(desktopIpc.setAllowMultiple, allowMultiple) as Promise<DesktopAppState>,
   setIntegratedTerminalShell: (shellPath: string) =>
     ipcRenderer.invoke(desktopIpc.setIntegratedTerminalShell, shellPath) as Promise<DesktopAppState>,
   setEnableTransparency: (enabled: boolean) =>
