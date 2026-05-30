@@ -11,6 +11,7 @@ import {
   type MessageBoxOptions,
 } from "electron";
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -38,6 +39,7 @@ import type {
   StartThreadInput,
   WorkspaceSessionTarget,
 } from "../src/desktop-state";
+import type { RuntimeLoginCallbacks } from "@pi-gui/session-driver/runtime-types";
 import type { SessionDriverEvent } from "@pi-gui/session-driver";
 import type { GenerateThreadTitleOptions } from "@pi-gui/pi-sdk-driver";
 import type { WorkspaceRef } from "@pi-gui/session-driver";
@@ -897,13 +899,20 @@ function validateComposerAttachmentPayload(attachment: ComposerAttachment): Comp
   return [normalized];
 }
 
-function createRuntimeLoginCallbacks() {
+function createRuntimeLoginCallbacks(): RuntimeLoginCallbacks {
   return {
     onAuth: async ({ url, instructions: _instructions }: { readonly url: string; readonly instructions?: string }) => {
       await shell.openExternal(url);
     },
     onPrompt: async ({ message, placeholder }: { readonly message: string; readonly placeholder?: string }) =>
       promptForText(message, placeholder),
+    onDeviceCode: async () => {
+      // Not implemented in desktop app
+    },
+    onSelect: async () => {
+      // Not implemented in desktop app
+      return undefined;
+    },
   };
 }
 

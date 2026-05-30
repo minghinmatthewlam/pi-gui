@@ -131,7 +131,7 @@ export function extractPreview(message: unknown): string | undefined {
   }
 
   if (typeof message.stopReason === "string" && typeof message.errorMessage === "string") {
-    return truncate(message.errorMessage);
+    return truncate(sanitizeProviderError(message.errorMessage));
   }
 
   return undefined;
@@ -149,12 +149,13 @@ export function determineRunOutcome(messages: readonly unknown[]): {
 
     const stopReason = typeof message.stopReason === "string" ? message.stopReason : undefined;
     if (stopReason === "error" || stopReason === "aborted") {
-      const messageText =
+      let messageText =
         typeof message.errorMessage === "string" && message.errorMessage.trim().length > 0
           ? message.errorMessage
           : stopReason === "aborted"
             ? "Run aborted"
             : "Run failed";
+      messageText = sanitizeProviderError(messageText);
       return {
         success: false,
         error: {
@@ -168,11 +169,10 @@ export function determineRunOutcome(messages: readonly unknown[]): {
 
   return { success: true };
 }
-
 export function toSessionErrorInfo(error: unknown, code: string): SessionErrorInfo {
   if (error instanceof Error) {
     return {
-      message: error.message,
+      message: sanitizeProviderError(error.message),
       code,
       details: {
         name: error.name,
@@ -181,11 +181,27 @@ export function toSessionErrorInfo(error: unknown, code: string): SessionErrorIn
     };
   }
 
-  return {
-    message: typeof error === "string" ? error : "Unknown error",
-    code,
-    details: error,
-  };
+    return {
+      message: typeof error === "string" ? sanitizeProviderError(error) : "Unknown error",
+      code,
+      details: error,
+    };
+  }
+export function sanitizeProviderError(message: string): string {
+  if (!message) return message;
+
+  // Strip " ERROR Worked for Xs" suffix
+  const stripped = message.replace(/\s*ERROR Worked for \d+s$/, "").trim();
+
+  if (stripped.includes("Connection error")) {
+    return "Connection error: Please try again.";
+  }
+
+  if (stripped.includes("JSON error injected into SSE stream")) {
+    return "Provider stream error: Received invalid JSON. Please try again.";
+  }
+
+  return stripped;
 }
 
 export function truncate(value: string, limit = 140): string {

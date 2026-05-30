@@ -378,25 +378,27 @@ export class SessionSupervisor {
     }
     await this.persistSnapshot(record);
     await this.emit(record, sessionUpdatedEvent(record));
-
     try {
       const images = input.attachments?.flatMap((attachment: NonNullable<SessionMessageInput["attachments"]>[number]) =>
         attachment.kind === "image"
-          ? [{
-              type: "image" as const,
-              data: attachment.data,
-              mimeType: attachment.mimeType,
-            }]
-          : [],
+      ? [{
+          type: "image" as const,
+          data: attachment.data,
+          mimeType: attachment.mimeType,
+        }]
+      : [],
       );
       const promptText = injectFileAttachmentPreamble(input.text, input.attachments);
       if (isQueuedMessage) {
         await this.queuePrompt(session, promptText, input.deliverAs!, images);
       } else {
-        await session.prompt(promptText, {
-          ...(images && images.length > 0 ? { images } : {}),
-          source: "interactive",
-        });
+        // For non-streaming, non-queued messages, use retry logic for transient errors
+        await this.callWithRetry(() => 
+          session.prompt(promptText, {
+            ...(images && images.length > 0 ? { images } : {}),
+            source: "interactive",
+          })
+        );
       }
 
       if (isExtensionCommand) {
@@ -425,12 +427,64 @@ export class SessionSupervisor {
     }
   }
 
+  /**
+   * Determines if an error is retryable based on its message.
+   * This is a heuristic since we don't have rich error objects from the agent.
+   */
+  private isRetryableError(error: unknown): boolean {
+    if (!error) return false;
+    const message = (error as Error)?.message ?? String(error);
+    // Common transient error patterns
+    return (
+      message.includes("Connection error") ||
+      message.includes("NetworkError") ||
+      message.includes("Failed to fetch") ||
+      message.includes("timeout") ||
+      message.includes("JSON error injected into SSE stream") ||
+      message.includes("Unexpected end of JSON input") ||
+      message.includes("Stream closed") ||
+      // HTTP 5xx errors might be represented as strings
+      /\b5\d{2}\b/.test(message)
+    );
+  }
+
+  /**
+   * Calls an async function with retry logic using exponential backoff.
+   * @param fn The function to call
+   * @param maxAttempts Maximum number of attempts (default: 3)
+   * @param baseDelayMs Base delay in milliseconds (default: 100)
+   * @returns The result of the function
+   * @throws The last error if all attempts fail
+   */
+  private async callWithRetry<T>(
+    fn: () => Promise<T>,
+    maxAttempts: number = 3,
+    baseDelayMs: number = 100
+  ): Promise<T> {
+    let lastError: unknown;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        return await fn();
+      } catch (error) {
+        lastError = error;
+        if (!this.isRetryableError(error) || attempt === maxAttempts - 1) {
+          // If not retryable or last attempt, rethrow
+          throw error;
+        }
+        // Wait before retrying
+        const delayMs = baseDelayMs * Math.pow(2, attempt);
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+      }
+    }
+    // This should never be reached due to the throw in the loop
+    throw lastError;
+}
+
   async replaceQueuedMessages(sessionRef: SessionRef, messages: readonly SessionQueuedMessage[]): Promise<void> {
     const record = await this.ensureRecord(sessionRef);
     const session = this.requireSession(record);
     session.clearQueue();
 
-    record.queuedMessages = messages.map((message) => cloneQueuedMessage(message));
     for (const message of record.queuedMessages) {
       const images = message.attachments?.flatMap((attachment: NonNullable<SessionQueuedMessage["attachments"]>[number]) =>
         attachment.kind === "image"
@@ -1040,11 +1094,16 @@ export class SessionSupervisor {
       readonly mimeType: string;
     }[],
   ): Promise<void> {
+    // These operations can also fail with transient network errors
     if (deliverAs === "steer") {
-      await session.steer(text, images ? [...images] : undefined);
+      await this.callWithRetry(() => 
+        session.steer(text, images ? [...images] : undefined)
+      );
       return;
     }
-    await session.followUp(text, images ? [...images] : undefined);
+    await this.callWithRetry(() => 
+      session.followUp(text, images ? [...images] : undefined)
+    );
   }
 
   private resolveModel(provider: string, modelId: string) {
