@@ -1,6 +1,6 @@
 import { type ClipboardEvent, type Dispatch, type DragEvent, type KeyboardEvent, type RefObject, type SetStateAction } from "react";
-import type { RuntimeSnapshot } from "@pi-gui/session-driver/runtime-types";
-import type { ComposerAttachment, QueuedComposerMessage, SessionRecord } from "./desktop-state";
+import { type RuntimeSnapshot } from "@pi-gui/session-driver/runtime-types";
+import type { ComposerAttachment, QueuedComposerMessage, SessionRecord, ContextUsage } from "./desktop-state";
 import { ArrowUpIcon, PlusIcon, StopSquareIcon } from "./icons";
 import type {
   ComposerSlashCommand,
@@ -13,9 +13,58 @@ import { ModelOnboardingNoticeBanner } from "./model-onboarding-notice";
 import type { ModelOnboardingState, ModelOnboardingSettingsSection } from "./model-onboarding";
 import { ModelSelector } from "./model-selector";
 import type { ExtensionDockModel } from "./extension-session-ui";
+function TokenCounter({ usage }: { usage?: ContextUsage }) {
+  console.log(`[pi-gui-ui] TokenCounter rendering with usage:`, usage);
+  if (!usage || usage.tokens === null) {
+    return <div className="token-counter">N/A</div>;
+  }
 
+  const formatTokens = (count: number) => {
+    if (count < 1000) return count.toString();
+    if (count < 10000) return `${(count / 1000).toFixed(1)}k`;
+    if (count < 1000000) return `${Math.round(count / 1000)}k`;
+    if (count < 10000000) return `${(count / 1000000).toFixed(1)}M`;
+    return `${Math.round(count / 1000000)}M`;
+  };
+
+  const percent = usage.percent ?? 0;
+  let colorClass = "";
+  if (percent > 90) {
+    colorClass = "token-counter--error";
+  } else if (percent > 70) {
+    colorClass = "token-counter--warning";
+  }
+
+  return (
+    <div className={`token-counter ${colorClass}`}>
+      <span>{formatTokens(usage.tokens)} / {formatTokens(usage.contextWindow)} ({percent.toFixed(1)}%)</span>
+      <div className="token-counter__tooltip">
+        <div style={{ fontWeight: 'bold', borderBottom: '1px solid var(--line)', paddingBottom: '4px', marginBottom: '4px' }}>Context Usage</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'auto auto', gap: '4px 12px' }}>
+          <span>Total:</span>
+          <span style={{ fontWeight: 'bold', textAlign: 'right' }}>{usage.tokens.toLocaleString()} / {usage.contextWindow.toLocaleString()} ({percent.toFixed(1)}%)</span>
+           <>
+             <span>Input:</span>
+             <span style={{ textAlign: 'right' }}>{(usage.input ?? 0).toLocaleString()}</span>
+           </>
+           <>
+             <span>Output:</span>
+             <span style={{ textAlign: 'right' }}>{(usage.output ?? 0).toLocaleString()}</span>
+           </>
+            {/* 
+            <>
+              <span>Cache Read:</span>
+              <span style={{ textAlign: 'right' }}>{(usage.cacheRead ?? 0).toLocaleString()}</span>
+            </>
+            */}
+        </div>
+      </div>
+    </div>
+  );
+}
 interface ComposerPanelProps {
   readonly selectedSession: SessionRecord;
+  readonly selectedSessionContextUsage?: ContextUsage;
   readonly lastError?: string;
   readonly runtime?: RuntimeSnapshot;
   readonly activeSlashCommand?: ComposerSlashCommand;
@@ -56,7 +105,7 @@ interface ComposerPanelProps {
   readonly onSubmit: () => void;
   readonly showMentionMenu: boolean;
   readonly mentionOptions: readonly string[];
-  readonly selectedMentionIndex: number;
+  readonly selectedMentionIndex?: number;
   readonly onSelectMention: (filePath: string) => void;
   readonly extensionDock?: ExtensionDockModel;
   readonly extensionDockExpanded: boolean;
@@ -65,6 +114,7 @@ interface ComposerPanelProps {
 
 export function ComposerPanel({
   selectedSession,
+  selectedSessionContextUsage,
   lastError,
   runtime,
   activeSlashCommand,
@@ -150,7 +200,7 @@ export function ComposerPanel({
           onSelectSlashOption={onSelectSlashOption}
           showMentionMenu={showMentionMenu}
           mentionOptions={mentionOptions}
-          selectedMentionIndex={selectedMentionIndex}
+          selectedMentionIndex={selectedMentionIndex ?? 0}
           onSelectMention={onSelectMention}
           textareaLabel="Composer"
           textareaTestId="composer"
@@ -165,7 +215,15 @@ export function ComposerPanel({
                   {selectedSession.status === "running"
                     ? `${runningLabel} · Enter to queue · Cmd+Enter to steer`
                     : "Enter to send · Shift+Enter for newline"}
-                  {" · "}
+                   {(() => {
+                     console.log(`[pi-gui-ui] ComposerPanel usage:`, selectedSessionContextUsage);
+                     return selectedSessionContextUsage !== undefined ? (
+                       <>
+                         {" · "}
+                         <TokenCounter usage={selectedSessionContextUsage} />
+                       </>
+                     ) : null;
+                   })()}
                   <ModelSelector
                     runtime={runtime}
                     provider={provider}

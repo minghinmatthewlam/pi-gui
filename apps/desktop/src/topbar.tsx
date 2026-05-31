@@ -1,6 +1,6 @@
 import type { MouseEvent as ReactMouseEvent, Dispatch, SetStateAction } from "react";
 import { SidebarToggleButton } from "./sidebar-toggle-button";
-import type { AppView, DesktopAppState, SessionRecord, WorkspaceRecord, WorktreeRecord } from "./desktop-state";
+import type { AppView, DesktopAppState, SessionRecord, WorkspaceRecord, WorktreeRecord, ContextUsage } from "./desktop-state";
 import { DiffIcon, FolderIcon, TerminalIcon } from "./icons";
 import { getDesktopShortcutLabel, type PiDesktopApi } from "./ipc";
 import type { WorkspaceMenuState } from "./hooks/use-workspace-menu";
@@ -31,6 +31,7 @@ interface TopbarProps {
   readonly sidebarCollapsed: boolean;
   readonly sidebarToggleShortcutLabel: string;
   readonly onTogglePrimarySidebar: () => void;
+  readonly selectedSessionContextUsage?: ContextUsage;
 }
 
 export function Topbar(props: TopbarProps) {
@@ -56,6 +57,7 @@ export function Topbar(props: TopbarProps) {
     sidebarCollapsed,
     sidebarToggleShortcutLabel,
     onTogglePrimarySidebar,
+    selectedSessionContextUsage,
   } = props;
 
   const terminalShortcut = getDesktopShortcutLabel(api.platform, "J");

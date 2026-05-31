@@ -33,8 +33,8 @@ function inheritShellPath() {
     // Fallback to safe defaults if shell resolution fails
     const fallbacks = ["/opt/homebrew/bin", "/usr/local/bin"];
     for (const p of fallbacks) {
-      if (existsSync(p) && !process.env.PATH.includes(p)) {
-        process.env.PATH = `${p}${path.delimiter}${process.env.PATH}`;
+       if (existsSync(p) && !(process.env.PATH?.includes(p))) {
+         process.env.PATH = `${p}${path.delimiter}${process.env.PATH ?? ""}`;
       }
     }
   }

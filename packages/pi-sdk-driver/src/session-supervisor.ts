@@ -678,7 +678,7 @@ export class SessionSupervisor {
     });
   }
 
-  private async ensureRecord(sessionRef: SessionRef): Promise<ManagedSessionRecord> {
+  public async ensureRecord(sessionRef: SessionRef): Promise<ManagedSessionRecord> {
     const key = sessionKey(sessionRef);
     const existing = this.records.get(key);
     if (existing && existing.session && !existing.closed) {

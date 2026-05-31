@@ -1,4 +1,5 @@
 import type { RuntimeSettingsSnapshot } from "@pi-gui/session-driver/runtime-types";
+import type { ContextUsage } from "./desktop-state";
 import type {
   NavigateSessionTreeOptions,
   NavigateSessionTreeResult,
@@ -214,6 +215,7 @@ export interface PiDesktopApi {
   ping(): Promise<string>;
   getState(): Promise<DesktopAppState>;
   onStateChanged(listener: PiDesktopStateListener): () => void;
+  getSessionContextUsage(sessionRef: { workspaceId: string; sessionId: string }): Promise<ContextUsage | undefined>;
   getSelectedTranscript(): Promise<SelectedTranscriptRecord | null>;
   onSelectedTranscriptChanged(listener: PiDesktopSelectedTranscriptListener): () => void;
   onCommand(listener: (command: PiDesktopCommand) => void): () => void;

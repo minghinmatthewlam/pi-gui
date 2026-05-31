@@ -1913,7 +1913,9 @@ export default function App() {
           onRequestNotificationPermission={handleRequestNotificationPermission}
           onOpenSystemNotificationSettings={handleOpenSystemNotificationSettings}
           onSetScopedModelPatterns={handleSetScopedModelPatterns}
-          onToggleAllowMultiple={handleToggleAllowMultiple}
+           onToggleAllowMultiple={(enabled) => {
+             void updateSnapshot(api, setSnapshot, () => api.setAllowMultiple(enabled));
+           }}
           onSetThemeMode={handleSetThemeMode}
           onSetThinkingLevel={handleSetThinkingLevel}
           onToggleSkillCommands={handleToggleSkillCommands}
@@ -2051,6 +2053,7 @@ export default function App() {
           sidebarCollapsed={snapshot.sidebarCollapsed}
           sidebarToggleShortcutLabel={sidebarToggleShortcutLabel}
           onTogglePrimarySidebar={handleTogglePrimarySidebar}
+          selectedSessionContextUsage={snapshot.selectedSessionContextUsage}
         />
 
         {showTerminalTakeover ? (
@@ -2151,6 +2154,7 @@ export default function App() {
             </section>
             <ComposerPanel
               key={selectedSessionKey}
+              selectedSessionContextUsage={snapshot.selectedSessionContextUsage}
               activeSlashCommand={slashMenu.activeSlashFlow?.command}
               activeSlashCommandMeta={slashMenu.activeSlashFlow?.command?.description}
               attachments={composerAttachments}

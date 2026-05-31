@@ -245,6 +245,19 @@ export class DesktopAppStore implements AppStoreInternals {
     };
   }
 
+  async getSessionContextUsage(sessionRef: SessionRef): Promise<import("../src/desktop-state").ContextUsage | undefined> {
+    console.log(`[pi-gui] getSessionContextUsage for ${JSON.stringify(sessionRef)}`);
+    const session = await this.driver.getSession(sessionRef);
+    const usage = session.getContextUsage();
+    console.log(`[pi-gui] getSessionContextUsage result: ${JSON.stringify(usage)}`);
+    return {
+      ...usage,
+      input: usage.input ?? null,
+      output: usage.output ?? null,
+      cacheRead: usage.cacheRead ?? null,
+    };
+  }
+
   /* ── Workspace methods (delegated) ─────────────────────── */
 
   async addWorkspace(path: string): Promise<DesktopAppState> {
@@ -992,6 +1005,7 @@ export class DesktopAppStore implements AppStoreInternals {
         composerAttachments: this.resolveComposerAttachments(selectedWorkspaceId, selectedSessionId),
         queuedComposerMessages: this.resolveQueuedComposerMessages(selectedWorkspaceId, selectedSessionId),
         editingQueuedMessageId: this.resolveEditingQueuedMessageId(selectedWorkspaceId, selectedSessionId),
+        selectedSessionContextUsage: (selectedWorkspaceId && selectedSessionId) ? await this.getSessionContextUsage({ workspaceId: selectedWorkspaceId, sessionId: selectedSessionId }).catch(() => undefined) : undefined,
         lastError: this.resolveSelectedSessionError(selectedWorkspaceId, selectedSessionId, options.clearLastError),
         revision: this.state.revision + 1,
       };
@@ -1493,6 +1507,18 @@ export class DesktopAppStore implements AppStoreInternals {
     );
     this.markSessionViewedIfActivelyViewed(event.sessionRef);
     this.state = this.syncDerivedSessionState(this.state, event.sessionRef);
+
+    // Update context usage for real-time counter
+    if (
+      (event.type === "assistantDelta" ||
+       event.type === "assistantThinkingDelta" ||
+       event.type === "toolFinished" ||
+        (event.type as string) === "sessionCompact")
+    ) {
+      const usage = await this.getSessionContextUsage(event.sessionRef);
+      this.state = { ...this.state, selectedSessionContextUsage: usage };
+    }
+
     if (shouldFollowSessionMutation && event.type !== "sessionClosed") {
       this.applyFastSessionSelection(event.sessionRef);
       if (!refreshedFollowedSession) {
@@ -1963,6 +1989,7 @@ export class DesktopAppStore implements AppStoreInternals {
       composerDraftSyncSource: "selection",
       composerDraftSyncNonce: this.state.composerDraftSyncNonce + 1,
       composerAttachments: this.resolveComposerAttachments(sessionRef.workspaceId, sessionRef.sessionId),
+      selectedSessionContextUsage: undefined,
       lastError: undefined,
       revision: this.state.revision + 1,
     };
@@ -1991,13 +2018,19 @@ export class DesktopAppStore implements AppStoreInternals {
       return;
     }
 
-    const runtimeByWorkspace = runtimeMissing ? await this.serializeRuntimeStateForCurrentWorkspaces() : undefined;
+    const [runtimeByWorkspace, selectedSessionContextUsage] = await Promise.all([
+      runtimeMissing ? this.serializeRuntimeStateForCurrentWorkspaces() : Promise.resolve(undefined),
+      this.getSessionContextUsage(sessionRef).catch(() => undefined),
+    ]);
     if (!this.isCurrentSelectionEpoch(sessionRef, selectionEpoch)) {
       return;
     }
 
     this.clearSessionError(sessionRef);
-    this.state = this.syncSelectedSessionHydrationState(this.state, sessionRef, snapshot, runtimeByWorkspace);
+    this.state = {
+      ...this.syncSelectedSessionHydrationState(this.state, sessionRef, snapshot, runtimeByWorkspace),
+      selectedSessionContextUsage,
+    };
     if (options.markViewed ?? true) {
       this.markSessionViewed(sessionRef);
     }

@@ -10,6 +10,16 @@ export type WorktreeStatus = "ready" | "missing" | "error";
 export type NewThreadEnvironment = "local" | "worktree";
 export type ThemeMode = "system" | "light" | "dark";
 export type ModelSettingsScopeMode = "app-global" | "per-repo";
+
+export interface ContextUsage {
+  readonly tokens: number | null;
+  readonly input: number | null;
+  readonly output: number | null;
+  readonly cacheRead: number | null;
+  readonly contextWindow: number;
+  readonly percent: number | null;
+}
+
 export type ComposerDraftSyncSource =
   | "state"
   | "selection"
@@ -176,7 +186,7 @@ export interface DesktopAppState {
   readonly modelSettingsScopeMode: ModelSettingsScopeMode;
   readonly globalModelSettings: ModelSettingsSnapshot;
   readonly sidebarCollapsed: boolean;
-  readonly allowMultiple: boolean;
+  readonly selectedSessionContextUsage?: ContextUsage;
   readonly enableTransparency: boolean;
   readonly revision: number;
   readonly lastError?: string;
@@ -222,12 +232,12 @@ export function createEmptyDesktopAppState(): DesktopAppState {
     globalModelSettings: {
       enabledModelPatterns: [],
     },
-    sidebarCollapsed: false,
-    allowMultiple: false,
-    enableTransparency: false,
-    revision: 0,
-  };
-}
+      sidebarCollapsed: false,
+      enableTransparency: false,
+      selectedSessionContextUsage: undefined,
+      revision: 0,
+    };
+  }
 
 export function getSelectedWorkspace(state: DesktopAppState): WorkspaceRecord | undefined {
   return state.workspaces.find((workspace) => workspace.id === state.selectedWorkspaceId);

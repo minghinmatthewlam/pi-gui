@@ -1,4 +1,62 @@
+/* Existing styles preserved... */
+
+.token-counter {
+  font-size: 11px;
+  font-weight: 500;
+  opacity: 0.8;
+  padding: 0 4px;
+  position: relative;
+  display: inline-block;
+  cursor: help;
+}
+
+.token-counter--warning {
+  color: var(--color-warning);
+}
+
+.token-counter--error {
+  color: var(--color-error);
+}
+
+.token-counter__tooltip {
+  position: absolute;
+  bottom: 125%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 11px;
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.1s ease;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--text-strong);
+  text-align: left;
+}
+
+.token-counter:hover .token-counter__tooltip {
+  opacity: 1;
+}
+
 .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .timeline-item__reasoning {
   margin-bottom: 0.75rem;
   border-left: 2px solid var(--line);
@@ -32,16 +90,6 @@
 @keyframes reasoning-fade-in {
   from { opacity: 0; transform: translateY(-2px); }
   to { opacity: 1; transform: translateY(0); }
-}
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
 }
 
 .main {

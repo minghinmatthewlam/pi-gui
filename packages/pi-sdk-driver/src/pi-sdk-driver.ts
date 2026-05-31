@@ -1,4 +1,4 @@
-import type { AuthStorage, ModelRegistry } from "@earendil-works/pi-coding-agent";
+import type { AuthStorage, ModelRegistry, AgentSession } from "@earendil-works/pi-coding-agent";
 import type { SessionCatalogSnapshot, WorkspaceCatalogSnapshot, WorkspaceId } from "@pi-gui/catalogs";
 import type {
   NavigateSessionTreeOptions,
@@ -123,6 +123,10 @@ export class PiSdkDriver implements SessionDriver {
 
   closeSession(sessionRef: SessionRef): Promise<void> {
     return this.supervisor.closeSession(sessionRef);
+  }
+
+  async getSession(sessionRef: SessionRef): Promise<AgentSession> {
+    return this.supervisor.ensureRecord(sessionRef).then(r => r.session!);
   }
 
   listWorkspaces(): Promise<WorkspaceCatalogSnapshot> {
