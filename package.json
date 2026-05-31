@@ -13,17 +13,17 @@
     "dev": "pnpm --filter @pi-gui/desktop dev",
     "bun:dev": "cd apps/desktop && bun run dev",
     "build": "pnpm -r --if-present build",
-    "bun:build": "for dir in apps/* packages/*; do (cd \"$dir\" && (grep -q '\"bun:build\":' package.json && bun run bun:build || (grep -q '\"build\":' package.json && bun run build))); done",
+    "bun:build": "bun run --filter @pi-gui/session-driver build && bun run --filter @pi-gui/pi-sdk-driver build && bun run --filter @pi-gui/catalogs build && bun run --filter @pi-gui/desktop build",
     "typecheck": "pnpm --filter @pi-gui/session-driver build && pnpm --filter @pi-gui/catalogs build && pnpm --filter @pi-gui/pi-sdk-driver build && pnpm -r --if-present typecheck",
-    "bun:typecheck": "cd packages/session-driver && bun run build && cd ../pi-sdk-driver && bun run build && cd ../catalogs && bun run build && for dir in apps/* packages/*; do (cd \"$dir\" && grep -q '\"typecheck\":' package.json && bun run typecheck); done",
+    "bun:typecheck": "bun run --filter @pi-gui/session-driver build && bun run --filter @pi-gui/pi-sdk-driver build && bun run --filter @pi-gui/catalogs build && bun run --filter @pi-gui/session-driver typecheck && bun run --filter @pi-gui/pi-sdk-driver typecheck && bun run --filter @pi-gui/catalogs typecheck && bun run --filter @pi-gui/desktop typecheck",
     "bun:package": "cd apps/desktop && bun run bun:package",
     "bun:package:dir": "cd apps/desktop && bun run bun:package:dir",
     "bun:package:linux": "cd apps/desktop && bun run bun:package:linux",
     "bun:package:linux:dir": "cd apps/desktop && bun run bun:package:linux:dir",
     "lint": "pnpm -r --if-present lint",
-    "bun:lint": "for dir in apps/* packages/*; do (cd \"$dir\" && (grep -q '\"bun:lint\":' package.json && bun run bun:lint || (grep -q '\"lint\":' package.json && bun run lint))); done",
+    "bun:lint": "bun run --filter @pi-gui/session-driver lint && bun run --filter @pi-gui/pi-sdk-driver lint && bun run --filter @pi-gui/catalogs lint && bun run --filter @pi-gui/desktop lint",
     "test": "pnpm -r --if-present test",
-    "bun:test": "for dir in apps/* packages/*; do (cd \"$dir\" && (grep -q '\"bun:test\":' package.json && bun run bun:test || (grep -q '\"test\":' package.json && bun run test))); done",
+    "bun:test": "bun run --filter @pi-gui/session-driver test && bun run --filter @pi-gui/pi-sdk-driver test && bun run --filter @pi-gui/catalogs test && bun run --filter @pi-gui/desktop test",
     "e2e": "playwright test",
     "test:homebrew-tap": "node scripts/test-update-homebrew-tap.mjs",
     "verify:install-copy": "node scripts/verify-install-copy.mjs",
@@ -41,6 +41,6 @@
     "video"
   ],
   "dependencies": {
-    "@earendil-works/pi-ai": "^0.75.5"
+    "@earendil-works/pi-ai": "^0.78.0"
   }
 }
