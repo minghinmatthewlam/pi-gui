@@ -189,7 +189,6 @@ export class DesktopAppStore implements AppStoreInternals {
   async getSelectedTranscript(): Promise<SelectedTranscriptRecord | null> {
     await this.initialize();
     const sessionRef = this.selectedSessionRef();
-    console.log(`[pi-gui] getSelectedTranscript called for session: ${sessionRef ? JSON.stringify(sessionRef) : 'none'}`);
     if (!sessionRef) {
       return null;
     }
@@ -246,15 +245,14 @@ export class DesktopAppStore implements AppStoreInternals {
   }
 
   async getSessionContextUsage(sessionRef: SessionRef): Promise<import("../src/desktop-state").ContextUsage | undefined> {
-    console.log(`[pi-gui] getSessionContextUsage for ${JSON.stringify(sessionRef)}`);
     const session = await this.driver.getSession(sessionRef);
     const usage = session.getContextUsage();
-    console.log(`[pi-gui] getSessionContextUsage result: ${JSON.stringify(usage)}`);
+    const stats = session.getSessionStats();
     return {
       ...usage,
-      input: usage.input ?? null,
-      output: usage.output ?? null,
-      cacheRead: usage.cacheRead ?? null,
+      input: stats.tokens.input,
+      output: stats.tokens.output,
+      cacheRead: stats.tokens.cacheRead,
     };
   }
 
@@ -1063,17 +1061,14 @@ export class DesktopAppStore implements AppStoreInternals {
   private async ensureTranscriptLoaded(sessionRef: SessionRef): Promise<void> {
     const key = sessionKey(sessionRef);
     if (this.sessionState.loadedTranscriptKeys.has(key)) {
-      console.log(`[pi-gui] ensureTranscriptLoaded: cache hit for session: ${key}`);
       return;
     }
-
     const cachedTranscript = await this.readPersistedTranscript(key);
     const transcript = cachedTranscript
       ? await this.resolveLoadedTranscript(sessionRef, cachedTranscript)
       : await this.driver.getTranscript(sessionRef);
 
     if (!cachedTranscript || cachedTranscript.format === "legacy") {
-    console.log(`[pi-gui] ensureTranscriptLoaded: cache miss, fetched transcript for session: ${key}`);
 
       await this.writePersistedTranscript(key, transcript);
     }

@@ -14,7 +14,6 @@ import type { ModelOnboardingState, ModelOnboardingSettingsSection } from "./mod
 import { ModelSelector } from "./model-selector";
 import type { ExtensionDockModel } from "./extension-session-ui";
 function TokenCounter({ usage }: { usage?: ContextUsage }) {
-  console.log(`[pi-gui-ui] TokenCounter rendering with usage:`, usage);
   if (!usage || usage.tokens === null) {
     return <div className="token-counter">N/A</div>;
   }
@@ -39,24 +38,38 @@ function TokenCounter({ usage }: { usage?: ContextUsage }) {
     <div className={`token-counter ${colorClass}`}>
       <span>{formatTokens(usage.tokens)} / {formatTokens(usage.contextWindow)} ({percent.toFixed(1)}%)</span>
       <div className="token-counter__tooltip">
-        <div style={{ fontWeight: 'bold', borderBottom: '1px solid var(--line)', paddingBottom: '4px', marginBottom: '4px' }}>Context Usage</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'auto auto', gap: '4px 12px' }}>
-          <span>Total:</span>
-          <span style={{ fontWeight: 'bold', textAlign: 'right' }}>{usage.tokens.toLocaleString()} / {usage.contextWindow.toLocaleString()} ({percent.toFixed(1)}%)</span>
-           <>
-             <span>Input:</span>
-             <span style={{ textAlign: 'right' }}>{(usage.input ?? 0).toLocaleString()}</span>
-           </>
-           <>
-             <span>Output:</span>
-             <span style={{ textAlign: 'right' }}>{(usage.output ?? 0).toLocaleString()}</span>
-           </>
-            {/* 
-            <>
-              <span>Cache Read:</span>
-              <span style={{ textAlign: 'right' }}>{(usage.cacheRead ?? 0).toLocaleString()}</span>
-            </>
-            */}
+        <div style={{ fontWeight: 'bold', borderBottom: '1px solid var(--line)', paddingBottom: '4px', marginBottom: '8px' }}>Token Usage</div>
+        
+        <div style={{ marginBottom: '8px' }}>
+          <div style={{ fontSize: '11px', opacity: 0.8, marginBottom: '2px' }}>Context Window</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'auto auto', gap: '4px 12px', alignItems: 'baseline' }}>
+            <span>Current:</span>
+            <span style={{ fontWeight: 'bold', textAlign: 'right' }}>{usage.tokens.toLocaleString()} / {usage.contextWindow.toLocaleString()} ({percent.toFixed(1)}%)</span>
+          </div>
+        </div>
+
+        <div>
+          <div style={{ fontSize: '11px', opacity: 0.8, marginBottom: '2px' }}>Session Usage</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'auto auto', gap: '4px 12px' }}>
+            <span>Input:</span>
+            <span style={{ textAlign: 'right' }}>{(usage.input ?? 0).toLocaleString()}</span>
+            <span>Output:</span>
+            <span style={{ textAlign: 'right' }}>{(usage.output ?? 0).toLocaleString()}</span>
+            <span>Cache Read:</span>
+            <span style={{ textAlign: 'right' }}>{(usage.cacheRead ?? 0).toLocaleString()}</span>
+            <div style={{ 
+              borderTop: '1px solid var(--line)', 
+              paddingTop: '4px', 
+              marginTop: '4px', 
+              gridColumn: '1 / span 2', 
+              display: 'grid', 
+              gridTemplateColumns: 'auto auto', 
+              gap: '4px 12px' 
+            }}>
+              <span style={{ fontWeight: 'bold' }}>Total:</span>
+              <span style={{ fontWeight: 'bold', textAlign: 'right' }}>{( (usage.input ?? 0) + (usage.output ?? 0) + (usage.cacheRead ?? 0) ).toLocaleString()}</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -216,10 +229,9 @@ export function ComposerPanel({
                     ? `${runningLabel} · Enter to queue · Cmd+Enter to steer`
                     : "Enter to send · Shift+Enter for newline"}
                    {(() => {
-                     console.log(`[pi-gui-ui] ComposerPanel usage:`, selectedSessionContextUsage);
-                     return selectedSessionContextUsage !== undefined ? (
-                       <>
-                         {" · "}
+                      return selectedSessionContextUsage !== undefined ? (
+                        <>
+                          {" · "}
                          <TokenCounter usage={selectedSessionContextUsage} />
                        </>
                      ) : null;
