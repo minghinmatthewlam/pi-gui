@@ -1057,8 +1057,12 @@
 .message__content {
   color: var(--text-strong);
   display: grid;
+  /* Cap the column to the container so wide code blocks scroll inside their own
+     <pre> and long tokens wrap, instead of stretching the transcript sideways. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 9px;
   line-height: 1.65;
+  overflow-wrap: anywhere;
 }
 
 .message__content > :first-child {
