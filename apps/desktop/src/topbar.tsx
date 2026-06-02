@@ -1,6 +1,6 @@
 import type { MouseEvent as ReactMouseEvent, Dispatch, SetStateAction } from "react";
 import type { AppView, DesktopAppState, SessionRecord, WorkspaceRecord, WorktreeRecord } from "./desktop-state";
-import { DiffIcon, FolderIcon, TerminalIcon } from "./icons";
+import { DiffIcon, FolderIcon, MenuIcon, TerminalIcon } from "./icons";
 import { getDesktopShortcutLabel, type PiDesktopApi } from "./ipc";
 import type { WorkspaceMenuState } from "./hooks/use-workspace-menu";
 
@@ -133,6 +133,18 @@ export function Topbar(props: TopbarProps) {
       </div>
 
       <div className="topbar__actions">
+        {api.platform === "win32" ? (
+          <button
+            aria-label="Application menu"
+            className="icon-button topbar__icon"
+            type="button"
+            onClick={() => {
+              void api.popupAppMenu();
+            }}
+          >
+            <MenuIcon />
+          </button>
+        ) : null}
         <div className="shortcut-tooltip-wrap topbar__tooltip-wrap">
           <button
             aria-label="Toggle terminal"

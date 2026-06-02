@@ -268,6 +268,7 @@ async function runGit(args: readonly string[]): Promise<string> {
   const { stdout } = await execFileAsync("git", [...args], {
     encoding: "utf8",
     maxBuffer: 10 * 1024 * 1024,
+    windowsHide: true,
   });
   return stdout;
 }

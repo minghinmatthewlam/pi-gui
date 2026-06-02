@@ -375,7 +375,10 @@ export class TerminalService {
 
   private resolveShell(): string {
     const configuredShell = this.options.getIntegratedTerminalShell()?.trim();
-    const shellPath = configuredShell || process.env.SHELL || defaultShellForPlatform();
+    const shellPath =
+      configuredShell ||
+      (process.platform === "win32" ? undefined : process.env.SHELL) ||
+      defaultShellForPlatform();
     if (process.platform !== "win32" && !path.isAbsolute(shellPath)) {
       throw new Error(`Integrated terminal shell must be an absolute path: ${shellPath}`);
     }

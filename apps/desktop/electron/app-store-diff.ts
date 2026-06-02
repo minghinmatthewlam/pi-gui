@@ -20,7 +20,7 @@ export function getChangedFiles(workspacePath: string): Promise<ChangedFileEntry
     execFile(
       "git",
       ["status", "--porcelain"],
-      { cwd: workspacePath, maxBuffer: 2 * 1024 * 1024 },
+      { cwd: workspacePath, maxBuffer: 2 * 1024 * 1024, windowsHide: true },
       (error, stdout) => {
         if (error) {
           resolve([]);
@@ -56,14 +56,14 @@ export function getFileDiff(workspacePath: string, filePath: string): Promise<st
     execFile(
       "git",
       ["diff", "--", filePath],
-      { cwd: workspacePath, maxBuffer: 5 * 1024 * 1024 },
+      { cwd: workspacePath, maxBuffer: 5 * 1024 * 1024, windowsHide: true },
       (error, stdout) => {
         if (error || !stdout.trim()) {
           // Try staged diff
           execFile(
             "git",
             ["diff", "--cached", "--", filePath],
-            { cwd: workspacePath, maxBuffer: 5 * 1024 * 1024 },
+            { cwd: workspacePath, maxBuffer: 5 * 1024 * 1024, windowsHide: true },
             (error2, stdout2) => {
               if (!error2 && stdout2.trim()) {
                 resolve(stdout2);
@@ -73,7 +73,7 @@ export function getFileDiff(workspacePath: string, filePath: string): Promise<st
               execFile(
                 "git",
                 ["diff", "--no-index", "--", "/dev/null", filePath],
-                { cwd: workspacePath, maxBuffer: 5 * 1024 * 1024 },
+                { cwd: workspacePath, maxBuffer: 5 * 1024 * 1024, windowsHide: true },
                 (_error3, stdout3) => {
                   // git diff --no-index exits 1 when files differ, which is expected
                   resolve(stdout3 || "");
@@ -95,7 +95,7 @@ export function stageFile(workspacePath: string, filePath: string): Promise<void
     execFile(
       "git",
       ["add", "--", filePath],
-      { cwd: workspacePath },
+      { cwd: workspacePath, windowsHide: true },
       (error) => {
         if (error) {
           reject(error);

@@ -2,6 +2,21 @@ import { nativeTheme, type BrowserWindow } from "electron";
 import { desktopIpc } from "../src/ipc";
 import type { ThemeMode } from "../src/desktop-state";
 
+// Window Controls Overlay caption colors for the Windows immersive title bar.
+export function windowsTitleBarOverlay(theme: "light" | "dark"): {
+  color: string;
+  symbolColor: string;
+  height: number;
+} {
+  // Transparent so the buttons blend with whatever view is behind them; only the
+  // glyph color is themed.
+  return {
+    color: "#00000000",
+    symbolColor: theme === "dark" ? "#e6e6e6" : "#2b2b2b",
+    height: 52,
+  };
+}
+
 export class ThemeManager {
   private mode: ThemeMode = "system";
   private window: BrowserWindow | null = null;
@@ -14,6 +29,7 @@ export class ThemeManager {
 
   setWindow(win: BrowserWindow) {
     this.window = win;
+    this.applyTitleBarOverlay();
   }
 
   getMode(): ThemeMode {
@@ -38,6 +54,18 @@ export class ThemeManager {
   }
 
   private broadcast() {
+    this.applyTitleBarOverlay();
     this.window?.webContents.send(desktopIpc.themeChanged, this.getResolvedTheme());
+  }
+
+  private applyTitleBarOverlay() {
+    if (process.platform !== "win32" || !this.window || this.window.isDestroyed()) {
+      return;
+    }
+    try {
+      this.window.setTitleBarOverlay(windowsTitleBarOverlay(this.getResolvedTheme()));
+    } catch {
+      // Only valid when the window was created with an overlay enabled.
+    }
   }
 }

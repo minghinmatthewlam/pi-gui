@@ -162,3 +162,44 @@ jobs:
             apps/desktop/release/latest-linux*.yml
           prerelease: ${{ contains(github.ref_name, 'beta') || contains(github.ref_name, 'alpha') || contains(github.ref_name, 'rc') }}
           generate_release_notes: true
+
+  release-windows:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      # Skip @electron/rebuild: node-pty ships win32 N-API prebuilds (rebuild
+      # fails on its bundled winpty). Installers are unsigned (no cert).
+      - name: Package Windows installers
+        shell: bash
+        run: |
+          cd apps/desktop
+          pnpm run build
+          pnpm exec electron-builder --win \
+            -c.npmRebuild=false \
+            --publish never \
+            "-c.extraMetadata.version=${GITHUB_REF_NAME#v}"
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            apps/desktop/release/*.exe
+            apps/desktop/release/*.exe.blockmap
+            apps/desktop/release/latest.yml
+          prerelease: ${{ contains(github.ref_name, 'beta') || contains(github.ref_name, 'alpha') || contains(github.ref_name, 'rc') }}
+          generate_release_notes: true

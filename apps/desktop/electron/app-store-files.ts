@@ -14,7 +14,7 @@ export function listWorkspaceFiles(workspacePath: string): Promise<string[]> {
     execFile(
       "git",
       ["ls-files", "--cached", "--others", "--exclude-standard"],
-      { cwd: workspacePath, maxBuffer: 5 * 1024 * 1024 },
+      { cwd: workspacePath, maxBuffer: 5 * 1024 * 1024, windowsHide: true },
       (error, stdout) => {
         if (error) {
           resolve([]);

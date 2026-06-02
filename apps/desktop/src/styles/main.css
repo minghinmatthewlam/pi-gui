@@ -61,6 +61,33 @@
   min-width: 0;
 }
 
+/* Reserve room for the Windows window-controls overlay (top-right). */
+.shell--win .topbar {
+  padding-right: 148px;
+}
+
+/* Thin scrollbars on Windows (macOS already uses thin overlay scrollbars). */
+.shell--win ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.shell--win ::-webkit-scrollbar-track,
+.shell--win ::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+.shell--win ::-webkit-scrollbar-thumb {
+  background-color: rgba(140, 142, 152, 0.32);
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.shell--win ::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(140, 142, 152, 0.55);
+}
+
 .environment-picker,
 .environment-picker * {
   -webkit-app-region: no-drag;
@@ -240,6 +267,9 @@
   display: grid;
   gap: 8px;
   pointer-events: none;
+  /* Opens upward over the draggable topbar on Windows; keep clicks from being
+     swallowed as window drag. */
+  -webkit-app-region: no-drag;
 }
 
 .chat-header {
@@ -1289,6 +1319,12 @@
 .model-selector {
   display: inline;
   position: relative;
+}
+
+/* Dropdown opens upward over the draggable topbar on Windows; keep it clickable. */
+.model-selector,
+.model-selector * {
+  -webkit-app-region: no-drag;
 }
 
 .model-selector__anchor {

@@ -16,6 +16,14 @@ export function PlusIcon() {
   );
 }
 
+export function MenuIcon() {
+  return (
+    <Icon>
+      <path d="M3.75 6h12.5M3.75 10h12.5M3.75 14h12.5" stroke="currentColor" strokeLinecap="round" strokeWidth="1.6" />
+    </Icon>
+  );
+}
+
 export function TerminalIcon() {
   return (
     <Icon>

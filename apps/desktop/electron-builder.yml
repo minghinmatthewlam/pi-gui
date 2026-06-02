@@ -18,6 +18,7 @@ extraResources:
 asar: true
 asarUnpack:
   - "**/*.node"
+  - "**/*.exe"
   - "**/*.wasm"
   - "**/node_modules/node-pty/**/*"
   - "**/node_modules/.pnpm/node-pty*/node_modules/node-pty/**/*"
@@ -46,6 +47,22 @@ linux:
   executableName: pi-gui
   target:
     - target: AppImage
+
+win:
+  icon: resources/icon.ico
+  target:
+    - target: nsis
+      arch:
+        - x64
+        - arm64
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: pi-gui
 
 toolsets:
   appimage: "1.0.2"

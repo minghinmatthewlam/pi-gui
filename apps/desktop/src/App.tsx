@@ -1995,17 +1995,12 @@ export default function App() {
     );
   }
 
-  const shellClassName = `shell${snapshot.sidebarCollapsed ? " shell--sidebar-collapsed" : ""}`;
+  const shellClassName = `shell${snapshot.sidebarCollapsed ? " shell--sidebar-collapsed" : ""}${
+    api?.platform === "win32" ? " shell--win" : ""
+  }`;
 
   return (
     <div className={shellClassName}>
-      {primarySidebarToggleVisible ? (
-        <SidebarToggleButton
-          collapsed={snapshot.sidebarCollapsed}
-          shortcutLabel={sidebarToggleShortcutLabel}
-          onToggle={handleTogglePrimarySidebar}
-        />
-      ) : null}
       {!snapshot.sidebarCollapsed ? (
         <Sidebar
           activeView={snapshot.activeView}
@@ -2254,6 +2249,15 @@ export default function App() {
           />
         ) : null}
       </main>
+      {/* Rendered last so its no-drag region wins over the full-width topbar drag
+          region on Windows (else clicks are swallowed as window drag). */}
+      {primarySidebarToggleVisible ? (
+        <SidebarToggleButton
+          collapsed={snapshot.sidebarCollapsed}
+          shortcutLabel={sidebarToggleShortcutLabel}
+          onToggle={handleTogglePrimarySidebar}
+        />
+      ) : null}
     </div>
   );
 }

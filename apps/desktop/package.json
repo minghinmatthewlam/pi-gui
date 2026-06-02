@@ -24,6 +24,8 @@
     "bun:package:linux": "bun run bun:build && bun run scripts/bun-package-wrapper.mjs electron-builder --linux AppImage --publish never",
     "package:linux:dir": "pnpm run build && electron-builder --linux --dir --publish never",
     "bun:package:linux:dir": "bun run bun:build && bun run scripts/bun-package-wrapper.mjs electron-builder --linux --dir --publish never",
+    "package:win": "pnpm run build && electron-builder --win -c.npmRebuild=false --publish never",
+    "package:win:dir": "pnpm run build && electron-builder --win --dir -c.npmRebuild=false --publish never",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.electron.json --noEmit",
     "verify:runtime-model-registry": "node scripts/assert-runtime-model-registry.mjs",
     "verify:packaged-runtime-deps": "pnpm run verify:runtime-model-registry && node scripts/assert-packaged-runtime-deps.mjs",

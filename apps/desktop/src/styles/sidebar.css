@@ -16,6 +16,11 @@
   background: var(--window);
 }
 
+/* No left-side traffic lights on Windows; tuck the sidebar toggle to the edge. */
+.shell--win {
+  --titlebar-toggle-left: 16px;
+}
+
 .shell--loading {
   grid-template-columns: 1fr;
   place-items: center;

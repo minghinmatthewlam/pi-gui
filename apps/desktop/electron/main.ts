@@ -1,3 +1,5 @@
+// Patch child_process for windowsHide before the pi runtime is imported below. Keep first.
+import "./suppress-windows-console";
 import {
   app,
   BrowserWindow,
@@ -23,10 +25,10 @@ import {
   NotificationPermissionService,
 } from "./notification-permission";
 import { checkForUpdate, initUpdateChecker } from "./update-checker";
-import { ThemeManager } from "./theme-manager";
+import { ThemeManager, windowsTitleBarOverlay } from "./theme-manager";
 import { TerminalService } from "./terminal-service";
 import type { DesktopAppState, ThemeMode } from "../src/desktop-state";
-import { desktopIpc, getDesktopCommandFromShortcut } from "../src/ipc";
+import { desktopCommands, desktopIpc, getDesktopCommandFromShortcut, type PiDesktopCommand } from "../src/ipc";
 import { SUPPORTED_COMPOSER_IMAGE_TYPES } from "../src/composer-attachments";
 import type {
   ComposerAttachment,
@@ -118,17 +120,26 @@ function readClipboardImageAttachment(): ComposerImageAttachment | null {
 
 function createWindow(): BrowserWindow {
   const backgroundTestMode = windowTestMode === "background";
-  const enableTransparency = store ? store.state.enableTransparency : false;
+  const isMac = process.platform === "darwin";
+  // macOS: inset traffic lights + vibrancy. Windows: Window Controls Overlay.
+  // Linux: standard frame.
+  const useTransparency = isMac && (store ? store.state.enableTransparency : false);
   const window = new BrowserWindow({
     width: 1480,
     height: 980,
     minWidth: 1200,
     minHeight: 760,
-    transparent: enableTransparency,
-    vibrancy: process.platform === "darwin" && enableTransparency ? "under-window" : undefined,
-    titleBarStyle: "hiddenInset",
-    backgroundColor: enableTransparency ? "#00000000" : "#f3f4f8",
-    trafficLightPosition: { x: 18, y: 18 },
+    transparent: useTransparency,
+    vibrancy: useTransparency ? "under-window" : undefined,
+    backgroundColor: useTransparency ? "#00000000" : "#f3f4f8",
+    ...(isMac
+      ? { titleBarStyle: "hiddenInset" as const, trafficLightPosition: { x: 18, y: 18 } }
+      : process.platform === "win32"
+        ? {
+            titleBarStyle: "hidden" as const,
+            titleBarOverlay: windowsTitleBarOverlay(themeManager.getResolvedTheme()),
+          }
+        : {}),
     show: false,
     icon: appIcon,
     webPreferences: {
@@ -183,6 +194,30 @@ function createWindow(): BrowserWindow {
       window.webContents.send(desktopIpc.appCommand, command);
     }
   });
+
+  if (process.platform === "win32") {
+    // No menu bar on Windows: right-click edit menu for text fields.
+    window.webContents.on("context-menu", (_event, params) => {
+      const template: MenuItemConstructorOptions[] = params.isEditable
+        ? [
+            { role: "undo" },
+            { role: "redo" },
+            { type: "separator" },
+            { role: "cut", enabled: params.editFlags.canCut },
+            { role: "copy", enabled: params.editFlags.canCopy },
+            { role: "paste", enabled: params.editFlags.canPaste },
+            { type: "separator" },
+            { role: "selectAll" },
+          ]
+        : params.selectionText.trim().length > 0
+          ? [{ role: "copy" }, { type: "separator" }, { role: "selectAll" }]
+          : [];
+      if (template.length === 0) {
+        return;
+      }
+      Menu.buildFromTemplate(template).popup({ window });
+    });
+  }
 
   if (isDev) {
     void window.loadURL(process.env.ELECTRON_RENDERER_URL as string);
@@ -326,6 +361,11 @@ async function runManualUpdateCheck(): Promise<void> {
 }
 
 function installApplicationMenu(): void {
+  if (process.platform === "win32") {
+    // No menu bar on Windows; the in-app topbar is the only chrome.
+    Menu.setApplicationMenu(null);
+    return;
+  }
   if (process.platform !== "darwin") {
     return;
   }
@@ -374,6 +414,67 @@ function installApplicationMenu(): void {
   ];
 
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
+function sendDesktopCommand(command: PiDesktopCommand): void {
+  if (mainWindow && canPublishToWindow(mainWindow)) {
+    mainWindow.webContents.send(desktopIpc.appCommand, command);
+  }
+}
+
+function showAboutDialog(): void {
+  const window = mainWindow && canPublishToWindow(mainWindow) ? mainWindow : undefined;
+  const options: MessageBoxOptions = {
+    type: "info",
+    title: "pi-gui",
+    message: "pi-gui",
+    detail: `Version ${app.getVersion()}\nElectron ${process.versions.electron}\nA Codex-style desktop app for pi.`,
+    buttons: ["OK"],
+  };
+  if (window) {
+    void dialog.showMessageBox(window, options);
+  } else {
+    void dialog.showMessageBox(options);
+  }
+}
+
+// Surfaced from the topbar menu button (popupAppMenu); Windows has no menu bar.
+function buildWindowsAppMenu(): Menu {
+  const template: MenuItemConstructorOptions[] = [
+    {
+      label: "File",
+      submenu: [
+        { label: "New Thread", click: () => sendDesktopCommand(desktopCommands.openNewThread) },
+        {
+          label: "Open Folder…",
+          click: () => {
+            void pickWorkspaceViaDialog();
+          },
+        },
+        { type: "separator" },
+        { label: "Settings", click: () => sendDesktopCommand(desktopCommands.openSettings) },
+        { type: "separator" },
+        { role: "quit" },
+      ],
+    },
+    { role: "editMenu" },
+    { role: "viewMenu" },
+    { role: "windowMenu" },
+    {
+      label: "Help",
+      submenu: [
+        {
+          id: CHECK_FOR_UPDATES_MENU_ITEM_ID,
+          label: "Check for Updates…",
+          click: () => {
+            void runManualUpdateCheck();
+          },
+        },
+        { label: "About pi", click: () => showAboutDialog() },
+      ],
+    },
+  ];
+  return Menu.buildFromTemplate(template);
 }
 
 app.setName("pi");
@@ -734,6 +835,10 @@ app.whenReady().then(async () => {
     }
 
     window.maximize();
+  });
+  ipcMain.handle(desktopIpc.popupAppMenu, (event) => {
+    const window = BrowserWindow.fromWebContents(event.sender) ?? mainWindow ?? undefined;
+    buildWindowsAppMenu().popup(window ? { window } : undefined);
   });
 
   mainWindow = createWindow();
