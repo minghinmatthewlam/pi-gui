@@ -91,6 +91,38 @@ const appIconPath = app.isPackaged
   : path.join(__dirname, "..", "..", "resources", "icon.png");
 const appIcon = nativeImage.createFromPath(appIconPath);
 
+function parseWebUrl(url: string): URL | null {
+  try {
+    const parsed = new URL(url);
+    return ["http:", "https:"].includes(parsed.protocol) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function isInAppUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    if (isDev && process.env.ELECTRON_RENDERER_URL) {
+      return parsed.origin === new URL(process.env.ELECTRON_RENDERER_URL).origin;
+    }
+    return parsed.protocol === "file:";
+  } catch {
+    return false;
+  }
+}
+
+function openExternalWebUrl(url: string): boolean {
+  const parsed = parseWebUrl(url);
+  if (!parsed) {
+    return false;
+  }
+  void shell.openExternal(parsed.toString()).catch((error) => {
+    console.error(`Failed to open external URL: ${parsed.toString()}`, error);
+  });
+  return true;
+}
+
 function readClipboardImageAttachment(): ComposerImageAttachment | null {
   const image = clipboard.readImage();
   if (image.isEmpty()) {
@@ -139,6 +171,20 @@ function createWindow(): BrowserWindow {
       // Keep hidden test windows responsive so Playwright exercises the same UI flows.
       backgroundThrottling: !backgroundTestMode,
     },
+  });
+
+  window.webContents.setWindowOpenHandler(({ url }) => {
+    if (!isInAppUrl(url)) {
+      openExternalWebUrl(url);
+    }
+    return { action: "deny" };
+  });
+  window.webContents.on("will-navigate", (event, url) => {
+    if (isInAppUrl(url)) {
+      return;
+    }
+    event.preventDefault();
+    openExternalWebUrl(url);
   });
 
   window.once("ready-to-show", () => {
@@ -488,11 +534,11 @@ app.whenReady().then(async () => {
     return mode;
   });
   ipcMain.handle(desktopIpc.openExternal, (_event, url: string) => {
-    const parsed = new URL(url);
-    if (!["http:", "https:"].includes(parsed.protocol)) {
+    const parsed = parseWebUrl(url);
+    if (!parsed) {
       throw new Error(`Refusing to open unsupported URL: ${url}`);
     }
-    return shell.openExternal(url);
+    return shell.openExternal(parsed.toString());
   });
   ipcMain.handle(desktopIpc.stateRequest, () => store.getState());
   ipcMain.handle(desktopIpc.selectedTranscriptRequest, () => store.getSelectedTranscript());
