@@ -1038,6 +1038,9 @@
   display: grid;
   gap: 9px;
   line-height: 1.65;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .message__content > :first-child {
@@ -1046,6 +1049,12 @@
 
 .message__content > :last-child {
   margin-bottom: 0;
+}
+
+.message__content p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .message__content p,
@@ -1084,10 +1093,13 @@
 .message__content pre {
   padding: 12px 14px;
   border-radius: 10px;
-  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
   background: #f2f4f8;
   color: #25304a;
   border: 1px solid #dfe3eb;
+  max-width: 100%;
 }
 
 .message__content pre code {
