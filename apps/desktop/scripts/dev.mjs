@@ -19,6 +19,8 @@ const packagePaths = [
 ];
 
 const isBun = process.versions.bun || process.env.npm_config_user_agent?.includes("bun");
+const isWin = process.platform === "win32";
+const pnpmCmd = isWin ? "pnpm.cmd" : "pnpm";
 
 async function run(cmd, args, cwd) {
   await new Promise((resolve, reject) => {
@@ -26,6 +28,7 @@ async function run(cmd, args, cwd) {
       cwd,
       stdio: "inherit",
       env: process.env,
+      shell: isWin,
     });
 
     child.once("error", reject);
@@ -45,6 +48,7 @@ function start(cmd, args, cwd) {
     cwd,
     stdio: "inherit",
     env: process.env,
+    shell: isWin,
   });
 }
 
@@ -55,7 +59,7 @@ async function main() {
     }
   } else {
     await run(
-      "pnpm",
+      pnpmCmd,
       ["--dir", repoRoot, "--filter", packageFilters[0], "--filter", packageFilters[1], "--filter", packageFilters[2], "run", "build"],
       desktopDir,
     );
@@ -70,7 +74,7 @@ async function main() {
       ]
     : [
         start(
-          "pnpm",
+          pnpmCmd,
           [
             "--dir",
             repoRoot,
@@ -87,7 +91,7 @@ async function main() {
           ],
           desktopDir,
         ),
-        start("pnpm", ["exec", "electron-vite", "dev", "--watch", ...extraArgs], desktopDir),
+        start(pnpmCmd, ["exec", "electron-vite", "dev", "--watch", ...extraArgs], desktopDir),
       ];
 
   let exiting = false;

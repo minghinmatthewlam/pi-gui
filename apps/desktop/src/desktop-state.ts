@@ -4,7 +4,7 @@ export type SessionStatus = "idle" | "running" | "failed";
 export type { SessionRole, TimelineToolCall, TranscriptMessage } from "./timeline-types";
 import type { TranscriptMessage } from "./timeline-types";
 
-export type AppView = "threads" | "new-thread" | "skills" | "extensions" | "settings";
+export type AppView = "threads" | "new-thread" | "skills" | "extensions" | "packages" | "settings";
 export type WorkspaceKind = "primary" | "worktree";
 export type WorktreeStatus = "ready" | "missing" | "error";
 export type NewThreadEnvironment = "local" | "worktree";
@@ -283,6 +283,22 @@ export interface RemoveWorktreeInput {
   readonly worktreeId: string;
 }
 
+export type PackageKind = "npm" | "git" | "local";
+export type PackageScope = "user" | "project";
+
+export interface PackageRecord {
+  readonly source: string;
+  readonly kind: PackageKind;
+  readonly displayName: string;
+  readonly description?: string;
+  readonly scope: PackageScope;
+  readonly enabled: boolean;
+  readonly extensionCount: number;
+  readonly skillCount: number;
+  readonly promptCount: number;
+  readonly themeCount: number;
+}
+
 export interface DesktopAppState {
   readonly workspaces: readonly WorkspaceRecord[];
   readonly worktreesByWorkspace: Readonly<Record<string, readonly WorktreeRecord[]>>;
@@ -296,6 +312,7 @@ export interface DesktopAppState {
   readonly queuedComposerMessages: readonly QueuedComposerMessage[];
   readonly editingQueuedMessageId?: string;
   readonly runtimeByWorkspace: Readonly<Record<string, RuntimeSnapshot>>;
+  readonly packagesByWorkspace: Readonly<Record<string, readonly PackageRecord[]>>;
   readonly sessionCommandsBySession: Readonly<Record<string, readonly RuntimeCommandRecord[]>>;
   readonly sessionExtensionUiBySession: Readonly<Record<string, SessionExtensionUiStateRecord>>;
   readonly extensionCommandCompatibilityByWorkspace: Readonly<Record<string, readonly ExtensionCommandCompatibilityRecord[]>>;
@@ -339,6 +356,7 @@ export function createEmptyDesktopAppState(): DesktopAppState {
     composerAttachments: [],
     queuedComposerMessages: [],
     runtimeByWorkspace: {},
+    packagesByWorkspace: {},
     sessionCommandsBySession: {},
     sessionExtensionUiBySession: {},
     extensionCommandCompatibilityByWorkspace: {},

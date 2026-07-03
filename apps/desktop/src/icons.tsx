@@ -381,3 +381,16 @@ export function DiffIcon() {
     </Icon>
   );
 }
+
+export function PackageIcon() {
+  return (
+    <Icon>
+      <path
+        d="M5.2 3.8h9.6a1.4 1.4 0 0 1 1.4 1.4v9.6a1.4 1.4 0 0 1-1.4 1.4H5.2a1.4 1.4 0 0 1-1.4-1.4V5.2a1.4 1.4 0 0 1 1.4-1.4Z"
+        stroke="currentColor"
+        strokeWidth="1.35"
+      />
+      <path d="M4.8 8h10.4M10 3.8v12.4" stroke="currentColor" strokeWidth="1.35" />
+    </Icon>
+  );
+}

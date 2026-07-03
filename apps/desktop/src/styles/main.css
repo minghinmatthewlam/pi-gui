@@ -2895,11 +2895,55 @@
 }
 
 .skills-toolbar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
   margin-bottom: 16px;
 }
 
 .skills-search {
   width: min(360px, 100%);
+}
+
+.package-sort {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.package-sort__label {
+  font-size: 13px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.package-sort__pills {
+  display: flex;
+  gap: 4px;
+}
+
+.package-sort__pill {
+  padding: 2px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 12px;
+  border: 1px solid var(--border-primary);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.package-sort__pill:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.package-sort__pill--active {
+  background: var(--accent-bg);
+  color: var(--accent-text);
+  border-color: var(--accent-bg);
 }
 
 .skills-layout {

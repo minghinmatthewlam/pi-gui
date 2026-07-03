@@ -33,6 +33,7 @@ import {
 import { deriveModelOnboardingState } from "./model-onboarding";
 import { SkillsView } from "./skills-view";
 import { ExtensionsView } from "./extensions-view";
+import { PackagesView } from "./packages-view";
 import { SettingsView, type SettingsSection } from "./settings-view";
 import { SecondarySurface } from "./secondary-surface";
 import { NewThreadView } from "./new-thread-view";
@@ -171,6 +172,7 @@ export default function App() {
   const [settingsWorkspaceId, setSettingsWorkspaceId] = useState("");
   const [skillsWorkspaceId, setSkillsWorkspaceId] = useState("");
   const [extensionsWorkspaceId, setExtensionsWorkspaceId] = useState("");
+  const [packagesWorkspaceId, setPackagesWorkspaceId] = useState("");
   const [pendingNewThreadWorkspaceId, setPendingNewThreadWorkspaceId] = useState("");
   const [newThreadRootWorkspaceId, setNewThreadRootWorkspaceId] = useState("");
   const [newThreadEnvironment, setNewThreadEnvironment] = useState<NewThreadEnvironment>("local");
@@ -368,6 +370,10 @@ export default function App() {
   const extensionsCommandCompatibility = extensionsWorkspace
     ? snapshot?.extensionCommandCompatibilityByWorkspace[extensionsWorkspace.id] ?? []
     : [];
+  const packagesWorkspace = packagesWorkspaceId
+    ? rootWorkspaceOptions.find((workspace) => workspace.id === packagesWorkspaceId)
+    : undefined;
+  const packagesRuntime = packagesWorkspace ? snapshot?.runtimeByWorkspace[packagesWorkspace.id] : undefined;
   const newThreadWorkspace =
     rootWorkspaceOptions.find((entry) => entry.id === newThreadRootWorkspaceId) ?? rootWorkspaceOptions[0];
   const newThreadRuntime = snapshot ? getEffectiveModelRuntime(snapshot, newThreadWorkspace) : undefined;
@@ -1106,6 +1112,7 @@ export default function App() {
       setSettingsWorkspaceId("");
       setSkillsWorkspaceId("");
       setExtensionsWorkspaceId("");
+      setPackagesWorkspaceId("");
       setPendingNewThreadWorkspaceId("");
       setNewThreadRootWorkspaceId("");
       setNewThreadEnvironment("local");
@@ -1119,6 +1126,9 @@ export default function App() {
       rootWorkspaceOptions.some((workspace) => workspace.id === current) ? current : (current || rootWorkspaceOptions[0]?.id || ""),
     );
     setExtensionsWorkspaceId((current) =>
+      rootWorkspaceOptions.some((workspace) => workspace.id === current) ? current : (current || rootWorkspaceOptions[0]?.id || ""),
+    );
+    setPackagesWorkspaceId((current) =>
       rootWorkspaceOptions.some((workspace) => workspace.id === current) ? current : (current || rootWorkspaceOptions[0]?.id || ""),
     );
     setNewThreadRootWorkspaceId((current) =>
@@ -1650,6 +1660,17 @@ export default function App() {
       setExtensionsWorkspaceId(nextWorkspaceId);
     }
     setActiveView("extensions");
+  };
+
+  const openPackages = (workspaceId?: string) => {
+    const nextWorkspaceId =
+      workspaceId && rootWorkspaceOptions.some((workspace) => workspace.id === workspaceId)
+        ? workspaceId
+        : packagesWorkspace?.id || rootWorkspaceOptions[0]?.id || "";
+    if (nextWorkspaceId) {
+      setPackagesWorkspaceId(nextWorkspaceId);
+    }
+    setActiveView("packages");
   };
 
   const openNewThreadSurface = (workspaceId?: string) => {
@@ -2459,6 +2480,38 @@ export default function App() {
     );
   }
 
+  if (snapshot.activeView === "packages") {
+    return (
+      <SecondarySurface onBack={() => setActiveView("threads")} testId="packages-surface" title="Packages">
+        <div className="surface-toolbar">
+          <label className="surface-toolbar__field">
+            <span>Workspace</span>
+            <select
+              value={packagesWorkspace?.id ?? ""}
+              onChange={(event) => setPackagesWorkspaceId(event.target.value)}
+            >
+              {rootWorkspaceOptions.map((workspace) => (
+                <option key={workspace.id} value={workspace.id}>
+                  {workspace.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <PackagesView
+          workspace={packagesWorkspace}
+          runtime={packagesRuntime}
+          onRefresh={() => {
+            if (!packagesWorkspace) {
+              return;
+            }
+            void updateSnapshot(api, setSnapshot, () => api.refreshRuntime(packagesWorkspace.id));
+          }}
+        />
+      </SecondarySurface>
+    );
+  }
+
   const shellClassName = `shell${snapshot.sidebarCollapsed ? " shell--sidebar-collapsed" : ""}`;
 
   return (
@@ -2487,6 +2540,7 @@ export default function App() {
           onSetActiveView={setActiveView}
           onOpenSkills={openSkills}
           onOpenExtensions={openExtensions}
+          onOpenPackages={openPackages}
           onOpenSettings={openSettings}
           onArchiveSession={handleArchiveSession}
           onSelectSession={handleSelectSession}
