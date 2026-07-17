@@ -384,7 +384,7 @@ function ModelChecklist({ probed, selected, onToggle, onManualAdd, disabled }: M
           Click &ldquo;Detect models&rdquo; or type a model ID below to add one manually.
         </p>
       ) : (
-        <ul className="settings-list">
+        <ul className="settings-list custom-endpoint-model-list">
           {[...knownIds].sort((a, b) => a.localeCompare(b)).map((id) => (
             <li key={id} className="settings-row">
               <label className="settings-row__label">

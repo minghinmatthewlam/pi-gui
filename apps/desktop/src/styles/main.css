@@ -2246,13 +2246,25 @@
 
 .extension-dialog {
   width: min(560px, 100%);
+  max-height: calc(100vh - 48px);
   display: grid;
   gap: 14px;
   padding: 22px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   border-radius: var(--radius-composer);
   background: var(--surface);
   border: 1px solid var(--line);
   box-shadow: var(--shadow-xl);
+}
+
+.custom-endpoint-model-list {
+  max-height: min(320px, 35vh);
+  margin: 0;
+  padding: 0 4px 0 0;
+  overflow-y: auto;
+  list-style: none;
+  scrollbar-gutter: stable;
 }
 
 .extension-dialog__title {

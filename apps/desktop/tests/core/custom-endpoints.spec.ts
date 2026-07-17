@@ -1,3 +1,5 @@
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
@@ -15,6 +17,36 @@ import {
 async function readModelsJson(agentDir: string): Promise<Record<string, unknown>> {
   const raw = await readFile(join(agentDir, "models.json"), "utf8");
   return JSON.parse(raw) as Record<string, unknown>;
+}
+
+async function startModelListServer(modelCount: number): Promise<{
+  readonly baseUrl: string;
+  readonly authorization: () => string | undefined;
+  readonly close: () => Promise<void>;
+}> {
+  let authorization: string | undefined;
+  const server = createServer((request, response) => {
+    authorization = request.headers.authorization;
+    response.writeHead(200, { "Content-Type": "application/json" });
+    response.end(JSON.stringify({
+      data: Array.from({ length: modelCount }, (_, index) => ({ id: `detected-model-${index + 1}` })),
+    }));
+  });
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      server.off("error", reject);
+      resolve();
+    });
+  });
+  const address = server.address() as AddressInfo;
+  return {
+    baseUrl: `http://127.0.0.1:${address.port}/v1`,
+    authorization: () => authorization,
+    close: () => new Promise<void>((resolve, reject) => {
+      server.close((error) => error ? reject(error) : resolve());
+    }),
+  };
 }
 
 async function openProvidersSettings(window: Awaited<ReturnType<Awaited<ReturnType<typeof launchDesktop>>["firstWindow"]>>) {
@@ -271,5 +303,68 @@ test("custom endpoint dialog blocks colliding provider IDs and invalid base URLs
     await expect(customEndpoints).toContainText("No custom endpoints yet.");
   } finally {
     await harness.close();
+  }
+});
+
+test("custom endpoint dialog keeps long detected model lists and actions reachable", async () => {
+  test.setTimeout(60_000);
+  const modelServer = await startModelListServer(50);
+  const userDataDir = await makeUserDataDir();
+  const agentDir = join(userDataDir, "agent");
+  const workspacePath = await makeWorkspace("custom-endpoints-long-model-list-workspace");
+  await seedAgentDir(agentDir, { enabledModels: [] });
+
+  const harness = await launchDesktop(userDataDir, {
+    agentDir,
+    initialWorkspaces: [workspacePath],
+    scrubProviderEnv: true,
+    testMode: "background",
+  });
+
+  try {
+    const window = await harness.firstWindow();
+    await harness.electronApp.evaluate(({ BrowserWindow }) => {
+      BrowserWindow.getAllWindows()[0]?.setSize(900, 600);
+    });
+    await expect.poll(() => window.evaluate(() => window.innerHeight)).toBe(600);
+    await openProvidersSettings(window);
+
+    const customEndpoints = window.locator(".settings-section", {
+      has: window.locator(".settings-section__title", { hasText: "Custom endpoints" }),
+    });
+    await customEndpoints.getByRole("button", { name: "Add endpoint", exact: true }).click();
+
+    const dialog = window.getByTestId("custom-endpoint-dialog");
+    await dialog.getByLabel("Provider ID").fill("many-models");
+    await dialog.getByLabel("Base URL").fill(modelServer.baseUrl);
+    await dialog.getByLabel("API key").fill("test-api-key");
+    await dialog.getByRole("button", { name: "Detect models", exact: true }).click();
+
+    const modelList = dialog.locator(".custom-endpoint-model-list");
+    await expect(modelList.locator("li")).toHaveCount(50);
+    expect(modelServer.authorization()).toBe("Bearer test-api-key");
+    const layout = await dialog.evaluate((element) => {
+      const list = element.querySelector<HTMLElement>(".custom-endpoint-model-list");
+      const rect = element.getBoundingClientRect();
+      return {
+        dialogBottom: rect.bottom,
+        dialogTop: rect.top,
+        listClientHeight: list?.clientHeight ?? 0,
+        listScrollHeight: list?.scrollHeight ?? 0,
+        viewportHeight: window.innerHeight,
+      };
+    });
+    expect(layout.dialogTop).toBeGreaterThanOrEqual(23);
+    expect(layout.dialogBottom).toBeLessThanOrEqual(layout.viewportHeight - 23);
+    expect(layout.listScrollHeight).toBeGreaterThan(layout.listClientHeight);
+
+    await modelList.hover();
+    await window.mouse.wheel(0, 5_000);
+    await window.mouse.wheel(0, 5_000);
+    const addEndpoint = dialog.getByRole("button", { name: "Add endpoint", exact: true });
+    await expect(addEndpoint).toBeInViewport();
+  } finally {
+    await harness.close();
+    await modelServer.close();
   }
 });
