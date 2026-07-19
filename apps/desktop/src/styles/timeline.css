@@ -36,7 +36,8 @@
   background: transparent;
   position: relative;
   max-height: calc(100vh - 320px);
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
   overflow-anchor: none;
   /* Programmatic timeline scrolls (opening a thread, jump-to-latest,
    * transcript-update alignment) drive scrollTop directly. Leaving
@@ -217,6 +218,7 @@
   align-items: center;
   justify-content: flex-end;
   min-width: 0;
+  max-width: 100%;
   gap: 8px;
 }
 
@@ -369,6 +371,7 @@
 
 .timeline-tool {
   max-width: 100%;
+  min-width: 0;
   display: grid;
   gap: 2px;
   padding: 0;
