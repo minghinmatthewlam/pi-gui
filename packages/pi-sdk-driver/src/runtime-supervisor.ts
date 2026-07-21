@@ -56,6 +56,8 @@ interface RuntimeContext {
   readonly settingsManager: SettingsManager;
   readonly packageManager: DefaultPackageManager;
   readonly resourceLoader: DefaultResourceLoader;
+  /** Provider ids this context last registered from extensions, so stale ones can be dropped. */
+  readonly extensionProviderIds: Set<string>;
 }
 
 export interface RuntimeInlineExtensionMetadata {
@@ -114,7 +116,7 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
     context.settingsManager.reload();
     this.authStorage.reload();
     this.modelRegistry.refresh();
-    await context.resourceLoader.reload();
+    await this.reloadResources(context);
     await this.autoEnableModelsForAuthenticatedProviders(context);
     return this.buildSnapshot(context);
   }
@@ -123,7 +125,7 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
     const context = await this.ensureContext(workspace);
     await this.authStorage.login(providerId, toPiOAuthLoginCallbacks(callbacks));
     this.modelRegistry.refresh();
-    await context.resourceLoader.reload();
+    await this.reloadResources(context);
     await this.autoEnableModelsForAuthenticatedProviders(context, [providerId]);
     return this.buildSnapshot(context);
   }
@@ -132,7 +134,7 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
     const context = await this.ensureContext(workspace);
     this.authStorage.logout(providerId);
     this.modelRegistry.refresh();
-    await context.resourceLoader.reload();
+    await this.reloadResources(context);
     return this.buildSnapshot(context);
   }
 
@@ -147,7 +149,7 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
     }
     this.authStorage.set(providerId, { type: "api_key", key: normalized });
     this.modelRegistry.refresh();
-    await context.resourceLoader.reload();
+    await this.reloadResources(context);
     await this.autoEnableModelsForAuthenticatedProviders(context, [providerId]);
     return this.buildSnapshot(context);
   }
@@ -166,7 +168,7 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
     const context = await this.ensureContext(workspace);
     await this.customProviderStore.set(input);
     this.modelRegistry.refresh();
-    await context.resourceLoader.reload();
+    await this.reloadResources(context);
     await this.autoEnableModelsForAuthenticatedProviders(context, [input.providerId]);
     return this.buildSnapshot(context);
   }
@@ -175,7 +177,7 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
     const context = await this.ensureContext(workspace);
     await this.customProviderStore.delete(providerId);
     this.modelRegistry.refresh();
-    await context.resourceLoader.reload();
+    await this.reloadResources(context);
     return this.buildSnapshot(context);
   }
 
@@ -247,7 +249,7 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
     const context = await this.ensureContext(workspace);
     context.settingsManager.setEnableSkillCommands(enabled);
     await context.settingsManager.flush();
-    await context.resourceLoader.reload();
+    await this.reloadResources(context);
     return this.buildSnapshot(context);
   }
 
@@ -328,7 +330,7 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
 
     this.toggleResource(context, resource, enabled, "skill");
     await context.settingsManager.flush();
-    await context.resourceLoader.reload();
+    await this.reloadResources(context);
     return this.buildSnapshot(context);
   }
 
@@ -342,7 +344,7 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
 
     this.toggleResource(context, resource, enabled, "extension");
     await context.settingsManager.flush();
-    await context.resourceLoader.reload();
+    await this.reloadResources(context);
     return this.buildSnapshot(context);
   }
 
@@ -402,9 +404,67 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
       settingsManager,
       packageManager,
       resourceLoader,
+      extensionProviderIds: new Set<string>(),
     };
+    this.syncExtensionProviders(context);
     this.contexts.set(workspace.workspaceId, context);
     return context;
+  }
+
+  private async reloadResources(context: RuntimeContext): Promise<void> {
+    await context.resourceLoader.reload();
+    this.syncExtensionProviders(context);
+  }
+
+  /**
+   * Apply providers that extensions registered while loading.
+   *
+   * `pi` queues `pi.registerProvider()` calls made during extension load on the
+   * shared extension runtime and flushes them when session services are created
+   * (`createAgentSessionServices`). The runtime snapshot never goes through that
+   * path, so without this the model list only ever shows built-ins, `models.json`
+   * providers, and custom providers — extension-provided models are invisible in
+   * settings and pickers even though sessions can use them.
+   */
+  private syncExtensionProviders(context: RuntimeContext): void {
+    const { runtime } = context.resourceLoader.getExtensions();
+    const registered = new Set<string>();
+    for (const { name, config, extensionPath } of runtime.pendingProviderRegistrations) {
+      try {
+        this.modelRegistry.registerProvider(name, config);
+        registered.add(name);
+      } catch (error) {
+        console.warn(
+          `[pi-gui] Extension "${extensionPath}" failed to register provider "${name}": ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+    }
+    runtime.pendingProviderRegistrations = [];
+
+    // Drop providers this context registered before but no longer does (extension
+    // disabled or removed), unless another workspace still provides them.
+    for (const providerId of context.extensionProviderIds) {
+      if (registered.has(providerId) || this.isExtensionProviderClaimedElsewhere(providerId, context)) {
+        continue;
+      }
+      this.modelRegistry.unregisterProvider(providerId);
+    }
+
+    context.extensionProviderIds.clear();
+    for (const providerId of registered) {
+      context.extensionProviderIds.add(providerId);
+    }
+  }
+
+  private isExtensionProviderClaimedElsewhere(providerId: string, context: RuntimeContext): boolean {
+    for (const other of this.contexts.values()) {
+      if (other !== context && other.extensionProviderIds.has(providerId)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private async buildSnapshot(context: RuntimeContext): Promise<RuntimeSnapshot> {
