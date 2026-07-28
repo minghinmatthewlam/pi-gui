@@ -2255,6 +2255,44 @@
   box-shadow: var(--shadow-xl);
 }
 
+.custom-endpoint-dialog {
+  max-height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.custom-endpoint-dialog__content {
+  min-height: 0;
+  display: grid;
+  flex: 1 1 auto;
+  gap: 14px;
+  padding: 22px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.custom-endpoint-model-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.custom-endpoint-dialog__footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  display: grid;
+  flex: 0 0 auto;
+  gap: 10px;
+  padding: 14px 22px 18px;
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+}
+
 .extension-dialog__title {
   color: var(--text-strong);
   font-size: 20px;
