@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { CUSTOM_PROVIDER_ID_PATTERN, isValidHttpBaseUrl } from "@pi-gui/pi-sdk-driver/custom-provider-types";
+import { trapDialogFocus } from "./dialog-focus";
 import type { CustomProviderConfig, CustomProviderModelConfig } from "./ipc";
 import { SettingsGroup } from "./settings-utils";
 
@@ -148,6 +149,7 @@ interface CustomEndpointDialogProps {
 }
 
 function CustomEndpointDialog({ mode, existingProviderIds, onClose, onSave }: CustomEndpointDialogProps) {
+  const titleId = useId();
   const initial = mode.kind === "edit" ? mode.original : undefined;
   const [providerId, setProviderId] = useState(initial?.providerId ?? "");
   const [baseUrl, setBaseUrl] = useState(initial?.baseUrl ?? "");
@@ -160,6 +162,9 @@ function CustomEndpointDialog({ mode, existingProviderIds, onClose, onSave }: Cu
   const [probePending, setProbePending] = useState(false);
   const [formError, setFormError] = useState<string | undefined>();
   const [savePending, setSavePending] = useState(false);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const probeButtonRef = useRef<HTMLButtonElement>(null);
+  const restoreProbeFocusRef = useRef(false);
 
   const selectedModelIds = useMemo(() => new Set(models.map((model) => model.id)), [models]);
   const isEdit = mode.kind === "edit";
@@ -169,6 +174,13 @@ function CustomEndpointDialog({ mode, existingProviderIds, onClose, onSave }: Cu
     existingProviderIds,
     initial?.providerId,
   ]);
+
+  useEffect(() => {
+    if (!probePending && restoreProbeFocusRef.current) {
+      restoreProbeFocusRef.current = false;
+      probeButtonRef.current?.focus();
+    }
+  }, [probePending]);
 
   const handleProbe = async () => {
     const api = window.piApp;
@@ -180,6 +192,7 @@ function CustomEndpointDialog({ mode, existingProviderIds, onClose, onSave }: Cu
       setProbeError("Base URL must start with http:// or https://");
       return;
     }
+    restoreProbeFocusRef.current = document.activeElement === probeButtonRef.current;
     setProbePending(true);
     setProbeError(undefined);
     const result = await api.probeCustomProviderModels({
@@ -248,111 +261,126 @@ function CustomEndpointDialog({ mode, existingProviderIds, onClose, onSave }: Cu
   return (
     <div className="extension-dialog-backdrop">
       <div
-        className="extension-dialog"
+        aria-labelledby={titleId}
+        aria-modal="true"
+        className="extension-dialog custom-endpoint-dialog"
         data-testid="custom-endpoint-dialog"
         onKeyDown={(event) => {
           if (event.key === "Escape" && !savePending) {
             event.preventDefault();
             onClose();
+            return;
+          }
+          if (event.key === "Tab") {
+            trapDialogFocus(event, dialogRef.current);
           }
         }}
+        ref={dialogRef}
+        role="dialog"
       >
-        <div className="extension-dialog__title">{isEdit ? "Edit custom endpoint" : "Add custom endpoint"}</div>
-        <p className="extension-dialog__body">
-          Configure an OpenAI-compatible server. The endpoint and API key are stored in plaintext at
-          <code> ~/.pi/agent/models.json</code>.
-        </p>
-        <label className="settings-field">
-          <span>Provider ID</span>
-          <input
-            aria-label="Provider ID"
-            autoFocus={!isEdit}
-            className="settings-search"
-            disabled={isEdit || savePending}
-            placeholder="ollama-local"
-            value={providerId}
-            onChange={(event) => setProviderId(event.target.value.trim().toLowerCase())}
-          />
-          {idValidationError ? (
-            <span className="settings-row__description settings-warning">{idValidationError}</span>
-          ) : (
-            <span className="settings-row__description">
-              Lowercase letters, digits, and dashes. Cannot be changed later.
-            </span>
-          )}
-        </label>
-        <label className="settings-field">
-          <span>Base URL</span>
-          <input
-            aria-label="Base URL"
-            className="settings-search"
-            disabled={savePending}
-            placeholder="http://localhost:11434/v1"
-            value={baseUrl}
-            onChange={(event) => setBaseUrl(event.target.value)}
-          />
-          <span className="settings-row__description">
-            Include the <code>/v1</code> suffix. Ollama: <code>http://localhost:11434/v1</code>. vLLM:{" "}
-            <code>http://localhost:8000/v1</code>.
-          </span>
-        </label>
-        <label className="settings-field">
-          <span>API key</span>
-          <input
-            aria-label="API key"
-            className="settings-search"
-            disabled={savePending}
-            placeholder="vLLM: pass through; Ollama: leave blank"
-            type="password"
-            value={apiKey}
-            onChange={(event) => setApiKey(event.target.value)}
-          />
-          <span className="settings-row__description">
-            Required by the storage format. For vLLM started with <code>--api-key</code>, enter that key. For Ollama
-            or other servers without auth, leave blank and a placeholder is saved.
-          </span>
-        </label>
-
-        <div className="settings-field">
-          <div className="settings-field__header">
-            <span>Models</span>
-            <button
-              className="button button--secondary"
-              disabled={probePending || savePending}
-              type="button"
-              onClick={() => void handleProbe()}
-            >
-              {probePending ? "Detecting…" : "Detect models"}
-            </button>
+        <div className="custom-endpoint-dialog__content" data-testid="custom-endpoint-dialog-content">
+          <div className="extension-dialog__title" id={titleId}>
+            {isEdit ? "Edit custom endpoint" : "Add custom endpoint"}
           </div>
-          {probeError ? (
-            <p className="settings-row__description settings-warning">{probeError}</p>
-          ) : null}
-          <ModelChecklist
-            probed={probeCandidates}
-            selected={models}
-            onToggle={toggleModel}
-            onManualAdd={handleManualAdd}
-            disabled={savePending}
-          />
-          <p className="settings-row__description">
-            Tool calling is required. Smaller models (&lt; 7B) often do not emit OpenAI-style function calls cleanly.
+          <p className="extension-dialog__body">
+            Configure an OpenAI-compatible server. The endpoint and API key are stored in plaintext at
+            <code> ~/.pi/agent/models.json</code>.
           </p>
+          <label className="settings-field">
+            <span>Provider ID</span>
+            <input
+              aria-label="Provider ID"
+              autoFocus={!isEdit}
+              className="settings-search"
+              disabled={isEdit || savePending}
+              placeholder="ollama-local"
+              value={providerId}
+              onChange={(event) => setProviderId(event.target.value.trim().toLowerCase())}
+            />
+            {idValidationError ? (
+              <span className="settings-row__description settings-warning">{idValidationError}</span>
+            ) : (
+              <span className="settings-row__description">
+                Lowercase letters, digits, and dashes. Cannot be changed later.
+              </span>
+            )}
+          </label>
+          <label className="settings-field">
+            <span>Base URL</span>
+            <input
+              aria-label="Base URL"
+              className="settings-search"
+              disabled={savePending}
+              placeholder="http://localhost:11434/v1"
+              value={baseUrl}
+              onChange={(event) => setBaseUrl(event.target.value)}
+            />
+            <span className="settings-row__description">
+              Include the <code>/v1</code> suffix. Ollama: <code>http://localhost:11434/v1</code>. vLLM:{" "}
+              <code>http://localhost:8000/v1</code>.
+            </span>
+          </label>
+          <label className="settings-field">
+            <span>API key</span>
+            <input
+              aria-label="API key"
+              className="settings-search"
+              disabled={savePending}
+              placeholder="vLLM: pass through; Ollama: leave blank"
+              type="password"
+              value={apiKey}
+              onChange={(event) => setApiKey(event.target.value)}
+            />
+            <span className="settings-row__description">
+              Required by the storage format. For vLLM started with <code>--api-key</code>, enter that key. For Ollama
+              or other servers without auth, leave blank and a placeholder is saved.
+            </span>
+          </label>
+
+          <div className="settings-field">
+            <div className="settings-field__header">
+              <span>Models</span>
+              <button
+                className="button button--secondary"
+                disabled={probePending || savePending}
+                ref={probeButtonRef}
+                type="button"
+                onClick={() => void handleProbe()}
+              >
+                {probePending ? "Detecting…" : "Detect models"}
+              </button>
+            </div>
+            {probeError ? (
+              <p className="settings-row__description settings-warning">{probeError}</p>
+            ) : null}
+            <ModelChecklist
+              probed={probeCandidates}
+              selected={models}
+              onToggle={toggleModel}
+              onManualAdd={handleManualAdd}
+              disabled={savePending}
+            />
+            <p className="settings-row__description">
+              Tool calling is required. Smaller models (&lt; 7B) often do not emit OpenAI-style function calls cleanly.
+            </p>
+          </div>
         </div>
 
-        {formError ? <p className="extension-dialog__body settings-warning">{formError}</p> : null}
-        <div className="extension-dialog__actions">
-          <button className="button button--secondary" disabled={savePending} type="button" onClick={onClose}>
-            Cancel
-          </button>
-          <button
-            className="button"
-            disabled={savePending || Boolean(idValidationError) || models.length === 0 || !baseUrl.trim()}
-            type="button"
-            onClick={() => void handleSave()}
-          >
-            {isEdit ? "Save changes" : "Add endpoint"}
-          </button>
+        <div className="custom-endpoint-dialog__footer" data-testid="custom-endpoint-dialog-footer">
+          {formError ? <p className="extension-dialog__body settings-warning">{formError}</p> : null}
+          <div className="extension-dialog__actions">
+            <button className="button button--secondary" disabled={savePending} type="button" onClick={onClose}>
+              Cancel
+            </button>
+            <button
+              className="button"
+              disabled={savePending || Boolean(idValidationError) || models.length === 0 || !baseUrl.trim()}
+              type="button"
+              onClick={() => void handleSave()}
+            >
+              {isEdit ? "Save changes" : "Add endpoint"}
+            </button>
+          </div>
         </div>
       </div>
     </div>

@@ -1,8 +1,8 @@
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
-import { readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page, type Video } from "@playwright/test";
 import {
   desktopShortcut,
   getDesktopState,
@@ -54,6 +54,18 @@ async function openProvidersSettings(window: Awaited<ReturnType<Awaited<ReturnTy
   await expect(window.getByTestId("settings-surface")).toBeVisible();
   await window.getByRole("button", { name: "Providers", exact: true }).click();
   await expect(window.locator(".view-header__title")).toHaveText("Providers");
+}
+
+async function saveCustomEndpointProof(window: Page, proofDir: string | undefined, fileName: string): Promise<void> {
+  if (proofDir) {
+    await window.screenshot({ path: join(proofDir, fileName), fullPage: false });
+  }
+}
+
+async function saveCustomEndpointVideo(video: Video | null, proofDir: string | undefined): Promise<void> {
+  if (proofDir && video) {
+    await video.saveAs(join(proofDir, "custom-endpoint-keyboard-flow.webm"));
+  }
 }
 
 test("settings lets the user add, edit, and delete an OpenAI-compatible custom endpoint", async () => {
@@ -306,8 +318,12 @@ test("custom endpoint dialog blocks colliding provider IDs and invalid base URLs
   }
 });
 
-test("custom endpoint dialog keeps long detected model lists and actions reachable", async () => {
-  test.setTimeout(60_000);
+test("custom endpoint dialog supports a long-list keyboard flow with sticky actions", async () => {
+  test.setTimeout(90_000);
+  const proofDir = process.env.PI_APP_CUSTOM_ENDPOINT_PROOF_DIR?.trim();
+  if (proofDir) {
+    await mkdir(proofDir, { recursive: true });
+  }
   const modelServer = await startModelListServer(50);
   const userDataDir = await makeUserDataDir();
   const agentDir = join(userDataDir, "agent");
@@ -319,52 +335,148 @@ test("custom endpoint dialog keeps long detected model lists and actions reachab
     initialWorkspaces: [workspacePath],
     scrubProviderEnv: true,
     testMode: "background",
+    ...(proofDir
+      ? {
+          recordVideoDir: join(proofDir, "raw-video"),
+          recordVideoSize: { width: 900, height: 600 },
+        }
+      : {}),
   });
+  let video: Video | null = null;
 
   try {
     const window = await harness.firstWindow();
+    video = window.video();
     await harness.electronApp.evaluate(({ BrowserWindow }) => {
       BrowserWindow.getAllWindows()[0]?.setSize(900, 600);
     });
-    await expect.poll(() => window.evaluate(() => window.innerHeight)).toBe(600);
+    await expect.poll(() => window.evaluate(() => ({
+      height: window.innerHeight,
+      width: window.innerWidth,
+    }))).toEqual({ height: 600, width: 900 });
     await openProvidersSettings(window);
 
     const customEndpoints = window.locator(".settings-section", {
       has: window.locator(".settings-section__title", { hasText: "Custom endpoints" }),
     });
-    await customEndpoints.getByRole("button", { name: "Add endpoint", exact: true }).click();
+    const openDialogButton = customEndpoints.getByRole("button", { name: "Add endpoint", exact: true });
+    await openDialogButton.click();
 
     const dialog = window.getByTestId("custom-endpoint-dialog");
+    const providerIdInput = dialog.getByLabel("Provider ID");
+    const cancelButton = dialog.getByRole("button", { name: "Cancel", exact: true });
+    await expect(providerIdInput).toBeFocused();
+    await providerIdInput.press("Shift+Tab");
+    await expect(cancelButton).toBeFocused();
+    await cancelButton.press("Tab");
+    await expect(providerIdInput).toBeFocused();
+    await window.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+    await expect(customEndpoints).toContainText("No custom endpoints yet.");
+
+    await openDialogButton.click();
+    await expect(dialog.getByLabel("Provider ID")).toBeFocused();
+    await cancelButton.click();
+    await expect(dialog).toHaveCount(0);
+    await expect(customEndpoints).toContainText("No custom endpoints yet.");
+
+    await openDialogButton.click();
+    await expect(dialog.getByLabel("Provider ID")).toBeFocused();
     await dialog.getByLabel("Provider ID").fill("many-models");
     await dialog.getByLabel("Base URL").fill(modelServer.baseUrl);
     await dialog.getByLabel("API key").fill("test-api-key");
-    await dialog.getByRole("button", { name: "Detect models", exact: true }).click();
+    const addEndpointButton = dialog.getByRole("button", { name: "Add endpoint", exact: true });
+    await expect(addEndpointButton).toBeDisabled();
+    const detectModelsButton = dialog.getByRole("button", { name: "Detect models", exact: true });
+    await detectModelsButton.click();
 
     const modelList = dialog.locator(".custom-endpoint-model-list");
     await expect(modelList.locator("li")).toHaveCount(50);
     expect(modelServer.authorization()).toBe("Bearer test-api-key");
+    await expect(addEndpointButton).toBeDisabled();
+
     const layout = await dialog.evaluate((element) => {
+      const content = element.querySelector<HTMLElement>(".custom-endpoint-dialog__content");
+      const footer = element.querySelector<HTMLElement>(".custom-endpoint-dialog__footer");
       const list = element.querySelector<HTMLElement>(".custom-endpoint-model-list");
       const rect = element.getBoundingClientRect();
+      const scrollableElements = [...element.querySelectorAll<HTMLElement>("*")].filter((candidate) => {
+        const overflowY = getComputedStyle(candidate).overflowY;
+        return (overflowY === "auto" || overflowY === "scroll")
+          && candidate.scrollHeight > candidate.clientHeight + 1;
+      });
       return {
+        contentClientHeight: content?.clientHeight ?? 0,
+        contentIsOnlyScrollable: scrollableElements.length === 1 && scrollableElements[0] === content,
+        contentOverflowY: content ? getComputedStyle(content).overflowY : "",
+        contentScrollHeight: content?.scrollHeight ?? 0,
         dialogBottom: rect.bottom,
         dialogTop: rect.top,
+        footerPosition: footer ? getComputedStyle(footer).position : "",
         listClientHeight: list?.clientHeight ?? 0,
+        listOverflowY: list ? getComputedStyle(list).overflowY : "",
         listScrollHeight: list?.scrollHeight ?? 0,
+        scrollableElementCount: scrollableElements.length,
         viewportHeight: window.innerHeight,
       };
     });
     expect(layout.dialogTop).toBeGreaterThanOrEqual(23);
     expect(layout.dialogBottom).toBeLessThanOrEqual(layout.viewportHeight - 23);
-    expect(layout.listScrollHeight).toBeGreaterThan(layout.listClientHeight);
+    expect(layout.contentScrollHeight).toBeGreaterThan(layout.contentClientHeight);
+    expect(layout.contentOverflowY).toBe("auto");
+    expect(layout.footerPosition).toBe("sticky");
+    expect(layout.listScrollHeight).toBeLessThanOrEqual(layout.listClientHeight + 1);
+    expect(layout.listOverflowY).toBe("visible");
+    expect(layout.scrollableElementCount).toBe(1);
+    expect(layout.contentIsOnlyScrollable).toBe(true);
 
-    await modelList.hover();
-    await window.mouse.wheel(0, 5_000);
-    await window.mouse.wheel(0, 5_000);
-    const addEndpoint = dialog.getByRole("button", { name: "Add endpoint", exact: true });
-    await expect(addEndpoint).toBeInViewport();
+    await expect(detectModelsButton).toBeFocused();
+    await window.keyboard.press("Tab");
+    const firstDetectedModel = dialog.getByLabel("Enable detected-model-1", { exact: true });
+    await expect(firstDetectedModel).toBeFocused();
+    await saveCustomEndpointProof(window, proofDir, "01-long-model-list.png");
+    await window.keyboard.press("Space");
+    await expect(firstDetectedModel).toBeChecked();
+    await expect(addEndpointButton).toBeEnabled();
+    await expect(addEndpointButton).toHaveCSS("opacity", "1");
+    await saveCustomEndpointProof(window, proofDir, "02-keyboard-selection.png");
+
+    const content = dialog.getByTestId("custom-endpoint-dialog-content");
+    const footer = dialog.getByTestId("custom-endpoint-dialog-footer");
+    const footerBeforeScroll = await footer.boundingBox();
+    await content.evaluate((element) => {
+      element.scrollTop = element.scrollHeight;
+    });
+    await expect.poll(() => content.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+    const footerAfterScroll = await footer.boundingBox();
+    expect(footerBeforeScroll).not.toBeNull();
+    expect(footerAfterScroll).not.toBeNull();
+    expect(footerAfterScroll?.y).toBeCloseTo(footerBeforeScroll?.y ?? 0, 0);
+    await expect(addEndpointButton).toBeInViewport();
+    await saveCustomEndpointProof(window, proofDir, "03-sticky-actions.png");
+
+    await addEndpointButton.click();
+    await expect(dialog).toHaveCount(0);
+    const entryRow = customEndpoints.locator(".settings-row", {
+      has: window.locator(".settings-row__title", { hasText: /^many-models$/ }),
+    });
+    await expect(entryRow).toBeVisible();
+    await expect(entryRow).toContainText(modelServer.baseUrl);
+    await expect(entryRow).toContainText("1 model");
+
+    const savedModels = await readModelsJson(agentDir);
+    const savedProviders = savedModels.providers as Record<string, Record<string, unknown>>;
+    expect(savedProviders["many-models"]).toMatchObject({
+      api: "openai-completions",
+      apiKey: "test-api-key",
+      baseUrl: modelServer.baseUrl,
+      models: [{ id: "detected-model-1" }],
+      piGuiCustomEndpoint: true,
+    });
+    await saveCustomEndpointProof(window, proofDir, "04-final-added-endpoint.png");
   } finally {
     await harness.close();
+    await saveCustomEndpointVideo(video, proofDir);
     await modelServer.close();
   }
 });
