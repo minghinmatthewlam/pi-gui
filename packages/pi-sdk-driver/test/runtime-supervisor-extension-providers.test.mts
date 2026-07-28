@@ -244,44 +244,6 @@ test("disabling an extension only drops the registrations of that workspace", as
   );
 });
 
-/**
- * Sessions resolve models against the registry the driver shares with the session
- * supervisor, so every provider a snapshot advertises has to be registered there
- * too — otherwise picking an extension model fails with "Unknown model".
- */
-test("the session registry resolves extension models from every open workspace", async () => {
-  const { root, agentDir } = await createSharedAgentDir();
-  const a = await createProjectWorkspace(root, "workspace-a", "scoped-a", "model-a");
-  const b = await createProjectWorkspace(root, "workspace-b", "scoped-b", "model-b");
-  const authStorage = AuthStorage.create(join(agentDir, "auth.json"));
-  const sessionRegistry = ModelRegistry.create(authStorage, join(agentDir, "models.json"));
-  const supervisor = new RuntimeSupervisor({ agentDir, authStorage, modelRegistry: sessionRegistry });
-
-  await supervisor.getRuntimeSnapshot(a.workspace);
-  await supervisor.getRuntimeSnapshot(b.workspace);
-
-  assert.ok(sessionRegistry.find("scoped-a", "model-a"), "workspace A's extension model must be resolvable");
-  assert.ok(sessionRegistry.find("scoped-b", "model-b"), "workspace B's extension model must be resolvable");
-});
-
-test("disabling an extension removes its provider from the session registry", async () => {
-  const { root, agentDir } = await createSharedAgentDir();
-  const a = await createProjectWorkspace(root, "workspace-a", "scoped-a", "model-a");
-  const authStorage = AuthStorage.create(join(agentDir, "auth.json"));
-  const sessionRegistry = ModelRegistry.create(authStorage, join(agentDir, "models.json"));
-  const supervisor = new RuntimeSupervisor({ agentDir, authStorage, modelRegistry: sessionRegistry });
-
-  await supervisor.getRuntimeSnapshot(a.workspace);
-  assert.ok(sessionRegistry.find("scoped-a", "model-a"));
-
-  await supervisor.setExtensionEnabled(a.workspace, a.extensionPath, false);
-  assert.equal(
-    sessionRegistry.find("scoped-a", "model-a"),
-    undefined,
-    "a disabled extension's provider must not linger in the session registry",
-  );
-});
-
 test("extension providers survive a runtime refresh", async () => {
   const { agentDir, workspacePath } = await createAgentDir();
   const supervisor = createSupervisor(agentDir);

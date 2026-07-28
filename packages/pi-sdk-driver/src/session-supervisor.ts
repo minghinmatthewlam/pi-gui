@@ -1,8 +1,9 @@
 import { access, realpath, stat, unlink } from "node:fs/promises";
 import { resolve } from "node:path";
 import {
-  ModelRegistry,
   SessionManager,
+  type AuthStorage,
+  type ModelRegistry,
   type AgentSessionRuntime,
   type AgentSession,
   type AgentSessionEvent,
@@ -97,12 +98,40 @@ import type { SessionTranscriptItem, SessionTranscriptMessage } from "./transcri
 import {
   createAgentSessionRuntimeWithNpmFallback,
   type PiCreateAgentSessionOptions,
+  type PiModelInfo,
 } from "./npm-package-fallback.js";
+
+function requireModel(modelRegistry: ModelRegistry, provider: string, modelId: string): PiModelInfo {
+  const model = modelRegistry.find(provider, modelId);
+  if (!model) {
+    throw new Error(`Unknown model ${provider}:${modelId}`);
+  }
+  return model;
+}
+
+/**
+ * Resolve a model against a live session's registry.
+ *
+ * The registry was built when the session was created, so a provider added since
+ * then — a custom provider set up in Settings, say — is not in it yet. Refreshing
+ * on a miss reloads `models.json` and reapplies the session's own extension
+ * registrations, which is what makes a freshly added model selectable without
+ * reopening the session.
+ */
+function requireSessionModel(modelRegistry: ModelRegistry, provider: string, modelId: string): PiModelInfo {
+  const model = modelRegistry.find(provider, modelId);
+  if (model) {
+    return model;
+  }
+  modelRegistry.refresh();
+  return requireModel(modelRegistry, provider, modelId);
+}
 
 export interface PiSdkDriverOptions {
   readonly catalogFilePath?: string;
-  readonly createAgentSessionRuntimeImpl?: (options?: CreateAgentSessionOptions) => Promise<AgentSessionRuntime>;
-  readonly modelRegistry?: ModelRegistry;
+  readonly createAgentSessionRuntimeImpl?: (options?: PiCreateAgentSessionOptions) => Promise<AgentSessionRuntime>;
+  readonly agentDir?: string;
+  readonly authStorage?: AuthStorage;
   readonly extensionFactories?: readonly ExtensionFactory[];
   readonly generateThreadTitleOverride?: (
     workspace: WorkspaceRef,
@@ -176,8 +205,9 @@ interface SkillAdapter {
 
 export class SessionSupervisor {
   private readonly catalogs: SessionFileCatalogStorage;
-  private readonly createAgentSessionRuntimeImpl: (options?: CreateAgentSessionOptions) => Promise<AgentSessionRuntime>;
-  private readonly modelRegistry: ModelRegistry | undefined;
+  private readonly createAgentSessionRuntimeImpl: (options?: PiCreateAgentSessionOptions) => Promise<AgentSessionRuntime>;
+  private readonly agentDir: string | undefined;
+  private readonly authStorage: AuthStorage | undefined;
   private readonly records = new Map<string, ManagedSessionRecord>();
   private readonly ensureRecordInFlight = new Map<string, Promise<ManagedSessionRecord>>();
   private readonly leaseIdentity: LeaseIdentity = currentLeaseIdentity();
@@ -198,7 +228,26 @@ export class SessionSupervisor {
             ...(options.extensionFactories ? { extensionFactories: [...options.extensionFactories] } : {}),
           },
         }));
-    this.modelRegistry = options.modelRegistry;
+    this.agentDir = options.agentDir;
+    this.authStorage = options.authStorage;
+  }
+
+  /**
+   * Options every session creation shares.
+   *
+   * Deliberately no `modelRegistry`: letting `createAgentSessionServices` build
+   * one per session keeps it cwd-bound, so it holds exactly the extension
+   * providers registered for this workspace and cannot pick up another open
+   * workspace's endpoint or credentials for the same provider id. `authStorage`
+   * is shared so a login made in Settings reaches sessions that are already open.
+   */
+  private baseCreateOptions(cwd: string, sessionManager: SessionManager): PiCreateAgentSessionOptions {
+    return {
+      cwd,
+      sessionManager,
+      ...(this.agentDir ? { agentDir: this.agentDir } : {}),
+      ...(this.authStorage ? { authStorage: this.authStorage } : {}),
+    };
   }
 
   listWorkspaces(): Promise<WorkspaceCatalogSnapshot> {
@@ -448,20 +497,21 @@ export class SessionSupervisor {
   async createSession(workspace: WorkspaceRef, options?: CreateSessionOptions): Promise<SessionSnapshot> {
     await this.touchWorkspace(workspace);
 
-    const initialModel = options?.initialModel
-      ? this.resolveModel(options.initialModel.provider, options.initialModel.modelId)
-      : undefined;
-    const createOptions: CreateAgentSessionOptions = {
-      cwd: workspace.path,
-      sessionManager: SessionManager.create(workspace.path),
-      ...(this.modelRegistry ? { modelRegistry: this.modelRegistry } : {}),
+    const initialModel = options?.initialModel;
+    const createOptions: PiCreateAgentSessionOptions = {
+      ...this.baseCreateOptions(workspace.path, SessionManager.create(workspace.path)),
+      ...(initialModel
+        ? {
+            resolveInitialModel: (modelRegistry: ModelRegistry) =>
+              requireModel(modelRegistry, initialModel.provider, initialModel.modelId),
+          }
+        : {}),
+      ...(options?.initialThinkingLevel
+        ? {
+            thinkingLevel: options.initialThinkingLevel as NonNullable<CreateAgentSessionOptions["thinkingLevel"]>,
+          }
+        : {}),
     };
-    if (initialModel) {
-      createOptions.model = initialModel;
-    }
-    if (options?.initialThinkingLevel) {
-      createOptions.thinkingLevel = options.initialThinkingLevel as NonNullable<CreateAgentSessionOptions["thinkingLevel"]>;
-    }
 
     const runtime = await this.createAgentSessionRuntimeImpl(createOptions);
     const session = runtime.session;
@@ -565,24 +615,24 @@ export class SessionSupervisor {
       branchedManager = forked;
     }
 
-    const createOptions: CreateAgentSessionOptions = {
-      cwd: targetWorkspace.path,
-      sessionManager: branchedManager,
-      ...(this.modelRegistry ? { modelRegistry: this.modelRegistry } : {}),
-    };
     const forkConfig = deriveSessionConfig(branchedManager);
-    if (forkConfig?.provider && forkConfig?.modelId) {
-      try {
-        createOptions.model = this.resolveModel(forkConfig.provider, forkConfig.modelId);
-      } catch {
-        // Forked model is no longer available; fall back to the runtime default.
-      }
-    }
-    if (forkConfig?.thinkingLevel) {
-      createOptions.thinkingLevel = forkConfig.thinkingLevel as NonNullable<
-        CreateAgentSessionOptions["thinkingLevel"]
-      >;
-    }
+    const forkProvider = forkConfig?.provider;
+    const forkModelId = forkConfig?.modelId;
+    const createOptions: PiCreateAgentSessionOptions = {
+      ...this.baseCreateOptions(targetWorkspace.path, branchedManager),
+      ...(forkProvider && forkModelId
+        ? {
+            // A model the source session used may not exist in the target
+            // workspace; fall back to the runtime default rather than failing.
+            resolveInitialModel: (modelRegistry: ModelRegistry) => modelRegistry.find(forkProvider, forkModelId),
+          }
+        : {}),
+      ...(forkConfig?.thinkingLevel
+        ? {
+            thinkingLevel: forkConfig.thinkingLevel as NonNullable<CreateAgentSessionOptions["thinkingLevel"]>,
+          }
+        : {}),
+    };
 
     const runtime = await this.createAgentSessionRuntimeImpl(createOptions);
     const session = runtime.session;
@@ -801,7 +851,10 @@ export class SessionSupervisor {
       throw new Error(`Session ${sessionKey(record.ref)} is not active.`);
     }
 
-    const model = this.resolveModel(selection.provider, selection.modelId);
+    // The session's own registry, not a shared one: it holds this workspace's
+    // extension providers, so the endpoint and credentials resolved here are the
+    // ones this workspace registered even if another workspace claims the id.
+    const model = requireSessionModel(session.modelRegistry, selection.provider, selection.modelId);
     const auth = await session.modelRegistry.getApiKeyAndHeaders(model);
     if (!auth.ok) {
       throw new Error(auth.error);
@@ -997,11 +1050,9 @@ export class SessionSupervisor {
     // conversation. Absent/dead/own leases never block (fully advisory).
     await this.assertSessionNotForeignLeased(sessionFile);
 
-    const runtime = await this.createAgentSessionRuntimeImpl({
-      cwd: workspace.path,
-      sessionManager: SessionManager.open(sessionFile),
-      ...(this.modelRegistry ? { modelRegistry: this.modelRegistry } : {}),
-    });
+    const runtime = await this.createAgentSessionRuntimeImpl(
+      this.baseCreateOptions(workspace.path, SessionManager.open(sessionFile)),
+    );
     const session = runtime.session;
 
     const record = existing ?? this.createRecord(workspaceToRef(workspace), runtime, sessionEntry.title);
@@ -1505,14 +1556,6 @@ export class SessionSupervisor {
     await session.followUp(text, images ? [...images] : undefined);
   }
 
-  private resolveModel(provider: string, modelId: string) {
-    const model = this.modelRegistry?.find(provider, modelId);
-    if (!model) {
-      throw new Error(`Unknown model ${provider}:${modelId}`);
-    }
-    return model;
-  }
-
   private applySessionThinkingLevel(session: AgentSession, thinkingLevel: string): void {
     const availableLevels = session.getAvailableThinkingLevels();
     const effectiveLevel = clampThinkingLevel(thinkingLevel, availableLevels) as AgentSession["thinkingLevel"];
@@ -1526,7 +1569,7 @@ export class SessionSupervisor {
 
   private async emitModelSelection(
     session: AgentSession,
-    model: ReturnType<SessionSupervisor["resolveModel"]>,
+    model: PiModelInfo,
     previousModel: AgentSession["model"],
   ): Promise<void> {
     const emitModelSelect = (session as unknown as {

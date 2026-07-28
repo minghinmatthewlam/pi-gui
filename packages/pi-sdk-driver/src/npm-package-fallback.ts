@@ -9,14 +9,28 @@ import {
   type CreateAgentSessionOptions,
   type CreateAgentSessionRuntimeResult,
   type ExtensionFactory,
+  type ModelRegistry,
 } from "@earendil-works/pi-coding-agent";
 
 export interface PiResourceLoaderOptions {
   readonly extensionFactories?: ExtensionFactory[];
 }
 
+/** `ModelInfo` is not exported from the package, so derive it from the session options. */
+export type PiModelInfo = NonNullable<CreateAgentSessionOptions["model"]>;
+
 export interface PiCreateAgentSessionOptions extends CreateAgentSessionOptions {
   readonly resourceLoaderOptions?: PiResourceLoaderOptions;
+  /**
+   * Pick the initial model against the cwd-bound registry the services just built.
+   *
+   * `createAgentSessionServices` flushes the extension providers registered for
+   * *this* cwd into *this* registry, so a model that only exists because of a
+   * workspace's extension can only be resolved here — after the services load and
+   * before the session is constructed, which is exactly the seam `pi` exposes
+   * `createAgentSessionFromServices` for. Ignored when `model` is set.
+   */
+  readonly resolveInitialModel?: (modelRegistry: ModelRegistry) => PiModelInfo | undefined;
 }
 
 export function isGlobalNpmLookupError(error: unknown): boolean {
@@ -98,12 +112,13 @@ async function createAgentSessionResultWithNpmFallback(
   options?: PiCreateAgentSessionOptions,
 ): Promise<CreateAgentSessionRuntimeResult> {
   const services = await createAgentSessionServicesWithNpmFallback(cwd, agentDir, options);
+  const model = options?.model ?? options?.resolveInitialModel?.(services.modelRegistry);
   return {
     ...(await createAgentSessionFromServices({
       services,
       sessionManager,
       ...(options?.sessionStartEvent ? { sessionStartEvent: options.sessionStartEvent } : {}),
-      ...(options?.model ? { model: options.model } : {}),
+      ...(model ? { model } : {}),
       ...(options?.thinkingLevel ? { thinkingLevel: options.thinkingLevel } : {}),
       ...(options?.scopedModels ? { scopedModels: options.scopedModels } : {}),
       ...(options?.tools ? { tools: options.tools } : {}),
@@ -134,6 +149,7 @@ export async function createAgentSessionRuntimeWithNpmFallback(
     sessionStartEvent: _optionSessionStartEvent,
     resourceLoaderOptions: stableResourceLoaderOptions,
     model: initialModel,
+    resolveInitialModel: initialModelResolver,
     thinkingLevel: initialThinkingLevel,
     ...stableOptions
   } = options ?? {};
@@ -150,6 +166,9 @@ export async function createAgentSessionRuntimeWithNpmFallback(
         sessionManager,
         ...(sessionStartEvent ? { sessionStartEvent } : {}),
         ...(includeInitialSessionOptions && initialModel ? { model: initialModel } : {}),
+        ...(includeInitialSessionOptions && initialModelResolver
+          ? { resolveInitialModel: initialModelResolver }
+          : {}),
         ...(includeInitialSessionOptions && initialThinkingLevel ? { thinkingLevel: initialThinkingLevel } : {}),
       });
     },

@@ -48,7 +48,11 @@ export class PiSdkDriver implements SessionDriver {
     this.modelRegistry = deps.modelRegistry;
     this.generateThreadTitleOverride = options.generateThreadTitleOverride;
 
-    this.supervisor = new SessionSupervisor({ ...options, modelRegistry: deps.modelRegistry });
+    this.supervisor = new SessionSupervisor({
+      ...options,
+      agentDir: deps.agentDir,
+      authStorage: deps.authStorage,
+    });
     this.runtimeSupervisor = new RuntimeSupervisor({ ...options, ...deps });
   }
 
@@ -160,8 +164,9 @@ export class PiSdkDriver implements SessionDriver {
     return this.supervisor.renameWorkspace(workspaceId, displayName);
   }
 
-  removeWorkspace(workspaceId: WorkspaceId): Promise<void> {
-    return this.supervisor.removeWorkspace(workspaceId);
+  async removeWorkspace(workspaceId: WorkspaceId): Promise<void> {
+    await this.supervisor.removeWorkspace(workspaceId);
+    this.runtimeSupervisor.removeWorkspace(workspaceId);
   }
 
   getTranscript(sessionRef: SessionRef) {

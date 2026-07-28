@@ -52,19 +52,17 @@ interface ModelSettingsSnapshot {
   readonly enabledModelPatterns: readonly string[];
 }
 
-/** `ProviderConfigInput` is not exported from the package, so derive it from the extension runtime. */
-type ExtensionProviderConfig =
-  ReturnType<DefaultResourceLoader["getExtensions"]>["runtime"]["pendingProviderRegistrations"][number]["config"];
-
-type ExtensionProviders = Map<string, { config: ExtensionProviderConfig; extensionPath: string }>;
+/** A queued `pi.registerProvider()` call, as the extension runtime records it. */
+type ExtensionProviderRegistration =
+  ReturnType<DefaultResourceLoader["getExtensions"]>["runtime"]["pendingProviderRegistrations"][number];
 
 interface RuntimeContext {
   readonly workspace: WorkspaceRef;
   readonly settingsManager: SettingsManager;
   readonly packageManager: DefaultPackageManager;
   readonly resourceLoader: DefaultResourceLoader;
-  /** Providers this workspace's extensions registered, keyed by provider id. */
-  extensionProviders: ExtensionProviders;
+  /** `registerProvider()` calls this workspace's extensions made, in call order. */
+  extensionProviders: readonly ExtensionProviderRegistration[];
   /** Registry the snapshot is built from, owned by this workspace. */
   modelRegistry: ModelRegistry;
 }
@@ -100,21 +98,24 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
   private readonly agentDir: string;
   private readonly modelsJsonPath: string;
   private readonly authStorage: AuthStorage;
-  /** Registry shared with the session supervisor; kept in sync with auth and models.json. */
-  private readonly sessionModelRegistry: ModelRegistry;
+  /**
+   * The driver's process-wide registry, kept in sync with auth and models.json.
+   *
+   * Not what snapshots or sessions read: those own workspace- and cwd-scoped
+   * registries. It still backs the driver's own model lookups (thread titles).
+   */
+  private readonly sharedModelRegistry: ModelRegistry;
   private readonly extensionFactories: readonly ExtensionFactory[];
   private readonly inlineExtensionMetadata: readonly RuntimeInlineExtensionMetadata[];
   private readonly customProviderStore: CustomProviderStore;
   private readonly contexts = new Map<string, RuntimeContext>();
-  /** Extension provider ids currently mirrored into the session registry. */
-  private sessionExtensionProviderIds = new Set<string>();
 
   constructor(options: RuntimeSupervisorOptions = {}) {
     const deps = createRuntimeDependencies(options);
     this.agentDir = deps.agentDir;
     this.modelsJsonPath = deps.modelsJsonPath;
     this.authStorage = deps.authStorage;
-    this.sessionModelRegistry = deps.modelRegistry;
+    this.sharedModelRegistry = deps.modelRegistry;
     this.extensionFactories = options.extensionFactories ?? [];
     this.inlineExtensionMetadata = options.inlineExtensionMetadata ?? [];
     this.customProviderStore = deps.customProviderStore;
@@ -129,7 +130,7 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
     const context = await this.ensureContext(workspace);
     context.settingsManager.reload();
     this.authStorage.reload();
-    this.sessionModelRegistry.refresh();
+    this.sharedModelRegistry.refresh();
     await this.reloadResources(context);
     await this.autoEnableModelsForAuthenticatedProviders(context);
     return this.buildSnapshot(context);
@@ -138,7 +139,7 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
   async login(workspace: WorkspaceRef, providerId: string, callbacks: RuntimeLoginCallbacks): Promise<RuntimeSnapshot> {
     const context = await this.ensureContext(workspace);
     await this.authStorage.login(providerId, toPiOAuthLoginCallbacks(callbacks));
-    this.sessionModelRegistry.refresh();
+    this.sharedModelRegistry.refresh();
     await this.reloadResources(context);
     await this.autoEnableModelsForAuthenticatedProviders(context, [providerId]);
     return this.buildSnapshot(context);
@@ -147,7 +148,7 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
   async logout(workspace: WorkspaceRef, providerId: string): Promise<RuntimeSnapshot> {
     const context = await this.ensureContext(workspace);
     this.authStorage.logout(providerId);
-    this.sessionModelRegistry.refresh();
+    this.sharedModelRegistry.refresh();
     await this.reloadResources(context);
     return this.buildSnapshot(context);
   }
@@ -162,7 +163,7 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
       throw new Error(`API key setup is not supported for ${providerId}.`);
     }
     this.authStorage.set(providerId, { type: "api_key", key: normalized });
-    this.sessionModelRegistry.refresh();
+    this.sharedModelRegistry.refresh();
     await this.reloadResources(context);
     await this.autoEnableModelsForAuthenticatedProviders(context, [providerId]);
     return this.buildSnapshot(context);
@@ -181,7 +182,7 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
     }
     const context = await this.ensureContext(workspace);
     await this.customProviderStore.set(input);
-    this.sessionModelRegistry.refresh();
+    this.sharedModelRegistry.refresh();
     await this.reloadResources(context);
     await this.autoEnableModelsForAuthenticatedProviders(context, [input.providerId]);
     return this.buildSnapshot(context);
@@ -190,7 +191,7 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
   async deleteCustomProvider(workspace: WorkspaceRef, providerId: string): Promise<RuntimeSnapshot> {
     const context = await this.ensureContext(workspace);
     await this.customProviderStore.delete(providerId);
-    this.sessionModelRegistry.refresh();
+    this.sharedModelRegistry.refresh();
     await this.reloadResources(context);
     return this.buildSnapshot(context);
   }
@@ -413,25 +414,35 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
       await resourceLoader.reload();
     }
 
-    const extensionProviders = this.drainExtensionProviders(resourceLoader);
+    const { registry, accepted } = this.buildModelRegistry(this.drainExtensionProviders(resourceLoader));
     const context: RuntimeContext = {
       workspace,
       settingsManager,
       packageManager,
       resourceLoader,
-      extensionProviders,
-      modelRegistry: this.buildModelRegistry(extensionProviders),
+      extensionProviders: accepted,
+      modelRegistry: registry,
     };
     this.contexts.set(workspace.workspaceId, context);
-    this.syncSessionModelRegistry();
     return context;
+  }
+
+  /**
+   * Drop a workspace's cached context.
+   *
+   * Contexts hold that workspace's resource loader, settings manager, and model
+   * registry, so a removed workspace has to give them up — otherwise its
+   * extensions keep their providers alive for the rest of the process.
+   */
+  removeWorkspace(workspaceId: WorkspaceRef["workspaceId"]): void {
+    this.contexts.delete(workspaceId);
   }
 
   private async reloadResources(context: RuntimeContext): Promise<void> {
     await context.resourceLoader.reload();
-    context.extensionProviders = this.drainExtensionProviders(context.resourceLoader);
-    context.modelRegistry = this.buildModelRegistry(context.extensionProviders);
-    this.syncSessionModelRegistry();
+    const { registry, accepted } = this.buildModelRegistry(this.drainExtensionProviders(context.resourceLoader));
+    context.extensionProviders = accepted;
+    context.modelRegistry = registry;
   }
 
   /**
@@ -447,15 +458,17 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
    * Each reload replays every enabled extension, so the drained queue is the
    * workspace's complete current set: providers whose extension was disabled or
    * removed simply do not come back.
+   *
+   * The queue is kept in call order rather than collapsed per provider id.
+   * `registerProvider()` is a merge, not an assignment — a full registration
+   * followed by a `baseUrl`-only one keeps the models and re-points them — so
+   * only replaying every call reproduces what `pi` itself would build.
    */
-  private drainExtensionProviders(resourceLoader: DefaultResourceLoader): ExtensionProviders {
+  private drainExtensionProviders(resourceLoader: DefaultResourceLoader): ExtensionProviderRegistration[] {
     const { runtime } = resourceLoader.getExtensions();
-    const providers: ExtensionProviders = new Map();
-    for (const { name, config, extensionPath } of runtime.pendingProviderRegistrations) {
-      providers.set(name, { config, extensionPath });
-    }
+    const registrations = [...runtime.pendingProviderRegistrations];
     runtime.pendingProviderRegistrations = [];
-    return providers;
+    return registrations;
   }
 
   /**
@@ -463,19 +476,26 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
    *
    * A fresh instance rather than `refresh()`: refreshing resets the process-wide
    * API and OAuth provider registrations and reapplies only the refreshed
-   * registry's providers, which would strip registrations owned by the session
-   * registry. Constructing a registry has the same cost and no global effect.
+   * registry's providers, which would strip registrations owned by session
+   * registries. Constructing a registry has the same cost and no global effect.
+   *
+   * Returns the registrations that were accepted, so a config `pi` rejects is
+   * dropped from the workspace's set instead of warning on every rebuild.
    */
-  private buildModelRegistry(providers: ExtensionProviders): ModelRegistry {
+  private buildModelRegistry(registrations: readonly ExtensionProviderRegistration[]): {
+    readonly registry: ModelRegistry;
+    readonly accepted: ExtensionProviderRegistration[];
+  } {
     const registry = ModelRegistry.create(this.authStorage, this.modelsJsonPath);
-    for (const [name, { config, extensionPath }] of providers) {
+    const accepted: ExtensionProviderRegistration[] = [];
+    for (const registration of registrations) {
+      const { name, config, extensionPath } = registration;
       try {
         // Copy: registering merges into the stored config object in place, which
-        // would let one registry's later registration rewrite our captured config.
+        // would let a later registration rewrite our captured config.
         registry.registerProvider(name, { ...config });
+        accepted.push(registration);
       } catch (error) {
-        // Rejected configs stay rejected, so drop it instead of warning on every rebuild.
-        providers.delete(name);
         console.warn(
           `[pi-gui] Extension "${extensionPath}" failed to register provider "${name}": ${
             error instanceof Error ? error.message : String(error)
@@ -483,41 +503,17 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
         );
       }
     }
-    return registry;
-  }
-
-  /**
-   * Mirror every open workspace's extension providers into the session registry.
-   *
-   * `createAgentSessionServices` only flushes them once a session exists, but the
-   * supervisor resolves a session's initial model against this registry before
-   * creating it — so without this, picking a model the snapshot advertises fails
-   * with "Unknown model". Cross-workspace collisions on a provider id resolve to
-   * whichever workspace synced last, matching how `pi` treats its own registry;
-   * snapshots stay workspace-scoped either way.
-   */
-  private syncSessionModelRegistry(): void {
-    const claimed = new Set<string>();
-    for (const context of this.contexts.values()) {
-      for (const [name, { config }] of context.extensionProviders) {
-        claimed.add(name);
-        this.sessionModelRegistry.registerProvider(name, { ...config });
-      }
-    }
-    for (const name of this.sessionExtensionProviderIds) {
-      if (!claimed.has(name)) {
-        this.sessionModelRegistry.unregisterProvider(name);
-      }
-    }
-    this.sessionExtensionProviderIds = claimed;
+    return { registry, accepted };
   }
 
   private async buildSnapshot(context: RuntimeContext): Promise<RuntimeSnapshot> {
-    // Pick up auth and models.json edits made since the last load. The session
+    // Pick up auth and models.json edits made since the last load. The shared
     // registry is refreshed first so it, not a workspace registry, ends up owning
     // the process-wide API and OAuth registrations.
-    this.sessionModelRegistry.refresh();
-    context.modelRegistry = this.buildModelRegistry(context.extensionProviders);
+    this.sharedModelRegistry.refresh();
+    const { registry, accepted } = this.buildModelRegistry(context.extensionProviders);
+    context.extensionProviders = accepted;
+    context.modelRegistry = registry;
     const resolvedPaths = await this.resolveRuntimePaths(context);
     const [skills, extensions, providers, models] = await Promise.all([
       this.buildSkillRecords(context, resolvedPaths.skills),
