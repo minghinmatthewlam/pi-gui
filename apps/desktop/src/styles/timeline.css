@@ -217,6 +217,7 @@
   align-items: center;
   justify-content: flex-end;
   min-width: 0;
+  max-width: 100%;
   gap: 8px;
 }
 
@@ -369,6 +370,7 @@
 
 .timeline-tool {
   max-width: 100%;
+  min-width: 0;
   display: grid;
   gap: 2px;
   padding: 0;
@@ -455,6 +457,8 @@
   color: var(--muted-strong);
   font-size: 13px;
   line-height: 1.45;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .timeline-tool__detail {
@@ -486,7 +490,9 @@
   color: var(--muted-soft);
   font-size: 12px;
   margin-left: 6px;
-  white-space: nowrap;
+  max-width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .timeline-tool__status-pip {
