@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { AuthStorage, ModelRegistry } from "@earendil-works/pi-coding-agent";
 import { RuntimeSupervisor } from "../dist/runtime-supervisor.js";
 
 const EXTENSION_PROVIDER = "ext-test-provider";
@@ -11,6 +12,53 @@ const JSON_PROVIDER = "json-test-provider";
 const JSON_MODEL = "json-test-model";
 const FILE_PROVIDER = "file-test-provider";
 const FILE_MODEL = "file-test-model";
+
+function extensionSource(providerId: string, modelId: string, baseUrl = "http://localhost:9/v1"): string {
+  return `export default async function providerExtension(pi) {
+  pi.registerProvider(${JSON.stringify(providerId)}, {
+    baseUrl: ${JSON.stringify(baseUrl)},
+    apiKey: "test-key",
+    api: "openai-completions",
+    models: [
+      {
+        id: ${JSON.stringify(modelId)},
+        name: ${JSON.stringify(`Model ${modelId}`)},
+        reasoning: false,
+        input: ["text"],
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        contextWindow: 128000,
+        maxTokens: 16384,
+      },
+    ],
+  });
+}
+`;
+}
+
+/** Create a workspace with a project-scoped extension under `<workspace>/.pi/extensions`. */
+async function createProjectWorkspace(
+  root: string,
+  workspaceId: string,
+  providerId: string,
+  modelId: string,
+  baseUrl?: string,
+): Promise<{ workspace: { workspaceId: string; path: string }; extensionPath: string }> {
+  const path = join(root, workspaceId);
+  const extensionPath = join(path, ".pi", "extensions", "provider.ts");
+  await mkdir(join(path, ".pi", "extensions"), { recursive: true });
+  await writeFile(extensionPath, extensionSource(providerId, modelId, baseUrl));
+  return { workspace: { workspaceId, path }, extensionPath };
+}
+
+function providerIds(snapshot: { providers: readonly { id: string }[] }, prefix: string): string[] {
+  return snapshot.providers.map((provider) => provider.id).filter((id) => id.startsWith(prefix));
+}
+
+function modelKeys(snapshot: { models: readonly { providerId: string; modelId: string }[] }, prefix: string): string[] {
+  return snapshot.models
+    .filter((model) => model.providerId.startsWith(prefix))
+    .map((model) => `${model.providerId}:${model.modelId}`);
+}
 
 async function createAgentDir(): Promise<{ agentDir: string; workspacePath: string }> {
   const root = await mkdtemp(join(tmpdir(), "pi-gui-ext-providers-"));
@@ -34,6 +82,16 @@ async function createAgentDir(): Promise<{ agentDir: string; workspacePath: stri
     }),
   );
   return { agentDir, workspacePath };
+}
+
+/** An agent dir with no models.json providers, for multi-workspace isolation tests. */
+async function createSharedAgentDir(): Promise<{ root: string; agentDir: string }> {
+  const root = await mkdtemp(join(tmpdir(), "pi-gui-ext-providers-"));
+  const agentDir = join(root, "agent");
+  await mkdir(agentDir, { recursive: true });
+  await writeFile(join(agentDir, "auth.json"), "{}");
+  await writeFile(join(agentDir, "settings.json"), JSON.stringify({ packages: [] }));
+  return { root, agentDir };
 }
 
 function createSupervisor(agentDir: string) {
@@ -123,6 +181,104 @@ test("disabling an extension drops the providers it registered", async () => {
   assert.ok(
     !disabled.models.some((model) => model.providerId === FILE_PROVIDER),
     "provider should be dropped once its extension is disabled",
+  );
+});
+
+test("each workspace only sees providers its own project extensions register", async () => {
+  const { root, agentDir } = await createSharedAgentDir();
+  const a = await createProjectWorkspace(root, "workspace-a", "scoped-a", "model-a");
+  const b = await createProjectWorkspace(root, "workspace-b", "scoped-b", "model-b");
+  const supervisor = new RuntimeSupervisor({ agentDir });
+
+  const firstA = await supervisor.getRuntimeSnapshot(a.workspace);
+  assert.deepEqual(providerIds(firstA, "scoped-"), ["scoped-a"]);
+
+  const snapshotB = await supervisor.getRuntimeSnapshot(b.workspace);
+  assert.deepEqual(providerIds(snapshotB, "scoped-"), ["scoped-b"], "workspace B must not see workspace A's provider");
+  assert.deepEqual(modelKeys(snapshotB, "scoped-"), ["scoped-b:model-b"]);
+
+  const secondA = await supervisor.getRuntimeSnapshot(a.workspace);
+  assert.deepEqual(
+    providerIds(secondA, "scoped-"),
+    ["scoped-a"],
+    "workspace A must not pick up workspace B's provider after B was opened",
+  );
+  assert.deepEqual(modelKeys(secondA, "scoped-"), ["scoped-a:model-a"]);
+});
+
+test("the same provider id resolves to each workspace's own configuration", async () => {
+  const { root, agentDir } = await createSharedAgentDir();
+  const a = await createProjectWorkspace(root, "workspace-a", "shared-id", "model-a", "http://localhost:9/a");
+  const b = await createProjectWorkspace(root, "workspace-b", "shared-id", "model-b", "http://localhost:9/b");
+  const supervisor = new RuntimeSupervisor({ agentDir });
+
+  await supervisor.getRuntimeSnapshot(a.workspace);
+  const snapshotB = await supervisor.getRuntimeSnapshot(b.workspace);
+  assert.deepEqual(modelKeys(snapshotB, "shared-id"), ["shared-id:model-b"]);
+
+  const secondA = await supervisor.getRuntimeSnapshot(a.workspace);
+  assert.deepEqual(
+    modelKeys(secondA, "shared-id"),
+    ["shared-id:model-a"],
+    "workspace A must keep its own configuration for a provider id workspace B also registers",
+  );
+});
+
+test("disabling an extension only drops the registrations of that workspace", async () => {
+  const { root, agentDir } = await createSharedAgentDir();
+  const a = await createProjectWorkspace(root, "workspace-a", "scoped-a", "model-a");
+  const b = await createProjectWorkspace(root, "workspace-b", "scoped-b", "model-b");
+  const supervisor = new RuntimeSupervisor({ agentDir });
+
+  await supervisor.getRuntimeSnapshot(a.workspace);
+  await supervisor.getRuntimeSnapshot(b.workspace);
+
+  const disabledA = await supervisor.setExtensionEnabled(a.workspace, a.extensionPath, false);
+  assert.deepEqual(providerIds(disabledA, "scoped-"), [], "workspace A should lose its own provider");
+
+  const snapshotB = await supervisor.getRuntimeSnapshot(b.workspace);
+  assert.deepEqual(
+    providerIds(snapshotB, "scoped-"),
+    ["scoped-b"],
+    "workspace B should keep its provider when workspace A disables its extension",
+  );
+});
+
+/**
+ * Sessions resolve models against the registry the driver shares with the session
+ * supervisor, so every provider a snapshot advertises has to be registered there
+ * too — otherwise picking an extension model fails with "Unknown model".
+ */
+test("the session registry resolves extension models from every open workspace", async () => {
+  const { root, agentDir } = await createSharedAgentDir();
+  const a = await createProjectWorkspace(root, "workspace-a", "scoped-a", "model-a");
+  const b = await createProjectWorkspace(root, "workspace-b", "scoped-b", "model-b");
+  const authStorage = AuthStorage.create(join(agentDir, "auth.json"));
+  const sessionRegistry = ModelRegistry.create(authStorage, join(agentDir, "models.json"));
+  const supervisor = new RuntimeSupervisor({ agentDir, authStorage, modelRegistry: sessionRegistry });
+
+  await supervisor.getRuntimeSnapshot(a.workspace);
+  await supervisor.getRuntimeSnapshot(b.workspace);
+
+  assert.ok(sessionRegistry.find("scoped-a", "model-a"), "workspace A's extension model must be resolvable");
+  assert.ok(sessionRegistry.find("scoped-b", "model-b"), "workspace B's extension model must be resolvable");
+});
+
+test("disabling an extension removes its provider from the session registry", async () => {
+  const { root, agentDir } = await createSharedAgentDir();
+  const a = await createProjectWorkspace(root, "workspace-a", "scoped-a", "model-a");
+  const authStorage = AuthStorage.create(join(agentDir, "auth.json"));
+  const sessionRegistry = ModelRegistry.create(authStorage, join(agentDir, "models.json"));
+  const supervisor = new RuntimeSupervisor({ agentDir, authStorage, modelRegistry: sessionRegistry });
+
+  await supervisor.getRuntimeSnapshot(a.workspace);
+  assert.ok(sessionRegistry.find("scoped-a", "model-a"));
+
+  await supervisor.setExtensionEnabled(a.workspace, a.extensionPath, false);
+  assert.equal(
+    sessionRegistry.find("scoped-a", "model-a"),
+    undefined,
+    "a disabled extension's provider must not linger in the session registry",
   );
 });
 
