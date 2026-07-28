@@ -36,8 +36,7 @@
   background: transparent;
   position: relative;
   max-height: calc(100vh - 320px);
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: auto;
   overflow-anchor: none;
   /* Programmatic timeline scrolls (opening a thread, jump-to-latest,
    * transcript-update alignment) drive scrollTop directly. Leaving
@@ -458,6 +457,8 @@
   color: var(--muted-strong);
   font-size: 13px;
   line-height: 1.45;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .timeline-tool__detail {
@@ -489,7 +490,9 @@
   color: var(--muted-soft);
   font-size: 12px;
   margin-left: 6px;
-  white-space: nowrap;
+  max-width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .timeline-tool__status-pip {
