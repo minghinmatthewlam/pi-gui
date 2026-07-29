@@ -50,7 +50,10 @@ export function useComposerDraftSync(params: UseComposerDraftSyncParams) {
       return;
     }
 
+    console.log(`[DraftSync] Snapshot updated. Nonce: ${snapshot.composerDraftSyncNonce}, Source: ${snapshot.composerDraftSyncSource}, Local Draft: '${composerDraftRef.current}', Snapshot Draft: '${snapshot.composerDraft}'`);
+    
     if (hydratedComposerSessionKeyRef.current !== selectedSessionKey) {
+      console.log(`[DraftSync] Session key changed to ${selectedSessionKey}, applying snapshot draft.`);
       hydratedComposerSessionKeyRef.current = selectedSessionKey;
       handledComposerSyncNonceRef.current = snapshot.composerDraftSyncNonce;
       acknowledgedLocalEditGenerationRef.current = localEditGenerationRef.current;
@@ -61,17 +64,33 @@ export function useComposerDraftSync(params: UseComposerDraftSyncParams) {
     }
 
     if (snapshot.composerDraftSyncNonce === handledComposerSyncNonceRef.current) {
+      console.log(`[DraftSync] Nonce unchanged (${handledComposerSyncNonceRef.current}), skipping.`);
       return;
     }
 
+    console.log(`[DraftSync] Nonce changed from ${handledComposerSyncNonceRef.current} to ${snapshot.composerDraftSyncNonce}.`);
     handledComposerSyncNonceRef.current = snapshot.composerDraftSyncNonce;
+    
+    // Perlindungan utama: Jangan biarkan 'command' mengosongkan teks lokal jika kita punya teks.
+    // Ini memperbaiki bug di mana ganti model / thinking level akan menghapus prompt.
+    if (
+      snapshot.composerDraftSyncSource === "command" &&
+      snapshot.composerDraft === "" &&
+      composerDraftRef.current !== ""
+    ) {
+      console.log(`[DraftSync] Ignoring empty snapshot draft from 'command' to preserve local text.`);
+      return;
+    }
+
     if (
       localEditGenerationRef.current > acknowledgedLocalEditGenerationRef.current &&
       (snapshot.composerDraftSyncSource === "persist" || snapshot.composerDraftSyncSource === "state")
     ) {
+      console.log(`[DraftSync] Local edit exists and source is ${snapshot.composerDraftSyncSource}, ignoring snapshot draft.`);
       return;
     }
 
+    console.log(`[DraftSync] Overwriting local draft with snapshot draft.`);
     acknowledgedLocalEditGenerationRef.current = localEditGenerationRef.current;
     pendingComposerDraftRef.current = null;
     composerDraftRef.current = snapshot.composerDraft;
@@ -83,30 +102,28 @@ export function useComposerDraftSync(params: UseComposerDraftSyncParams) {
     snapshot?.composerDraftSyncSource,
   ]);
 
-  const persistComposerDraft = (write: PendingComposerDraftWrite) => {
+  const persistComposerDraft = async (write: PendingComposerDraftWrite) => {
     if (!api) {
       return;
     }
     inFlightComposerDraftWritesRef.current.add(write);
-    void api.updateComposerDraft(write.draft).then(
-      (state) => {
-        inFlightComposerDraftWritesRef.current.delete(write);
-        const hasOtherWriteForSession = [...inFlightComposerDraftWritesRef.current.values()].some(
-          (candidate) => candidate.sessionKey === write.sessionKey,
-        );
-        if (
-          write.sessionKey === selectedSessionKey &&
-          write.generation === localEditGenerationRef.current &&
-          state.composerDraft === write.draft &&
-          !hasOtherWriteForSession
-        ) {
-          acknowledgedLocalEditGenerationRef.current = write.generation;
-        }
-      },
-      () => {
-        inFlightComposerDraftWritesRef.current.delete(write);
-      },
-    );
+    try {
+      const state = await api.updateComposerDraft(write.draft);
+      inFlightComposerDraftWritesRef.current.delete(write);
+      const hasOtherWriteForSession = [...inFlightComposerDraftWritesRef.current.values()].some(
+        (candidate) => candidate.sessionKey === write.sessionKey,
+      );
+      if (
+        write.sessionKey === selectedSessionKey &&
+        write.generation === localEditGenerationRef.current &&
+        state.composerDraft === write.draft &&
+        !hasOtherWriteForSession
+      ) {
+        acknowledgedLocalEditGenerationRef.current = write.generation;
+      }
+    } catch {
+      inFlightComposerDraftWritesRef.current.delete(write);
+    }
   };
 
   useEffect(() => {
@@ -164,7 +181,7 @@ export function useComposerDraftSync(params: UseComposerDraftSyncParams) {
 
   useEffect(() => () => flushComposerDraftRef.current(), []);
 
-  const flushComposerDraft = () => {
+  const flushComposerDraft = async () => {
     if (composerDraftWriteTimerRef.current !== null) {
       window.clearTimeout(composerDraftWriteTimerRef.current);
       composerDraftWriteTimerRef.current = null;
@@ -172,10 +189,12 @@ export function useComposerDraftSync(params: UseComposerDraftSyncParams) {
     const pending = pendingComposerDraftRef.current;
     pendingComposerDraftRef.current = null;
     if (pending !== null) {
-      persistComposerDraft(pending);
+      await persistComposerDraft(pending);
     }
   };
-  flushComposerDraftRef.current = flushComposerDraft;
+  flushComposerDraftRef.current = () => {
+    void flushComposerDraft();
+  };
 
   return { composerDraft, setComposerDraft, composerDraftRef, flushComposerDraft };
 }
