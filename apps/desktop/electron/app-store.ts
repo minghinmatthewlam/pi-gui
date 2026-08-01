@@ -90,7 +90,6 @@ import {
   buildWorkspaceRecords,
   cloneComposerAttachment,
   cloneComposerAttachments,
-  cloneTranscriptMessage,
   latestSessionActivityAt,
   mergeQueuedComposerMessages,
   mapToRecord,
@@ -2689,10 +2688,13 @@ export class DesktopAppStore implements AppStoreInternals {
   private buildSelectedTranscriptRecord(sessionRef: SessionRef): SelectedTranscriptRecord {
     this.ensureSessionSchemaInfo(sessionRef);
     const schemaInfo = this.sessionSchemaInfoCache.get(sessionKey(sessionRef));
+    // No defensive clone here: every consumer ships this record over IPC, which
+    // structured-clones the payload anyway. Cloning 400+ messages per publish
+    // just doubled main-process allocations during streaming.
     return {
       workspaceId: sessionRef.workspaceId,
       sessionId: sessionRef.sessionId,
-      transcript: (this.sessionState.transcriptCache.get(sessionKey(sessionRef)) ?? []).map(cloneTranscriptMessage),
+      transcript: this.sessionState.transcriptCache.get(sessionKey(sessionRef)) ?? [],
       ...(schemaInfo ? { schemaInfo } : {}),
     };
   }
@@ -3165,7 +3167,10 @@ export class DesktopAppStore implements AppStoreInternals {
     runtimeByWorkspace?: Record<string, RuntimeSnapshot>,
   ): DesktopAppState {
     const key = sessionKey(sessionRef);
-    const transcript = (this.sessionState.transcriptCache.get(key) ?? []).map(cloneTranscriptMessage);
+    // No clone: the cache follows immutable-write discipline (every mutation
+    // replaces the array), so this reference is a stable snapshot. Cloning the
+    // whole transcript here cost O(thread) allocations per session state sync.
+    const transcript = this.sessionState.transcriptCache.get(key) ?? [];
     const preview = previewFromTranscript(transcript);
     const lastViewedAt = this.sessionState.lastViewedAtBySession.get(key);
     const nextState = {
