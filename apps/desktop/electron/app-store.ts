@@ -2241,6 +2241,12 @@ export class DesktopAppStore implements AppStoreInternals {
           this.updateSessionConfig(event.sessionRef, event.snapshot.config);
           this.updateQueuedComposerMessages(event.sessionRef, event.snapshot.queuedMessages);
           await this.refreshSessionCommands(event.sessionRef);
+          if (event.type === "runCompleted") {
+            // Live-event assistant messages are built without usage metadata;
+            // re-read the settled transcript from the session file so fields
+            // only present there (e.g. contextTokens) reach the UI.
+            await this.reloadTranscriptFromDriver(event.sessionRef);
+          }
           break;
         case "sessionUpdated":
           this.updateSessionConfig(event.sessionRef, event.snapshot.config);
