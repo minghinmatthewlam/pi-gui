@@ -771,7 +771,11 @@ function createAppWindow(sourceView?: DesktopAppViewState): BrowserWindow {
 // IPC requests are untouched and stay immediate.
 const PUBLISH_COALESCE_MS = 200;
 
-function throttleTrailing(fn: () => void, intervalMs: number): { run: () => void; cancel: () => void } {
+// Leading + trailing throttle: an isolated update publishes synchronously —
+// several main-side protocols (e.g. the composer-draft persist echo) depend on
+// the publish happening inside the same tick that marked its origin — while
+// bursts coalesce onto a trailing edge whose final flush always runs.
+function throttleLeadingTrailing(fn: () => void, intervalMs: number): { run: () => void; cancel: () => void } {
   let timer: NodeJS.Timeout | null = null;
   let lastRun = 0;
   return {
@@ -779,12 +783,17 @@ function throttleTrailing(fn: () => void, intervalMs: number): { run: () => void
       if (timer) {
         return;
       }
-      const wait = Math.max(0, intervalMs - (Date.now() - lastRun));
+      const elapsed = Date.now() - lastRun;
+      if (elapsed >= intervalMs) {
+        lastRun = Date.now();
+        fn();
+        return;
+      }
       timer = setTimeout(() => {
         timer = null;
         lastRun = Date.now();
         fn();
-      }, wait);
+      }, intervalMs - elapsed);
     },
     cancel: () => {
       if (timer) {
@@ -800,7 +809,7 @@ function attachStatePublisher(window: BrowserWindow): void {
   const startPublishing = () => {
     stopPublishingStateByWebContentsId.get(webContentsId)?.();
     stopPublishingSelectedTranscriptByWebContentsId.get(webContentsId)?.();
-    const publishLatest = throttleTrailing(() => {
+    const publishLatest = throttleLeadingTrailing(() => {
       publishStateToWindow(window);
       void publishSelectedTranscriptToWindow(window);
     }, PUBLISH_COALESCE_MS);
