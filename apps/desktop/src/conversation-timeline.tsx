@@ -573,7 +573,23 @@ function isSameDisplayItem(a: DisplayTimelineItem, b: DisplayTimelineItem): bool
     return a.role === b.role && a.text === b.text && a.attachments === b.attachments;
   }
   if (a.kind === "tool" && b.kind === "tool") {
-    return a.status === b.status && a.input === b.input && a.output === b.output;
+    // input/output are rebuilt objects on every transcript update, so identity
+    // comparison would re-render every tool row per streaming tick. All visible
+    // transitions (result arrival, failure) flip status and/or the derived
+    // label/detail/metadata strings, so compare those instead.
+    return (
+      a.status === b.status &&
+      a.toolName === b.toolName &&
+      a.label === b.label &&
+      a.detail === b.detail &&
+      a.metadata === b.metadata
+    );
+  }
+  if (a.kind === "activity" && b.kind === "activity") {
+    return a.label === b.label && a.detail === b.detail && a.metadata === b.metadata && a.tone === b.tone;
+  }
+  if (a.kind === "summary" && b.kind === "summary") {
+    return a.label === b.label && a.metadata === b.metadata && a.presentation === b.presentation;
   }
   if (a.kind === "turn-marker" && b.kind === "turn-marker") {
     return a.durationMs === b.durationMs;
