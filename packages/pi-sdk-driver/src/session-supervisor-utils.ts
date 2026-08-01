@@ -251,6 +251,7 @@ export function transcriptFromMessages(messages: readonly unknown[], fallbackTim
 
     const text = messageText(message);
     const attachments = messageAttachments(message);
+    const contextTokens = role === "assistant" ? messageContextTokens(message) : undefined;
     if (text || attachments.length > 0) {
       transcript.push({
         kind: "message",
@@ -258,6 +259,7 @@ export function transcriptFromMessages(messages: readonly unknown[], fallbackTim
         role,
         text,
         ...(attachments.length > 0 ? { attachments } : {}),
+        ...(contextTokens != null ? { contextTokens } : {}),
         createdAt,
       });
     }
@@ -268,6 +270,15 @@ export function transcriptFromMessages(messages: readonly unknown[], fallbackTim
   }
 
   return transcript;
+}
+
+function messageContextTokens(message: Record<string, unknown>): number | undefined {
+  const usage = message.usage;
+  if (!isRecord(usage)) {
+    return undefined;
+  }
+  const total = usage.totalTokens;
+  return typeof total === "number" && Number.isFinite(total) && total > 0 ? total : undefined;
 }
 
 function messageCreatedAt(message: Record<string, unknown>, fallback: string): string {
