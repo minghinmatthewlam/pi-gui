@@ -160,6 +160,15 @@ export default function App() {
       : null;
   const activeTranscript = selectedTranscriptForSession?.transcript ?? [];
   const isTranscriptLoading = Boolean(selectedSession) && !selectedTranscriptForSession;
+  const activeContextTokens = useMemo(() => {
+    for (let index = activeTranscript.length - 1; index >= 0; index -= 1) {
+      const item = activeTranscript[index];
+      if (item?.kind === "message" && item.role === "assistant" && item.contextTokens != null) {
+        return item.contextTokens;
+      }
+    }
+    return undefined;
+  }, [activeTranscript]);
   const {
     setTimelinePaneElement,
     disableTimelineVirtualization,
@@ -953,6 +962,7 @@ export default function App() {
               composerDraft={composerDraft}
               composerRef={composerRef}
               runtime={selectedModelRuntime}
+              contextTokens={activeContextTokens}
               provider={resolvedSessionProvider}
               modelId={resolvedSessionModelId}
               thinkingLevel={resolvedSessionThinkingLevel}

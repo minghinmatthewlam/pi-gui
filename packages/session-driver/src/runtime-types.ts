@@ -33,6 +33,7 @@ export interface RuntimeModelRecord {
   readonly authType: RuntimeAuthType;
   readonly reasoning: boolean;
   readonly supportsImages: boolean;
+  readonly contextWindow?: number;
 }
 
 export interface RuntimeSkillRecord {

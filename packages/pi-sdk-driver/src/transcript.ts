@@ -24,6 +24,9 @@ export interface SessionTranscriptMessage {
   readonly attachments?: readonly SessionTranscriptAttachment[];
   readonly createdAt: string;
   readonly id: string;
+  /** Total tokens (prompt + completion) reported for the turn that produced this
+   * assistant message — i.e. the context occupancy after that turn. */
+  readonly contextTokens?: number;
 }
 
 export interface SessionTranscriptToolCall {

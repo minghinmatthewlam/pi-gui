@@ -1538,6 +1538,34 @@ export class DesktopAppStore implements AppStoreInternals {
     await this.recordSelectedTranscriptFileStat(sessionRef);
   }
 
+  /**
+   * Post-run reload of the settled transcript from the session file. The file
+   * is canonical after a run, but a lagging or partial read (or a driver that
+   * doesn't persist transcripts, as in tests) must never wipe a richer live
+   * timeline — compare substantive rows (messages + tools; the live timeline
+   * also carries activity rows the file never has) and keep the live timeline
+   * when the parse comes up short.
+   */
+  private async reloadTranscriptFromDriverIfComplete(sessionRef: SessionRef): Promise<void> {
+    const key = sessionKey(sessionRef);
+    let parsed: TranscriptMessage[];
+    try {
+      parsed = timelineFromDriverTranscript(await this.driver.getTranscript(sessionRef));
+    } catch {
+      return;
+    }
+    const substantiveRows = (items: readonly TranscriptMessage[]): number =>
+      items.reduce((count, item) => (item.kind === "message" || item.kind === "tool" ? count + 1 : count), 0);
+    const current = this.sessionState.transcriptCache.get(key) ?? [];
+    if (substantiveRows(parsed) < substantiveRows(current)) {
+      return;
+    }
+    this.sessionState.loadedTranscriptKeys.add(key);
+    this.sessionState.transcriptCache.set(key, parsed);
+    await this.recordSelectedTranscriptFileStat(sessionRef);
+    this.publishSelectedTranscriptFor(sessionRef);
+  }
+
   async reloadTranscriptFromDriver(sessionRef: SessionRef): Promise<void> {
     const key = sessionKey(sessionRef);
     const transcript = timelineFromDriverTranscript(await this.driver.getTranscript(sessionRef));
@@ -2241,6 +2269,12 @@ export class DesktopAppStore implements AppStoreInternals {
           this.updateSessionConfig(event.sessionRef, event.snapshot.config);
           this.updateQueuedComposerMessages(event.sessionRef, event.snapshot.queuedMessages);
           await this.refreshSessionCommands(event.sessionRef);
+          if (event.type === "runCompleted") {
+            // Live-event assistant messages are built without usage metadata;
+            // re-read the settled transcript from the session file so fields
+            // only present there (e.g. contextTokens) reach the UI.
+            await this.reloadTranscriptFromDriverIfComplete(event.sessionRef);
+          }
           break;
         case "sessionUpdated":
           this.updateSessionConfig(event.sessionRef, event.snapshot.config);

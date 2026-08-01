@@ -19,6 +19,8 @@ interface ComposerPanelProps {
   readonly selectedSession: SessionRecord;
   readonly lastError?: string;
   readonly runtime?: RuntimeSnapshot;
+  /** Context occupancy (total tokens) reported by the last completed turn. */
+  readonly contextTokens?: number;
   readonly activeSlashCommand?: ComposerSlashCommand;
   readonly activeSlashCommandMeta?: string;
   readonly composerDraft: string;
@@ -69,6 +71,7 @@ export function ComposerPanel({
   selectedSession,
   lastError,
   runtime,
+  contextTokens,
   activeSlashCommand,
   activeSlashCommandMeta,
   composerDraft,
@@ -181,6 +184,20 @@ export function ComposerPanel({
                     onSetModel={onSetModel}
                     onSetThinking={onSetThinking}
                   />
+                  {contextTokens != null ? (
+                    <span title="Context used, from the last completed turn's reported usage">
+                      {" · "}
+                      {formatContextTokens(contextTokens)}
+                      {(() => {
+                        const window = runtime?.models.find(
+                          (model) => model.providerId === provider && model.modelId === modelId,
+                        )?.contextWindow;
+                        return window
+                          ? ` / ${formatContextTokens(window)} (${Math.round((contextTokens / window) * 100)}%)`
+                          : "";
+                      })()}
+                    </span>
+                  ) : null}
                 </div>
                 <div className="composer__actions">
                   <button
@@ -212,4 +229,15 @@ export function ComposerPanel({
       </div>
     </footer>
   );
+}
+
+function formatContextTokens(count: number): string {
+  if (count >= 1_000_000) {
+    const millions = count / 1_000_000;
+    return `${Number.isInteger(millions) ? millions : millions.toFixed(1)}M`;
+  }
+  if (count >= 1000) {
+    return `${Math.round(count / 1000)}k`;
+  }
+  return String(count);
 }
