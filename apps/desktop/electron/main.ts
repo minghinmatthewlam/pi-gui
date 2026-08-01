@@ -440,6 +440,19 @@ function publishStateToWindow(window: BrowserWindow, state: DesktopAppState = st
   window.webContents.send(desktopIpc.stateChanged, projected);
 }
 
+// Transcript arrays in the store follow an immutable-write discipline (every
+// mutation path copies the array before writing), so array identity is an exact
+// change detector. Remember what each window last received and skip the send —
+// and its full-payload serialization — when nothing it displays has changed
+// (e.g. events from other sessions ticking the store).
+interface PublishedTranscriptFingerprint {
+  readonly workspaceId: string;
+  readonly sessionId: string;
+  readonly transcript: unknown;
+  readonly schemaInfo: unknown;
+}
+const lastPublishedTranscriptByWebContentsId = new Map<number, PublishedTranscriptFingerprint | null>();
+
 async function publishSelectedTranscriptToWindow(window: BrowserWindow): Promise<void> {
   if (!canPublishToWindow(window)) {
     return;
@@ -454,6 +467,29 @@ async function publishSelectedTranscriptToWindow(window: BrowserWindow): Promise
       }
     } else if (projected.selectedSessionId) {
       return;
+    }
+    const previous = lastPublishedTranscriptByWebContentsId.get(webContentsId);
+    if (payload) {
+      if (
+        previous &&
+        previous.workspaceId === payload.workspaceId &&
+        previous.sessionId === payload.sessionId &&
+        previous.transcript === payload.transcript &&
+        previous.schemaInfo === payload.schemaInfo
+      ) {
+        return;
+      }
+      lastPublishedTranscriptByWebContentsId.set(webContentsId, {
+        workspaceId: payload.workspaceId,
+        sessionId: payload.sessionId,
+        transcript: payload.transcript,
+        schemaInfo: payload.schemaInfo,
+      });
+    } else {
+      if (previous === null) {
+        return;
+      }
+      lastPublishedTranscriptByWebContentsId.set(webContentsId, null);
     }
     window.webContents.send(desktopIpc.selectedTranscriptChanged, payload);
   }
@@ -706,6 +742,7 @@ function createAppWindow(sourceView?: DesktopAppViewState): BrowserWindow {
   window.once("closed", () => {
     appWindows.delete(window);
     windowViews.delete(webContentsId);
+    lastPublishedTranscriptByWebContentsId.delete(webContentsId);
     terminalFocusedWebContentsIds.delete(webContentsId);
     terminalService?.disposeWebContents(webContentsId);
     void store.cancelPendingDialogsWithoutVisibleWindow((sessionRef) => isSessionVisibleInAnotherWindow(sessionRef));
