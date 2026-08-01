@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useMemo, useRef, useState, type MutableRefObject, type RefCallback, type RefObject } from "react";
+import { memo, useCallback, useLayoutEffect, useMemo, useRef, useState, type MutableRefObject, type RefCallback, type RefObject } from "react";
 import type { TranscriptMessage } from "./desktop-state";
 import type { DisplayTimelineItem } from "./timeline-types";
 import { buildDisplayTimelineItems } from "./timeline-turns";
@@ -492,17 +492,7 @@ function VirtualizedTranscriptList({
   );
 }
 
-function MeasuredTimelineItem({
-  item,
-  className,
-  top,
-  onHeightChange,
-  expandedToolCallIds,
-  onToggleToolCall,
-  onViewFileInDiff,
-  sourceMessageIndex,
-  onForkFromMessage,
-}: {
+interface MeasuredTimelineItemProps {
   readonly item: DisplayTimelineItem;
   readonly className?: string;
   readonly top?: number;
@@ -512,7 +502,19 @@ function MeasuredTimelineItem({
   readonly onViewFileInDiff?: (path: string) => void;
   readonly sourceMessageIndex?: number;
   readonly onForkFromMessage?: (messageIndex: number, preview?: string) => void;
-}) {
+}
+
+function MeasuredTimelineItemBase({
+  item,
+  className,
+  top,
+  onHeightChange,
+  expandedToolCallIds,
+  onToggleToolCall,
+  onViewFileInDiff,
+  sourceMessageIndex,
+  onForkFromMessage,
+}: MeasuredTimelineItemProps) {
   const rowRef = useRef<HTMLDivElement | null>(null);
 
   useLayoutEffect(() => {
@@ -554,6 +556,65 @@ function MeasuredTimelineItem({
     </div>
   );
 }
+
+// The transcript array is rebuilt with fresh item objects on every session
+// update, so reference equality on `item` would re-render all rows each
+// streaming tick — on long threads (virtualization off) that means re-running
+// every row several times per second, which saturates the renderer. Compare
+// items structurally by the fields that actually affect their rendering.
+function isSameDisplayItem(a: DisplayTimelineItem, b: DisplayTimelineItem): boolean {
+  if (a === b) {
+    return true;
+  }
+  if (a.kind !== b.kind || a.id !== b.id) {
+    return false;
+  }
+  if (a.kind === "message" && b.kind === "message") {
+    return a.role === b.role && a.text === b.text && a.attachments === b.attachments;
+  }
+  if (a.kind === "tool" && b.kind === "tool") {
+    // input/output are rebuilt objects on every transcript update, so identity
+    // comparison would re-render every tool row per streaming tick. All visible
+    // transitions (result arrival, failure) flip status and/or the derived
+    // label/detail/metadata strings, so compare those instead.
+    return (
+      a.status === b.status &&
+      a.toolName === b.toolName &&
+      a.label === b.label &&
+      a.detail === b.detail &&
+      a.metadata === b.metadata
+    );
+  }
+  if (a.kind === "activity" && b.kind === "activity") {
+    return a.label === b.label && a.detail === b.detail && a.metadata === b.metadata && a.tone === b.tone;
+  }
+  if (a.kind === "summary" && b.kind === "summary") {
+    return a.label === b.label && a.metadata === b.metadata && a.presentation === b.presentation;
+  }
+  if (a.kind === "turn-marker" && b.kind === "turn-marker") {
+    return a.durationMs === b.durationMs;
+  }
+  return false;
+}
+
+function areMeasuredTimelineItemPropsEqual(
+  prev: MeasuredTimelineItemProps,
+  next: MeasuredTimelineItemProps,
+): boolean {
+  return (
+    isSameDisplayItem(prev.item, next.item) &&
+    prev.className === next.className &&
+    prev.top === next.top &&
+    prev.onHeightChange === next.onHeightChange &&
+    prev.expandedToolCallIds === next.expandedToolCallIds &&
+    prev.onToggleToolCall === next.onToggleToolCall &&
+    prev.onViewFileInDiff === next.onViewFileInDiff &&
+    prev.sourceMessageIndex === next.sourceMessageIndex &&
+    prev.onForkFromMessage === next.onForkFromMessage
+  );
+}
+
+const MeasuredTimelineItem = memo(MeasuredTimelineItemBase, areMeasuredTimelineItemPropsEqual);
 
 function findStartIndex(offsets: readonly number[], heights: readonly number[], targetOffset: number): number {
   let low = 0;

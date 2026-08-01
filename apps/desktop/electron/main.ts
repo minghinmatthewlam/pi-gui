@@ -440,6 +440,19 @@ function publishStateToWindow(window: BrowserWindow, state: DesktopAppState = st
   window.webContents.send(desktopIpc.stateChanged, projected);
 }
 
+// Transcript arrays in the store follow an immutable-write discipline (every
+// mutation path copies the array before writing), so array identity is an exact
+// change detector. Remember what each window last received and skip the send —
+// and its full-payload serialization — when nothing it displays has changed
+// (e.g. events from other sessions ticking the store).
+interface PublishedTranscriptFingerprint {
+  readonly workspaceId: string;
+  readonly sessionId: string;
+  readonly transcript: unknown;
+  readonly schemaInfo: unknown;
+}
+const lastPublishedTranscriptByWebContentsId = new Map<number, PublishedTranscriptFingerprint | null>();
+
 async function publishSelectedTranscriptToWindow(window: BrowserWindow): Promise<void> {
   if (!canPublishToWindow(window)) {
     return;
@@ -454,6 +467,29 @@ async function publishSelectedTranscriptToWindow(window: BrowserWindow): Promise
       }
     } else if (projected.selectedSessionId) {
       return;
+    }
+    const previous = lastPublishedTranscriptByWebContentsId.get(webContentsId);
+    if (payload) {
+      if (
+        previous &&
+        previous.workspaceId === payload.workspaceId &&
+        previous.sessionId === payload.sessionId &&
+        previous.transcript === payload.transcript &&
+        previous.schemaInfo === payload.schemaInfo
+      ) {
+        return;
+      }
+      lastPublishedTranscriptByWebContentsId.set(webContentsId, {
+        workspaceId: payload.workspaceId,
+        sessionId: payload.sessionId,
+        transcript: payload.transcript,
+        schemaInfo: payload.schemaInfo,
+      });
+    } else {
+      if (previous === null) {
+        return;
+      }
+      lastPublishedTranscriptByWebContentsId.set(webContentsId, null);
     }
     window.webContents.send(desktopIpc.selectedTranscriptChanged, payload);
   }
@@ -706,6 +742,7 @@ function createAppWindow(sourceView?: DesktopAppViewState): BrowserWindow {
   window.once("closed", () => {
     appWindows.delete(window);
     windowViews.delete(webContentsId);
+    lastPublishedTranscriptByWebContentsId.delete(webContentsId);
     terminalFocusedWebContentsIds.delete(webContentsId);
     terminalService?.disposeWebContents(webContentsId);
     void store.cancelPendingDialogsWithoutVisibleWindow((sessionRef) => isSessionVisibleInAnotherWindow(sessionRef));
@@ -725,17 +762,66 @@ function createAppWindow(sourceView?: DesktopAppViewState): BrowserWindow {
   return window;
 }
 
+// Store updates arrive per agent event — during streaming that is tens of times
+// per second, and each publish serializes the full app state plus the full
+// selected transcript over IPC. On long threads that firehose saturates the
+// renderer (deserialize + rebuild + render per token batch) and can OOM it.
+// Coalesce bursts to a trailing-edge cadence; the final flush always runs, so
+// the window never misses the settled state. Direct publishes on user-initiated
+// IPC requests are untouched and stay immediate.
+const PUBLISH_COALESCE_MS = 200;
+
+// Leading + trailing throttle: an isolated update publishes synchronously —
+// several main-side protocols (e.g. the composer-draft persist echo) depend on
+// the publish happening inside the same tick that marked its origin — while
+// bursts coalesce onto a trailing edge whose final flush always runs.
+function throttleLeadingTrailing(fn: () => void, intervalMs: number): { run: () => void; cancel: () => void } {
+  let timer: NodeJS.Timeout | null = null;
+  let lastRun = 0;
+  return {
+    run: () => {
+      if (timer) {
+        return;
+      }
+      const elapsed = Date.now() - lastRun;
+      if (elapsed >= intervalMs) {
+        lastRun = Date.now();
+        fn();
+        return;
+      }
+      timer = setTimeout(() => {
+        timer = null;
+        lastRun = Date.now();
+        fn();
+      }, intervalMs - elapsed);
+    },
+    cancel: () => {
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+    },
+  };
+}
+
 function attachStatePublisher(window: BrowserWindow): void {
   const webContentsId = window.webContents.id;
   const startPublishing = () => {
     stopPublishingStateByWebContentsId.get(webContentsId)?.();
     stopPublishingSelectedTranscriptByWebContentsId.get(webContentsId)?.();
-    const stopPublishingState = store.subscribe((state) => {
-      publishStateToWindow(window, state);
+    const publishLatest = throttleLeadingTrailing(() => {
+      publishStateToWindow(window);
       void publishSelectedTranscriptToWindow(window);
+    }, PUBLISH_COALESCE_MS);
+    const stopPublishingStateSubscription = store.subscribe(() => {
+      publishLatest.run();
     });
+    const stopPublishingState = () => {
+      publishLatest.cancel();
+      stopPublishingStateSubscription();
+    };
     const stopPublishingSelectedTranscript = store.subscribeToSelectedTranscript(() => {
-      void publishSelectedTranscriptToWindow(window);
+      publishLatest.run();
     });
     stopPublishingStateByWebContentsId.set(webContentsId, stopPublishingState);
     stopPublishingSelectedTranscriptByWebContentsId.set(webContentsId, stopPublishingSelectedTranscript);
