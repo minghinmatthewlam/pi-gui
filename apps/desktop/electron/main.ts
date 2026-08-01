@@ -725,17 +725,57 @@ function createAppWindow(sourceView?: DesktopAppViewState): BrowserWindow {
   return window;
 }
 
+// Store updates arrive per agent event — during streaming that is tens of times
+// per second, and each publish serializes the full app state plus the full
+// selected transcript over IPC. On long threads that firehose saturates the
+// renderer (deserialize + rebuild + render per token batch) and can OOM it.
+// Coalesce bursts to a trailing-edge cadence; the final flush always runs, so
+// the window never misses the settled state. Direct publishes on user-initiated
+// IPC requests are untouched and stay immediate.
+const PUBLISH_COALESCE_MS = 200;
+
+function throttleTrailing(fn: () => void, intervalMs: number): { run: () => void; cancel: () => void } {
+  let timer: NodeJS.Timeout | null = null;
+  let lastRun = 0;
+  return {
+    run: () => {
+      if (timer) {
+        return;
+      }
+      const wait = Math.max(0, intervalMs - (Date.now() - lastRun));
+      timer = setTimeout(() => {
+        timer = null;
+        lastRun = Date.now();
+        fn();
+      }, wait);
+    },
+    cancel: () => {
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+    },
+  };
+}
+
 function attachStatePublisher(window: BrowserWindow): void {
   const webContentsId = window.webContents.id;
   const startPublishing = () => {
     stopPublishingStateByWebContentsId.get(webContentsId)?.();
     stopPublishingSelectedTranscriptByWebContentsId.get(webContentsId)?.();
-    const stopPublishingState = store.subscribe((state) => {
-      publishStateToWindow(window, state);
+    const publishLatest = throttleTrailing(() => {
+      publishStateToWindow(window);
       void publishSelectedTranscriptToWindow(window);
+    }, PUBLISH_COALESCE_MS);
+    const stopPublishingStateSubscription = store.subscribe(() => {
+      publishLatest.run();
     });
+    const stopPublishingState = () => {
+      publishLatest.cancel();
+      stopPublishingStateSubscription();
+    };
     const stopPublishingSelectedTranscript = store.subscribeToSelectedTranscript(() => {
-      void publishSelectedTranscriptToWindow(window);
+      publishLatest.run();
     });
     stopPublishingStateByWebContentsId.set(webContentsId, stopPublishingState);
     stopPublishingSelectedTranscriptByWebContentsId.set(webContentsId, stopPublishingSelectedTranscript);
