@@ -155,8 +155,30 @@ export function ConversationTimeline({
     setMeasurementVersion((current) => current + 1);
   }, []);
 
+  // React re-runs ref callbacks (detach null + re-attach node) whenever the callback
+  // identity changes, even though the DOM node is unchanged — and timelinePaneElementRef's
+  // identity changes on every transcript append (its useCallback chain depends on
+  // activeTranscript.length). Each spurious re-attach re-runs the pane mount logic,
+  // whose saved-scroll restore yanks the viewport away from the live bottom mid-stream
+  // (the scroll-jump bug). Forward only real node changes; swallow same-node
+  // re-attachments and their paired null-detach.
+  const forwardedPaneNodeRef = useRef<HTMLDivElement | null>(null);
   const assignTimelinePaneRef = useCallback((node: HTMLDivElement | null) => {
+    if (node === null) {
+      timelinePaneRef.current = null;
+      queueMicrotask(() => {
+        if (timelinePaneRef.current === null && forwardedPaneNodeRef.current !== null) {
+          forwardedPaneNodeRef.current = null;
+          timelinePaneElementRef?.(null);
+        }
+      });
+      return;
+    }
     timelinePaneRef.current = node;
+    if (forwardedPaneNodeRef.current === node) {
+      return;
+    }
+    forwardedPaneNodeRef.current = node;
     timelinePaneElementRef?.(node);
   }, [timelinePaneElementRef, timelinePaneRef]);
 
