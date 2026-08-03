@@ -26,6 +26,7 @@ import { deriveModelOnboardingState } from "./model-onboarding";
 import type { SettingsSection } from "./settings-view";
 import { SecondarySurfaces } from "./app/secondary-surfaces";
 import { NewThreadView } from "./new-thread-view";
+import { DashboardView } from "./dashboard-view";
 import { buildThreadGroups } from "./thread-groups";
 import { Sidebar } from "./sidebar";
 import { SidebarToggleButton } from "./sidebar-toggle-button";
@@ -831,7 +832,15 @@ export default function App() {
           terminalPanel
         ) : (
           <>
-        {snapshot.activeView === "new-thread" ? (
+        {snapshot.activeView === "dashboard" ? (
+          <DashboardView
+            workspaces={snapshot.workspaces}
+            onOpenSession={(workspaceId, sessionId) => {
+              void updateSnapshot(api, setSnapshot, () => api.selectSession({ workspaceId, sessionId }));
+              setActiveView("threads");
+            }}
+          />
+        ) : snapshot.activeView === "new-thread" ? (
           rootWorkspaceOptions.length > 0 ? (
             <NewThreadView
               workspaces={rootWorkspaceOptions}

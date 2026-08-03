@@ -6,6 +6,9 @@ import {
   type CustomProviderProbeInput,
   type CustomProviderProbeResult,
   type ChangedFilesResult,
+  type DashboardPeriodModels,
+  type DashboardUsageQuery,
+  type DashboardUsageSnapshot,
   type DesktopNotificationPermissionStatus,
   type WorkspaceFilePreview,
   type PiDesktopCommand,
@@ -121,6 +124,8 @@ contextBridge.exposeInMainWorld("piApp", {
     };
   },
   getPathForFile: (file: File) => webUtils.getPathForFile(file),
+  getDashboardUsage: () =>
+    ipcRenderer.invoke(desktopIpc.dashboardUsage) as Promise<DashboardUsageSnapshot>,
   addWorkspacePath: (workspacePath: string) =>
     ipcRenderer.invoke(desktopIpc.addWorkspacePath, workspacePath) as Promise<DesktopAppState>,
   pickWorkspace: () => ipcRenderer.invoke(desktopIpc.pickWorkspace) as Promise<DesktopAppState>,
