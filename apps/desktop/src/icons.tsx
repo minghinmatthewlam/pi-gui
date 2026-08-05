@@ -280,6 +280,17 @@ export function StatusIcon() {
   );
 }
 
+export function DashboardIcon() {
+  return (
+    <Icon>
+      <rect x="3.5" y="3.5" width="5.4" height="5.4" rx="1.2" stroke="currentColor" strokeWidth="1.3" />
+      <rect x="11.1" y="3.5" width="5.4" height="5.4" rx="1.2" stroke="currentColor" strokeWidth="1.3" />
+      <rect x="3.5" y="11.1" width="5.4" height="5.4" rx="1.2" stroke="currentColor" strokeWidth="1.3" />
+      <rect x="11.1" y="11.1" width="5.4" height="5.4" rx="1.2" stroke="currentColor" strokeWidth="1.3" />
+    </Icon>
+  );
+}
+
 export function SkillIcon() {
   return (
     <Icon>

@@ -44,7 +44,9 @@ import {
   type CustomProviderConfig,
   type CustomProviderProbeInput,
   type CustomProviderProbeResult,
+  type DashboardUsageQuery,
 } from "../src/ipc";
+import { readDashboardUsage, readDashboardUsageForPeriod } from "./dashboard-usage";
 import { SUPPORTED_COMPOSER_IMAGE_TYPES } from "../src/composer-attachments";
 import type {
   ComposerAttachment,
@@ -1172,6 +1174,11 @@ app.whenReady().then(async () => {
     }
     await shell.openPath(workspacePath);
   });
+  ipcMain.handle(desktopIpc.dashboardUsage, (_event, query?: DashboardUsageQuery) =>
+    query && query.kind && query.key
+      ? readDashboardUsageForPeriod(query.kind, query.key)
+      : readDashboardUsage(),
+  );
   ipcMain.handle(desktopIpc.createWorktree, (event, input: CreateWorktreeInput) =>
     runWindowScopedForEvent(event, () => store.createWorktree(input)),
   );

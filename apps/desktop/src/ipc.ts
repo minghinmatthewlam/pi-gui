@@ -52,6 +52,55 @@ export type CustomProviderProbeResult =
   | { readonly ok: true; readonly models: readonly string[] }
   | { readonly ok: false; readonly error: string };
 
+export type DashboardUsagePeriodKind = "day" | "week" | "year";
+
+export interface DashboardUsageByDay {
+  readonly date: string;
+  readonly inputTokens: number;
+  readonly outputTokens: number;
+  readonly cacheReadTokens: number;
+  readonly reasoningTokens: number;
+  readonly cost: number;
+}
+
+export interface DashboardUsageByModel {
+  readonly model: string;
+  readonly provider: string;
+  readonly messages: number;
+  readonly inputTokens: number;
+  readonly outputTokens: number;
+  readonly reasoningTokens: number;
+  readonly cost: number;
+}
+
+export interface DashboardUsageTotals {
+  readonly inputTokens: number;
+  readonly outputTokens: number;
+  readonly cacheReadTokens: number;
+  readonly reasoningTokens: number;
+  readonly cost: number;
+}
+
+export interface DashboardUsageSnapshot {
+  readonly days: readonly DashboardUsageByDay[];
+  readonly weeks: readonly DashboardUsageByDay[];
+  readonly years: readonly DashboardUsageByDay[];
+  readonly totals: DashboardUsageTotals;
+  readonly byModel: readonly DashboardUsageByModel[];
+}
+
+export interface DashboardUsageQuery {
+  readonly kind: DashboardUsagePeriodKind;
+  readonly key: string;
+}
+
+export interface DashboardPeriodModels {
+  readonly kind: DashboardUsagePeriodKind;
+  readonly key: string;
+  readonly models: readonly DashboardUsageByModel[];
+  readonly totals: DashboardUsageTotals;
+}
+
 export const desktopIpc = {
   stateRequest: "pi-gui:state-request",
   stateChanged: "pi-gui:state-changed",
@@ -86,6 +135,7 @@ export const desktopIpc = {
   setChildSupervisionLoop: "pi-gui:set-child-supervision-loop",
   cancelCurrentRun: "pi-gui:cancel-current-run",
   setActiveView: "pi-gui:set-active-view",
+  dashboardUsage: "pi-gui:dashboard-usage",
   setSidebarCollapsed: "pi-gui:set-sidebar-collapsed",
   refreshRuntime: "pi-gui:refresh-runtime",
   setModelSettingsScopeMode: "pi-gui:set-model-settings-scope-mode",
@@ -319,6 +369,8 @@ export interface PiDesktopApi {
   setChildSupervisionLoop(input: SetChildSupervisionLoopInput): Promise<DesktopAppState>;
   cancelCurrentRun(): Promise<DesktopAppState>;
   setActiveView(view: AppView): Promise<DesktopAppState>;
+  getDashboardUsage(): Promise<DashboardUsageSnapshot>;
+  getDashboardPeriodModels(query: DashboardUsageQuery): Promise<DashboardPeriodModels>;
   setSidebarCollapsed(collapsed: boolean): Promise<DesktopAppState>;
   refreshRuntime(workspaceId?: string): Promise<DesktopAppState>;
   setModelSettingsScopeMode(mode: ModelSettingsScopeMode): Promise<DesktopAppState>;
