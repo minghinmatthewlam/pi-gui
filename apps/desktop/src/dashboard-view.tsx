@@ -129,14 +129,16 @@ export function DashboardView({ workspaces, onOpenSession }: DashboardViewProps)
     let inputTokens = 0;
     let outputTokens = 0;
     let cacheReadTokens = 0;
+    let reasoningTokens = 0;
     let cost = 0;
     for (const entry of windowEntries) {
       inputTokens += entry.bucket.inputTokens;
       outputTokens += entry.bucket.outputTokens;
       cacheReadTokens += entry.bucket.cacheReadTokens;
+      reasoningTokens += entry.bucket.reasoningTokens;
       cost += entry.bucket.cost;
     }
-    return { inputTokens, outputTokens, cacheReadTokens, cost };
+    return { inputTokens, outputTokens, cacheReadTokens, reasoningTokens, cost };
   }, [windowEntries]);
 
   const maxTokens = useMemo(
@@ -227,7 +229,7 @@ export function DashboardView({ workspaces, onOpenSession }: DashboardViewProps)
                 <div className="kpi-card">
                   <span className="kpi-card__label">Window tokens</span>
                   <span className="kpi-card__value">
-                    {formatTokens(windowTotals.inputTokens + windowTotals.outputTokens)}
+                    {formatTokens(windowTotals.inputTokens + windowTotals.outputTokens + windowTotals.reasoningTokens)}
                   </span>
                 </div>
                 <div className="kpi-card">
@@ -344,7 +346,7 @@ export function DashboardView({ workspaces, onOpenSession }: DashboardViewProps)
                         <div className="kpi-card">
                           <span className="kpi-card__label">Tokens</span>
                           <span className="kpi-card__value">
-                            {formatTokens(periodDetail.totals.inputTokens + periodDetail.totals.outputTokens)}
+                            {formatTokens(periodDetail.totals.inputTokens + periodDetail.totals.outputTokens + periodDetail.totals.reasoningTokens)}
                           </span>
                         </div>
                         <div className="kpi-card">
@@ -434,7 +436,7 @@ function ModelBars({ models }: { readonly models: readonly DashboardUsageByModel
           <span className="model-bar__label">
             {entry.model}
             <span className="model-bar__meta">
-              {entry.provider} · {entry.messages} msgs · {formatTokens(entry.inputTokens + entry.outputTokens)} ·{" "}
+              {entry.provider} · {entry.messages} msgs · {formatTokens(entry.inputTokens + entry.outputTokens + entry.reasoningTokens)} ·{" "}
               {formatCost(entry.cost)}
             </span>
           </span>
@@ -465,6 +467,7 @@ function buildWindow(
     inputTokens: 0,
     outputTokens: 0,
     cacheReadTokens: 0,
+    reasoningTokens: 0,
     cost: 0,
   });
   for (let i = size - 1; i >= 0; i -= 1) {

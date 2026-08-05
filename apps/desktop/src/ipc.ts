@@ -59,6 +59,7 @@ export interface DashboardUsageByDay {
   readonly inputTokens: number;
   readonly outputTokens: number;
   readonly cacheReadTokens: number;
+  readonly reasoningTokens: number;
   readonly cost: number;
 }
 
@@ -68,6 +69,7 @@ export interface DashboardUsageByModel {
   readonly messages: number;
   readonly inputTokens: number;
   readonly outputTokens: number;
+  readonly reasoningTokens: number;
   readonly cost: number;
 }
 
@@ -75,6 +77,7 @@ export interface DashboardUsageTotals {
   readonly inputTokens: number;
   readonly outputTokens: number;
   readonly cacheReadTokens: number;
+  readonly reasoningTokens: number;
   readonly cost: number;
 }
 
