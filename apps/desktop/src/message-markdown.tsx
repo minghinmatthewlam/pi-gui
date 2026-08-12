@@ -13,6 +13,11 @@ const MARKDOWN_COMPONENTS = {
       {children}
     </a>
   ),
+  table: ({ children }: { children?: React.ReactNode }) => (
+    <div className="message__table-scroll">
+      <table>{children}</table>
+    </div>
+  ),
 } as const;
 
 export function MessageMarkdown({ text }: { readonly text: string }) {
