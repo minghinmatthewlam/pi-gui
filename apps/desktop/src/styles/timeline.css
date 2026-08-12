@@ -767,6 +767,7 @@
 .message__content {
   color: var(--text-strong);
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 9px;
   line-height: 1.65;
   max-width: 100%;
@@ -849,6 +850,34 @@
 
 .message__content a:hover {
   text-decoration: underline;
+}
+
+.message__table-scroll {
+  width: max-content;
+  max-width: 100%;
+  min-width: 0;
+  justify-self: start;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+}
+
+.message__table-scroll table {
+  width: max-content;
+  border-collapse: collapse;
+  font-size: 0.95em;
+}
+
+.message__table-scroll th,
+.message__table-scroll td {
+  padding: var(--space-1-5) var(--space-2-5);
+  border: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+
+.message__table-scroll th {
+  background: var(--overlay-subtle);
+  font-weight: var(--font-semibold);
 }
 
 /* ---- Reduced motion ----------------------------------------------------- */
