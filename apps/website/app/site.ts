@@ -11,4 +11,4 @@ export const SITE_DESCRIPTION =
 export const SITE_SOCIAL_DESCRIPTION =
   "A beta macOS and Linux desktop interface for AI coding agents with GitHub Releases, persistent workspaces, and real-time session review.";
 export const HERO_BETA_NOTE =
-  "Beta for macOS arm64 and Linux AppImage. Install from GitHub Releases on either platform, or Homebrew on macOS.";
+  "Beta for macOS and Linux AppImage. Install from GitHub Releases on either platform, or Homebrew on macOS.";
