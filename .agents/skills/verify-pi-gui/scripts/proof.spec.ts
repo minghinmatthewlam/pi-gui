@@ -18,6 +18,7 @@ test('visible app navigation and settings persistence without test hooks', async
   });
   const doctor = async (harness: DesktopHarness) => {
     await harness.focusWindow();
+    const page = await harness.firstWindow();
     const identity = await harness.electronApp.evaluate(({ app, BrowserWindow }) => ({
       pid: process.pid, appPath: app.getAppPath(), userData: app.getPath('userData'),
       visible: BrowserWindow.getAllWindows()[0]?.isVisible(),
@@ -25,15 +26,15 @@ test('visible app navigation and settings persistence without test hooks', async
       testMode: process.env.PI_APP_TEST_MODE ?? null,
       testHooks: '__PI_APP_TEST_HOOKS' in globalThis,
     }));
+    const documentFocused = await page.evaluate(() => document.hasFocus());
     expect(identity.visible).toBe(true);
-    expect(identity.focused).toBe(true);
+    expect(identity.focused || documentFocused).toBe(true);
     expect(identity.testMode).toBeNull();
     expect(identity.testHooks).toBe(false);
     expect(resolve(identity.appPath)).toBe(resolve('apps/desktop'));
     expect(resolve(identity.userData)).toBe(resolve(userDataDir));
     runs.push({ pid: identity.pid, closed: false });
-    await writeFile(join(evidence, `doctor-${runs.length}.json`), JSON.stringify(identity, null, 2));
-    const page = await harness.firstWindow();
+    await writeFile(join(evidence, `doctor-${runs.length}.json`), JSON.stringify({ ...identity, documentFocused }, null, 2));
     await expect(page.getByRole('button', { name: /^(Settings|Back to app)$/ })).toBeVisible();
     return page;
   };

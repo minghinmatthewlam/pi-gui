@@ -266,6 +266,17 @@ function createDesktopHarness(electronApp: ElectronApplication): DesktopHarness 
 
 async function focusElectronAppProcess(electronApp: ElectronApplication): Promise<void> {
   const pid = await electronApp.evaluate(() => process.pid);
+  const electronAppBundle = resolve(electronExecutablePath, "..", "..");
+  try {
+    await execFileAsync("open", ["-a", electronAppBundle], { timeout: 5_000 });
+  } catch {
+    // The bundle activate path is best-effort; continue with AppleScript/Electron focus.
+  }
+  try {
+    await execFileAsync("osascript", ["-e", 'tell application "Electron" to activate'], { timeout: 5_000 });
+  } catch {
+    // Fall through to System Events when the Electron app name is unavailable.
+  }
   try {
     await execFileAsync(
       "osascript",
@@ -277,7 +288,7 @@ async function focusElectronAppProcess(electronApp: ElectronApplication): Promis
           return name of targetProcess
         end tell`,
       ],
-      { timeout: 5_000 },
+      { timeout: 2_000 },
     );
   } catch {
     // Fall back to Electron/Playwright focus APIs when System Events access is unavailable.
