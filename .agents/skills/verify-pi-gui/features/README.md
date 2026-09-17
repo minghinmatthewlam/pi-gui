@@ -29,11 +29,12 @@ Record exact feature/entry point, command, result and evidence directory. `compl
 
 Packaged-app launch, native dialogs/clipboard, model/account onboarding, attachments, file/diff/terminal interaction, and broader extension behavior require separate mapped journeys as those features are changed. Do not claim full-app coverage from this initial map.
 
-## Latest observed proof (2026-09-16)
+## Latest observed proof (2026-09-17)
 
-- `run-jT6s7v`: a real openai-codex/gpt-5.6-luna request sent, assistant text grew while running, and the response completed. The run then failed because Alpha's draft was empty after creating Bravo and switching back. Both the draft expectation and the nonzero result remain.
-- The revised recipe continues after draft assertion failures so it can collect later coverage. That revision has not yet completed a real run; tool completion, stop, archive/restore, and restart in this new recipe remain unverified.
-- `run-Y5MlNp`: anthropic configuration reached Send but displayed No API key for provider; no response proof.
-- `run-zH4Jq1`: earlier secondary visible settings/navigation smoke passed.
+- `run-t8uKWJ` (this branch, after dropping Electron `recordVideo`): doctor passed on a visible development Electron window with test mode/hooks absent and the renderer document focused. New thread → Start thread sent a real `openai-codex` / `gpt-5.6-luna` prompt. The composer and thread row showed `No API key for provider: openai-codex`. Saved oauth access tokens for openai-codex, anthropic, and xai in `$HOME/.pi/agent/auth.json` are expired. `stream-samples.json` is empty. Not a conversation pass.
+- Same-day launch failures `run-3TX38D`, `run-aoYczc`, and `run-5nTilg` were harness/environment issues (Playwright Electron `recordVideo` stalling `loadURL`, then native `isFocused()` false). They are not conversation proof.
+- Prior `run-jT6s7v` (2026-09-16): a real openai-codex/gpt-5.6-luna request sent, assistant text grew while running, and the response completed. The run then failed because Alpha's draft was empty after creating Bravo and switching back.
+- Prior `run-Y5MlNp`: anthropic configuration reached Send but displayed No API key for provider.
+- Prior `run-zH4Jq1`: secondary visible settings/navigation smoke passed.
 
 Evidence directories are under `.artifacts/verify-pi-gui/`. These are point-in-time observations of the checkout used; re-run after moving the skill to another branch.
