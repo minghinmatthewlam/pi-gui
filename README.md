@@ -49,7 +49,7 @@ execution all run through upstream `pi`.
 
 ## Install
 
-pi-gui is in public beta for **macOS (Apple Silicon)** and **Linux (AppImage)**.
+pi-gui is in public beta for **macOS** and **Linux (AppImage)**.
 
 ### From GitHub Releases
 
