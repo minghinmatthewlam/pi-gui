@@ -643,7 +643,7 @@ jobs:
         run: |
           mkdir release-download
           gh release download "$GITHUB_REF_NAME" \
-            --pattern "pi-gui-${GITHUB_REF_NAME#v}-arm64.dmg" \
+            --pattern "pi-gui-${GITHUB_REF_NAME#v}-universal.dmg" \
             --dir release-download
 
       - name: Checkout Homebrew tap
@@ -663,7 +663,7 @@ jobs:
             --version "${GITHUB_REF_NAME#v}" \
             --tag "$GITHUB_REF_NAME" \
             --github-repo "$GITHUB_REPOSITORY" \
-            --asset-name "pi-gui-${GITHUB_REF_NAME#v}-arm64.dmg" \
-            --dmg-path "$PWD/release-download/pi-gui-${GITHUB_REF_NAME#v}-arm64.dmg" \
+            --asset-name "pi-gui-${GITHUB_REF_NAME#v}-universal.dmg" \
+            --dmg-path "$PWD/release-download/pi-gui-${GITHUB_REF_NAME#v}-universal.dmg" \
             --commit \
             --push

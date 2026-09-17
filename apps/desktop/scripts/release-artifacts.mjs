@@ -16,13 +16,13 @@ function platformSpec(platform, version) {
       return {
         manifestName: "release-manifest-macos.json",
         updateManifest: "latest-mac.yml",
-        primaryUpdateAsset: `${base}-arm64.zip`,
-        updateAssets: [`${base}-arm64.zip`, `${base}-arm64.dmg`],
+        primaryUpdateAsset: `${base}-universal.zip`,
+        updateAssets: [`${base}-universal.zip`, `${base}-universal.dmg`],
         files: [
-          { name: `${base}-arm64.dmg`, role: "dmg" },
-          { name: `${base}-arm64.dmg.blockmap`, role: "dmg-blockmap" },
-          { name: `${base}-arm64.zip`, role: "update-archive" },
-          { name: `${base}-arm64.zip.blockmap`, role: "update-blockmap" },
+          { name: `${base}-universal.dmg`, role: "dmg" },
+          { name: `${base}-universal.dmg.blockmap`, role: "dmg-blockmap" },
+          { name: `${base}-universal.zip`, role: "update-archive" },
+          { name: `${base}-universal.zip.blockmap`, role: "update-blockmap" },
           { name: "latest-mac.yml", role: "update-manifest" },
         ],
       };
