@@ -30,11 +30,12 @@ mac:
   entitlements: resources/entitlements.mac.plist
   entitlementsInherit: resources/entitlements.mac.inherit.plist
   notarize: true
+  x64ArchFiles: "**/*"
   target:
     - target: dmg
-      arch: arm64
+      arch: universal
     - target: zip
-      arch: arm64
+      arch: universal
   darkModeSupport: true
   extraFiles:
     - from: build/native/pi-gui-notification-status-helper

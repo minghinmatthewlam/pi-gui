@@ -6,6 +6,7 @@ const VERSION_PATTERN = /^(\s*version\s+")([^"]+)(")$/m;
 const SHA256_PATTERN = /^(\s*sha256\s+")([^"]+)(")$/m;
 const URL_PATTERN = /^(\s*url\s+")([^"]+)(")$/m;
 const CASK_PATTERN = /^cask "([^"]+)" do$/m;
+const ARCH_DEPENDS_PATTERN = /^[ \t]*depends_on arch: :arm64\n(?:\n)?/m;
 
 export function resolveCaskPath(tapDir, caskToken = "pi-gui") {
   return path.join(path.resolve(tapDir), "Casks", `${caskToken}.rb`);
@@ -24,8 +25,6 @@ cask "${caskToken}" do
   desc "Codex-style desktop shell for pi"
   homepage "https://github.com/minghinmatthewlam/pi-gui"
 
-  depends_on arch: :arm64
-
   app "pi-gui.app"
 end
 `;
@@ -43,7 +42,8 @@ export function updateCaskContent(existingContent, { assetUrl, caskToken = "pi-g
   const nextContent = existingContent
     .replace(VERSION_PATTERN, `$1${version}$3`)
     .replace(SHA256_PATTERN, `$1${sha256}$3`)
-    .replace(URL_PATTERN, `$1${assetUrl}$3`);
+    .replace(URL_PATTERN, `$1${assetUrl}$3`)
+    .replace(ARCH_DEPENDS_PATTERN, "");
 
   if (nextContent === existingContent) {
     return {

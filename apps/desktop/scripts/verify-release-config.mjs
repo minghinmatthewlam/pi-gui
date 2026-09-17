@@ -122,6 +122,22 @@ function validateCiWorkflow(workflow) {
 function validateBuilderConfig(config, desktopPackage, afterRemoveSource) {
   assert(config.mac?.notarize === true, "electron-builder must notarize the macOS app");
   assert(
+    JSON.stringify(config.mac?.target) ===
+      JSON.stringify([
+        { target: "dmg", arch: "universal" },
+        { target: "zip", arch: "universal" },
+      ]),
+    "macOS packaging must produce a universal DMG and ZIP",
+  );
+  assert(
+    config.mac?.x64ArchFiles === "**/*",
+    "universal merge must allow identical unpacked Mach-O files in both slices",
+  );
+  assert(
+    desktopPackage.scripts?.["package:dir"]?.includes("electron-builder --mac --dir --universal"),
+    "unpacked macOS packaging must pass --universal because --dir ignores DMG/ZIP target arch",
+  );
+  assert(
     config.win?.signAndEditExecutable === true,
     "electron-builder must sign and edit the packaged Windows executable",
   );
@@ -547,6 +563,15 @@ function validateWorkflow(
         "verify-published-windows",
       ]),
     "Homebrew sync must wait for every post-publication native verification",
+  );
+  assert(
+    runText(stepNamed(jobs["sync-homebrew"], "Download published DMG")).includes(
+      "-universal.dmg",
+    ) &&
+      runText(stepNamed(jobs["sync-homebrew"], "Sync Homebrew tap")).includes(
+        "-universal.dmg",
+      ),
+    "Homebrew sync must consume the universal macOS DMG",
   );
 }
 

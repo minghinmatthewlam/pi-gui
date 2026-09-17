@@ -87,7 +87,7 @@ const packagePlatform = (process.env.PI_APP_PACKAGE_PLATFORM ?? process.platform
 const asarPath = resolveAsarPath(desktopDir, packagePlatform);
 const notificationHelperPath =
   packagePlatform === "darwin"
-    ? path.join(desktopDir, "release", "mac-arm64", "pi-gui.app", "Contents", "MacOS", "pi-gui-notification-status-helper")
+    ? path.join(desktopDir, "release", "mac-universal", "pi-gui.app", "Contents", "MacOS", "pi-gui-notification-status-helper")
     : undefined;
 const pnpmBinary = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 const piCodingAgentPackageName = "@earendil-works/pi-coding-agent";
@@ -163,7 +163,7 @@ console.log(`Verified packaged runtime dependencies in ${asarPath}`);
 
 function resolveAsarPath(desktopDir, packagePlatform) {
   if (packagePlatform === "darwin") {
-    return path.join(desktopDir, "release", "mac-arm64", "pi-gui.app", "Contents", "Resources", "app.asar");
+    return path.join(desktopDir, "release", "mac-universal", "pi-gui.app", "Contents", "Resources", "app.asar");
   }
 
   if (packagePlatform === "linux") {
