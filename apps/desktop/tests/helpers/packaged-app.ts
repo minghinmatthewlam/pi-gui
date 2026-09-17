@@ -56,6 +56,7 @@ export async function resolveAppBundleExecutable(appBundle: string): Promise<str
 export async function resolvePackagedReleaseZip(releaseDir = packagedReleaseDir): Promise<string> {
   const entries = await readdir(releaseDir, { withFileTypes: true });
   const zipEntry =
+    entries.find((entry) => entry.isFile() && entry.name.endsWith("-universal.zip")) ??
     entries.find((entry) => entry.isFile() && entry.name.endsWith("-arm64.zip")) ??
     entries.find((entry) => entry.isFile() && entry.name.endsWith("-mac.zip")) ??
     entries.find((entry) => entry.isFile() && entry.name.endsWith(".zip"));

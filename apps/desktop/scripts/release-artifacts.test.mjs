@@ -22,7 +22,7 @@ function updateManifestName(platform) {
 
 function primaryUpdateAsset(platform) {
   if (platform === "macos") {
-    return `pi-gui-${VERSION}-arm64.zip`;
+    return `pi-gui-${VERSION}-universal.zip`;
   }
   if (platform === "linux") {
     return `pi-gui-${VERSION}-x86_64.AppImage`;
@@ -32,7 +32,7 @@ function primaryUpdateAsset(platform) {
 
 function updateAssets(platform) {
   if (platform === "macos") {
-    return [`pi-gui-${VERSION}-arm64.zip`, `pi-gui-${VERSION}-arm64.dmg`];
+    return [`pi-gui-${VERSION}-universal.zip`, `pi-gui-${VERSION}-universal.dmg`];
   }
   if (platform === "linux") {
     return [`pi-gui-${VERSION}-x86_64.AppImage`, `pi-gui_${VERSION}_amd64.deb`];

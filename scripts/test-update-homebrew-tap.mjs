@@ -12,7 +12,7 @@ async function main() {
   await writeFile(
     caskPath,
     renderCask({
-      assetUrl: "https://example.com/pi-gui-0.1.0-beta.1-arm64.dmg",
+      assetUrl: "https://example.com/pi-gui-0.1.0-beta.1-universal.dmg",
       sha256: "a".repeat(64),
       version: "0.1.0-beta.1",
     }),
@@ -20,7 +20,7 @@ async function main() {
   );
 
   const dryRunResult = await applyHomebrewTapUpdate({
-    assetUrl: "https://example.com/pi-gui-0.1.0-beta.2-arm64.dmg",
+    assetUrl: "https://example.com/pi-gui-0.1.0-beta.2-universal.dmg",
     dryRun: true,
     sha256: "b".repeat(64),
     tapDir,
@@ -31,7 +31,7 @@ async function main() {
   assert.match(unchangedContent, /0\.1\.0-beta\.1/);
 
   const writeResult = await applyHomebrewTapUpdate({
-    assetUrl: "https://example.com/pi-gui-0.1.0-beta.2-arm64.dmg",
+    assetUrl: "https://example.com/pi-gui-0.1.0-beta.2-universal.dmg",
     sha256: "b".repeat(64),
     tapDir,
     version: "0.1.0-beta.2",
@@ -44,7 +44,10 @@ async function main() {
     updatedContent,
     /sha256 "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"/,
   );
-  assert.match(updatedContent, /url "https:\/\/example\.com\/pi-gui-0\.1\.0-beta\.2-arm64\.dmg"/);
+  assert.match(
+    updatedContent,
+    /url "https:\/\/example\.com\/pi-gui-0\.1\.0-beta\.2-universal\.dmg"/,
+  );
 
   process.stdout.write("Homebrew tap rewrite fixture passed.\n");
 }
