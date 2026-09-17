@@ -26,7 +26,11 @@ else
   exit 1
 fi
 set +e
-pnpm exec playwright test -c .agents/skills/verify-pi-gui/scripts/playwright.config.ts "$spec" --output "$PI_GUI_PROOF_DIR/playwright" --reporter=line >"$PI_GUI_PROOF_DIR/run.log" 2>&1
+if command -v dbus-run-session >/dev/null 2>&1; then
+  dbus-run-session -- pnpm exec playwright test -c .agents/skills/verify-pi-gui/scripts/playwright.config.ts "$spec" --output "$PI_GUI_PROOF_DIR/playwright" --reporter=line >"$PI_GUI_PROOF_DIR/run.log" 2>&1
+else
+  pnpm exec playwright test -c .agents/skills/verify-pi-gui/scripts/playwright.config.ts "$spec" --output "$PI_GUI_PROOF_DIR/playwright" --reporter=line >"$PI_GUI_PROOF_DIR/run.log" 2>&1
+fi
 result=$?
 set -e
 cat "$PI_GUI_PROOF_DIR/run.log"

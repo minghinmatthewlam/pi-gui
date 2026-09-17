@@ -22,6 +22,13 @@ const nativeClipboardImagePath = resolve(__dirname, "..", "..", "..", "website",
 const execFileAsync = promisify(execFile);
 const require = createRequire(__filename);
 const electronExecutablePath = require("electron") as string;
+
+function linuxElectronCliArgs(): string[] {
+  if (process.platform !== "linux") {
+    return [];
+  }
+  return ["--no-sandbox", "--disable-setuid-sandbox", "--disable-gpu", "--disable-dev-shm-usage"];
+}
 const REAL_AUTH_ENV_VAR = "PI_APP_REAL_AUTH";
 const REAL_AUTH_SOURCE_DIR_ENV_VAR = "PI_APP_REAL_AUTH_SOURCE_DIR";
 const REQUIRED_REAL_AUTH_FILES = ["auth.json"] as const;
@@ -117,7 +124,7 @@ export async function launchDesktop(
   const agentDir = await prepareAgentDir(userDataDir, normalized);
   const env = buildDesktopLaunchEnv(userDataDir, agentDir, normalized);
   const electronApp = await electron.launch({
-    args: [desktopDir],
+    args: [...linuxElectronCliArgs(), desktopDir],
     cwd: desktopDir,
     env,
     ...(normalized.recordVideoDir
@@ -140,7 +147,7 @@ export async function spawnDesktopProcess(
   const normalized = Array.isArray(options) ? { initialWorkspaces: options } : options;
   const agentDir = await prepareAgentDir(userDataDir, normalized);
   const env = buildDesktopLaunchEnv(userDataDir, agentDir, normalized);
-  return spawn(electronExecutablePath, [desktopDir], {
+  return spawn(electronExecutablePath, [...linuxElectronCliArgs(), desktopDir], {
     cwd: desktopDir,
     env,
     stdio: "ignore",
@@ -176,7 +183,7 @@ async function launchDesktopExecutable(
 ): Promise<DesktopHarness> {
   const electronApp = await electron.launch({
     executablePath,
-    args: [],
+    args: linuxElectronCliArgs(),
     cwd: dirname(executablePath),
     env,
   });
@@ -275,6 +282,7 @@ function buildDesktopLaunchEnv(
     PI_CODING_AGENT_DIR: agentDir,
     ...(options.notificationLogPath ? { PI_APP_NOTIFICATION_LOG_PATH: options.notificationLogPath } : {}),
     PI_APP_OPEN_DEVTOOLS: "0",
+    ...(process.platform === "linux" ? { ELECTRON_DISABLE_SANDBOX: "1" } : {}),
     ...(options.envOverrides ?? {}),
   };
   for (const [key, value] of Object.entries(options.envOverrides ?? {})) {

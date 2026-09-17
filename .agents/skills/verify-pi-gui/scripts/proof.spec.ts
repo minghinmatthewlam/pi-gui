@@ -4,6 +4,7 @@ import { join, resolve } from 'node:path';
 import { launchDesktop, seedAgentDir, type DesktopHarness } from '../../../../apps/desktop/tests/helpers/electron-app';
 
 test('visible app navigation and settings persistence without test hooks', async () => {
+  test.setTimeout(180_000);
   const evidence = process.env.PI_GUI_PROOF_DIR;
   if (!evidence) throw new Error('Run scripts/prove.sh to allocate a unique evidence directory');
   const userDataDir = join(evidence, 'profile');
