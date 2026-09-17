@@ -46,7 +46,7 @@ test('real conversation: stream, switch, tool, stop, archive, restart', async ()
   const launch = async () => {
     harness = await launchDesktop(profile, {
       agentDir, initialWorkspaces: [workspace], scrubProviderEnv: true,
-      envOverrides: { PI_APP_TEST_MODE: undefined }, recordVideoDir: join(evidence, 'videos'),
+      envOverrides: { PI_APP_TEST_MODE: undefined },
     });
     runs.push({ pid: harness.electronApp.process().pid!, closed: false });
     await harness.focusWindow();
