@@ -127,7 +127,7 @@ export async function launchDesktop(
     args: [...linuxElectronCliArgs(), desktopDir],
     cwd: desktopDir,
     env,
-    ...(normalized.recordVideoDir
+    ...(normalized.recordVideoDir && process.platform !== "linux"
       ? {
           recordVideo: {
             dir: normalized.recordVideoDir,
