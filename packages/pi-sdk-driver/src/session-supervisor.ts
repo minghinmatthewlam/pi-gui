@@ -1349,6 +1349,9 @@ export class SessionSupervisor {
     if (typeof abortRetry === "function" && typeof agentAbort === "function") {
       abortRetry.call(session);
       agentAbort.call(session.agent);
+      if (!session.isStreaming) {
+        return Promise.resolve();
+      }
       return new Promise((resolve) => {
         record.abortConfirm = resolve;
       });
