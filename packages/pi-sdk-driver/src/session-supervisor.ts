@@ -203,6 +203,7 @@ interface ManagedSessionRecord {
   /** mtime (epoch ms) of the JSONL last reconciled into the served transcript. */
   transcriptDiskMtimeMs: number | undefined;
   termination: SessionTermination | undefined;
+  abortConfirm: (() => void) | undefined;
 }
 
 interface RegisteredCommandAdapter {
@@ -1221,6 +1222,7 @@ export class SessionSupervisor {
       leasePath: undefined,
       transcriptDiskMtimeMs: undefined,
       termination: undefined,
+      abortConfirm: undefined,
     };
     return record;
   }
@@ -1252,10 +1254,10 @@ export class SessionSupervisor {
   }
 
   /**
-   * Queue the abort deadline before calling `session.abort()`. Evaluating abort
-   * as withDeadline's first argument can run `agent.abort()` listeners on this
-   * turn; if those listeners never return, the timer is never scheduled and the
-   * session stays `stopping` forever.
+   * Queue the abort deadline before invoking abort. `session.abort()` waits for
+   * idle, and dropping `agent_end` while aborting can deadlock that wait. Signal
+   * the agent abort controller instead, then confirm via `agent_end` or the
+   * deadline.
    */
   private awaitAbortWithDeadline(record: ManagedSessionRecord): Promise<"stopped" | "quarantined"> {
     const session = record.session;
@@ -1272,6 +1274,7 @@ export class SessionSupervisor {
           return;
         }
         settled = true;
+        record.abortConfirm = undefined;
         void this.quarantineRecord(
           record,
           new DeadlineExceededError("session.abort", timeoutMs),
@@ -1282,13 +1285,14 @@ export class SessionSupervisor {
       }, timeoutMs);
 
       setTimeout(() => {
-        this.invokeSessionAbort(session).then(
+        this.invokeSessionAbort(record, session).then(
           async () => {
             if (settled) {
               return;
             }
             settled = true;
             clearTimeout(timer);
+            record.abortConfirm = undefined;
             this.clearRunStateAfterConfirmedStop(record);
             record.termination = "stopped";
             record.status = "idle";
@@ -1303,6 +1307,7 @@ export class SessionSupervisor {
             }
             settled = true;
             clearTimeout(timer);
+            record.abortConfirm = undefined;
             await this.quarantineRecord(record, error);
             resolve("quarantined");
           },
@@ -1331,13 +1336,22 @@ export class SessionSupervisor {
     });
   }
 
-  private invokeSessionAbort(session: AgentSession): Promise<void> {
+  private invokeSessionAbort(record: ManagedSessionRecord, session: AgentSession): Promise<void> {
     this.sessionRunStats.abortCalls += 1;
     if (this.sessionRunFixture?.abort === "hang") {
       return new Promise(() => {});
     }
     if (this.sessionRunFixture?.abort === "reject") {
       return Promise.reject(new Error("injected abort failure"));
+    }
+    const abortRetry = (session as AgentSession & { abortRetry?: () => void }).abortRetry;
+    const agentAbort = session.agent.abort;
+    if (typeof abortRetry === "function" && typeof agentAbort === "function") {
+      abortRetry.call(session);
+      agentAbort.call(session.agent);
+      return new Promise((resolve) => {
+        record.abortConfirm = resolve;
+      });
     }
     return session.abort();
   }
@@ -2265,6 +2279,11 @@ export class SessionSupervisor {
       case "turn_end":
         return [sessionUpdatedEvent(record)];
       case "agent_end": {
+        if (record.termination === "aborting") {
+          record.abortConfirm?.();
+          record.abortConfirm = undefined;
+          return [];
+        }
         if (record.termination) {
           return [];
         }
