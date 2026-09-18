@@ -138,6 +138,21 @@ function electronCliArgs(entry?: string): string[] {
   return args;
 }
 
+function playwrightRecordVideoOptions(
+  dir: string | undefined,
+  size?: { readonly width: number; readonly height: number },
+): { recordVideo?: { dir: string; size?: { width: number; height: number } } } {
+  if (!dir || process.platform === "linux") {
+    return {};
+  }
+  return {
+    recordVideo: {
+      dir,
+      ...(size ? { size } : {}),
+    },
+  };
+}
+
 export async function launchDesktop(
   userDataDir: string,
   options: readonly string[] | LaunchDesktopOptions = [],
@@ -149,14 +164,7 @@ export async function launchDesktop(
     args: electronCliArgs(desktopDir),
     cwd: desktopDir,
     env,
-    ...(normalized.recordVideoDir
-      ? {
-          recordVideo: {
-            dir: normalized.recordVideoDir,
-            ...(normalized.recordVideoSize ? { size: normalized.recordVideoSize } : {}),
-          },
-        }
-      : {}),
+    ...playwrightRecordVideoOptions(normalized.recordVideoDir, normalized.recordVideoSize),
   });
 
   return createDesktopHarness(electronApp);
