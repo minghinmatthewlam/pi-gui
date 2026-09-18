@@ -106,7 +106,9 @@ import {
   type PiModelInfo,
 } from "./npm-package-fallback.js";
 
-function requireModel(modelRuntime: ModelRuntime, provider: string, modelId: string): PiModelInfo {
+type RuntimeModel = NonNullable<ReturnType<ModelRuntime["getModel"]>>;
+
+function requireModel(modelRuntime: ModelRuntime, provider: string, modelId: string): RuntimeModel {
   const model = modelRuntime.getModel(provider, modelId);
   if (!model) {
     throw new Error(`Unknown model ${provider}:${modelId}`);
@@ -127,7 +129,7 @@ async function requireSessionModel(
   modelRuntime: ModelRuntime,
   provider: string,
   modelId: string,
-): Promise<PiModelInfo> {
+): Promise<RuntimeModel> {
   const model = modelRuntime.getModel(provider, modelId);
   if (model) {
     return model;

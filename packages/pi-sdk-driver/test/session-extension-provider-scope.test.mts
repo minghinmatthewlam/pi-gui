@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { AgentSessionRuntime } from "@earendil-works/pi-coding-agent";
 import { PiSdkDriver } from "../dist/pi-sdk-driver.js";
 import { createAgentSessionRuntimeWithNpmFallback } from "../dist/npm-package-fallback.js";
 
@@ -73,25 +74,25 @@ async function makeWorkspaceDir(root: string, name: string, source: string): Pro
  * actually resolves against.
  */
 function makeDriver(root: string, agentDir: string) {
-  const created: { cwd: string | undefined; runtime: { session: { modelRuntime: any } } }[] = [];
+  const created: { cwd: string | undefined; runtime: AgentSessionRuntime }[] = [];
   const driver = new PiSdkDriver({
     agentDir,
     catalogFilePath: join(root, "catalogs.json"),
     createAgentSessionRuntimeImpl: async (options) => {
       const runtime = await createAgentSessionRuntimeWithNpmFallback(options);
-      created.push({ cwd: options?.cwd, runtime: runtime as never });
+      created.push({ cwd: options?.cwd, runtime });
       return runtime;
     },
   });
   const runtimeFor = (cwd: string) => {
-    const entry = created.findLast((candidate) => candidate.cwd === cwd);
+    const entry = [...created].reverse().find((candidate) => candidate.cwd === cwd);
     assert.ok(entry, `no session runtime was created for ${cwd}`);
     return entry.runtime.session.modelRuntime;
   };
   return { driver, runtimeFor };
 }
 
-test("a workspace resolves its own models for a provider id another workspace also registers", async () => {
+await test("a workspace resolves its own models for a provider id another workspace also registers", async () => {
   const { root, agentDir } = await makeAgentDir();
   const pathA = await makeWorkspaceDir(
     root,
@@ -119,7 +120,7 @@ test("a workspace resolves its own models for a provider id another workspace al
   await driver.closeSession(snapshot.ref);
 });
 
-test("a session keeps its own workspace's endpoint and key for a shared provider and model id", async () => {
+await test("a session keeps its own workspace's endpoint and key for a shared provider and model id", async () => {
   const { root, agentDir } = await makeAgentDir();
   const pathA = await makeWorkspaceDir(
     root,
@@ -155,7 +156,7 @@ test("a session keeps its own workspace's endpoint and key for a shared provider
   await driver.closeSession(snapshot.ref);
 });
 
-test("removing a workspace leaves another workspace's session resolution intact", async () => {
+await test("removing a workspace leaves another workspace's session resolution intact", async () => {
   const { root, agentDir } = await makeAgentDir();
   const pathA = await makeWorkspaceDir(
     root,
@@ -186,7 +187,7 @@ test("removing a workspace leaves another workspace's session resolution intact"
   await driver.closeSession(snapshot.ref);
 });
 
-test("removing a workspace evicts its runtime context", async () => {
+await test("removing a workspace evicts its runtime context", async () => {
   const { root, agentDir } = await makeAgentDir();
   const path = await makeWorkspaceDir(
     root,
@@ -214,7 +215,7 @@ test("removing a workspace evicts its runtime context", async () => {
   );
 });
 
-test("an override-only registration keeps the models the first registration defined", async () => {
+await test("an override-only registration keeps the models the first registration defined", async () => {
   const { root, agentDir } = await makeAgentDir();
   const path = await makeWorkspaceDir(
     root,

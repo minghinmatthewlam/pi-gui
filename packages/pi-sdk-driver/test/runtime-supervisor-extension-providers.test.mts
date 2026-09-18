@@ -126,7 +126,7 @@ function createSupervisor(agentDir: string) {
   });
 }
 
-test("runtime snapshot includes providers registered by extensions", async () => {
+await test("runtime snapshot includes providers registered by extensions", async () => {
   const { agentDir, workspacePath } = await createAgentDir();
   const supervisor = createSupervisor(agentDir);
   const workspace = { workspaceId: "workspace-1", path: workspacePath };
@@ -151,7 +151,7 @@ test("runtime snapshot includes providers registered by extensions", async () =>
   );
 });
 
-test("disabling an extension drops the providers it registered", async () => {
+await test("disabling an extension drops the providers it registered", async () => {
   const { agentDir, workspacePath } = await createAgentDir();
   const extensionPath = join(agentDir, "extensions", "file-provider.ts");
   await mkdir(join(agentDir, "extensions"), { recursive: true });
@@ -196,7 +196,7 @@ test("disabling an extension drops the providers it registered", async () => {
   );
 });
 
-test("each workspace only sees providers its own project extensions register", async () => {
+await test("each workspace only sees providers its own project extensions register", async () => {
   const { root, agentDir } = await createSharedAgentDir();
   const a = await createProjectWorkspace(root, "workspace-a", "scoped-a", "model-a");
   const b = await createProjectWorkspace(root, "workspace-b", "scoped-b", "model-b");
@@ -222,7 +222,7 @@ test("each workspace only sees providers its own project extensions register", a
   assert.deepEqual(modelKeys(secondA, "scoped-"), ["scoped-a:model-a"]);
 });
 
-test("the same provider id resolves to each workspace's own configuration", async () => {
+await test("the same provider id resolves to each workspace's own configuration", async () => {
   const { root, agentDir } = await createSharedAgentDir();
   const a = await createProjectWorkspace(
     root,
@@ -252,7 +252,7 @@ test("the same provider id resolves to each workspace's own configuration", asyn
   );
 });
 
-test("disabling an extension only drops the registrations of that workspace", async () => {
+await test("disabling an extension only drops the registrations of that workspace", async () => {
   const { root, agentDir } = await createSharedAgentDir();
   const a = await createProjectWorkspace(root, "workspace-a", "scoped-a", "model-a");
   const b = await createProjectWorkspace(root, "workspace-b", "scoped-b", "model-b");
@@ -276,7 +276,7 @@ test("disabling an extension only drops the registrations of that workspace", as
   );
 });
 
-test("extension providers survive a runtime refresh", async () => {
+await test("extension providers survive a runtime refresh", async () => {
   const { agentDir, workspacePath } = await createAgentDir();
   const supervisor = createSupervisor(agentDir);
   const workspace = { workspaceId: "workspace-1", path: workspacePath };

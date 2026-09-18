@@ -88,7 +88,7 @@ export async function generateThreadTitle(
     if (!session.model) {
       return null;
     }
-    const auth = await session.modelRuntime.getAuth(session.model);
+    const auth = await session.modelRuntime.getAuth(session.model.provider);
     if (!auth?.auth.apiKey) {
       return null;
     }
