@@ -2171,7 +2171,12 @@ export class SessionSupervisor {
         if (options?.persistSnapshot !== false) {
           await this.persistSnapshot(record);
         }
+        // Snapshots are captured when the agent event is queued. Stop emits
+        // stopping/idle off this queue, so a later drain must not revive running.
         for (const event of events) {
+          if (isStaleQueuedRunSnapshot(record, event)) {
+            continue;
+          }
           await this.emit(record, event);
         }
       },
@@ -3132,6 +3137,19 @@ function sessionUpdatedEvent(record: ManagedSessionRecord): SessionDriverEvent {
     timestamp: record.updatedAt,
     snapshot: buildSnapshot(record),
   };
+}
+
+function isStaleQueuedRunSnapshot(
+  record: ManagedSessionRecord,
+  event: SessionDriverEvent,
+): boolean {
+  if (!record.termination) {
+    return false;
+  }
+  if (event.type !== "sessionUpdated" && event.type !== "runCompleted") {
+    return false;
+  }
+  return event.snapshot.status === "running";
 }
 
 function toDriverEvents(

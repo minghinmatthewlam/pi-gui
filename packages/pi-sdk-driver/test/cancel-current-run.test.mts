@@ -17,6 +17,7 @@ interface FakeControl {
   disposeCalls: number;
   prompt: "hang" | "reject" | "resolve";
   abort: "hang" | "reject" | "resolve";
+  readonly agentListeners: Array<(event: unknown) => void>;
 }
 
 function createFakeRuntime(control: FakeControl) {
@@ -36,7 +37,15 @@ function createFakeRuntime(control: FakeControl) {
       promptTemplates: [],
       resourceLoader: { getSkills: () => ({ skills: [] }) },
       agent: { waitForIdle: async () => undefined, state: {} },
-      subscribe: () => () => undefined,
+      subscribe: (listener) => {
+        control.agentListeners.push(listener);
+        return () => {
+          const index = control.agentListeners.indexOf(listener);
+          if (index >= 0) {
+            control.agentListeners.splice(index, 1);
+          }
+        };
+      },
       bindExtensions: async () => undefined,
       dispose: () => undefined,
       clearQueue: () => undefined,
@@ -118,6 +127,7 @@ await test("sendUserMessage returns while prompt is still in flight", async () =
     disposeCalls: 0,
     prompt: "hang",
     abort: "resolve",
+    agentListeners: [],
   };
   await withSupervisor(control, async (supervisor, sessionRef) => {
     const started = Date.now();
@@ -136,6 +146,7 @@ await test("cancelCurrentRun aborts an in-flight hanging prompt within a short b
     disposeCalls: 0,
     prompt: "hang",
     abort: "resolve",
+    agentListeners: [],
   };
   await withSupervisor(control, async (supervisor, sessionRef) => {
     const events: SessionDriverEvent[] = [];
@@ -159,6 +170,7 @@ await test("never-resolving abort quarantines and does not report idle", async (
     disposeCalls: 0,
     prompt: "hang",
     abort: "hang",
+    agentListeners: [],
   };
   await withSupervisor(control, async (supervisor, sessionRef) => {
     const events: SessionDriverEvent[] = [];
@@ -186,6 +198,7 @@ await test("rejecting abort quarantines and does not report idle", async () => {
     disposeCalls: 0,
     prompt: "hang",
     abort: "reject",
+    agentListeners: [],
   };
   await withSupervisor(control, async (supervisor, sessionRef) => {
     const events: SessionDriverEvent[] = [];
@@ -198,5 +211,52 @@ await test("rejecting abort quarantines and does not report idle", async () => {
     assert.equal(latestStatus(events), "failed");
     const failed = events.find((event) => event.type === "runFailed");
     assert.equal(failed?.type === "runFailed" ? failed.error.code : undefined, "ABORT_FAILED");
+  });
+});
+
+function emitQueuedRunningSnapshots(control: FakeControl, count: number): void {
+  for (let index = 0; index < count; index += 1) {
+    for (const listener of control.agentListeners) {
+      listener({
+        type: "message_update",
+        message: { role: "assistant", content: [{ type: "text", text: `token-${index}` }] },
+        assistantMessageEvent: { type: "text_delta", delta: `token-${index}` },
+      });
+    }
+  }
+}
+
+await test("queued running snapshots do not revive a session after Stop", async () => {
+  const control: FakeControl = {
+    promptCalls: 0,
+    abortCalls: 0,
+    disposeCalls: 0,
+    prompt: "hang",
+    abort: "resolve",
+    agentListeners: [],
+  };
+  await withSupervisor(control, async (supervisor, sessionRef) => {
+    const events: SessionDriverEvent[] = [];
+    supervisor.subscribe(sessionRef, (event) => {
+      events.push(event);
+    });
+    await supervisor.sendUserMessage(sessionRef, { text: "stream then stop" });
+    emitQueuedRunningSnapshots(control, 2);
+    const outcome = await supervisor.cancelCurrentRun(sessionRef);
+    assert.equal(outcome, "stopped");
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const stoppingIndex = events.findIndex(
+      (event) => event.type === "sessionUpdated" && event.snapshot.status === "stopping",
+    );
+    assert.ok(stoppingIndex >= 0, "expected a stopping snapshot");
+    const revived = events
+      .slice(stoppingIndex + 1)
+      .some(
+        (event) =>
+          (event.type === "sessionUpdated" || event.type === "runCompleted") &&
+          event.snapshot.status === "running",
+      );
+    assert.equal(revived, false);
+    assert.equal(latestStatus(events), "idle");
   });
 });
