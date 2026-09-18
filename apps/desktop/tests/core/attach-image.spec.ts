@@ -11,7 +11,7 @@ import {
   writeTinyPng,
 } from "../helpers/electron-app";
 
-test("attaches an image through the native picker and shows the attachment chip", async () => {
+test("attaches an image from a stubbed picker result and shows the attachment chip", async () => {
   test.setTimeout(60_000);
   const userDataDir = await makeUserDataDir();
   const workspacePath = await makeWorkspace("native-attach-image-workspace");

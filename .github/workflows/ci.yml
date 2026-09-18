@@ -84,7 +84,28 @@ jobs:
         run: pnpm --filter @pi-gui/website run build
 
   desktop-core:
+    name: desktop-core
+    if: ${{ always() }}
+    needs: desktop-core-shards
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Require every Core shard to succeed
+        env:
+          CI_NEEDS: ${{ toJSON(needs) }}
+        run: node scripts/check-ci-results.mjs --core-shards
+
+  desktop-core-shards:
+    name: Desktop Core (${{ matrix.shard }}/4)
     runs-on: macos-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
 
     steps:
       - uses: actions/checkout@v4
@@ -100,16 +121,22 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Desktop Core
-        run: pnpm --filter @pi-gui/desktop run test:e2e:ci:mac
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_NAME: ${{ github.workspace }}/apps/desktop/test-results/core-report.json
+        run: pnpm --filter @pi-gui/desktop run test:e2e:ci:mac --shard=${{ matrix.shard }}/4 --reporter=line,json
 
-      - name: Upload failure artifacts
-        if: failure()
+      - name: Summarize Core timing
+        if: ${{ !cancelled() }}
+        run: node .github/scripts/summarize-playwright-trend.mjs apps/desktop/test-results/core-report.json apps/desktop/test-results/core-summary.json
+
+      - name: Upload Core results
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: desktop-core-test-results
+          name: desktop-core-test-results-${{ matrix.shard }}
           path: apps/desktop/test-results/
           retention-days: 7
-          if-no-files-found: ignore
+          if-no-files-found: error
 
   desktop-package-linux:
     runs-on: ubuntu-latest

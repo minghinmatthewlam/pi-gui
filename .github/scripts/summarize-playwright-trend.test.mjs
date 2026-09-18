@@ -15,7 +15,9 @@ test("groups failures by spec file without merging unrelated surfaces", () => {
             file: "core/timeline-pinning.spec.ts",
             line: 426,
             column: 5,
-            tests: [{ status: "expected", results: [{ status: "passed", errors: [] }] }],
+            tests: [
+              { status: "expected", results: [{ status: "passed", errors: [], duration: 1234 }] },
+            ],
           },
         ],
       },
@@ -36,6 +38,7 @@ test("groups failures by spec file without merging unrelated surfaces", () => {
                     results: [
                       {
                         status: "failed",
+                        duration: 4321,
                         errors: [{ message: "composerDraftsBySession missing" }],
                       },
                     ],
@@ -49,6 +52,8 @@ test("groups failures by spec file without merging unrelated surfaces", () => {
     ],
   });
 
+  assert.equal(summary.groups[0].durationMs, 4321);
+  assert.equal(summary.groups[1].durationMs, 1234);
   assert.deepEqual(
     summary.groups.map((group) => group.specFile),
     ["core/persistence.spec.ts", "core/timeline-pinning.spec.ts"],

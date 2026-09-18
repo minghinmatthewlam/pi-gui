@@ -578,7 +578,7 @@ export function registerDesktopIpc({
 
   ipcMain.handle(desktopIpc.cancelCurrentRun, (event) => {
     const target = windows.targetForSender(event.sender);
-    // A submitted prompt owns the serialized action queue until its turn ends.
+    // A long slash command can still own the serialized action queue.
     // Stop must bypass that queue and cancel the captured target immediately.
     return immediate(event, () => owners.conversation.cancelCurrentRun(target));
   });
@@ -658,13 +658,14 @@ export function registerDesktopIpc({
   });
   ipcMain.handle(desktopIpc.submitComposer, (event, rawText: unknown, rawOptions: unknown) => {
     const target = windows.targetForSender(event.sender);
-    return run(event, () =>
-      owners.conversation.submitComposer(
-        target,
-        expectString(rawText, "text"),
-        expectOptionalDeliverOptions(rawOptions),
-      ),
-    );
+    const text = expectString(rawText, "text");
+    const options = expectOptionalDeliverOptions(rawOptions);
+    // Ordinary prompts target a captured session and may await the entire turn.
+    // Keep that wait outside the window queue so selection and other windows stay usable.
+    // Slash commands can change selection (for example an extension creating a child
+    // session), so retain their serialized sender-view context.
+    const dispatch = text.trimStart().startsWith("/") ? run : immediate;
+    return dispatch(event, () => owners.conversation.submitComposer(target, text, options));
   });
   ipcMain.handle(desktopIpc.getSessionTree, (event, rawTarget: unknown) => {
     windows.windowForSender(event.sender);

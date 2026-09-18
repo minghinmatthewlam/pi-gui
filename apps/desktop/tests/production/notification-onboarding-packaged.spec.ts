@@ -12,7 +12,7 @@ import {
   createThread,
   selectSessionByTitle,
   setSessionVisibilityOverride,
-} from "../live/session-event-test-helpers";
+} from "../helpers/session-event-test-helpers";
 
 test("requests notification permission in the packaged app when active work moves to the background", async () => {
   const userDataDir = await makeUserDataDir();

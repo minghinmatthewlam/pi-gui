@@ -112,3 +112,107 @@ test("the public Electron helper loads through Playwright and the marketing scri
   const helper = await jiti.import(path.join(root, "apps/desktop/tests/helpers/electron-app.ts"));
   assert.equal(typeof helper.launchDesktop, "function");
 });
+
+test("Core shards cover each discovered test exactly once and preserve one worker", () => {
+  const list = (shard) => {
+    const result = spawnSync(
+      process.execPath,
+      [
+        require.resolve("@playwright/test/cli"),
+        "test",
+        "-c",
+        "apps/desktop/playwright.config.ts",
+        "apps/desktop/tests/core",
+        "--list",
+        "--reporter=json",
+        ...(shard ? [`--shard=${shard}/4`] : []),
+      ],
+      {
+        cwd: root,
+        env: {
+          ...process.env,
+          CI: "true",
+          PI_APP_TEST_MODE: "background",
+          PLAYWRIGHT_JSON_OUTPUT_NAME: "",
+          PLAYWRIGHT_JSON_OUTPUT_FILE: "",
+        },
+        encoding: "utf8",
+        timeout: 60_000,
+        maxBuffer: 8 * 1024 * 1024,
+      },
+    );
+    assert.ifError(result.error);
+    assert.equal(result.status, 0, result.stderr + result.stdout);
+    const report = JSON.parse(result.stdout);
+    assert.equal(report.config.workers, 1);
+    assert.equal(report.config.fullyParallel, false);
+    const ids = [];
+    function visit(suites) {
+      for (const suite of suites) {
+        for (const spec of suite.specs ?? []) {
+          for (const test of spec.tests) ids.push(`${spec.id}:${test.projectId}`);
+        }
+        visit(suite.suites ?? []);
+      }
+    }
+    visit(report.suites);
+    return ids;
+  };
+  const full = list();
+  assert.ok(full.length > 0);
+  const shards = [1, 2, 3, 4].map(list);
+  for (const shard of shards) assert.ok(shard.length > 0);
+  const combined = shards.flat();
+  assert.equal(new Set(combined).size, combined.length, "A test must not run in two shards");
+  assert.deepEqual(combined.sort(), full.sort(), "Shards must not omit tests");
+});
+
+test("every desktop spec has a known lane and lane commands cannot mix suites", async () => {
+  const lanes = new Set(["unit", "core", "live", "native", "production", "dev", "perf", "demo"]);
+  const files = await readdir(path.join(root, "apps/desktop/tests"), { recursive: true });
+  for (const file of files.filter((file) => file.endsWith(".spec.ts"))) {
+    assert.ok(lanes.has(file.split(path.sep)[0]), `Unclassified desktop spec: ${file}`);
+  }
+  const { scripts } = JSON.parse(
+    await readFile(path.join(root, "apps/desktop/package.json"), "utf8"),
+  );
+  for (const lane of ["core", "live", "native"]) {
+    assert.ok(scripts[`test:e2e:${lane}`].includes(`apps/desktop/tests/${lane}`));
+  }
+  assert.match(scripts["test:e2e:core"], /PI_APP_TEST_LANE=core/);
+  assert.equal(scripts["test:e2e:ci:mac"], "pnpm run test:e2e:core");
+  for (const [name, command] of Object.entries(scripts)) {
+    const match = name.match(/^test:(core|live|native|prod):/);
+    if (match) {
+      const lane = match[1] === "prod" ? "production" : match[1];
+      for (const pathMatch of command.matchAll(/apps\/desktop\/tests\/(\w+)/g)) {
+        assert.equal(pathMatch[1], lane, `${name} selects the wrong lane`);
+      }
+    }
+    if (command.includes("apps/desktop/tests/live")) {
+      assert.ok(
+        command.startsWith("node scripts/require-live-auth.mjs && "),
+        `${name} must preflight live auth`,
+      );
+    }
+  }
+});
+
+test("requested live runs fail before build when auth configuration is missing", () => {
+  const script = path.join(root, "apps/desktop/scripts/require-live-auth.mjs");
+  for (const env of [
+    { PI_APP_REAL_AUTH: "", PI_APP_REAL_AUTH_SOURCE_DIR: "" },
+    { PI_APP_REAL_AUTH: "1", PI_APP_REAL_AUTH_SOURCE_DIR: "relative/path" },
+    {
+      PI_APP_REAL_AUTH: "1",
+      PI_APP_REAL_AUTH_SOURCE_DIR: path.join(root, "missing-live-auth-source"),
+    },
+  ]) {
+    const result = spawnSync(process.execPath, [script], {
+      env: { ...process.env, ...env },
+      encoding: "utf8",
+    });
+    assert.equal(result.status, 2);
+    assert.match(result.stderr, /No provider tests ran/);
+  }
+});

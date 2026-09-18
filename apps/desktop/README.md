@@ -85,7 +85,7 @@ Use the smallest lane that matches the changed surface.
   Opt-in higher-fidelity smokes that stay out of the default fast lanes. Use these for real-auth `live` checks, packaged `.app` launch, and real macOS open-panel coverage.
 
   ```bash
-  pnpm --filter @pi-gui/desktop run test:prod:real-auth-contract
+  pnpm --filter @pi-gui/desktop run test:core:auth-contract
   pnpm --filter @pi-gui/desktop run test:prod:packaged-smoke
   pnpm --filter @pi-gui/desktop run test:prod:applications-relaunch
   pnpm --filter @pi-gui/desktop run test:prod:release-zip-smoke
@@ -180,8 +180,8 @@ pnpm --filter @pi-gui/desktop run test:core:persistence
 pnpm --filter @pi-gui/desktop run test:live:tool-calls
 pnpm --filter @pi-gui/desktop run test:native:paste
 pnpm --filter @pi-gui/desktop run test:native:open-folder
-pnpm --filter @pi-gui/desktop run test:native:attach-image
-pnpm --filter @pi-gui/desktop run test:prod:real-auth-contract
+pnpm --filter @pi-gui/desktop run test:core:attach-image
+pnpm --filter @pi-gui/desktop run test:core:auth-contract
 pnpm --filter @pi-gui/desktop run test:prod:packaged-smoke
 pnpm --filter @pi-gui/desktop run test:prod:applications-relaunch
 pnpm --filter @pi-gui/desktop run test:prod:release-zip-smoke

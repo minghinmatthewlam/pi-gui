@@ -253,16 +253,15 @@ export function expectSetChildSupervisionLoopInput(value: unknown): SetChildSupe
   };
 }
 
-export function expectNotificationPreferences(value: unknown): NotificationPreferences {
+export function expectNotificationPreferences(value: unknown): Partial<NotificationPreferences> {
   const record = expectRecord(value, "preferences");
-  return {
-    backgroundCompletion: expectBoolean(
-      record.backgroundCompletion,
-      "preferences.backgroundCompletion",
-    ),
-    backgroundFailure: expectBoolean(record.backgroundFailure, "preferences.backgroundFailure"),
-    attentionNeeded: expectBoolean(record.attentionNeeded, "preferences.attentionNeeded"),
-  };
+  let preferences: Partial<NotificationPreferences> = {};
+  for (const key of ["backgroundCompletion", "backgroundFailure", "attentionNeeded"] as const) {
+    if (Object.hasOwn(record, key)) {
+      preferences = { ...preferences, [key]: expectBoolean(record[key], `preferences.${key}`) };
+    }
+  }
+  return preferences;
 }
 
 export function expectCustomProviderConfig(value: unknown): CustomProviderConfig {

@@ -1,4 +1,4 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { appendFile, readFile, writeFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 
 export function summarizePlaywrightReport(report, metadata = {}) {
@@ -10,9 +10,14 @@ export function summarizePlaywrightReport(report, metadata = {}) {
       specFile: file,
       counts: { expected: 0, unexpected: 0, flaky: 0, skipped: 0 },
       failures: [],
+      durationMs: 0,
     };
 
     for (const test of spec.tests ?? []) {
+      group.durationMs += (test.results ?? []).reduce(
+        (sum, result) => sum + (result.duration ?? 0),
+        0,
+      );
       const status = normalizeStatus(test.status);
       group.counts[status] += 1;
       if (status === "unexpected" || status === "flaky") {
@@ -74,6 +79,27 @@ async function main() {
     runId: process.env.GITHUB_RUN_ID,
     runAttempt: process.env.GITHUB_RUN_ATTEMPT,
   });
+  if (process.env.GITHUB_STEP_SUMMARY) {
+    const rows = [...summary.groups]
+      .sort((a, b) => b.durationMs - a.durationMs)
+      .map(
+        (group) =>
+          `| ${group.specFile} | ${(group.durationMs / 1000).toFixed(1)} | ${group.counts.expected} | ${group.counts.unexpected} | ${group.counts.skipped} |`,
+      );
+    await appendFile(
+      process.env.GITHUB_STEP_SUMMARY,
+      [
+        "### Core test timing",
+        "",
+        `Suite duration: ${((summary.stats.duration ?? 0) / 1000).toFixed(1)} seconds. File times sum test attempts, including retries.`,
+        "",
+        "| File | Seconds | Passed | Unexpected | Skipped |",
+        "| --- | ---: | ---: | ---: | ---: |",
+        ...rows,
+        "",
+      ].join("\n"),
+    );
+  }
   await writeFile(outputPath, `${JSON.stringify(summary, null, 2)}\n`, "utf8");
 }
 

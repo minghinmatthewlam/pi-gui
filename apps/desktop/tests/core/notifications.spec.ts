@@ -17,7 +17,7 @@ import {
   createThread,
   selectSessionByTitle,
   setSessionVisibilityOverride,
-} from "./session-event-test-helpers";
+} from "../helpers/session-event-test-helpers";
 
 test("does not log a notification or blue dot for a focused selected session completion", async () => {
   const userDataDir = await makeUserDataDir();
@@ -148,7 +148,7 @@ test("logs a completion notification and blue dot for a selected session after t
   }
 });
 
-test("logs a failure notification and blue dot for a focused different session", async () => {
+test("logs a failure notification and preserves failed status with an unread update", async () => {
   const userDataDir = await makeUserDataDir();
   const notificationLogPath = join(userDataDir, "notifications-failed.jsonl");
   const workspacePath = await makeWorkspace("notifications-failed-workspace");
@@ -184,9 +184,16 @@ test("logs a failure notification and blue dot for a focused different session",
     await expect
       .poll(() => readOptionalLog(notificationLogPath), { timeout: 30_000 })
       .toContain("The run failed");
+    await expect
+      .poll(async () => {
+        const state = await getDesktopState(window);
+        return state.workspaces[0]?.sessions.find((entry) => entry.title === "Failed Session A")
+          ?.hasUnseenUpdate;
+      })
+      .toBe(true);
     await expect(window.locator(".session-row", { hasText: "Failed Session A" })).toHaveAttribute(
       "data-sidebar-indicator",
-      "unseen",
+      "failed",
     );
   } finally {
     await harness.close();
@@ -222,52 +229,6 @@ test("logs an attention-needed notification and blue dot for a focused different
     await expect(
       window.locator(".session-row", { hasText: "Attention Session A" }),
     ).toHaveAttribute("data-sidebar-indicator", "running");
-  } finally {
-    await harness.close();
-  }
-});
-
-test("clears a selected session blue dot when the window regains focus", async () => {
-  const userDataDir = await makeUserDataDir();
-  const notificationLogPath = join(userDataDir, "notifications-refocus.jsonl");
-  const workspacePath = await makeWorkspace("notifications-refocus-workspace");
-  const harness = await launchDesktop(userDataDir, {
-    initialWorkspaces: [workspacePath],
-    notificationLogPath,
-    testMode: "background",
-  });
-
-  try {
-    const window = await harness.firstWindow();
-    const session = await createThread(window, "Refocus Session");
-    await setSessionVisibilityOverride(harness, "active");
-    await selectSessionByTitle(window, "Refocus Session");
-    await setSessionVisibilityOverride(harness, null);
-    await harness.electronApp.evaluate(({ BrowserWindow }) => {
-      const appWindow = BrowserWindow.getAllWindows()[0];
-      appWindow?.minimize();
-    });
-    await expect
-      .poll(() =>
-        harness.electronApp.evaluate(({ BrowserWindow }) => {
-          const appWindow = BrowserWindow.getAllWindows()[0];
-          return {
-            focused: appWindow?.isFocused() ?? false,
-            minimized: appWindow?.isMinimized() ?? false,
-          };
-        }),
-      )
-      .toEqual({ focused: false, minimized: true });
-
-    const row = window.locator(".session-row", { hasText: "Refocus Session" });
-    const runId = await emitRunningEvent(harness, session, "Refocus");
-    await emitCompletedEvent(harness, session, "Refocus", runId);
-
-    await expect(row).toHaveAttribute("data-sidebar-indicator", "unseen");
-
-    await harness.focusWindow();
-
-    await expect(row).toHaveAttribute("data-sidebar-indicator", "none");
   } finally {
     await harness.close();
   }

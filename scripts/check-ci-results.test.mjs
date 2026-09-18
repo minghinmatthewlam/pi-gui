@@ -4,7 +4,7 @@ import { spawnSync } from "node:child_process";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
-import { checkCiResults, requiredJobs } from "./check-ci-results.mjs";
+import { checkCiResults, requiredJobs, coreShardJobs } from "./check-ci-results.mjs";
 
 const passing = () => Object.fromEntries(requiredJobs.map((job) => [job, { result: "success" }]));
 const script = fileURLToPath(new URL("./check-ci-results.mjs", import.meta.url));
@@ -62,7 +62,7 @@ test("workflow aggregate covers every job and cannot ignore unsuccessful checks"
   const sorted = (values) => [...values].sort();
   assert.deepEqual(
     sorted(Object.keys(workflow.jobs).filter((job) => job !== "ci-required")),
-    sorted(requiredJobs),
+    sorted([...requiredJobs, ...coreShardJobs]),
   );
   assert.deepEqual(sorted(gate.needs), sorted(requiredJobs));
   assert.equal(gate.name, "CI required");
@@ -115,4 +115,65 @@ test("CI runs the canonical baseline unconditionally", () => {
     mutate(invalid);
     assert.throws(() => assertBaselineRuns(invalid), /baseline|pnpm check/);
   }
+});
+
+function assertCoreShards(workflow) {
+  const gate = workflow.jobs["desktop-core"];
+  assert.equal(gate.name, "desktop-core");
+  assert.equal(gate.if, "${{ always() }}");
+  assert.equal(gate.needs, "desktop-core-shards");
+  const check = gate.steps.find(
+    (step) => step.run === "node scripts/check-ci-results.mjs --core-shards",
+  );
+  assert.ok(check, "Core gate must validate shard results");
+  assert.equal(check.env.CI_NEEDS, "${{ toJSON(needs) }}");
+  assert.equal(check.if, undefined);
+  const matrix = workflow.jobs["desktop-core-shards"];
+  assert.equal(matrix.if, undefined);
+  assert.deepEqual(matrix.strategy.matrix, { shard: [1, 2, 3, 4] });
+  assert.equal(matrix.strategy["fail-fast"], false);
+  const run = matrix.steps.find((step) => step.name === "Desktop Core");
+  assert.equal(run.if, undefined);
+  assert.equal(
+    run.run,
+    "pnpm --filter @pi-gui/desktop run test:e2e:ci:mac --shard=${{ matrix.shard }}/4 --reporter=line,json",
+  );
+  const upload = matrix.steps.find((step) => step.uses === "actions/upload-artifact@v4");
+  assert.equal(upload.with.name, "desktop-core-test-results-${{ matrix.shard }}");
+}
+
+test("all Core shards are required and retain independent reports", () => {
+  const workflow = parse(
+    readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8"),
+  );
+  assertCoreShards(workflow);
+  for (const mutate of [
+    (w) => {
+      w.jobs["desktop-core"].needs = "typecheck";
+    },
+    (w) => {
+      w.jobs["desktop-core"].if = "success()";
+    },
+    (w) => {
+      w.jobs["desktop-core-shards"].strategy.matrix.shard = [1, 2, 3];
+    },
+    (w) => {
+      w.jobs["desktop-core-shards"].steps.find((s) => s.name === "Desktop Core").run =
+        "echo skipped";
+    },
+  ]) {
+    const invalid = structuredClone(workflow);
+    mutate(invalid);
+    assert.throws(() => assertCoreShards(invalid));
+  }
+  for (const result of ["success", "failure", "cancelled", "skipped", undefined]) {
+    const needs = { "desktop-core-shards": { result } };
+    assert.equal(checkCiResults(needs, coreShardJobs).length, result === "success" ? 0 : 1);
+    const child = spawnSync(process.execPath, [script, "--core-shards"], {
+      env: { ...process.env, CI_NEEDS: JSON.stringify(needs) },
+      encoding: "utf8",
+    });
+    assert.equal(child.status, result === "success" ? 0 : 1, child.stderr);
+  }
+  assert.ok(checkCiResults({}, coreShardJobs).length > 0);
 });

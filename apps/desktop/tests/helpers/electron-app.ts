@@ -342,7 +342,12 @@ function buildDesktopLaunchEnv(
   agentDir: string,
   options: LaunchDesktopOptions,
 ): NodeJS.ProcessEnv {
-  const baseEnv = options.inheritParentEnv === false ? {} : process.env;
+  const baseEnv = options.inheritParentEnv === false ? {} : { ...process.env };
+  // Ambient provider credentials must never turn a fixture test into a real request.
+  // Explicit envOverrides remain available for tests of environment configuration.
+  for (const key of Object.keys(baseEnv)) {
+    if (isProviderAuthEnvVar(key)) delete baseEnv[key];
+  }
   const env = {
     ...baseEnv,
     PI_APP_USER_DATA_DIR: userDataDir,
@@ -384,6 +389,9 @@ async function prepareAgentDir(
   userDataDir: string,
   options: LaunchDesktopOptions,
 ): Promise<string> {
+  if (process.env.PI_APP_TEST_LANE === "core" && options.realAuthSourceDir) {
+    throw new Error("Core tests must not use real provider credentials; use the live lane.");
+  }
   if (options.agentDir && options.realAuthSourceDir) {
     throw new Error(
       "Pass either agentDir or realAuthSourceDir to the desktop launch helper, not both.",

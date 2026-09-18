@@ -74,8 +74,6 @@ test("settings lets the user save an API key for a built-in provider", async () 
 
 test("settings shows environment-configured providers as managed externally", async () => {
   test.setTimeout(60_000);
-  const previousOpenAiKey = process.env.OPENAI_API_KEY;
-  process.env.OPENAI_API_KEY = "test-openai-env-key";
 
   const userDataDir = await makeUserDataDir();
   const agentDir = join(userDataDir, "agent");
@@ -90,6 +88,7 @@ test("settings shows environment-configured providers as managed externally", as
     agentDir,
     initialWorkspaces: [workspacePath],
     testMode: "background",
+    envOverrides: { OPENAI_API_KEY: "test-openai-env-key" },
   });
 
   try {
@@ -109,11 +108,6 @@ test("settings shows environment-configured providers as managed externally", as
     await expect(openAiRow.locator(".settings-row__control")).toHaveCount(0);
   } finally {
     await harness.close();
-    if (previousOpenAiKey === undefined) {
-      delete process.env.OPENAI_API_KEY;
-    } else {
-      process.env.OPENAI_API_KEY = previousOpenAiKey;
-    }
   }
 });
 

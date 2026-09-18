@@ -15,10 +15,16 @@ test("default desktop launches keep real-auth mode disabled and seed fake auth i
   expect(realAuth.skipReason).toContain("PI_APP_REAL_AUTH_SOURCE_DIR");
 
   const userDataDir = await makeUserDataDir();
-  const harness = await launchDesktop(userDataDir, { testMode: "background" });
+  const previousKey = process.env.OPENAI_API_KEY;
+  process.env.OPENAI_API_KEY = "ambient-test-key-must-not-leak";
+  const harness = await launchDesktop(userDataDir, { testMode: "background" }).finally(() => {
+    if (previousKey === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = previousKey;
+  });
 
   try {
     await harness.firstWindow();
+    expect(await harness.electronApp.evaluate(() => process.env.OPENAI_API_KEY)).toBeUndefined();
 
     const agentDir = await harness.electronApp.evaluate(
       () => process.env.PI_CODING_AGENT_DIR ?? "",
@@ -40,5 +46,18 @@ test("default desktop launches keep real-auth mode disabled and seed fake auth i
     });
   } finally {
     await harness.close();
+  }
+});
+
+test("Core rejects an explicit real-auth source before opening it", async () => {
+  const previousLane = process.env.PI_APP_TEST_LANE;
+  process.env.PI_APP_TEST_LANE = "core";
+  try {
+    await expect(
+      launchDesktop(await makeUserDataDir(), { realAuthSourceDir: "/unused-real-auth-source" }),
+    ).rejects.toThrow("Core tests must not use real provider credentials");
+  } finally {
+    if (previousLane === undefined) delete process.env.PI_APP_TEST_LANE;
+    else process.env.PI_APP_TEST_LANE = previousLane;
   }
 });

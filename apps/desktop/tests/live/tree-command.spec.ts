@@ -26,12 +26,16 @@ test("runs /tree summarize flow against a real provider and surfaces the branch 
     const newThreadComposer = window.getByTestId("new-thread-composer");
     await newThreadComposer.fill("Reply with exactly ROOT-ONE.");
     await window.getByRole("button", { name: "Start thread" }).click();
-    await expect(window.getByTestId("transcript")).toContainText("ROOT-ONE", { timeout: 150_000 });
+    await expect(
+      window.locator(".timeline-item--assistant .message__content").last(),
+    ).toContainText("ROOT-ONE", { timeout: 150_000 });
 
     const composer = window.getByTestId("composer");
     await composer.fill("Reply with exactly BETA-TWO.");
     await composer.press("Enter");
-    await expect(window.getByTestId("transcript")).toContainText("BETA-TWO", { timeout: 150_000 });
+    await expect(
+      window.locator(".timeline-item--assistant .message__content").last(),
+    ).toContainText("BETA-TWO", { timeout: 150_000 });
 
     await composer.fill("/tree");
     await composer.press("Enter");
@@ -43,7 +47,7 @@ test("runs /tree summarize flow against a real provider and surfaces the branch 
       .click();
     await treeModal.getByRole("button", { name: "Continue" }).click();
     await expect(window.getByTestId("tree-summary-step")).toBeVisible();
-    await treeModal.getByRole("button", { name: "Summarize" }).click();
+    await treeModal.getByRole("button", { name: /^Summarize Generate a branch summary/ }).click();
     await treeModal.getByRole("button", { name: "Switch branch" }).click();
 
     await expect(treeModal).toHaveCount(0, { timeout: 150_000 });

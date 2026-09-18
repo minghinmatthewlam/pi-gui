@@ -1,6 +1,6 @@
 # Required CI results
 
-The `CI required` job in `.github/workflows/ci.yml` waits for every other job and
+The `CI required` job in `.github/workflows/ci.yml` waits for every top-level required job and
 uses `always()` so a failed or skipped dependency does not skip the aggregate.
 `scripts/check-ci-results.mjs` accepts only the exact required dependency set with
 every result equal to `success`. Missing, skipped, cancelled, failed, and unknown
@@ -10,6 +10,13 @@ its logs and rerun after repair.
 The checker is dependency-free; it runs on Node 22 without a package install.
 Its tests parse the workflow and require every nonaggregate job to be covered,
 prevent `continue-on-error`, and exercise failing results and the CLI exit status.
+
+The `desktop-core-shards` matrix runs indices 1–4. The stable `desktop-core`
+job waits for the matrix with `always()` and validates its aggregate result
+using `check-ci-results.mjs --core-shards`. Failure, cancellation, skipping,
+and missing results fail closed. The final gate waits for this stable check;
+its name preserves the existing branch requirement. Matrix jobs do not use
+`continue-on-error`, and fail-fast is disabled so all four report results.
 
 ## GitHub activation
 

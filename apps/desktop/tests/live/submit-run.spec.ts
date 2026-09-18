@@ -27,7 +27,9 @@ test("submits a real prompt and shows the response in the transcript", async () 
     await window.getByLabel("New thread prompt").fill("Reply with only the uppercase word READY.");
     await window.getByRole("button", { name: "Start thread" }).click();
 
-    await expect(window.getByTestId("transcript")).toContainText(/READY/, { timeout: 150_000 });
+    await expect(
+      window.locator(".timeline-item--assistant .message__content").last(),
+    ).toContainText(/READY/, { timeout: 150_000 });
 
     await expect
       .poll(

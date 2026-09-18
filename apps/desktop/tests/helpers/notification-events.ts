@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import type { SessionDriverEvent } from "@pi-gui/session-driver";
 import type { DesktopHarness } from "./electron-app";
 import { emitTestSessionEvent } from "./electron-app";
-import type { SessionContext } from "../live/session-event-test-helpers";
+import type { SessionContext } from "./session-event-test-helpers";
 
 export async function readOptionalLog(path: string): Promise<string> {
   try {

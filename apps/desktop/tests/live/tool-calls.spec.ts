@@ -30,7 +30,9 @@ test("renders a real tool call item that expands and collapses from the transcri
     );
     await composer.press("Enter");
 
-    await expect(window.getByTestId("transcript")).toContainText("TOOL_OK", { timeout: 150_000 });
+    await expect(
+      window.locator(".timeline-item--assistant .message__content").last(),
+    ).toContainText("TOOL_OK", { timeout: 150_000 });
     await expect
       .poll(async () => window.locator(".timeline-tool").count(), { timeout: 120_000 })
       .toBeGreaterThan(0);

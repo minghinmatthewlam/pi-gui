@@ -11,7 +11,7 @@ import {
   createThread,
   selectSessionByTitle,
   setSessionVisibilityOverride,
-} from "./session-event-test-helpers";
+} from "../helpers/session-event-test-helpers";
 
 async function openNotificationSettings(window: Page): Promise<void> {
   await window.getByRole("button", { name: "Settings", exact: true }).click();
@@ -91,39 +91,6 @@ test("requests notification permission when the user leaves the threads surface"
   }
 });
 
-test("requests notification permission when the user minimizes a running session window", async () => {
-  const userDataDir = await makeUserDataDir();
-  const requestLogPath = join(userDataDir, "notification-onboarding-minimize.log");
-  const workspacePath = await makeWorkspace("notification-onboarding-minimize-workspace");
-  const harness = await launchDesktop(userDataDir, {
-    initialWorkspaces: [workspacePath],
-    testMode: "foreground",
-    envOverrides: {
-      PI_APP_TEST_NOTIFICATION_PERMISSION_STATUS: "default",
-      PI_APP_TEST_NOTIFICATION_PERMISSION_REQUEST_RESULT: "granted",
-      PI_APP_TEST_NOTIFICATION_PERMISSION_REQUEST_LOG_PATH: requestLogPath,
-    },
-  });
-
-  try {
-    const window = await harness.firstWindow();
-    await setSessionVisibilityOverride(harness, "active");
-    const session = await createThread(window, "Onboarding Minimize Session");
-    await selectSessionByTitle(window, "Onboarding Minimize Session");
-    await emitRunningEvent(harness, session, "Minimize");
-
-    await expect.poll(() => readOptionalLog(requestLogPath), { timeout: 5_000 }).toBe("");
-    await setSessionVisibilityOverride(harness, null);
-    await harness.electronApp.evaluate(({ BrowserWindow }) => {
-      const appWindow = BrowserWindow.getAllWindows()[0];
-      appWindow?.minimize();
-    });
-    await expect.poll(() => readOptionalLog(requestLogPath), { timeout: 5_000 }).not.toBe("");
-  } finally {
-    await harness.close();
-  }
-});
-
 test("requests notification permission after a backgrounded session later flips to running", async () => {
   const userDataDir = await makeUserDataDir();
   const requestLogPath = join(userDataDir, "notification-onboarding-late-running.log");
@@ -179,12 +146,10 @@ test("does not request notification permission when all notification categories 
     const backgroundCompletion = window.getByLabel("Background completion", { exact: true });
     const backgroundFailure = window.getByLabel("Background failures", { exact: true });
     const attentionNeeded = window.getByLabel("Needs input or approval", { exact: true });
-    await backgroundCompletion.click();
-    await backgroundFailure.click();
-    await attentionNeeded.click();
-    await expect(backgroundCompletion).not.toBeChecked();
-    await expect(backgroundFailure).not.toBeChecked();
-    await expect(attentionNeeded).not.toBeChecked();
+    for (const checkbox of [backgroundCompletion, backgroundFailure, attentionNeeded]) {
+      await checkbox.click();
+      await expect(checkbox).not.toBeChecked();
+    }
     await returnToThreads(window);
     await selectSessionByTitle(window, "Disabled Session A");
     await emitRunningEvent(harness, sessionA, "Disabled");
