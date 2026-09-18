@@ -925,7 +925,10 @@ export class SessionSupervisor {
     if (!record?.session) {
       return "stopped";
     }
-    if (record.termination === "aborting") {
+    if (record.termination === "quarantined") {
+      return "quarantined";
+    }
+    if (record.termination === "aborting" || record.termination === "stopped") {
       return "stopped";
     }
 
@@ -936,24 +939,7 @@ export class SessionSupervisor {
     await this.persistSnapshot(record);
     await this.emit(record, sessionUpdatedEvent(record));
 
-    try {
-      await withDeadline(
-        this.invokeSessionAbort(record.session),
-        this.abortTimeoutMs,
-        "session.abort",
-      );
-    } catch (error) {
-      await this.quarantineRecord(record, error);
-      return "quarantined";
-    }
-
-    this.clearRunStateAfterConfirmedStop(record);
-    record.termination = "stopped";
-    record.status = "idle";
-    record.updatedAt = nowIso();
-    await this.persistSnapshot(record);
-    await this.emit(record, sessionUpdatedEvent(record));
-    return "stopped";
+    return this.awaitAbortWithDeadline(record);
   }
 
   async setSessionModel(sessionRef: SessionRef, selection: SessionModelSelection): Promise<void> {
@@ -1263,6 +1249,66 @@ export class SessionSupervisor {
 
   private isTerminating(record: ManagedSessionRecord): boolean {
     return record.termination !== undefined;
+  }
+
+  /**
+   * Queue the abort deadline before calling `session.abort()`. Evaluating abort
+   * as withDeadline's first argument can run `agent.abort()` listeners on this
+   * turn; if those listeners never return, the timer is never scheduled and the
+   * session stays `stopping` forever.
+   */
+  private awaitAbortWithDeadline(record: ManagedSessionRecord): Promise<"stopped" | "quarantined"> {
+    const session = record.session;
+    if (!session) {
+      return Promise.resolve("stopped");
+    }
+
+    const timeoutMs = this.abortTimeoutMs;
+    return new Promise((resolve) => {
+      let settled = false;
+
+      const timer = setTimeout(() => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        void this.quarantineRecord(
+          record,
+          new DeadlineExceededError("session.abort", timeoutMs),
+        ).then(
+          () => resolve("quarantined"),
+          () => resolve("quarantined"),
+        );
+      }, timeoutMs);
+
+      setTimeout(() => {
+        this.invokeSessionAbort(session).then(
+          async () => {
+            if (settled) {
+              return;
+            }
+            settled = true;
+            clearTimeout(timer);
+            this.clearRunStateAfterConfirmedStop(record);
+            record.termination = "stopped";
+            record.status = "idle";
+            record.updatedAt = nowIso();
+            await this.persistSnapshot(record);
+            await this.emit(record, sessionUpdatedEvent(record));
+            resolve("stopped");
+          },
+          async (error: unknown) => {
+            if (settled) {
+              return;
+            }
+            settled = true;
+            clearTimeout(timer);
+            await this.quarantineRecord(record, error);
+            resolve("quarantined");
+          },
+        );
+      }, 0);
+    });
   }
 
   private invokeSessionPrompt(
