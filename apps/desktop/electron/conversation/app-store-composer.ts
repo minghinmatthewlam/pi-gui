@@ -635,22 +635,27 @@ async function cancelCurrentRun(
 
   const key = sessionKey(sessionRef);
   store.conversationState.pendingComposerRestoreBySession.delete(key);
-  try {
-    const outcome = await store.driver.cancelCurrentRun(sessionRef);
-    if (outcome === "quarantined") {
-      return store.emit();
-    }
-    clearActiveAssistantMessage(
-      store.conversationState.activeAssistantMessageBySession,
-      sessionRef,
-    );
-    store.conversationState.sessionErrorsBySession.delete(key);
-    store.clearConversationError();
-    store.schedulePersistUiState();
-    return store.emit();
-  } catch (error) {
-    return store.withSessionError(sessionRef, error);
-  }
+  void store.driver.cancelCurrentRun(sessionRef).then(
+    (outcome) => {
+      if (outcome === "quarantined") {
+        return;
+      }
+      clearActiveAssistantMessage(
+        store.conversationState.activeAssistantMessageBySession,
+        sessionRef,
+      );
+      store.conversationState.sessionErrorsBySession.delete(key);
+      store.clearConversationError();
+      store.schedulePersistUiState();
+      void store.emit();
+    },
+    (error: unknown) => {
+      void store.withSessionError(sessionRef, error).catch((err: unknown) => {
+        console.error("[app-store-composer] cancelCurrentRun failed", err);
+      });
+    },
+  );
+  return store.emit();
 }
 
 /* ── Internal helpers ───────────────────────────────────── */
