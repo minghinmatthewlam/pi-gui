@@ -292,6 +292,29 @@ async function measure(label: string, seeded: number): Promise<void> {
     }
     const streamWallMs = Date.now() - t0;
 
+    // The user-visible symptom in #93: start a burst of deltas, then ask main to
+    // do an unrelated piece of work (create a thread) and time how long it takes
+    // to come back while the burst is still draining.
+    const burst: Array<Promise<void>> = [];
+    for (let index = 0; index < DELTA_COUNT; index += 1) {
+      burst.push(
+        emitNoWait(harness, {
+          type: "assistantDelta",
+          sessionRef,
+          timestamp: new Date().toISOString(),
+          runId,
+          text: `burst${index} `,
+        }),
+      );
+    }
+    const createSessionDuringStreamMs = await window.evaluate(async (workspaceId) => {
+      const app = globalThis.window.piApp;
+      const started = performance.now();
+      await app!.createSession({ workspaceId, title: `during-stream-${Date.now()}` });
+      return performance.now() - started;
+    }, workspace!.id);
+    await Promise.all(burst);
+
     const main = await stopMainSample(harness);
     const renderer = await stopRendererSample(window);
     let topRenderer: Array<{ fn: string; selfMs: number }> = [];
@@ -337,6 +360,7 @@ async function measure(label: string, seeded: number): Promise<void> {
           baselineMainCpuUserMs: Number(baseline.cpuUserMs.toFixed(0)),
           deltas: DELTA_COUNT,
           streamWallMs,
+          createSessionDuringStreamMs: Number(createSessionDuringStreamMs.toFixed(0)),
           mainCpuMsPerDelta: Number((main.cpuUserMs / DELTA_COUNT).toFixed(2)),
           mainCpuUserMs: Number(main.cpuUserMs.toFixed(0)),
           mainSends: main.sends,
