@@ -74,7 +74,10 @@ declare module "@pi-gui/catalogs" {
     getWorktree(worktreeId: WorktreeId): Promise<WorktreeCatalogEntry | undefined>;
     upsertWorktree(entry: WorktreeCatalogEntry): Promise<void>;
     deleteWorktree(worktreeId: WorktreeId): Promise<void>;
-    replaceWorkspaceWorktrees(workspaceId: WorkspaceId, entries: readonly WorktreeCatalogEntry[]): Promise<void>;
+    replaceWorkspaceWorktrees(
+      workspaceId: WorkspaceId,
+      entries: readonly WorktreeCatalogEntry[],
+    ): Promise<void>;
   }
 
   export interface CatalogStorage {

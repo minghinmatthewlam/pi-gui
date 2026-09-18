@@ -31,10 +31,7 @@ function sequenceFetch(...responses) {
 test("accepts an authoritative 404 when no release may exist yet", async () => {
   const result = await checkGithubReleaseState({
     ...baseOptions,
-    fetchImpl: sequenceFetch(
-      jsonResponse(404, { message: "Not Found" }),
-      jsonResponse(200, []),
-    ),
+    fetchImpl: sequenceFetch(jsonResponse(404, { message: "Not Found" }), jsonResponse(200, [])),
   });
   assert.deepEqual(result, { state: "absent" });
 });
@@ -80,8 +77,7 @@ test("rejects an already-published release", async () => {
   await assert.rejects(
     checkGithubReleaseState({
       ...baseOptions,
-      fetchImpl: async () =>
-        jsonResponse(200, { id: 59, tag_name: baseOptions.tag, draft: false }),
+      fetchImpl: async () => jsonResponse(200, { id: 59, tag_name: baseOptions.tag, draft: false }),
     }),
     /already published/,
   );
@@ -145,10 +141,7 @@ test("requires an existing draft before final publication", async () => {
     checkGithubReleaseState({
       ...baseOptions,
       requireDraft: true,
-      fetchImpl: sequenceFetch(
-        jsonResponse(404, { message: "Not Found" }),
-        jsonResponse(200, []),
-      ),
+      fetchImpl: sequenceFetch(jsonResponse(404, { message: "Not Found" }), jsonResponse(200, [])),
     }),
     /Required draft release/,
   );

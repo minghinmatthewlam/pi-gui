@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type RefObject,
+} from "react";
 import type { RuntimeExtensionRecord, RuntimeSnapshot } from "@pi-gui/session-driver/runtime-types";
 import { extensionSourceSummary } from "../extension-display";
 import type { PiDesktopApi } from "../ipc";
@@ -63,7 +71,9 @@ export function useMentionMenu({
   onEnableExtension,
 }: UseMentionMenuParams): MentionMenuState {
   const [allFiles, setAllFiles] = useState<readonly string[]>([]);
-  const [pendingEnablePaths, setPendingEnablePaths] = useState<ReadonlySet<string>>(() => new Set());
+  const [pendingEnablePaths, setPendingEnablePaths] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [suppressed, setSuppressed] = useState(false);
   const composerDraftRef = useRef(composerDraft);
@@ -75,7 +85,10 @@ export function useMentionMenu({
       setAllFiles([]);
       return;
     }
-    void api.listWorkspaceFiles(workspaceId).then(setAllFiles).catch(() => setAllFiles([]));
+    void api
+      .listWorkspaceFiles(workspaceId)
+      .then(setAllFiles)
+      .catch(() => setAllFiles([]));
   }, [api, workspaceId]);
 
   // Reset suppression when draft changes
@@ -89,7 +102,9 @@ export function useMentionMenu({
         return current;
       }
       const enabledPaths = new Set(
-        (runtime?.extensions ?? []).filter((extension) => extension.enabled).map((extension) => extension.path),
+        (runtime?.extensions ?? [])
+          .filter((extension) => extension.enabled)
+          .map((extension) => extension.path),
       );
       let next: Set<string> | undefined;
       for (const path of current) {
@@ -115,7 +130,11 @@ export function useMentionMenu({
       return [];
     }
     const lowerQuery = mentionMatch.query.toLowerCase();
-    const extensionOptions = buildExtensionMentionOptions(runtime?.extensions ?? [], lowerQuery, pendingEnablePaths);
+    const extensionOptions = buildExtensionMentionOptions(
+      runtime?.extensions ?? [],
+      lowerQuery,
+      pendingEnablePaths,
+    );
     const fileOptions = allFiles
       .filter((file) => file.toLowerCase().includes(lowerQuery))
       .slice(0, 10)
@@ -297,7 +316,9 @@ function describeExtension(extension: RuntimeExtensionRecord): string {
   }
 
   const contributionParts = [
-    extension.commands.length > 0 ? pluralizeContribution(extension.commands.length, "command") : undefined,
+    extension.commands.length > 0
+      ? pluralizeContribution(extension.commands.length, "command")
+      : undefined,
     extension.tools.length > 0 ? pluralizeContribution(extension.tools.length, "tool") : undefined,
   ].filter(Boolean);
   if (contributionParts.length > 0) {
@@ -340,11 +361,20 @@ function stripGitSuffix(value: string): string {
 }
 
 function lastResourceSegment(value: string): string {
-  return value.split(/[/\\]+/).filter(Boolean).at(-1) ?? value;
+  return (
+    value
+      .split(/[/\\]+/)
+      .filter(Boolean)
+      .at(-1) ?? value
+  );
 }
 
 function normalizeMentionText(value: string): string {
-  return value.trim().replace(/^@+/, "").replace(/[/\\]+/g, "-").replace(/\s+/g, "-");
+  return value
+    .trim()
+    .replace(/^@+/, "")
+    .replace(/[/\\]+/g, "-")
+    .replace(/\s+/g, "-");
 }
 
 function pluralizeContribution(count: number, label: string): string {

@@ -26,9 +26,7 @@ async function main() {
     console.log("Screenshot 2 taken (after workspace)");
 
     // Check DOM content
-    const bodyHTML = await page.evaluate(() =>
-      document.body.innerHTML.substring(0, 1500),
-    );
+    const bodyHTML = await page.evaluate(() => document.body.innerHTML.substring(0, 1500));
     console.log("Body HTML preview:", bodyHTML);
   } finally {
     await harness.close();

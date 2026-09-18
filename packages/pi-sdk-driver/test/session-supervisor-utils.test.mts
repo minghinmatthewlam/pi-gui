@@ -4,21 +4,12 @@ import { messageText } from "../dist/session-supervisor-utils.js";
 
 const markdownParts = [
   "## Verification report",
-  [
-    "### Tests",
-    "",
-    "- Driver regression: passed",
-    "- Electron projection: passed",
-  ].join("\n"),
-  [
-    "```text",
-    "user prompt -> worker response",
-    "```",
-  ].join("\n"),
+  ["### Tests", "", "- Driver regression: passed", "- Electron projection: passed"].join("\n"),
+  ["```text", "user prompt -> worker response", "```"].join("\n"),
 ];
 const markdownReport = markdownParts.join("\n\n");
 
-test("messageText preserves Markdown newlines in array-shaped assistant content", () => {
+await test("messageText preserves Markdown newlines in array-shaped assistant content", () => {
   const message = {
     role: "assistant",
     content: [

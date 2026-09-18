@@ -1,5 +1,9 @@
 import { sessionKey } from "@pi-gui/pi-sdk-driver";
-import type { CreateSessionInput, DesktopAppState, WorkspaceSessionTarget } from "../src/desktop-state";
+import type {
+  CreateSessionInput,
+  DesktopAppState,
+  WorkspaceSessionTarget,
+} from "../src/desktop-state";
 import { toSessionRef } from "./app-store-utils";
 import type { AppStoreInternals, RefreshStateOptions } from "./app-store-internals";
 import { NEW_THREAD_PLACEHOLDER_TITLE } from "./thread-title-constants";
@@ -18,7 +22,10 @@ function fallbackSelectionAfterWorkspaceRemoval(
   };
 }
 
-export async function addWorkspace(store: AppStoreInternals, path: string): Promise<DesktopAppState> {
+export async function addWorkspace(
+  store: AppStoreInternals,
+  path: string,
+): Promise<DesktopAppState> {
   await store.initialize();
   const normalizedPath = path.trim();
   if (!normalizedPath) {
@@ -78,7 +85,10 @@ export async function renameWorkspace(
   });
 }
 
-export async function removeWorkspace(store: AppStoreInternals, workspaceId: string): Promise<DesktopAppState> {
+export async function removeWorkspace(
+  store: AppStoreInternals,
+  workspaceId: string,
+): Promise<DesktopAppState> {
   await store.initialize();
 
   return store.withErrorHandling(async () => {
@@ -87,7 +97,10 @@ export async function removeWorkspace(store: AppStoreInternals, workspaceId: str
   });
 }
 
-export async function selectWorkspace(store: AppStoreInternals, workspaceId: string): Promise<DesktopAppState> {
+export async function selectWorkspace(
+  store: AppStoreInternals,
+  workspaceId: string,
+): Promise<DesktopAppState> {
   await store.initialize();
   const workspace = store.state.workspaces.find((entry) => entry.id === workspaceId);
   if (!workspace) {
@@ -101,19 +114,24 @@ export async function selectWorkspace(store: AppStoreInternals, workspaceId: str
 
   return syncWorkspace(store, workspaceId, {
     selectedWorkspaceId: workspaceId,
-    selectedSessionId: store.state.selectedWorkspaceId === workspaceId ? store.state.selectedSessionId : "",
+    selectedSessionId:
+      store.state.selectedWorkspaceId === workspaceId ? store.state.selectedSessionId : "",
     clearLastError: true,
     refreshWorktrees: true,
     activeView: "threads",
   });
 }
 
-export async function selectSession(store: AppStoreInternals, target: WorkspaceSessionTarget): Promise<DesktopAppState> {
+export async function selectSession(
+  store: AppStoreInternals,
+  target: WorkspaceSessionTarget,
+): Promise<DesktopAppState> {
   await store.initialize();
   const currentSessionRef = store.selectedSessionRef();
   if (
     currentSessionRef &&
-    (currentSessionRef.workspaceId !== target.workspaceId || currentSessionRef.sessionId !== target.sessionId)
+    (currentSessionRef.workspaceId !== target.workspaceId ||
+      currentSessionRef.sessionId !== target.sessionId)
   ) {
     await store.cancelPendingDialogsForSession(currentSessionRef);
   }
@@ -158,14 +176,22 @@ export async function archiveSession(
     store.clearPendingAutoTitle(sessionRef);
     const key = sessionKey(sessionRef);
     store.sessionState.pinnedAtBySession.delete(key);
-    store.sessionState.pinnedSessionOrder = store.sessionState.pinnedSessionOrder.filter((entry) => entry !== key);
+    store.sessionState.pinnedSessionOrder = store.sessionState.pinnedSessionOrder.filter(
+      (entry) => entry !== key,
+    );
     await store.driver.archiveSession(sessionRef);
     return store.refreshState(selectionAfterArchiving(store.state, target));
   });
 }
 
-function selectionAfterArchiving(state: DesktopAppState, target: WorkspaceSessionTarget): RefreshStateOptions {
-  if (state.selectedWorkspaceId !== target.workspaceId || state.selectedSessionId !== target.sessionId) {
+function selectionAfterArchiving(
+  state: DesktopAppState,
+  target: WorkspaceSessionTarget,
+): RefreshStateOptions {
+  if (
+    state.selectedWorkspaceId !== target.workspaceId ||
+    state.selectedSessionId !== target.sessionId
+  ) {
     return {
       selectedWorkspaceId: state.selectedWorkspaceId,
       selectedSessionId: state.selectedSessionId,
@@ -185,7 +211,9 @@ function selectionAfterArchiving(state: DesktopAppState, target: WorkspaceSessio
   }
 
   const rootWorkspaceId =
-    targetWorkspace.kind === "worktree" ? (targetWorkspace.rootWorkspaceId ?? targetWorkspace.id) : targetWorkspace.id;
+    targetWorkspace.kind === "worktree"
+      ? (targetWorkspace.rootWorkspaceId ?? targetWorkspace.id)
+      : targetWorkspace.id;
   const rankedCandidates = state.workspaces
     .filter((w) => w.id === rootWorkspaceId || w.rootWorkspaceId === rootWorkspaceId)
     .flatMap((w) =>
@@ -195,8 +223,10 @@ function selectionAfterArchiving(state: DesktopAppState, target: WorkspaceSessio
         .map((s) => ({ workspaceId: w.id, session: s })),
     )
     .sort((left, right) => {
-      if (left.workspaceId === target.workspaceId && right.workspaceId !== target.workspaceId) return -1;
-      if (left.workspaceId !== target.workspaceId && right.workspaceId === target.workspaceId) return 1;
+      if (left.workspaceId === target.workspaceId && right.workspaceId !== target.workspaceId)
+        return -1;
+      if (left.workspaceId !== target.workspaceId && right.workspaceId === target.workspaceId)
+        return 1;
       if (left.session.updatedAt !== right.session.updatedAt) {
         return right.session.updatedAt.localeCompare(left.session.updatedAt);
       }
@@ -234,7 +264,10 @@ export async function unarchiveSession(
   });
 }
 
-export async function createSession(store: AppStoreInternals, input: CreateSessionInput): Promise<DesktopAppState> {
+export async function createSession(
+  store: AppStoreInternals,
+  input: CreateSessionInput,
+): Promise<DesktopAppState> {
   await store.initialize();
   const ws = store.workspaceRefFromState(input.workspaceId);
   if (!ws) {

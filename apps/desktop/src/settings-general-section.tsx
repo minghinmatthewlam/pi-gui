@@ -41,7 +41,10 @@ export function SettingsGeneralSection({
           value={connectedCount > 0 ? String(connectedCount) : "None"}
         />
         <SettingsInfoRow label="Discovered skills" value={String(runtime?.skills.length ?? 0)} />
-        <SettingsRow title="Model settings scope" description="Choose whether model defaults apply everywhere or per repo.">
+        <SettingsRow
+          title="Model settings scope"
+          description="Choose whether model defaults apply everywhere or per repo."
+        >
           <div className="settings-pill-row">
             <button
               className={`settings-pill${modelSettingsScopeMode === "app-global" ? " settings-pill--active" : ""}`}
@@ -61,7 +64,10 @@ export function SettingsGeneralSection({
             </button>
           </div>
         </SettingsRow>
-        <SettingsRow title="Enable skill slash commands" description="Keep skill slash commands available in the composer.">
+        <SettingsRow
+          title="Enable skill slash commands"
+          description="Keep skill slash commands available in the composer."
+        >
           <input
             aria-label="Enable skill slash commands"
             checked={runtime?.settings.enableSkillCommands ?? true}
@@ -69,7 +75,10 @@ export function SettingsGeneralSection({
             onChange={(event) => onToggleSkillCommands(event.target.checked)}
           />
         </SettingsRow>
-        <SettingsRow title="Shell of integrated terminal" description="Leave blank to use your default login shell.">
+        <SettingsRow
+          title="Shell of integrated terminal"
+          description="Leave blank to use your default login shell."
+        >
           <input
             aria-label="Shell of integrated terminal"
             className="settings-text-input"

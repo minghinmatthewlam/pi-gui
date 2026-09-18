@@ -18,7 +18,11 @@ import type {
   TranscriptMessage,
   WorkspaceSessionTarget,
 } from "../src/desktop-state";
-import type { PendingAutoTitle, QueuedComposerEditState, SessionStateMap } from "./session-state-map";
+import type {
+  PendingAutoTitle,
+  QueuedComposerEditState,
+  SessionStateMap,
+} from "./session-state-map";
 import type { GitWorktreeManager } from "./worktree-manager";
 import type { JsonFileStore } from "./json-file-store";
 import type { PendingRuntimeCommandExecution } from "./extension-command-compatibility";
@@ -33,7 +37,10 @@ export interface AppStoreInternals {
   state: DesktopAppState;
   readonly sessionState: SessionStateMap;
   readonly runtimeByWorkspace: Map<string, RuntimeSnapshot>;
-  readonly extensionCommandCompatibilityByWorkspace: Map<string, Map<string, ExtensionCommandCompatibilityRecord>>;
+  readonly extensionCommandCompatibilityByWorkspace: Map<
+    string,
+    Map<string, ExtensionCommandCompatibilityRecord>
+  >;
   readonly pendingRuntimeCommandsBySession: Map<string, PendingRuntimeCommandExecution>;
 
   /* ── Infrastructure ────────────────────────────────────── */
@@ -55,7 +62,11 @@ export interface AppStoreInternals {
   workspaceRefFromState(workspaceId: string): WorkspaceRef | undefined;
   selectedSessionRef(): SessionRef | undefined;
   getExtensionFilePath(workspaceId: string, filePath: string): string | undefined;
-  sessionFromState(sessionRef: SessionRef): { archivedAt?: string; updatedAt: string; title: string; status: string; preview?: string } | undefined;
+  sessionFromState(
+    sessionRef: SessionRef,
+  ):
+    | { archivedAt?: string; updatedAt: string; title: string; status: string; preview?: string }
+    | undefined;
   ensureSessionReady(sessionRef: SessionRef): Promise<SessionSnapshot | undefined>;
   ensureSessionSubscription(sessionRef: SessionRef): Promise<void>;
   ensureSessionSubscribed(sessionRef: SessionRef): Promise<void>;
@@ -68,11 +79,17 @@ export interface AppStoreInternals {
     command: RuntimeCommandRecord,
   ): ExtensionCommandCompatibilityRecord | undefined;
   beginRuntimeCommandExecution(sessionRef: SessionRef, command: RuntimeCommandRecord): void;
-  finishRuntimeCommandExecution(sessionRef: SessionRef, timestamp?: string): PendingRuntimeCommandExecution | undefined;
+  finishRuntimeCommandExecution(
+    sessionRef: SessionRef,
+    timestamp?: string,
+  ): PendingRuntimeCommandExecution | undefined;
   clearExtensionUiForSession(sessionRef: SessionRef): void;
   cancelPendingDialogsForSession(sessionRef: SessionRef): Promise<void>;
   persistUiState(): Promise<void>;
-  persistComposerAttachments(key: string, attachments: readonly ComposerAttachment[]): Promise<void>;
+  persistComposerAttachments(
+    key: string,
+    attachments: readonly ComposerAttachment[],
+  ): Promise<void>;
   schedulePersistUiState(): void;
   updateSessionConfig(sessionRef: SessionRef, config: SessionConfig | undefined): void;
   setPendingAutoTitle(sessionRef: SessionRef, pending: PendingAutoTitle): void;
@@ -83,7 +100,10 @@ export interface AppStoreInternals {
     queuedMessages: readonly import("@pi-gui/session-driver").SessionQueuedMessage[] | undefined,
   ): void;
   getQueuedComposerMessages(sessionRef: SessionRef): readonly QueuedComposerMessage[];
-  setQueuedComposerEditState(sessionRef: SessionRef, editState: QueuedComposerEditState | undefined): void;
+  setQueuedComposerEditState(
+    sessionRef: SessionRef,
+    editState: QueuedComposerEditState | undefined,
+  ): void;
   getQueuedComposerEditState(sessionRef: SessionRef): QueuedComposerEditState | undefined;
   reloadTranscriptFromDriver(sessionRef: SessionRef): Promise<void>;
   publishSelectedTranscript(): void;

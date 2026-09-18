@@ -1,5 +1,9 @@
 import type { HostUiRequest, SessionConfig } from "@pi-gui/session-driver";
-import type { ModelSettingsSnapshot, RuntimeCommandRecord, RuntimeSnapshot } from "@pi-gui/session-driver/runtime-types";
+import type {
+  ModelSettingsSnapshot,
+  RuntimeCommandRecord,
+  RuntimeSnapshot,
+} from "@pi-gui/session-driver/runtime-types";
 import type { SessionSchemaInfo } from "@pi-gui/pi-sdk-driver";
 export type { SessionSchemaInfo } from "@pi-gui/pi-sdk-driver";
 export type SessionStatus = "idle" | "running" | "failed";
@@ -90,7 +94,8 @@ export interface SessionRecord {
   readonly config?: SessionConfig;
 }
 
-export type OrchestrationChildThreadStatus = "queued" | "running" | "waiting" | "complete" | "failed";
+export type OrchestrationChildThreadStatus =
+  "queued" | "running" | "waiting" | "complete" | "failed";
 export type OrchestrationSupervisionGate = "continue" | "stop" | "wake";
 export type OrchestrationSupervisionStatus = "monitoring" | "attention" | "stopped";
 export type OrchestrationEvidenceKind =
@@ -109,7 +114,8 @@ export type OrchestrationEvidenceSource =
   | "command"
   | "review"
   | "blocker";
-export type OrchestrationEvidenceStatus = "reported" | "accepted" | "running" | "passed" | "failed" | "blocked";
+export type OrchestrationEvidenceStatus =
+  "reported" | "accepted" | "running" | "passed" | "failed" | "blocked";
 
 export interface OrchestrationEvidenceGitRef {
   readonly workspaceId: string;
@@ -309,7 +315,9 @@ export interface DesktopAppState {
   readonly runtimeByWorkspace: Readonly<Record<string, RuntimeSnapshot>>;
   readonly sessionCommandsBySession: Readonly<Record<string, readonly RuntimeCommandRecord[]>>;
   readonly sessionExtensionUiBySession: Readonly<Record<string, SessionExtensionUiStateRecord>>;
-  readonly extensionCommandCompatibilityByWorkspace: Readonly<Record<string, readonly ExtensionCommandCompatibilityRecord[]>>;
+  readonly extensionCommandCompatibilityByWorkspace: Readonly<
+    Record<string, readonly ExtensionCommandCompatibilityRecord[]>
+  >;
   readonly orchestrationChildren: readonly OrchestrationChildThread[];
   readonly notificationPreferences: NotificationPreferences;
   readonly integratedTerminalShell: string;
@@ -383,5 +391,7 @@ export function getSelectedWorkspace(state: DesktopAppState): WorkspaceRecord | 
 }
 
 export function getSelectedSession(state: DesktopAppState): SessionRecord | undefined {
-  return getSelectedWorkspace(state)?.sessions.find((session) => session.id === state.selectedSessionId);
+  return getSelectedWorkspace(state)?.sessions.find(
+    (session) => session.id === state.selectedSessionId,
+  );
 }

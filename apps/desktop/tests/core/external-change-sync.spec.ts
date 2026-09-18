@@ -47,7 +47,10 @@ test("reflects an external append to the selected session's JSONL on window focu
       .poll(
         async () => {
           try {
-            sessionFilePath = await sessionFilePathFromCatalog(userDataDir, { workspaceId, sessionId });
+            sessionFilePath = await sessionFilePathFromCatalog(userDataDir, {
+              workspaceId,
+              sessionId,
+            });
             const contents = await readFile(sessionFilePath, "utf8");
             return contents.split("\n").filter(Boolean).length;
           } catch {
@@ -65,14 +68,19 @@ test("reflects an external append to the selected session's JSONL on window focu
     ]);
 
     // The append alone must not update the view — sync is focus-driven now.
-    await expect(window.getByTestId("transcript")).not.toContainText("external CLI turn appears on focus");
+    await expect(window.getByTestId("transcript")).not.toContainText(
+      "external CLI turn appears on focus",
+    );
 
     // Returning focus to the window reconciles from disk and republishes the transcript.
     await triggerWindowActivation(harness);
 
-    await expect(window.getByTestId("transcript")).toContainText("external CLI turn appears on focus", {
-      timeout: 20_000,
-    });
+    await expect(window.getByTestId("transcript")).toContainText(
+      "external CLI turn appears on focus",
+      {
+        timeout: 20_000,
+      },
+    );
 
     // The selection must be untouched — the update came from the focus reconcile, not a reselect.
     const afterState = await getDesktopState(window);
@@ -109,14 +117,20 @@ test("surfaces a CLI-created session on window focus", async () => {
 
     let seedFilePath = "";
     await expect
-      .poll(async () => {
-        try {
-          seedFilePath = await sessionFilePathFromCatalog(userDataDir, { workspaceId, sessionId });
-          return (await readFile(seedFilePath, "utf8")).split("\n").filter(Boolean).length;
-        } catch {
-          return 0;
-        }
-      }, { timeout: 20_000 })
+      .poll(
+        async () => {
+          try {
+            seedFilePath = await sessionFilePathFromCatalog(userDataDir, {
+              workspaceId,
+              sessionId,
+            });
+            return (await readFile(seedFilePath, "utf8")).split("\n").filter(Boolean).length;
+          } catch {
+            return 0;
+          }
+        },
+        { timeout: 20_000 },
+      )
       .toBeGreaterThan(0);
 
     // Fabricate a second session's JSONL beside the seed, exactly as the pi CLI would.
@@ -127,11 +141,14 @@ test("surfaces a CLI-created session on window focus", async () => {
     await triggerWindowActivation(harness);
 
     await expect
-      .poll(async () => {
-        const next = await getDesktopState(window);
-        const workspace = next.workspaces.find((entry) => entry.id === workspaceId);
-        return workspace?.sessions.length ?? 0;
-      }, { timeout: 20_000 })
+      .poll(
+        async () => {
+          const next = await getDesktopState(window);
+          const workspace = next.workspaces.find((entry) => entry.id === workspaceId);
+          return workspace?.sessions.length ?? 0;
+        },
+        { timeout: 20_000 },
+      )
       .toBeGreaterThan(1);
   } finally {
     await harness.close();

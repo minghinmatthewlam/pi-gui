@@ -64,7 +64,8 @@ export interface ComposerProviderOption extends ComposerSlashOption {
 }
 
 export const MODEL_OPTIONS_EMPTY_TITLE = "No models available";
-export const MODEL_OPTIONS_EMPTY_DESCRIPTION = "Open Settings to enable a model or log in to a provider.";
+export const MODEL_OPTIONS_EMPTY_DESCRIPTION =
+  "Open Settings to enable a model or log in to a provider.";
 
 export type ParsedComposerCommand =
   | { type: "model"; provider: string; modelId: string }
@@ -250,7 +251,9 @@ export function buildSlashCommandSections(
   const normalizedQuery = query.trim().toLowerCase();
   const availableRuntimeCommands = resolveRuntimeCommands(runtime, sessionCommands);
   const compatibilityByKey = new Map(
-    compatibilityRecords.map((record) => [`${record.extensionPath}::${record.commandName}`, record] as const),
+    compatibilityRecords.map(
+      (record) => [`${record.extensionPath}::${record.commandName}`, record] as const,
+    ),
   );
   const runtimeMatches = availableRuntimeCommands
     .map<ComposerSlashCommand>((command) => ({
@@ -269,7 +272,8 @@ export function buildSlashCommandSections(
     .filter((command) => matchesCommand(command, normalizedQuery));
   const allowTreeCommand = options.allowTreeCommand ?? true;
   const hostMatches = HOST_ACTION_SLASH_COMMANDS.filter(
-    (command) => (allowTreeCommand || command.kind !== "tree") && matchesCommand(command, normalizedQuery),
+    (command) =>
+      (allowTreeCommand || command.kind !== "tree") && matchesCommand(command, normalizedQuery),
   );
 
   // Prefer a host action when it is a prefix match and runtime skills only
@@ -363,8 +367,12 @@ export function resolveRuntimeSlashCommand(
   }
 
   const spaceIndex = trimmed.indexOf(" ");
-  const commandName = normalizeRuntimeCommandName(spaceIndex === -1 ? trimmed : trimmed.slice(0, spaceIndex));
-  return resolveRuntimeCommands(runtime, sessionCommands).find((command) => command.name === commandName);
+  const commandName = normalizeRuntimeCommandName(
+    spaceIndex === -1 ? trimmed : trimmed.slice(0, spaceIndex),
+  );
+  return resolveRuntimeCommands(runtime, sessionCommands).find(
+    (command) => command.name === commandName,
+  );
 }
 
 function normalizeRuntimeCommandName(value: string): string {
@@ -411,11 +419,14 @@ export function buildModelOptions(
     })
     .sort((left: RuntimeSnapshot["models"][number], right: RuntimeSnapshot["models"][number]) => {
       const providerCompare =
-        providerRankForId(runtime.providers, left.providerId) - providerRankForId(runtime.providers, right.providerId);
+        providerRankForId(runtime.providers, left.providerId) -
+        providerRankForId(runtime.providers, right.providerId);
       if (providerCompare !== 0) {
         return providerCompare;
       }
-      return `${left.providerName} ${left.label}`.localeCompare(`${right.providerName} ${right.label}`);
+      return `${left.providerName} ${left.label}`.localeCompare(
+        `${right.providerName} ${right.label}`,
+      );
     })
     .map((model: RuntimeSnapshot["models"][number]) => ({
       value: model.modelId,

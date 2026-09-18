@@ -40,7 +40,10 @@ test("existing thread highlights and accepts dropped images and files", async ()
     await expect(window.getByTestId("composer-drop-indicator")).toHaveCount(0);
     await expect(window.locator(".composer-attachment--image")).toHaveCount(1);
     await expect(window.locator(".composer-attachment--file")).toHaveCount(1);
-    await expect(window.locator(".composer-attachment__name")).toContainText(["drop-image.png", "notes.txt"]);
+    await expect(window.locator(".composer-attachment__name")).toContainText([
+      "drop-image.png",
+      "notes.txt",
+    ]);
   } finally {
     await harness.close();
   }
@@ -76,16 +79,29 @@ test("new thread reuses drag-drop attachments and carries them into the transcri
 
     await expect(window.getByTestId("composer")).toBeVisible({ timeout: 15_000 });
     await expect
-      .poll(async () => {
-        const transcript = await getSelectedTranscript(window);
-        const userMessage = transcript?.transcript.find(
-          (entry) => entry.kind === "message" && "role" in entry && entry.role === "user",
-        );
-        return userMessage?.attachments?.map((attachment) => attachment.kind).sort().join(",") ?? "";
-      }, { timeout: 15_000 })
+      .poll(
+        async () => {
+          const transcript = await getSelectedTranscript(window);
+          const userMessage = transcript?.transcript.find(
+            (entry): entry is Extract<typeof entry, { kind: "message" }> =>
+              entry.kind === "message" && entry.role === "user",
+          );
+          return (
+            userMessage?.attachments
+              ?.map((attachment) => attachment.kind)
+              .sort()
+              .join(",") ?? ""
+          );
+        },
+        { timeout: 15_000 },
+      )
       .toBe("file,image");
-    await expect(window.locator(".timeline-item__attachment--image")).toHaveCount(1, { timeout: 15_000 });
-    await expect(window.locator(".timeline-item__attachment--file")).toContainText("notes.txt", { timeout: 15_000 });
+    await expect(window.locator(".timeline-item__attachment--image")).toHaveCount(1, {
+      timeout: 15_000,
+    });
+    await expect(window.locator(".timeline-item__attachment--file")).toContainText("notes.txt", {
+      timeout: 15_000,
+    });
   } finally {
     await harness.close();
   }

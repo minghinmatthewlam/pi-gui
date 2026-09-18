@@ -13,7 +13,8 @@ export interface SessionTranscriptFileAttachment {
   readonly sizeBytes?: number;
 }
 
-export type SessionTranscriptAttachment = SessionTranscriptImageAttachment | SessionTranscriptFileAttachment;
+export type SessionTranscriptAttachment =
+  SessionTranscriptImageAttachment | SessionTranscriptFileAttachment;
 
 export type SessionTranscriptRole = "user" | "assistant" | "branchSummary" | "compactionSummary";
 

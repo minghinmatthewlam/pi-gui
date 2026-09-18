@@ -8,7 +8,10 @@ const CACHE_TTL_MS = 30_000;
 const CACHE_MAX_ENTRIES = 20;
 const MAX_PREVIEW_BYTES = 200 * 1024;
 
-export function listWorkspaceFiles(workspacePath: string, options: { readonly force?: boolean } = {}): Promise<string[]> {
+export function listWorkspaceFiles(
+  workspacePath: string,
+  options: { readonly force?: boolean } = {},
+): Promise<string[]> {
   const cached = fileCache.get(workspacePath);
   if (!options.force && cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
     return Promise.resolve(cached.files);
@@ -42,7 +45,10 @@ export function listWorkspaceFiles(workspacePath: string, options: { readonly fo
   });
 }
 
-export async function readWorkspaceFile(workspacePath: string, filePath: string): Promise<WorkspaceFilePreview> {
+export async function readWorkspaceFile(
+  workspacePath: string,
+  filePath: string,
+): Promise<WorkspaceFilePreview> {
   const resolved = await resolveExistingWorkspacePath(workspacePath, filePath);
   const handle = await open(resolved, "r");
   try {

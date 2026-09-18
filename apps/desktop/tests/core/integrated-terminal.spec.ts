@@ -40,28 +40,40 @@ test("opens a workspace terminal with persistent output, tabs, and takeover cont
     await terminal.locator(".xterm").click();
     await window.keyboard.type("printf 'PI_TERMINAL_OK\\n'; pwd");
     await window.keyboard.press("Enter");
-    await expect(terminal.locator(".xterm-rows")).toContainText("PI_TERMINAL_OK", { timeout: 15_000 });
-    await expect(terminal.locator(".xterm-rows")).toContainText(basename(workspacePath), { timeout: 15_000 });
+    await expect(terminal.locator(".xterm-rows")).toContainText("PI_TERMINAL_OK", {
+      timeout: 15_000,
+    });
+    await expect(terminal.locator(".xterm-rows")).toContainText(basename(workspacePath), {
+      timeout: 15_000,
+    });
 
     await window.keyboard.press(desktopShortcut("J"));
     await expect(terminal).toHaveCount(0);
     await window.keyboard.press(desktopShortcut("J"));
-    await expect(window.getByTestId("integrated-terminal").locator(".xterm-rows")).toContainText("PI_TERMINAL_OK", {
-      timeout: 15_000,
-    });
+    await expect(window.getByTestId("integrated-terminal").locator(".xterm-rows")).toContainText(
+      "PI_TERMINAL_OK",
+      {
+        timeout: 15_000,
+      },
+    );
 
     await createNamedThread(window, "Terminal other thread");
     await expect(window.getByTestId("integrated-terminal")).toHaveCount(0);
     await window.keyboard.press(desktopShortcut("J"));
     await expect(window.getByTestId("integrated-terminal")).toBeVisible();
-    await expect(window.getByTestId("integrated-terminal").locator(".xterm-rows")).not.toContainText("PI_TERMINAL_OK");
+    await expect(
+      window.getByTestId("integrated-terminal").locator(".xterm-rows"),
+    ).not.toContainText("PI_TERMINAL_OK");
     await selectSession(window, "Terminal host thread");
     await expect(window.getByTestId("integrated-terminal")).toHaveCount(0);
     await window.keyboard.press(desktopShortcut("J"));
     await expect(window.getByTestId("integrated-terminal")).toBeVisible();
-    await expect(window.getByTestId("integrated-terminal").locator(".xterm-rows")).toContainText("PI_TERMINAL_OK", {
-      timeout: 15_000,
-    });
+    await expect(window.getByTestId("integrated-terminal").locator(".xterm-rows")).toContainText(
+      "PI_TERMINAL_OK",
+      {
+        timeout: 15_000,
+      },
+    );
 
     await window.getByTestId("integrated-terminal").locator(".xterm").click();
     await window.keyboard.press(desktopShortcut(","));
@@ -72,7 +84,9 @@ test("opens a workspace terminal with persistent output, tabs, and takeover cont
       clipboard.writeImage(nativeImage.createFromDataURL(`data:image/png;base64,${pngBase64}`));
     }, TINY_PNG_BASE64);
     await window.keyboard.press(desktopShortcut("V"));
-    await expect.poll(async () => (await getDesktopState(window)).composerAttachments.length).toBe(0);
+    await expect
+      .poll(async () => (await getDesktopState(window)).composerAttachments.length)
+      .toBe(0);
 
     await window.getByLabel("New terminal").click();
     await expect(window.getByTestId("terminal-tab")).toHaveCount(2);
@@ -88,10 +102,15 @@ test("opens a workspace terminal with persistent output, tabs, and takeover cont
     expect(takeover?.height ?? 0).toBeGreaterThan(beforeTakeover?.height ?? 0);
 
     await window.getByLabel("Restore terminal").click();
-    await expect(window.getByTestId("integrated-terminal")).not.toHaveClass(/terminal-panel--takeover/);
+    await expect(window.getByTestId("integrated-terminal")).not.toHaveClass(
+      /terminal-panel--takeover/,
+    );
     await expect(window.getByTestId("composer")).toBeVisible();
 
-    await window.getByLabel(/Close Terminal/).last().click();
+    await window
+      .getByLabel(/Close Terminal/)
+      .last()
+      .click();
     await expect(window.getByTestId("terminal-tab")).toHaveCount(2);
   } finally {
     await harness.close();
@@ -116,7 +135,9 @@ test("persists the integrated terminal shell setting", async () => {
     const shellInput = window.getByLabel("Shell of integrated terminal");
     await shellInput.fill("/bin/zsh");
     await shellInput.press("Enter");
-    await expect.poll(async () => (await getDesktopState(window)).integratedTerminalShell).toBe("/bin/zsh");
+    await expect
+      .poll(async () => (await getDesktopState(window)).integratedTerminalShell)
+      .toBe("/bin/zsh");
   } finally {
     await harness.close();
   }
@@ -150,7 +171,12 @@ test("pastes clipboard text into the integrated terminal once", async () => {
     await window.keyboard.press(desktopShortcut("V"));
 
     await expect
-      .poll(async () => countOccurrences((await terminal.locator(".xterm-rows").innerText()) ?? "", "PI_TERMINAL_PASTE_ONCE"))
+      .poll(async () =>
+        countOccurrences(
+          (await terminal.locator(".xterm-rows").innerText()) ?? "",
+          "PI_TERMINAL_PASTE_ONCE",
+        ),
+      )
       .toBe(1);
   } finally {
     await harness.close();
@@ -198,9 +224,7 @@ test("writes an oversized terminal paste in chunks instead of dropping it", asyn
       "process.stdin.pipe(output)",
       'process.stdout.write("PI_TERMINAL_RECEIVER_" + "READY\\n")',
     ].join(";");
-    await window.keyboard.type(
-      `node -e '${receiverScript}'; echo PI_TERMINAL_RECEIVER_""DONE`,
-    );
+    await window.keyboard.type(`node -e '${receiverScript}'; echo PI_TERMINAL_RECEIVER_""DONE`);
     await window.keyboard.press("Enter");
     await expect(terminal.locator(".xterm-rows")).toContainText(receiverReady, { timeout: 15_000 });
 

@@ -770,7 +770,11 @@ export const themePresets: readonly ThemePreset[] = [
   ),
 ];
 
-export function applyThemePresetToRoot(root: HTMLElement, presetId: ThemePresetId, resolvedTheme: ResolvedTheme): void {
+export function applyThemePresetToRoot(
+  root: HTMLElement,
+  presetId: ThemePresetId,
+  resolvedTheme: ResolvedTheme,
+): void {
   for (const tokenName of themeTokenNames) {
     root.style.removeProperty(tokenName);
   }

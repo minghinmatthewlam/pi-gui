@@ -38,7 +38,8 @@ export interface TimelineSummary {
   readonly presentation: TimelineSummaryPresentation;
 }
 
-export type TranscriptMessage = SessionTranscriptMessage | TimelineActivity | TimelineToolCall | TimelineSummary;
+export type TranscriptMessage =
+  SessionTranscriptMessage | TimelineActivity | TimelineToolCall | TimelineSummary;
 
 /**
  * A derived, view-only marker inserted between turns to show how long the agent

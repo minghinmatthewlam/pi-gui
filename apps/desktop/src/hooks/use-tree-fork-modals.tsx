@@ -115,7 +115,10 @@ export function useTreeForkModals(params: UseTreeForkModalsParams) {
   }, [api, selectedSession, selectedWorkspace, setComposerDraft]);
 
   const navigateTreeSelection = useCallback(
-    (targetId: string, options?: { readonly summarize?: boolean; readonly customInstructions?: string }) => {
+    (
+      targetId: string,
+      options?: { readonly summarize?: boolean; readonly customInstructions?: string },
+    ) => {
       if (!api || !selectedWorkspace || !selectedSession) {
         return;
       }
@@ -187,8 +190,9 @@ export function useTreeForkModals(params: UseTreeForkModalsParams) {
         return;
       }
       const rootWorkspaceId =
-        (snapshot ? resolveRepoWorkspaceId(snapshot.workspaces, selectedWorkspace.id) : undefined) ??
-        selectedWorkspace.id;
+        (snapshot
+          ? resolveRepoWorkspaceId(snapshot.workspaces, selectedWorkspace.id)
+          : undefined) ?? selectedWorkspace.id;
       const input: ForkThreadInput = {
         sourceWorkspaceId: selectedWorkspace.id,
         sourceSessionId: selectedSession.id,
@@ -217,7 +221,15 @@ export function useTreeForkModals(params: UseTreeForkModalsParams) {
           }));
         });
     },
-    [api, forkModalState.sourceMessageIndex, selectedSession, selectedWorkspace, snapshot, setSnapshot, focusComposer],
+    [
+      api,
+      forkModalState.sourceMessageIndex,
+      selectedSession,
+      selectedWorkspace,
+      snapshot,
+      setSnapshot,
+      focusComposer,
+    ],
   );
 
   useEffect(() => {

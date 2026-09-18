@@ -14,7 +14,9 @@ export class JsonFileStore<T> {
     if (result.corrupted) {
       console.error(
         `[json-file-store] corrupt entry for "${sessionKey}" in ${this.rootDir}` +
-          (result.recovered ? " — recovered from backup" : " — no usable backup, treating as empty"),
+          (result.recovered
+            ? " — recovered from backup"
+            : " — no usable backup, treating as empty"),
       );
     }
     return result.value;
@@ -42,7 +44,10 @@ export class JsonFileStore<T> {
       } catch (error) {
         // A single malformed filename must not abort the whole listing; that
         // would silently disable attachment pruning for every key.
-        console.error(`[json-file-store] skipping malformed filename "${name}" in ${this.rootDir}`, error);
+        console.error(
+          `[json-file-store] skipping malformed filename "${name}" in ${this.rootDir}`,
+          error,
+        );
       }
     }
     return keys;

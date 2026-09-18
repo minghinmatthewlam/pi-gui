@@ -28,16 +28,22 @@ export async function getChangedFiles(
 ): Promise<ChangedFilesResult> {
   let result: GitCommandResult;
   try {
-    result = await executeGit(
-      ["status", "--porcelain=v1", "-z"],
-      { cwd: workspacePath, maxBuffer: 2 * 1024 * 1024 },
-    );
+    result = await executeGit(["status", "--porcelain=v1", "-z"], {
+      cwd: workspacePath,
+      maxBuffer: 2 * 1024 * 1024,
+    });
   } catch {
-    return gitStatusUnavailable("git-status-failed", "Git status is unavailable for this workspace.");
+    return gitStatusUnavailable(
+      "git-status-failed",
+      "Git status is unavailable for this workspace.",
+    );
   }
 
   if (result.error) {
-    return gitStatusUnavailable("git-status-failed", "Git status is unavailable for this workspace.");
+    return gitStatusUnavailable(
+      "git-status-failed",
+      "Git status is unavailable for this workspace.",
+    );
   }
 
   try {
@@ -46,7 +52,10 @@ export async function getChangedFiles(
       files: parseGitStatusPorcelainV1Z(result.stdout),
     };
   } catch {
-    return gitStatusUnavailable("git-status-invalid", "Git returned an unreadable changed-file status.");
+    return gitStatusUnavailable(
+      "git-status-invalid",
+      "Git returned an unreadable changed-file status.",
+    );
   }
 }
 
@@ -96,7 +105,10 @@ export async function getFileDiff(
     return unstaged.stdout;
   }
 
-  const staged = await executeGit(["--literal-pathspecs", "diff", "--cached", "--", filePath], options);
+  const staged = await executeGit(
+    ["--literal-pathspecs", "diff", "--cached", "--", filePath],
+    options,
+  );
   if (!staged.error && staged.stdout.trim()) {
     return staged.stdout;
   }
@@ -133,17 +145,12 @@ function executeGitCommand(
   options: GitCommandOptions,
 ): Promise<GitCommandResult> {
   return new Promise((resolve) => {
-    execFile(
-      "git",
-      [...args],
-      options,
-      (error, stdout) => {
-        resolve({
-          error,
-          stdout,
-        });
-      },
-    );
+    execFile("git", [...args], options, (error, stdout) => {
+      resolve({
+        error,
+        stdout,
+      });
+    });
   });
 }
 
@@ -157,11 +164,7 @@ function gitStatusUnavailable(
   };
 }
 
-function toChangedFileEntry(
-  xy: string,
-  filePath: string,
-  previousPath?: string,
-): ChangedFileEntry {
+function toChangedFileEntry(xy: string, filePath: string, previousPath?: string): ChangedFileEntry {
   return {
     path: filePath,
     ...(previousPath === undefined ? {} : { previousPath }),

@@ -84,7 +84,10 @@ export interface OrchestrationRuntimeBridge {
     input: { readonly prompt: string; readonly toolCallId: string },
   ) => Promise<AgentToolResult<CreateChildThreadToolDetails>>;
   readonly listThreads: (ctx: ExtensionContext) => Promise<AgentToolResult<ListThreadsToolDetails>>;
-  readonly readThread: (ctx: ExtensionContext, threadId: string) => Promise<AgentToolResult<ReadThreadToolDetails>>;
+  readonly readThread: (
+    ctx: ExtensionContext,
+    threadId: string,
+  ) => Promise<AgentToolResult<ReadThreadToolDetails>>;
   readonly sendMessageToThread: (
     ctx: ExtensionContext,
     input: { readonly threadId: string; readonly message: string },
@@ -97,11 +100,14 @@ type OrchestrationToolDetails =
   | ReadThreadToolDetails
   | SendMessageToThreadToolDetails;
 
-function createCreateChildThreadTool(bridge: OrchestrationRuntimeBridge): ToolDefinition<any, OrchestrationToolDetails> {
+function createCreateChildThreadTool(
+  bridge: OrchestrationRuntimeBridge,
+): ToolDefinition<any, OrchestrationToolDetails> {
   return {
     name: createChildThreadToolName,
     label: "Create child thread",
-    description: "Start a separate pi-gui child thread for a delegated investigation or implementation task.",
+    description:
+      "Start a separate pi-gui child thread for a delegated investigation or implementation task.",
     promptSnippet: "create_child_thread: start a separate pi-gui child thread for delegated work.",
     promptGuidelines: [
       "Use create_child_thread when the user asks you to spin up, delegate to, or run a separate child thread.",
@@ -127,12 +133,15 @@ function createCreateChildThreadTool(bridge: OrchestrationRuntimeBridge): ToolDe
   };
 }
 
-function createListThreadsTool(bridge: OrchestrationRuntimeBridge): ToolDefinition<any, OrchestrationToolDetails> {
+function createListThreadsTool(
+  bridge: OrchestrationRuntimeBridge,
+): ToolDefinition<any, OrchestrationToolDetails> {
   return {
     name: listThreadsToolName,
     label: "List threads",
     description: "List pi-gui threads visible to the current workspace and parent thread.",
-    promptSnippet: "list_threads: list relevant pi-gui threads for the current workspace and parent context.",
+    promptSnippet:
+      "list_threads: list relevant pi-gui threads for the current workspace and parent context.",
     promptGuidelines: [
       "Use list_threads before reading or messaging another pi-gui thread when you need the exact thread id.",
       "Use the returned thread id with read_thread or send_message_to_thread.",
@@ -147,7 +156,9 @@ function createListThreadsTool(bridge: OrchestrationRuntimeBridge): ToolDefiniti
   };
 }
 
-function createReadThreadTool(bridge: OrchestrationRuntimeBridge): ToolDefinition<any, OrchestrationToolDetails> {
+function createReadThreadTool(
+  bridge: OrchestrationRuntimeBridge,
+): ToolDefinition<any, OrchestrationToolDetails> {
   return {
     name: readThreadToolName,
     label: "Read thread",
@@ -215,7 +226,9 @@ function createSendMessageToThreadTool(
       const message = messageFromParams(params);
       if (!threadId || !message) {
         return {
-          content: [{ type: "text", text: "send_message_to_thread requires thread_id and message." }],
+          content: [
+            { type: "text", text: "send_message_to_thread requires thread_id and message." },
+          ],
           details: {
             action: sendMessageToThreadAction,
             threadId: threadId ?? "",
@@ -240,7 +253,9 @@ export function createOrchestrationRuntimeTools(
   ];
 }
 
-export function createOrchestrationRuntimeExtension(bridge: OrchestrationRuntimeBridge): ExtensionFactory {
+export function createOrchestrationRuntimeExtension(
+  bridge: OrchestrationRuntimeBridge,
+): ExtensionFactory {
   return (pi: ExtensionAPI) => {
     for (const tool of createOrchestrationRuntimeTools(bridge)) {
       pi.registerTool(tool);
@@ -304,7 +319,10 @@ function threadIdFromParams(params: unknown): string | undefined {
   if (!isRecord(params)) {
     return undefined;
   }
-  const threadId = stringParam(params, "thread_id") ?? stringParam(params, "threadId") ?? stringParam(params, "id");
+  const threadId =
+    stringParam(params, "thread_id") ??
+    stringParam(params, "threadId") ??
+    stringParam(params, "id");
   return threadId || undefined;
 }
 

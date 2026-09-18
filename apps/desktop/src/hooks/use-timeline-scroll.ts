@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject, type MutableRefObject } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type RefObject,
+  type MutableRefObject,
+} from "react";
 import type { AppView, SelectedTranscriptRecord } from "../desktop-state";
 import { VIRTUALIZATION_THRESHOLD } from "../conversation-timeline";
 
@@ -142,84 +150,91 @@ export function useTimelineScroll({
     }
   };
 
-  const scrollTimelineToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
-    const pane = timelinePaneRef.current;
-    if (!pane) {
-      return;
-    }
-
-    if (
-      selectedSessionKey &&
-      hasTimelineOffBottomState(selectedSessionKey) &&
-      !pinnedToBottomRef.current
-    ) {
-      return;
-    }
-
-    const alignmentGeneration = bottomAlignmentGenerationRef.current + 1;
-    bottomAlignmentGenerationRef.current = alignmentGeneration;
-
-    const align = (remainingChecks: number) => {
-      if (alignmentGeneration !== bottomAlignmentGenerationRef.current) {
-        return;
-      }
-      if (behavior === "auto") {
-        pane.scrollTop = pane.scrollHeight;
-      } else {
-        pane.scrollTo({ top: pane.scrollHeight, behavior });
-      }
-      pinnedToBottomRef.current = true;
-      lastTimelineScrollTopBySessionRef.current.set(selectedSessionKey, pane.scrollTop);
-      lastTimelinePinnedBySessionRef.current.set(selectedSessionKey, true);
-      clearTimelineOffBottomState(selectedSessionKey);
-      setShowJumpToLatest(false);
-
-      if (remainingChecks <= 0) {
+  const scrollTimelineToBottom = useCallback(
+    (behavior: ScrollBehavior = "auto") => {
+      const pane = timelinePaneRef.current;
+      if (!pane) {
         return;
       }
 
-      window.requestAnimationFrame(() => {
+      if (
+        selectedSessionKey &&
+        hasTimelineOffBottomState(selectedSessionKey) &&
+        !pinnedToBottomRef.current
+      ) {
+        return;
+      }
+
+      const alignmentGeneration = bottomAlignmentGenerationRef.current + 1;
+      bottomAlignmentGenerationRef.current = alignmentGeneration;
+
+      const align = (remainingChecks: number) => {
         if (alignmentGeneration !== bottomAlignmentGenerationRef.current) {
           return;
         }
-        const remaining = pane.scrollHeight - pane.scrollTop - pane.clientHeight;
-        if (remaining > 1 || remainingChecks > 1) {
-          align(remainingChecks - 1);
+        if (behavior === "auto") {
+          pane.scrollTop = pane.scrollHeight;
+        } else {
+          pane.scrollTo({ top: pane.scrollHeight, behavior });
         }
-      });
-    };
+        pinnedToBottomRef.current = true;
+        lastTimelineScrollTopBySessionRef.current.set(selectedSessionKey, pane.scrollTop);
+        lastTimelinePinnedBySessionRef.current.set(selectedSessionKey, true);
+        clearTimelineOffBottomState(selectedSessionKey);
+        setShowJumpToLatest(false);
 
-    align(6);
-  }, [selectedSessionKey]);
+        if (remainingChecks <= 0) {
+          return;
+        }
 
-  const requestPinnedBottomAlignment = useCallback((
-    behavior: ScrollBehavior = "auto",
-    options?: { readonly preferExactRestore?: boolean },
-  ) => {
-    if (
-      selectedSessionKey &&
-      hasTimelineOffBottomState(selectedSessionKey) &&
-      !pinnedToBottomRef.current
-    ) {
-      return;
-    }
+        window.requestAnimationFrame(() => {
+          if (alignmentGeneration !== bottomAlignmentGenerationRef.current) {
+            return;
+          }
+          const remaining = pane.scrollHeight - pane.scrollTop - pane.clientHeight;
+          if (remaining > 1 || remainingChecks > 1) {
+            align(remainingChecks - 1);
+          }
+        });
+      };
 
-    if (exactBottomRestoreSessionKeyRef.current === selectedSessionKey && selectedSessionKey) {
-      pendingPinnedBottomBehaviorRef.current = behavior;
-      deferredPinnedBottomAlignmentRef.current = true;
-      return;
-    }
+      align(6);
+    },
+    [selectedSessionKey],
+  );
 
-    if (options?.preferExactRestore && selectedSessionKey && activeTranscript.length > VIRTUALIZATION_THRESHOLD) {
-      exactBottomRestoreSessionKeyRef.current = selectedSessionKey;
-      pendingPinnedBottomBehaviorRef.current = behavior;
-      preserveBottomOnNextPaneResizeRef.current = true;
-      setDisableTimelineVirtualization(true);
-      return;
-    }
+  const requestPinnedBottomAlignment = useCallback(
+    (behavior: ScrollBehavior = "auto", options?: { readonly preferExactRestore?: boolean }) => {
+      if (
+        selectedSessionKey &&
+        hasTimelineOffBottomState(selectedSessionKey) &&
+        !pinnedToBottomRef.current
+      ) {
+        return;
+      }
 
-    scrollTimelineToBottom(behavior);
-  }, [activeTranscript.length, scrollTimelineToBottom, selectedSessionKey]);
+      if (exactBottomRestoreSessionKeyRef.current === selectedSessionKey && selectedSessionKey) {
+        pendingPinnedBottomBehaviorRef.current = behavior;
+        deferredPinnedBottomAlignmentRef.current = true;
+        return;
+      }
+
+      if (
+        options?.preferExactRestore &&
+        selectedSessionKey &&
+        activeTranscript.length > VIRTUALIZATION_THRESHOLD
+      ) {
+        exactBottomRestoreSessionKeyRef.current = selectedSessionKey;
+        pendingPinnedBottomBehaviorRef.current = behavior;
+        preserveBottomOnNextPaneResizeRef.current = true;
+        setDisableTimelineVirtualization(true);
+        return;
+      }
+
+      scrollTimelineToBottom(behavior);
+    },
+    [activeTranscript.length, scrollTimelineToBottom, selectedSessionKey],
+  );
 
   const finalizeTimelineVirtualizationDisable = useCallback(() => {
     const pane = timelinePaneRef.current;
@@ -236,7 +251,9 @@ export function useTimelineScroll({
     }
 
     const shouldRestoreBottom =
-      pinnedToBottomRef.current || preserveBottomOnNextPaneResizeRef.current || deferredPinnedBottomAlignmentRef.current;
+      pinnedToBottomRef.current ||
+      preserveBottomOnNextPaneResizeRef.current ||
+      deferredPinnedBottomAlignmentRef.current;
     if (!shouldRestoreBottom) {
       resetExactBottomRestoreState();
       setDisableTimelineVirtualization(false);
@@ -245,7 +262,10 @@ export function useTimelineScroll({
 
     const finishRestore = (remainingChecks: number, stableChecks: number) => {
       window.requestAnimationFrame(() => {
-        if (timelinePaneRef.current !== pane || exactBottomRestoreSessionKeyRef.current !== restoreSessionKey) {
+        if (
+          timelinePaneRef.current !== pane ||
+          exactBottomRestoreSessionKeyRef.current !== restoreSessionKey
+        ) {
           return;
         }
 
@@ -274,7 +294,10 @@ export function useTimelineScroll({
     }
 
     window.requestAnimationFrame(() => {
-      if (timelinePaneRef.current !== pane || exactBottomRestoreSessionKeyRef.current !== restoreSessionKey) {
+      if (
+        timelinePaneRef.current !== pane ||
+        exactBottomRestoreSessionKeyRef.current !== restoreSessionKey
+      ) {
         return;
       }
       setDisableTimelineVirtualization(false);
@@ -284,111 +307,128 @@ export function useTimelineScroll({
     });
   }, [scrollTimelineToBottom, selectedSessionKey, activeView]);
 
-  const setTimelinePaneElement = useCallback((node: HTMLDivElement | null) => {
-    timelinePaneRef.current = node;
-    if (!node) {
-      return;
-    }
+  const setTimelinePaneElement = useCallback(
+    (node: HTMLDivElement | null) => {
+      timelinePaneRef.current = node;
+      if (!node) {
+        return;
+      }
 
-    setTimelinePaneMountVersion((current) => current + 1);
+      setTimelinePaneMountVersion((current) => current + 1);
 
-    const savedOffBottomState = lastTimelineOffBottomStateBySessionRef.current.get(selectedSessionKey);
-    const savedPinned = lastTimelinePinnedBySessionRef.current.get(selectedSessionKey);
-    const savedScrollTop = savedOffBottomState?.scrollTop ?? lastTimelineScrollTopBySessionRef.current.get(selectedSessionKey);
+      const savedOffBottomState =
+        lastTimelineOffBottomStateBySessionRef.current.get(selectedSessionKey);
+      const savedPinned = lastTimelinePinnedBySessionRef.current.get(selectedSessionKey);
+      const savedScrollTop =
+        savedOffBottomState?.scrollTop ??
+        lastTimelineScrollTopBySessionRef.current.get(selectedSessionKey);
 
-    if (!selectedSessionKey || activeView !== "threads") {
-      setDisableTimelineVirtualization(false);
-      return;
-    }
-    if (savedOffBottomState && isTranscriptLoading) {
-      setDisableTimelineVirtualization(false);
-      return;
-    }
+      if (!selectedSessionKey || activeView !== "threads") {
+        setDisableTimelineVirtualization(false);
+        return;
+      }
+      if (savedOffBottomState && isTranscriptLoading) {
+        setDisableTimelineVirtualization(false);
+        return;
+      }
 
-    const shouldRestoreBottom =
-      !savedOffBottomState &&
-      ((savedPinned ?? pinnedToBottomRef.current) || preserveBottomOnNextPaneResizeRef.current);
-    if (shouldRestoreBottom) {
-      preserveBottomOnNextPaneResizeRef.current = true;
-      node.scrollTop = node.scrollHeight;
+      const shouldRestoreBottom =
+        !savedOffBottomState &&
+        ((savedPinned ?? pinnedToBottomRef.current) || preserveBottomOnNextPaneResizeRef.current);
+      if (shouldRestoreBottom) {
+        preserveBottomOnNextPaneResizeRef.current = true;
+        node.scrollTop = node.scrollHeight;
+        window.requestAnimationFrame(() => {
+          if (timelinePaneRef.current !== node) {
+            return;
+          }
+          if (pinnedToBottomRef.current || preserveBottomOnNextPaneResizeRef.current) {
+            requestPinnedBottomAlignment("auto", { preferExactRestore: true });
+          }
+        });
+        return;
+      }
+
+      if (savedScrollTop == null && !savedOffBottomState) {
+        setDisableTimelineVirtualization(false);
+        return;
+      }
+
+      if (savedOffBottomState) {
+        pendingTimelineOffBottomRestoreSessionKeyRef.current = selectedSessionKey;
+        applyTimelineOffBottomRestore(selectedSessionKey, node);
+        window.requestAnimationFrame(() => {
+          if (timelinePaneRef.current === node) {
+            setDisableTimelineVirtualization(false);
+          }
+        });
+        return;
+      }
+      node.scrollTop = savedScrollTop ?? node.scrollTop;
+      const restoredPinned = isNearBottom(node);
+      bottomAlignmentGenerationRef.current += 1;
+      pinnedToBottomRef.current = restoredPinned;
+      resetExactBottomRestoreState();
+      lastTimelinePinnedBySessionRef.current.set(selectedSessionKey, restoredPinned);
+      if (restoredPinned) {
+        clearTimelineOffBottomState(selectedSessionKey);
+      }
       window.requestAnimationFrame(() => {
         if (timelinePaneRef.current !== node) {
           return;
         }
-        if (pinnedToBottomRef.current || preserveBottomOnNextPaneResizeRef.current) {
-          requestPinnedBottomAlignment("auto", { preferExactRestore: true });
-        }
+        setDisableTimelineVirtualization(false);
       });
-      return;
-    }
+    },
+    [
+      applyTimelineOffBottomRestore,
+      isTranscriptLoading,
+      requestPinnedBottomAlignment,
+      selectedSessionKey,
+      activeView,
+    ],
+  );
 
-    if (savedScrollTop == null && !savedOffBottomState) {
-      setDisableTimelineVirtualization(false);
-      return;
-    }
-
-    if (savedOffBottomState) {
-      pendingTimelineOffBottomRestoreSessionKeyRef.current = selectedSessionKey;
-      applyTimelineOffBottomRestore(selectedSessionKey, node);
-      window.requestAnimationFrame(() => {
-        if (timelinePaneRef.current === node) {
-          setDisableTimelineVirtualization(false);
-        }
-      });
-      return;
-    }
-    node.scrollTop = savedScrollTop ?? node.scrollTop;
-    const restoredPinned = isNearBottom(node);
-    bottomAlignmentGenerationRef.current += 1;
-    pinnedToBottomRef.current = restoredPinned;
-    resetExactBottomRestoreState();
-    lastTimelinePinnedBySessionRef.current.set(selectedSessionKey, restoredPinned);
-    if (restoredPinned) {
-      clearTimelineOffBottomState(selectedSessionKey);
-    }
-    window.requestAnimationFrame(() => {
-      if (timelinePaneRef.current !== node) {
-        return;
-      }
-      setDisableTimelineVirtualization(false);
-    });
-  }, [applyTimelineOffBottomRestore, isTranscriptLoading, requestPinnedBottomAlignment, selectedSessionKey, activeView]);
-
-  const schedulePinnedBottomRealignment = useCallback((delayFrames = 0) => {
-    const waitForFrames = (remainingFrames: number) => {
-      window.requestAnimationFrame(() => {
-        if (remainingFrames > 0) {
-          waitForFrames(remainingFrames - 1);
-          return;
-        }
-        requestPinnedBottomAlignment("auto", { preferExactRestore: true });
+  const schedulePinnedBottomRealignment = useCallback(
+    (delayFrames = 0) => {
+      const waitForFrames = (remainingFrames: number) => {
         window.requestAnimationFrame(() => {
-          preserveBottomOnNextPaneResizeRef.current = false;
-          if (pinnedToBottomRef.current) {
-            requestPinnedBottomAlignment("auto", { preferExactRestore: true });
+          if (remainingFrames > 0) {
+            waitForFrames(remainingFrames - 1);
+            return;
           }
+          requestPinnedBottomAlignment("auto", { preferExactRestore: true });
+          window.requestAnimationFrame(() => {
+            preserveBottomOnNextPaneResizeRef.current = false;
+            if (pinnedToBottomRef.current) {
+              requestPinnedBottomAlignment("auto", { preferExactRestore: true });
+            }
+          });
         });
-      });
-    };
+      };
 
-    waitForFrames(delayFrames);
-  }, [requestPinnedBottomAlignment]);
+      waitForFrames(delayFrames);
+    },
+    [requestPinnedBottomAlignment],
+  );
 
   useLayoutEffect(() => {
     const savedOffBottomState = selectedSessionKey
       ? lastTimelineOffBottomStateBySessionRef.current.get(selectedSessionKey)
       : undefined;
-    const savedPinned = selectedSessionKey ? lastTimelinePinnedBySessionRef.current.get(selectedSessionKey) : undefined;
-    const shouldRestorePinned = !savedOffBottomState
-      ? savedPinned ?? true
-      : false;
+    const savedPinned = selectedSessionKey
+      ? lastTimelinePinnedBySessionRef.current.get(selectedSessionKey)
+      : undefined;
+    const shouldRestorePinned = !savedOffBottomState ? (savedPinned ?? true) : false;
     setShowJumpToLatest(false);
     lastTranscriptMarkerRef.current = "";
     pinnedToBottomRef.current = shouldRestorePinned;
     timelineScrollIntentUntilRef.current = 0;
     previousTimelinePaneSizeRef.current = null;
     preserveBottomOnNextPaneResizeRef.current = false;
-    pendingTimelineOffBottomRestoreSessionKeyRef.current = savedOffBottomState ? selectedSessionKey : null;
+    pendingTimelineOffBottomRestoreSessionKeyRef.current = savedOffBottomState
+      ? selectedSessionKey
+      : null;
     resetExactBottomRestoreState(shouldRestorePinned ? selectedSessionKey || null : null);
     setDisableTimelineVirtualization(Boolean(selectedSessionKey && shouldRestorePinned));
 
@@ -431,7 +471,8 @@ export function useTimelineScroll({
       return;
     }
 
-    const savedOffBottomState = lastTimelineOffBottomStateBySessionRef.current.get(selectedSessionKey);
+    const savedOffBottomState =
+      lastTimelineOffBottomStateBySessionRef.current.get(selectedSessionKey);
     if (!savedOffBottomState) {
       protectedTimelineScrollSessionKeysRef.current.delete(selectedSessionKey);
       pendingTimelineOffBottomRestoreSessionKeyRef.current = null;
@@ -530,9 +571,14 @@ export function useTimelineScroll({
     const updateMeasuredSize = (nextSize: { width: number; height: number }) => {
       const previousSize = previousTimelinePaneSizeRef.current;
       previousTimelinePaneSizeRef.current = nextSize;
-      const shouldStickToBottom = preserveBottomOnNextPaneResizeRef.current || pinnedToBottomRef.current;
-      const widthChanged = previousSize ? Math.abs(nextSize.width - previousSize.width) >= 1 : false;
-      const heightChanged = previousSize ? Math.abs(nextSize.height - previousSize.height) >= 1 : false;
+      const shouldStickToBottom =
+        preserveBottomOnNextPaneResizeRef.current || pinnedToBottomRef.current;
+      const widthChanged = previousSize
+        ? Math.abs(nextSize.width - previousSize.width) >= 1
+        : false;
+      const heightChanged = previousSize
+        ? Math.abs(nextSize.height - previousSize.height) >= 1
+        : false;
       if (!previousSize || (!widthChanged && !heightChanged) || !shouldStickToBottom) {
         return;
       }
@@ -556,7 +602,13 @@ export function useTimelineScroll({
       resizeObserver.disconnect();
       previousTimelinePaneSizeRef.current = null;
     };
-  }, [requestPinnedBottomAlignment, selectedSessionKey, sidePanelMode, activeView, timelinePaneMountVersion]);
+  }, [
+    requestPinnedBottomAlignment,
+    selectedSessionKey,
+    sidePanelMode,
+    activeView,
+    timelinePaneMountVersion,
+  ]);
 
   useEffect(() => {
     const pane = timelinePaneRef.current;
@@ -578,29 +630,37 @@ export function useTimelineScroll({
     setShowJumpToLatest(true);
   }, [activeTranscript, requestPinnedBottomAlignment, selectedSession, selectedSessionKey]);
 
-  const handleTimelineContentHeightChange = useCallback((state?: { readonly wasAtBottom: boolean }) => {
-    const pane = timelinePaneRef.current;
-    if (
-      pane &&
-      pendingTimelineOffBottomRestoreSessionKeyRef.current === selectedSessionKey &&
-      applyTimelineOffBottomRestore(selectedSessionKey, pane)
-    ) {
-      return;
-    }
-    if (state?.wasAtBottom) {
-      pinnedToBottomRef.current = true;
-    }
-    if (!pinnedToBottomRef.current && !preserveBottomOnNextPaneResizeRef.current) {
-      return;
-    }
-
-    window.requestAnimationFrame(() => {
+  const handleTimelineContentHeightChange = useCallback(
+    (state?: { readonly wasAtBottom: boolean }) => {
+      const pane = timelinePaneRef.current;
+      if (
+        pane &&
+        pendingTimelineOffBottomRestoreSessionKeyRef.current === selectedSessionKey &&
+        applyTimelineOffBottomRestore(selectedSessionKey, pane)
+      ) {
+        return;
+      }
+      if (state?.wasAtBottom) {
+        pinnedToBottomRef.current = true;
+      }
       if (!pinnedToBottomRef.current && !preserveBottomOnNextPaneResizeRef.current) {
         return;
       }
-      requestPinnedBottomAlignment("auto", { preferExactRestore: true });
-    });
-  }, [applyTimelineOffBottomRestore, requestPinnedBottomAlignment, selectedSessionKey, timelinePaneRef]);
+
+      window.requestAnimationFrame(() => {
+        if (!pinnedToBottomRef.current && !preserveBottomOnNextPaneResizeRef.current) {
+          return;
+        }
+        requestPinnedBottomAlignment("auto", { preferExactRestore: true });
+      });
+    },
+    [
+      applyTimelineOffBottomRestore,
+      requestPinnedBottomAlignment,
+      selectedSessionKey,
+      timelinePaneRef,
+    ],
+  );
 
   const saveCurrentTimelineScrollState = () => {
     const pane = timelinePaneRef.current;
@@ -672,7 +732,8 @@ export function useTimelineScroll({
   };
 
   const handleTimelineScrollIntent = () => {
-    timelineScrollIntentUntilRef.current = window.performance.now() + TIMELINE_SCROLL_INTENT_WINDOW_MS;
+    timelineScrollIntentUntilRef.current =
+      window.performance.now() + TIMELINE_SCROLL_INTENT_WINDOW_MS;
     cancelPendingTimelineOffBottomRestore(selectedSessionKey);
   };
 
@@ -689,7 +750,9 @@ export function useTimelineScroll({
   // caller can restore the bottom-pinned position after the resize settles.
   const beginPreserveTimelineBottom = useCallback((): boolean => {
     const pane = timelinePaneRef.current;
-    const shouldPreserveBottom = pane ? isNearBottom(pane) || pinnedToBottomRef.current : pinnedToBottomRef.current;
+    const shouldPreserveBottom = pane
+      ? isNearBottom(pane) || pinnedToBottomRef.current
+      : pinnedToBottomRef.current;
     if (shouldPreserveBottom) {
       preserveBottomOnNextPaneResizeRef.current = true;
     }
@@ -711,7 +774,10 @@ export function useTimelineScroll({
   };
 }
 
-function buildTranscriptChangeMarker(sessionKey: string, transcript: SelectedTranscriptRecord["transcript"]): string {
+function buildTranscriptChangeMarker(
+  sessionKey: string,
+  transcript: SelectedTranscriptRecord["transcript"],
+): string {
   const lastItem = transcript.at(-1);
   return `${sessionKey}:${transcript.length}:${lastItem ? JSON.stringify(lastItem) : ""}`;
 }

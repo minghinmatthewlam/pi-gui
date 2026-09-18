@@ -88,7 +88,9 @@ export class TerminalService {
   ): TerminalPanelSnapshot {
     const root = this.ensureRoot(webContents, workspaceId, terminalScopeId);
     if (root.sessionIds.length >= MAX_TERMINAL_SESSIONS_PER_ROOT) {
-      throw new Error(`A workspace can have up to ${MAX_TERMINAL_SESSIONS_PER_ROOT} terminal tabs.`);
+      throw new Error(
+        `A workspace can have up to ${MAX_TERMINAL_SESSIONS_PER_ROOT} terminal tabs.`,
+      );
     }
     const session = this.createSessionForRoot(webContents, root, size);
     root.sessionIds.push(session.id);
@@ -126,7 +128,7 @@ export class TerminalService {
     // Chunk large input (e.g. a big paste) instead of dropping it, so no data is
     // silently lost. Split on code-unit boundaries but never inside a UTF-16
     // surrogate pair.
-    for (let offset = 0; offset < data.length; ) {
+    for (let offset = 0; offset < data.length;) {
       let end = Math.min(offset + MAX_WRITE_LENGTH, data.length);
       if (end < data.length) {
         const code = data.charCodeAt(end - 1);
@@ -146,7 +148,11 @@ export class TerminalService {
     session.pty?.resize(normalizedSize.cols, normalizedSize.rows);
   }
 
-  restart(webContents: WebContents, terminalId: string, size?: Partial<TerminalSize>): TerminalPanelSnapshot {
+  restart(
+    webContents: WebContents,
+    terminalId: string,
+    size?: Partial<TerminalSize>,
+  ): TerminalPanelSnapshot {
     const session = this.requireOwnedSession(webContents, terminalId);
     this.disposePty(session);
     session.shell = this.resolveShell();
@@ -187,11 +193,14 @@ export class TerminalService {
   setTitle(webContents: WebContents, terminalId: string, title: string): void {
     const session = this.requireOwnedSession(webContents, terminalId);
     const normalizedTitle = title.trim();
-    session.title = normalizedTitle.length > 0 ? normalizedTitle.slice(0, 80) : this.defaultTitle(session);
+    session.title =
+      normalizedTitle.length > 0 ? normalizedTitle.slice(0, 80) : this.defaultTitle(session);
   }
 
   retainWorkspacePaths(workspacePaths: readonly string[]): void {
-    const retained = new Set(workspacePaths.map((workspacePath) => normalizeRootKey(workspacePath)));
+    const retained = new Set(
+      workspacePaths.map((workspacePath) => normalizeRootKey(workspacePath)),
+    );
     for (const [rootKey, root] of this.rootsByKey) {
       if (!retained.has(root.workspaceRootKey)) {
         for (const sessionId of root.sessionIds) {
@@ -229,7 +238,11 @@ export class TerminalService {
     this.rootsByKey.clear();
   }
 
-  private ensureRoot(webContents: WebContents, workspaceId: string, terminalScopeId: string): TerminalRoot {
+  private ensureRoot(
+    webContents: WebContents,
+    workspaceId: string,
+    terminalScopeId: string,
+  ): TerminalRoot {
     const normalizedScopeId = terminalScopeId.trim();
     if (!normalizedScopeId) {
       throw new Error("Terminal scope is required");
@@ -302,13 +315,19 @@ export class TerminalService {
       session.status = "error";
       const message = error instanceof Error ? error.message : String(error);
       this.appendReplay(session, `${message}\r\n`);
-      this.sendToOwner(webContents, session, desktopIpc.terminalError, { terminalId: session.id, message });
+      this.sendToOwner(webContents, session, desktopIpc.terminalError, {
+        terminalId: session.id,
+        message,
+      });
       return;
     }
 
     session.dataSubscription = session.pty.onData((data) => {
       this.appendReplay(session, data);
-      this.sendToOwner(webContents, session, desktopIpc.terminalData, { terminalId: session.id, data });
+      this.sendToOwner(webContents, session, desktopIpc.terminalData, {
+        terminalId: session.id,
+        data,
+      });
     });
     session.exitSubscription = session.pty.onExit(({ exitCode, signal }) => {
       session.status = "exited";
@@ -336,7 +355,12 @@ export class TerminalService {
     session.truncated = nextReplay.truncated;
   }
 
-  private sendToOwner(webContents: WebContents, session: TerminalSession, channel: string, payload: unknown): void {
+  private sendToOwner(
+    webContents: WebContents,
+    session: TerminalSession,
+    channel: string,
+    payload: unknown,
+  ): void {
     if (webContents.id === session.ownerWebContentsId && !webContents.isDestroyed()) {
       webContents.send(channel, payload);
     }
@@ -362,9 +386,10 @@ export class TerminalService {
     const sessions = root.sessionIds
       .map((sessionId) => this.sessionsById.get(sessionId))
       .filter((session): session is TerminalSession => Boolean(session));
-    const activeSessionId = root.activeSessionId && sessions.some((session) => session.id === root.activeSessionId)
-      ? root.activeSessionId
-      : sessions[0]?.id ?? "";
+    const activeSessionId =
+      root.activeSessionId && sessions.some((session) => session.id === root.activeSessionId)
+        ? root.activeSessionId
+        : (sessions[0]?.id ?? "");
     return {
       workspaceId: root.workspaceId,
       rootKey: root.rootKey,
@@ -431,7 +456,12 @@ function normalizeSize(size?: Partial<TerminalSize>): TerminalSize {
   };
 }
 
-function clampInteger(value: number | undefined, fallback: number, min: number, max: number): number {
+function clampInteger(
+  value: number | undefined,
+  fallback: number,
+  min: number,
+  max: number,
+): number {
   if (!Number.isFinite(value)) {
     return fallback;
   }

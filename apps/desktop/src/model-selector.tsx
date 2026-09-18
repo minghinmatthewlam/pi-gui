@@ -58,8 +58,14 @@ export function ModelSelector({
   const hasAvailableModelOptions = modelOptions.length > 0;
   const hasModelControl = Boolean(provider && modelId) || hasAvailableModelOptions;
   const shouldRenderModelControl = hasModelControl || showEmptyModelControl;
-  const modelBadgeLabel = provider && modelId ? `${provider}:${modelId}` : hasAvailableModelOptions ? unselectedModelLabel : emptyModelLabel;
-  const noMatchingModels = hasAvailableModelOptions && modelFilter.trim().length > 0 && groupedModels.length === 0;
+  const modelBadgeLabel =
+    provider && modelId
+      ? `${provider}:${modelId}`
+      : hasAvailableModelOptions
+        ? unselectedModelLabel
+        : emptyModelLabel;
+  const noMatchingModels =
+    hasAvailableModelOptions && modelFilter.trim().length > 0 && groupedModels.length === 0;
 
   useEffect(() => {
     if (open === "none") {
@@ -135,7 +141,9 @@ export function ModelSelector({
                         }}
                       >
                         <span className="model-selector__item-label">{option.label}</span>
-                        {isActive ? <span className="model-selector__item-meta">active</span> : null}
+                        {isActive ? (
+                          <span className="model-selector__item-meta">active</span>
+                        ) : null}
                       </button>
                     );
                   })}
@@ -146,7 +154,9 @@ export function ModelSelector({
                   <div className="model-selector__group-title">
                     {noMatchingModels ? "No matching models" : emptyModelTitle}
                   </div>
-                  {noMatchingModels ? <div className="model-selector__empty">Try a different filter.</div> : null}
+                  {noMatchingModels ? (
+                    <div className="model-selector__empty">Try a different filter.</div>
+                  ) : null}
                 </>
               ) : null}
             </div>

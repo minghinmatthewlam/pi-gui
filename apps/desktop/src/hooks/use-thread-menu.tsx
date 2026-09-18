@@ -15,7 +15,6 @@ interface UseThreadMenuParams {
   readonly api: PiDesktopApi;
   readonly setSnapshot: Dispatch<SetStateAction<DesktopAppState | null>>;
   readonly updateSnapshot: (
-    api: PiDesktopApi,
     setSnapshot: Dispatch<SetStateAction<DesktopAppState | null>>,
     action: () => Promise<DesktopAppState>,
   ) => Promise<DesktopAppState>;
@@ -40,7 +39,11 @@ export interface ThreadMenuState {
   readonly runMenuAction: (event: ReactMouseEvent<HTMLElement>, action: () => void) => void;
 }
 
-export function useThreadMenu({ api, setSnapshot, updateSnapshot }: UseThreadMenuParams): ThreadMenuState {
+export function useThreadMenu({
+  api,
+  setSnapshot,
+  updateSnapshot,
+}: UseThreadMenuParams): ThreadMenuState {
   const [menuSessionId, setMenuSessionId] = useState<string | null>(null);
   const [renameSessionId, setRenameSessionId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
@@ -84,7 +87,9 @@ export function useThreadMenu({ api, setSnapshot, updateSnapshot }: UseThreadMen
   });
   const mutate = (action: () => Promise<DesktopAppState>) => {
     setMenuSessionId(null);
-    void updateSnapshot(api, setSnapshot, action);
+    void updateSnapshot(setSnapshot, action).catch((error: unknown) => {
+      console.error("[renderer] updateSnapshot failed", error);
+    });
   };
 
   return {
@@ -122,12 +127,16 @@ export function useThreadMenu({ api, setSnapshot, updateSnapshot }: UseThreadMen
     },
     archiveOrRestore: (thread) => {
       const target = targetFor(thread);
-      mutate(() => thread.session.archivedAt ? api.unarchiveSession(target) : api.archiveSession(target));
+      mutate(() =>
+        thread.session.archivedAt ? api.unarchiveSession(target) : api.archiveSession(target),
+      );
     },
     markRead: (thread) => mutate(() => api.markSessionRead(targetFor(thread))),
     copySessionId: (thread) => {
       setMenuSessionId(null);
-      void navigator.clipboard.writeText(thread.session.id);
+      void navigator.clipboard.writeText(thread.session.id).catch((error: unknown) => {
+        console.error("[renderer] navigator.clipboard.writeText failed", error);
+      });
     },
     runMenuAction: (event, action) => {
       event.preventDefault();

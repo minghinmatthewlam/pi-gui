@@ -39,7 +39,9 @@ export function QueuedComposerMessages({
           key={message.id}
         >
           <div className="queued-composer-message__header">
-            {message.text ? <div className="queued-composer-message__text">{message.text}</div> : null}
+            {message.text ? (
+              <div className="queued-composer-message__text">{message.text}</div>
+            ) : null}
             <div className="queued-composer-message__actions">
               {message.mode !== "steer" ? (
                 <button type="button" onClick={() => onSteerMessage(message.id)}>
@@ -49,7 +51,11 @@ export function QueuedComposerMessages({
               <button type="button" onClick={() => onEditMessage(message.id)}>
                 Edit
               </button>
-              <button aria-label={`Delete queued message ${message.text || message.id}`} type="button" onClick={() => onRemoveMessage(message.id)}>
+              <button
+                aria-label={`Delete queued message ${message.text || message.id}`}
+                type="button"
+                onClick={() => onRemoveMessage(message.id)}
+              >
                 Delete
               </button>
             </div>
@@ -57,7 +63,10 @@ export function QueuedComposerMessages({
           {message.attachments.length > 0 ? (
             <div className="queued-composer-message__attachments">
               {message.attachments.map((attachment, index) => (
-                <QueuedAttachmentPreview attachment={attachment} key={`${message.id}:${attachment.name}:${index}`} />
+                <QueuedAttachmentPreview
+                  attachment={attachment}
+                  key={`${message.id}:${attachment.name}:${index}`}
+                />
               ))}
             </div>
           ) : null}

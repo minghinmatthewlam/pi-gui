@@ -67,7 +67,9 @@ export async function generateThreadTitle(
     createOptions.model = selectedModel;
   }
   if (options.thinkingLevel) {
-    createOptions.thinkingLevel = options.thinkingLevel as NonNullable<CreateAgentSessionOptions["thinkingLevel"]>;
+    createOptions.thinkingLevel = options.thinkingLevel as NonNullable<
+      CreateAgentSessionOptions["thinkingLevel"]
+    >;
   }
 
   const { session } = await createAgentSession(createOptions);
@@ -82,7 +84,13 @@ export async function generateThreadTitle(
     if (!session.model) {
       return null;
     }
-    const auth = await session.modelRegistry.getApiKeyAndHeaders(session.model);
+    // The upstream session exposes Model<any>; validate its API discriminator
+    // before passing the model into the typed authentication boundary.
+    const api: unknown = session.model.api;
+    if (typeof api !== "string") {
+      return null;
+    }
+    const auth = await session.modelRegistry.getApiKeyAndHeaders({ ...session.model, api });
     if (!auth.ok || !auth.apiKey) {
       return null;
     }
@@ -157,7 +165,7 @@ function stripWrappingQuotes(value: string): string {
     const first = current[0];
     const last = current[current.length - 1];
     if (
-      (first === "\"" && last === "\"") ||
+      (first === '"' && last === '"') ||
       (first === "'" && last === "'") ||
       (first === "`" && last === "`")
     ) {

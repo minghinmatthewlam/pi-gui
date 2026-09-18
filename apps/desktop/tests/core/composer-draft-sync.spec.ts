@@ -37,30 +37,37 @@ test("ignores stale persisted draft acknowledgements while typing", async () => 
     await composer.press("Backspace");
     await expect(composer).toHaveValue(expectedDraft);
 
-    await window.evaluate(({ stale }) => {
-      window.setTimeout(() => {
-        void window.piApp.updateComposerDraft(stale);
-      }, 50);
-    }, { stale: staleDraft });
+    const [, sampledValues] = await Promise.all([
+      window.evaluate(
+        async ({ stale }) => {
+          await new Promise<void>((resolve) => globalThis.window.setTimeout(resolve, 50));
+          const app = globalThis.window.piApp;
+          if (!app) throw new Error("piApp IPC bridge is unavailable");
+          await app.updateComposerDraft(stale);
+        },
+        { stale: staleDraft },
+      ),
+      window.evaluate(async () => {
+        const composer = document.querySelector<HTMLTextAreaElement>("[data-testid='composer']");
+        if (!composer) {
+          throw new Error("Composer textarea was unavailable");
+        }
 
-    const sampledValues = await window.evaluate(async () => {
-      const composer = document.querySelector<HTMLTextAreaElement>("[data-testid='composer']");
-      if (!composer) {
-        throw new Error("Composer textarea was unavailable");
-      }
-
-      const values: string[] = [];
-      const started = performance.now();
-      while (performance.now() - started < 900) {
-        values.push(composer.value);
-        await new Promise((resolve) => window.setTimeout(resolve, 20));
-      }
-      return values;
-    });
+        const values: string[] = [];
+        const started = performance.now();
+        while (performance.now() - started < 900) {
+          values.push(composer.value);
+          await new Promise((resolve) => globalThis.window.setTimeout(resolve, 20));
+        }
+        return values;
+      }),
+    ]);
 
     expect(sampledValues).not.toContain(staleDraft);
     await expect(composer).toHaveValue(expectedDraft);
-    await expect.poll(async () => (await getDesktopState(window)).composerDraft).toBe(expectedDraft);
+    await expect
+      .poll(async () => (await getDesktopState(window)).composerDraft)
+      .toBe(expectedDraft);
   } finally {
     await harness.close();
   }
@@ -81,7 +88,7 @@ test("adopts a persisted draft when no local edit is pending", async () => {
 
     const persistedDraft = "persisted outside the local debounce";
     await window.evaluate(async (draft) => {
-      const app = window.piApp;
+      const app = globalThis.window.piApp;
       if (!app) {
         throw new Error("piApp IPC bridge is unavailable");
       }
@@ -92,7 +99,9 @@ test("adopts a persisted draft when no local edit is pending", async () => {
     await expect(composer).toHaveValue(persistedDraft);
     await window.waitForTimeout(600);
     await expect(composer).toHaveValue(persistedDraft);
-    await expect.poll(async () => (await getDesktopState(window)).composerDraft).toBe(persistedDraft);
+    await expect
+      .poll(async () => (await getDesktopState(window)).composerDraft)
+      .toBe(persistedDraft);
   } finally {
     await harness.close();
   }
@@ -136,7 +145,7 @@ test("does not resurrect a cleared draft while an older write is in flight", asy
 
       ipcMain.removeHandler(channel);
       ipcMain.handle(channel, async (...args) => {
-        const draft = args[1];
+        const draft: unknown = args[1];
         if (typeof draft !== "string") {
           throw new Error("Composer draft IPC argument was not a string");
         }

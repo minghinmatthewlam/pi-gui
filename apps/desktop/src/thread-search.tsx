@@ -66,12 +66,7 @@ export function ThreadSearchBar({
         >
           &#x25BC;
         </button>
-        <button
-          aria-label="Close search"
-          className="icon-button"
-          type="button"
-          onClick={onClose}
-        >
+        <button aria-label="Close search" className="icon-button" type="button" onClick={onClose}>
           &#x2715;
         </button>
       </div>

@@ -23,7 +23,7 @@ class FakeCatalog {
   readonly worktrees = {
     listWorktrees: async (workspaceId?: string) => {
       const entries = workspaceId
-        ? this.byWorkspace.get(workspaceId) ?? []
+        ? (this.byWorkspace.get(workspaceId) ?? [])
         : [...this.byWorkspace.values()].flat();
       return { worktrees: entries.map((entry) => ({ ...entry })) };
     },
@@ -37,11 +37,20 @@ class FakeCatalog {
     },
     deleteWorktree: async (worktreeId: string) => {
       for (const [workspaceId, bucket] of this.byWorkspace) {
-        this.byWorkspace.set(workspaceId, bucket.filter((entry) => entry.worktreeId !== worktreeId));
+        this.byWorkspace.set(
+          workspaceId,
+          bucket.filter((entry) => entry.worktreeId !== worktreeId),
+        );
       }
     },
-    replaceWorkspaceWorktrees: async (workspaceId: string, entries: readonly WorktreeCatalogEntry[]) => {
-      this.byWorkspace.set(workspaceId, entries.map((entry) => ({ ...entry })));
+    replaceWorkspaceWorktrees: async (
+      workspaceId: string,
+      entries: readonly WorktreeCatalogEntry[],
+    ) => {
+      this.byWorkspace.set(
+        workspaceId,
+        entries.map((entry) => ({ ...entry })),
+      );
     },
   };
 }
@@ -107,7 +116,9 @@ test("rolls back a just-created worktree and its branch on failed thread creatio
     expect(await pathExists(created.path)).toBe(false);
     expect(await branchExists(repo, branchName)).toBe(false);
     const remaining = await manager.listWorktrees(workspace);
-    expect(remaining.worktrees.some((entry) => entry.worktreeId === created.worktreeId)).toBe(false);
+    expect(remaining.worktrees.some((entry) => entry.worktreeId === created.worktreeId)).toBe(
+      false,
+    );
   } finally {
     await rm(root, { recursive: true, force: true });
   }

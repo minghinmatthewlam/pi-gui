@@ -22,10 +22,13 @@ export interface ThreadGroup {
 }
 
 export function buildThreadGroups(state: DesktopAppState): readonly ThreadGroup[] {
-  const workspacesById = new Map(state.workspaces.map((workspace) => [workspace.id, workspace] as const));
+  const workspacesById = new Map(
+    state.workspaces.map((workspace) => [workspace.id, workspace] as const),
+  );
   const rootWorkspaces = state.workspaces.filter((workspace) => workspace.kind === "primary");
   const orphanWorktrees = state.workspaces.filter(
-    (workspace) => workspace.kind === "worktree" && !workspacesById.has(workspace.rootWorkspaceId ?? ""),
+    (workspace) =>
+      workspace.kind === "worktree" && !workspacesById.has(workspace.rootWorkspaceId ?? ""),
   );
 
   const order = state.workspaceOrder;
@@ -53,10 +56,17 @@ function buildRootGroup(
   const linkedWorkspaces = (state.worktreesByWorkspace[rootWorkspace.id] ?? [])
     .map((worktree) => ({
       worktree,
-      workspace: worktree.linkedWorkspaceId ? workspacesById.get(worktree.linkedWorkspaceId) : undefined,
+      workspace: worktree.linkedWorkspaceId
+        ? workspacesById.get(worktree.linkedWorkspaceId)
+        : undefined,
     }))
-    .filter((entry): entry is { worktree: NonNullable<(typeof state.worktreesByWorkspace)[string][number]>; workspace: WorkspaceRecord } =>
-      Boolean(entry.workspace),
+    .filter(
+      (
+        entry,
+      ): entry is {
+        worktree: NonNullable<(typeof state.worktreesByWorkspace)[string][number]>;
+        workspace: WorkspaceRecord;
+      } => Boolean(entry.workspace),
     );
 
   const threads: ThreadListEntry[] = [
@@ -111,10 +121,15 @@ function buildOrphanGroup(workspace: WorkspaceRecord): ThreadGroup {
   );
 }
 
-function partitionThreads(rootWorkspace: WorkspaceRecord, entries: readonly ThreadListEntry[]): ThreadGroup {
+function partitionThreads(
+  rootWorkspace: WorkspaceRecord,
+  entries: readonly ThreadListEntry[],
+): ThreadGroup {
   return {
     rootWorkspace,
-    pinnedThreads: entries.filter((entry) => !entry.session.archivedAt && Boolean(entry.session.pinnedAt)),
+    pinnedThreads: entries.filter(
+      (entry) => !entry.session.archivedAt && Boolean(entry.session.pinnedAt),
+    ),
     threads: entries.filter((entry) => !entry.session.archivedAt && !entry.session.pinnedAt),
     archivedThreads: entries.filter((entry) => Boolean(entry.session.archivedAt)),
   };

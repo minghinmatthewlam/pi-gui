@@ -9,7 +9,6 @@ import {
   launchDesktop,
   makeUserDataDir,
   makeWorkspace,
-  type PiAppWindow,
   seedAgentDir,
   waitForWorkspaceByPath,
 } from "../helpers/electron-app";
@@ -19,19 +18,35 @@ async function readModelsJson(agentDir: string): Promise<Record<string, unknown>
   return JSON.parse(raw) as Record<string, unknown>;
 }
 
-async function startModelListServer(modelCount: number, beforeResponse?: () => Promise<void>): Promise<{
+async function startModelListServer(
+  modelCount: number,
+  beforeResponse?: () => Promise<void>,
+): Promise<{
   readonly baseUrl: string;
   readonly authorization: () => string | undefined;
   readonly close: () => Promise<void>;
 }> {
   let authorization: string | undefined;
-  const server = createServer(async (request, response) => {
+  const requestErrors: Error[] = [];
+  const server = createServer((request, response) => {
     authorization = request.headers.authorization;
-    await beforeResponse?.();
-    response.writeHead(200, { "Content-Type": "application/json" });
-    response.end(JSON.stringify({
-      data: Array.from({ length: modelCount }, (_, index) => ({ id: `detected-model-${index + 1}` })),
-    }));
+    Promise.resolve()
+      .then(() => beforeResponse?.())
+      .then(() => {
+        response.writeHead(200, { "Content-Type": "application/json" });
+        response.end(
+          JSON.stringify({
+            data: Array.from({ length: modelCount }, (_, index) => ({
+              id: `detected-model-${index + 1}`,
+            })),
+          }),
+        );
+      })
+      .catch((error: unknown) => {
+        const failure = error instanceof Error ? error : new Error(String(error));
+        requestErrors.push(failure);
+        response.destroy(failure);
+      });
   });
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);
@@ -44,26 +59,40 @@ async function startModelListServer(modelCount: number, beforeResponse?: () => P
   return {
     baseUrl: `http://127.0.0.1:${address.port}/v1`,
     authorization: () => authorization,
-    close: () => new Promise<void>((resolve, reject) => {
-      server.close((error) => error ? reject(error) : resolve());
-    }),
+    close: () =>
+      new Promise<void>((resolve, reject) => {
+        server.close((error) => {
+          const failure = error ?? requestErrors[0];
+          if (failure) reject(failure);
+          else resolve();
+        });
+      }),
   };
 }
 
-async function openProvidersSettings(window: Awaited<ReturnType<Awaited<ReturnType<typeof launchDesktop>>["firstWindow"]>>) {
+async function openProvidersSettings(
+  window: Awaited<ReturnType<Awaited<ReturnType<typeof launchDesktop>>["firstWindow"]>>,
+) {
   await window.keyboard.press(desktopShortcut(","));
   await expect(window.getByTestId("settings-surface")).toBeVisible();
   await window.getByRole("button", { name: "Providers", exact: true }).click();
   await expect(window.locator(".view-header__title")).toHaveText("Providers");
 }
 
-async function saveCustomEndpointProof(window: Page, proofDir: string | undefined, fileName: string): Promise<void> {
+async function saveCustomEndpointProof(
+  window: Page,
+  proofDir: string | undefined,
+  fileName: string,
+): Promise<void> {
   if (proofDir) {
     await window.screenshot({ path: join(proofDir, fileName), fullPage: false });
   }
 }
 
-async function saveCustomEndpointVideo(video: Video | null, proofDir: string | undefined): Promise<void> {
+async function saveCustomEndpointVideo(
+  video: Video | null,
+  proofDir: string | undefined,
+): Promise<void> {
   if (proofDir && video) {
     await video.saveAs(join(proofDir, "custom-endpoint-keyboard-flow.webm"));
   }
@@ -71,7 +100,9 @@ async function saveCustomEndpointVideo(video: Video | null, proofDir: string | u
 
 test("custom endpoint detection preserves focus moved to manual model entry", async () => {
   let releaseResponse!: () => void;
-  const responseReady = new Promise<void>((resolve) => { releaseResponse = resolve; });
+  const responseReady = new Promise<void>((resolve) => {
+    releaseResponse = resolve;
+  });
   const modelServer = await startModelListServer(2, () => responseReady);
   const userDataDir = await makeUserDataDir();
   const agentDir = join(userDataDir, "agent");
@@ -99,7 +130,11 @@ test("custom endpoint detection preserves focus moved to manual model entry", as
     await expect(manualModel).toBeFocused();
     await manualModel.press("Enter");
     await expect(dialog.getByLabel("Enable manual-model", { exact: true })).toBeChecked();
-    await saveCustomEndpointProof(window, process.env.PI_APP_CUSTOM_ENDPOINT_PROOF_DIR, "delayed-detection-focus.png");
+    await saveCustomEndpointProof(
+      window,
+      process.env.PI_APP_CUSTOM_ENDPOINT_PROOF_DIR,
+      "delayed-detection-focus.png",
+    );
   } finally {
     releaseResponse();
     await harness.close();
@@ -159,13 +194,16 @@ test("settings lets the user add, edit, and delete an OpenAI-compatible custom e
       piGuiCustomEndpoint: true,
       models: [{ id: "llama3.1" }],
     });
-    await expect.poll(async () => {
-      const state = await getDesktopState(window);
-      return (
-        state.runtimeByWorkspace[otherWorkspace.id]?.providers.some((provider) => provider.id === "ollama-local")
-        ?? false
-      );
-    }).toBe(true);
+    await expect
+      .poll(async () => {
+        const state = await getDesktopState(window);
+        return (
+          state.runtimeByWorkspace[otherWorkspace.id]?.providers.some(
+            (provider) => provider.id === "ollama-local",
+          ) ?? false
+        );
+      })
+      .toBe(true);
 
     // Edit flow: change base URL.
     await entryRow.getByRole("button", { name: "Edit", exact: true }).click();
@@ -191,13 +229,16 @@ test("settings lets the user add, edit, and delete an OpenAI-compatible custom e
     const afterDelete = await readModelsJson(agentDir);
     const afterDeleteProviders = (afterDelete.providers as Record<string, unknown>) ?? {};
     expect(afterDeleteProviders["ollama-local"]).toBeUndefined();
-    await expect.poll(async () => {
-      const state = await getDesktopState(window);
-      return (
-        state.runtimeByWorkspace[otherWorkspace.id]?.providers.some((provider) => provider.id === "ollama-local")
-        ?? false
-      );
-    }).toBe(false);
+    await expect
+      .poll(async () => {
+        const state = await getDesktopState(window);
+        return (
+          state.runtimeByWorkspace[otherWorkspace.id]?.providers.some(
+            (provider) => provider.id === "ollama-local",
+          ) ?? false
+        );
+      })
+      .toBe(false);
   } finally {
     await harness.close();
   }
@@ -267,26 +308,32 @@ test("custom endpoints keep legacy managed entries separate from built-in overri
       }),
     ).toHaveCount(0);
 
-    const blockedState = await window.evaluate(async ({ workspaceId }) => {
-      const app = (window as PiAppWindow).piApp;
-      if (!app) {
-        throw new Error("piApp IPC bridge is unavailable");
-      }
-      return app.setCustomProvider(workspaceId, {
-        providerId: "openai",
-        baseUrl: "http://localhost:11434/v1",
-        models: [{ id: "should-not-save" }],
-      });
-    }, { workspaceId: workspace.id });
+    const blockedState = await window.evaluate(
+      async ({ workspaceId }) => {
+        const app = globalThis.window.piApp;
+        if (!app) {
+          throw new Error("piApp IPC bridge is unavailable");
+        }
+        return app.setCustomProvider(workspaceId, {
+          providerId: "openai",
+          baseUrl: "http://localhost:11434/v1",
+          models: [{ id: "should-not-save" }],
+        });
+      },
+      { workspaceId: workspace.id },
+    );
     expect(blockedState.lastError).toContain("conflicts with a built-in provider");
 
-    await window.evaluate(async ({ workspaceId }) => {
-      const app = (window as PiAppWindow).piApp;
-      if (!app) {
-        throw new Error("piApp IPC bridge is unavailable");
-      }
-      await app.deleteCustomProvider(workspaceId, "openai");
-    }, { workspaceId: workspace.id });
+    await window.evaluate(
+      async ({ workspaceId }) => {
+        const app = globalThis.window.piApp;
+        if (!app) {
+          throw new Error("piApp IPC bridge is unavailable");
+        }
+        await app.deleteCustomProvider(workspaceId, "openai");
+      },
+      { workspaceId: workspace.id },
+    );
     const afterBlockedDelete = await readModelsJson(agentDir);
     expect((afterBlockedDelete.providers as Record<string, unknown>).openai).toBeDefined();
     expect((afterBlockedDelete.providers as Record<string, unknown>).deepseek).toBeDefined();
@@ -389,16 +436,23 @@ test("custom endpoint dialog supports a long-list keyboard flow with sticky acti
     await harness.electronApp.evaluate(({ BrowserWindow }) => {
       BrowserWindow.getAllWindows()[0]?.setSize(900, 600);
     });
-    await expect.poll(() => window.evaluate(() => ({
-      height: window.innerHeight,
-      width: window.innerWidth,
-    }))).toEqual({ height: 600, width: 900 });
+    await expect
+      .poll(() =>
+        window.evaluate(() => ({
+          height: globalThis.window.innerHeight,
+          width: globalThis.window.innerWidth,
+        })),
+      )
+      .toEqual({ height: 600, width: 900 });
     await openProvidersSettings(window);
 
     const customEndpoints = window.locator(".settings-section", {
       has: window.locator(".settings-section__title", { hasText: "Custom endpoints" }),
     });
-    const openDialogButton = customEndpoints.getByRole("button", { name: "Add endpoint", exact: true });
+    const openDialogButton = customEndpoints.getByRole("button", {
+      name: "Add endpoint",
+      exact: true,
+    });
     await openDialogButton.click();
 
     const dialog = window.getByTestId("custom-endpoint-dialog");
@@ -439,14 +493,19 @@ test("custom endpoint dialog supports a long-list keyboard flow with sticky acti
       const footer = element.querySelector<HTMLElement>(".custom-endpoint-dialog__footer");
       const list = element.querySelector<HTMLElement>(".custom-endpoint-model-list");
       const rect = element.getBoundingClientRect();
-      const scrollableElements = [...element.querySelectorAll<HTMLElement>("*")].filter((candidate) => {
-        const overflowY = getComputedStyle(candidate).overflowY;
-        return (overflowY === "auto" || overflowY === "scroll")
-          && candidate.scrollHeight > candidate.clientHeight + 1;
-      });
+      const scrollableElements = [...element.querySelectorAll<HTMLElement>("*")].filter(
+        (candidate) => {
+          const overflowY = getComputedStyle(candidate).overflowY;
+          return (
+            (overflowY === "auto" || overflowY === "scroll") &&
+            candidate.scrollHeight > candidate.clientHeight + 1
+          );
+        },
+      );
       return {
         contentClientHeight: content?.clientHeight ?? 0,
-        contentIsOnlyScrollable: scrollableElements.length === 1 && scrollableElements[0] === content,
+        contentIsOnlyScrollable:
+          scrollableElements.length === 1 && scrollableElements[0] === content,
         contentOverflowY: content ? getComputedStyle(content).overflowY : "",
         contentScrollHeight: content?.scrollHeight ?? 0,
         dialogBottom: rect.bottom,
@@ -456,7 +515,7 @@ test("custom endpoint dialog supports a long-list keyboard flow with sticky acti
         listOverflowY: list ? getComputedStyle(list).overflowY : "",
         listScrollHeight: list?.scrollHeight ?? 0,
         scrollableElementCount: scrollableElements.length,
-        viewportHeight: window.innerHeight,
+        viewportHeight: globalThis.window.innerHeight,
       };
     });
     expect(layout.dialogTop).toBeGreaterThanOrEqual(23);

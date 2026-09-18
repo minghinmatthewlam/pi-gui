@@ -8,7 +8,10 @@ export function resolveWorkspacePath(workspacePath: string, filePath: string): s
   return resolved;
 }
 
-export async function resolveExistingWorkspacePath(workspacePath: string, filePath: string): Promise<string> {
+export async function resolveExistingWorkspacePath(
+  workspacePath: string,
+  filePath: string,
+): Promise<string> {
   const resolved = resolveWorkspacePath(workspacePath, filePath);
   const [realWorkspaceRoot, realTarget] = await Promise.all([
     realpath(path.resolve(workspacePath)),

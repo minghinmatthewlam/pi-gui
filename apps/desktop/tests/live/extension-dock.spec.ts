@@ -75,7 +75,11 @@ test("renders a single collapsed dock inside the composer surface and expands to
   const workspacePath = await makeWorkspace("extension-dock-workspace");
   await initGitRepo(workspacePath);
   await mkdir(join(workspacePath, "src"), { recursive: true });
-  await writeFile(join(workspacePath, "src", "App.tsx"), "export default function App() { return null; }\n", "utf8");
+  await writeFile(
+    join(workspacePath, "src", "App.tsx"),
+    "export default function App() { return null; }\n",
+    "utf8",
+  );
   await commitAllInGitRepo(workspacePath, "init");
   await writeProjectExtension(workspacePath, "dock-extension.ts", extensionSource);
 
@@ -91,7 +95,9 @@ test("renders a single collapsed dock inside the composer surface and expands to
     const dock = window.getByTestId("extension-dock");
     const dockSummary = window.getByTestId("extension-dock-summary");
     const dockToggle = window.getByTestId("extension-dock-toggle");
-    const dockInComposerSurface = window.locator(".composer__surface [data-testid='extension-dock']");
+    const dockInComposerSurface = window.locator(
+      ".composer__surface [data-testid='extension-dock']",
+    );
     const composerSurface = window.locator(".composer__surface");
     const composer = window.getByTestId("composer");
 
@@ -133,7 +139,9 @@ test("renders a single collapsed dock inside the composer surface and expands to
     const slashMenuBox = await slashMenu.boundingBox();
     assertExists(slashMenuBox, "Expected slash menu box");
     expect(slashMenuBox.y + slashMenuBox.height).toBeLessThanOrEqual(composerBox.y + 16);
-    expect(slashMenuBox.y + slashMenuBox.height).toBeGreaterThanOrEqual(dockBox.y + dockBox.height - 4);
+    expect(slashMenuBox.y + slashMenuBox.height).toBeGreaterThanOrEqual(
+      dockBox.y + dockBox.height - 4,
+    );
 
     await composer.fill("@");
     const mentionMenu = window.getByTestId("mention-menu");
@@ -141,7 +149,9 @@ test("renders a single collapsed dock inside the composer surface and expands to
     const mentionMenuBox = await mentionMenu.boundingBox();
     assertExists(mentionMenuBox, "Expected mention menu box");
     expect(mentionMenuBox.y + mentionMenuBox.height).toBeLessThanOrEqual(composerBox.y + 16);
-    expect(mentionMenuBox.y + mentionMenuBox.height).toBeGreaterThanOrEqual(dockBox.y + dockBox.height - 4);
+    expect(mentionMenuBox.y + mentionMenuBox.height).toBeGreaterThanOrEqual(
+      dockBox.y + dockBox.height - 4,
+    );
   } finally {
     await harness.close();
   }
@@ -170,7 +180,9 @@ test("uses literal fallback summaries for status-only and widget-only extension 
       .poll(async () => {
         const nextState = await getDesktopState(window);
         const sessionKey = `${nextState.selectedWorkspaceId}:${nextState.selectedSessionId}`;
-        return (nextState.sessionCommandsBySession[sessionKey] ?? []).map((command) => command.name).sort();
+        return (nextState.sessionCommandsBySession[sessionKey] ?? [])
+          .map((command) => command.name)
+          .sort();
       })
       .toEqual(expect.arrayContaining(["status-only", "widget-only"]));
 
@@ -211,7 +223,9 @@ test("does not spam the transcript when an extension updates its widget repeated
     const transcriptActivities = window.locator(".timeline .timeline-activity");
     const baselineCount = await transcriptActivities.count();
 
-    await expect(window.getByTestId("extension-dock-summary")).toHaveText("Tick 3", { timeout: 10_000 });
+    await expect(window.getByTestId("extension-dock-summary")).toHaveText("Tick 3", {
+      timeout: 10_000,
+    });
     await expect(transcriptActivities).toHaveCount(baselineCount);
     await expect(window.locator(".timeline")).not.toContainText("Tick 1");
     await expect(window.locator(".timeline")).not.toContainText("Tick 2");

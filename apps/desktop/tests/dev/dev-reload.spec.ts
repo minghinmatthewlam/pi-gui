@@ -77,10 +77,14 @@ class DevDesktopHarness {
     const readMarker = async (page: Page) =>
       page.evaluate(async (markerName) => {
         if (markerName === "main") {
-          const pingValue = await window.piApp?.ping();
+          const pingValue = await globalThis.window.piApp?.ping();
           return pingValue?.split(":")[1] ?? null;
         }
-        return window.__piDevReloadRenderer?.[markerName] ?? window.__piDevReloadHost?.[markerName] ?? null;
+        return (
+          window.__piDevReloadRenderer?.[markerName] ??
+          window.__piDevReloadHost?.[markerName] ??
+          null
+        );
       }, name);
 
     const page = await this.getPage(2_500);
@@ -142,9 +146,13 @@ class DevDesktopHarness {
           this.page = await this.findFirstPage(this.browser, timeoutMs);
         }
         await this.page.waitForLoadState("domcontentloaded", { timeout: 1_500 });
-        await this.page.waitForFunction(() => Boolean((window as Window & { piApp?: unknown }).piApp), undefined, {
-          timeout: 1_500,
-        });
+        await this.page.waitForFunction(
+          () => Boolean((window as Window & { piApp?: unknown }).piApp),
+          undefined,
+          {
+            timeout: 1_500,
+          },
+        );
         return this.page;
       } catch (error) {
         lastError = error;
@@ -157,13 +165,18 @@ class DevDesktopHarness {
       }
     }
 
-    throw new Error(`Failed to connect to desktop dev app: ${String(lastError)}\n${this.recentLogs()}`);
+    throw new Error(
+      `Failed to connect to desktop dev app: ${String(lastError)}\n${this.recentLogs()}`,
+    );
   }
 
   private async findFirstPage(browser: Browser, timeoutMs: number): Promise<Page> {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
-      const page = browser.contexts().flatMap((context) => context.pages()).find((candidate) => !candidate.isClosed());
+      const page = browser
+        .contexts()
+        .flatMap((context) => context.pages())
+        .find((candidate) => !candidate.isClosed());
       if (page) {
         return page;
       }
@@ -199,8 +212,8 @@ async function startDesktopDev(): Promise<DevDesktopHarness> {
   });
 
   const harness = new DevDesktopHarness(child);
-  child.stdout.on("data", (chunk) => harness.appendLog(chunk.toString()));
-  child.stderr.on("data", (chunk) => harness.appendLog(chunk.toString()));
+  child.stdout.on("data", (chunk: Buffer) => harness.appendLog(chunk.toString()));
+  child.stderr.on("data", (chunk: Buffer) => harness.appendLog(chunk.toString()));
   try {
     await waitForMarker(harness, probes.renderer.markerName, probes.renderer.before, 45_000);
     return harness;
@@ -229,7 +242,9 @@ async function waitForMarker(
     await delay(500);
   }
 
-  throw new Error(`Timed out waiting for marker ${name}=${expected}: ${String(lastError ?? "no marker value")}`);
+  throw new Error(
+    `Timed out waiting for marker ${name}=${expected}: ${String(lastError ?? "no marker value")}`,
+  );
 }
 
 async function replaceProbeText(name: ProbeName, nextValue: string): Promise<() => Promise<void>> {
@@ -249,7 +264,12 @@ test("reloads running desktop app for renderer, Electron, and shared package edi
   try {
     await waitForMarker(harness, probes.main.markerName, probes.main.before, 20_000);
     await waitForMarker(harness, probes.preload.markerName, probes.preload.before, 20_000);
-    await waitForMarker(harness, probes.sessionDriver.markerName, probes.sessionDriver.before, 20_000);
+    await waitForMarker(
+      harness,
+      probes.sessionDriver.markerName,
+      probes.sessionDriver.before,
+      20_000,
+    );
     await waitForMarker(harness, probes.piSdkDriver.markerName, probes.piSdkDriver.before, 20_000);
     await waitForMarker(harness, probes.catalogs.markerName, probes.catalogs.before, 20_000);
 
@@ -263,7 +283,12 @@ test("reloads running desktop app for renderer, Electron, and shared package edi
     await waitForMarker(harness, probes.preload.markerName, probes.preload.after, 30_000);
 
     restoreSteps.unshift(await replaceProbeText("sessionDriver", probes.sessionDriver.after));
-    await waitForMarker(harness, probes.sessionDriver.markerName, probes.sessionDriver.after, 20_000);
+    await waitForMarker(
+      harness,
+      probes.sessionDriver.markerName,
+      probes.sessionDriver.after,
+      20_000,
+    );
 
     restoreSteps.unshift(await replaceProbeText("piSdkDriver", probes.piSdkDriver.after));
     await waitForMarker(harness, probes.piSdkDriver.markerName, probes.piSdkDriver.after, 20_000);

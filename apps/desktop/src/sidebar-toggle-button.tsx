@@ -6,7 +6,11 @@ interface SidebarToggleButtonProps {
   readonly onToggle: () => void;
 }
 
-export function SidebarToggleButton({ collapsed, shortcutLabel, onToggle }: SidebarToggleButtonProps) {
+export function SidebarToggleButton({
+  collapsed,
+  shortcutLabel,
+  onToggle,
+}: SidebarToggleButtonProps) {
   return (
     <div className="shortcut-tooltip-wrap sidebar-toggle">
       <button

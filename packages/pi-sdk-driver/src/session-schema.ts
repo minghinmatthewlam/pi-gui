@@ -40,7 +40,8 @@ export function buildSessionSchemaInfo(fileSchemaVersion: number | undefined): S
   return {
     fileSchemaVersion,
     runtimeSchemaVersion: RUNTIME_SCHEMA_VERSION,
-    writtenByNewerRuntime: fileSchemaVersion !== undefined && fileSchemaVersion > RUNTIME_SCHEMA_VERSION,
+    writtenByNewerRuntime:
+      fileSchemaVersion !== undefined && fileSchemaVersion > RUNTIME_SCHEMA_VERSION,
   };
 }
 

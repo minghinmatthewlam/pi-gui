@@ -8,6 +8,7 @@ import type { Page } from "@playwright/test";
 import {
   addWorkspaceViaIpc,
   getDesktopState,
+  getSelectedTranscript,
   launchDesktop,
   makeWorkspace,
   type PiAppWindow,
@@ -55,11 +56,16 @@ function startFrameRecorder(page: Page, framesDir: string): () => Promise<number
 async function renderClip(framesDir: string, outputPath: string): Promise<void> {
   await execFileAsync("ffmpeg", [
     "-y",
-    "-framerate", String(frameRate),
-    "-i", path.join(framesDir, "frame-%05d.png"),
-    "-vf", "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,format=yuv420p",
-    "-c:v", "libx264",
-    "-crf", "18",
+    "-framerate",
+    String(frameRate),
+    "-i",
+    path.join(framesDir, "frame-%05d.png"),
+    "-vf",
+    "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,format=yuv420p",
+    "-c:v",
+    "libx264",
+    "-crf",
+    "18",
     "-an",
     outputPath,
   ]);
@@ -78,8 +84,15 @@ async function waitForLiveResponse(
     const state = await getDesktopState(page);
     const workspace = state.workspaces.find((entry) => entry.id === state.selectedWorkspaceId);
     const session = workspace?.sessions.find((entry) => entry.id === state.selectedSessionId);
-    const transcript = session?.transcript ?? [];
-    const assistantMessages = transcript.filter((item) => item.kind === "message" && item.role === "assistant");
+    const selectedTranscript = await getSelectedTranscript(page);
+    const transcript =
+      selectedTranscript?.workspaceId === workspace?.id &&
+      selectedTranscript?.sessionId === session?.id
+        ? (selectedTranscript?.transcript ?? [])
+        : [];
+    const assistantMessages = transcript.flatMap((item) =>
+      item.kind === "message" && item.role === "assistant" ? [item.text] : [],
+    );
     const latestAssistant = assistantMessages.at(-1);
 
     if (state.lastError) {
@@ -89,7 +102,7 @@ async function waitForLiveResponse(
     if (
       session?.status === "idle" &&
       latestAssistant &&
-      latestAssistant.text.trim().length >= options.minimumAssistantLength
+      latestAssistant.trim().length >= options.minimumAssistantLength
     ) {
       return;
     }
@@ -144,12 +157,18 @@ async function captureParallelSessions(page: Page): Promise<void> {
     await hold(800);
 
     // Fire prompt in session A
-    const promptA = "Analyze the project structure and suggest three architectural improvements. Be concise.";
-    await page.evaluate(({ workspaceId: wId, sessionId, prompt }) => {
-      const app = (window as PiAppWindow).piApp;
-      if (!app) throw new Error("piApp unavailable");
-      void app.selectSession({ workspaceId: wId, sessionId }).then(() => app.submitComposer(prompt));
-    }, { workspaceId, sessionId: sessionAId, prompt: promptA });
+    const promptA =
+      "Analyze the project structure and suggest three architectural improvements. Be concise.";
+    await page.evaluate(
+      ({ workspaceId: wId, sessionId, prompt }) => {
+        const app = (window as PiAppWindow).piApp;
+        if (!app) throw new Error("piApp unavailable");
+        return app
+          .selectSession({ workspaceId: wId, sessionId })
+          .then(() => app.submitComposer(prompt));
+      },
+      { workspaceId, sessionId: sessionAId, prompt: promptA },
+    );
 
     // Wait until A is running
     const aRunDeadline = Date.now() + 30_000;
@@ -165,31 +184,42 @@ async function captureParallelSessions(page: Page): Promise<void> {
 
     // Fire prompt in session B
     const promptB = "List the top 5 files in this project by importance. One sentence each.";
-    await page.evaluate(({ workspaceId: wId, sessionId, prompt }) => {
-      const app = (window as PiAppWindow).piApp;
-      if (!app) throw new Error("piApp unavailable");
-      void app.selectSession({ workspaceId: wId, sessionId }).then(() => app.submitComposer(prompt));
-    }, { workspaceId, sessionId: sessionBId, prompt: promptB });
+    await page.evaluate(
+      ({ workspaceId: wId, sessionId, prompt }) => {
+        const app = (window as PiAppWindow).piApp;
+        if (!app) throw new Error("piApp unavailable");
+        return app
+          .selectSession({ workspaceId: wId, sessionId })
+          .then(() => app.submitComposer(prompt));
+      },
+      { workspaceId, sessionId: sessionBId, prompt: promptB },
+    );
 
     // Let B stream while visible
     await hold(2500);
 
     // Switch back to session A to show both running
-    await page.evaluate(({ workspaceId: wId, sessionId }) => {
-      const app = (window as PiAppWindow).piApp;
-      if (!app) throw new Error("piApp unavailable");
-      void app.selectSession({ workspaceId: wId, sessionId });
-    }, { workspaceId, sessionId: sessionAId });
+    await page.evaluate(
+      ({ workspaceId: wId, sessionId }) => {
+        const app = (window as PiAppWindow).piApp;
+        if (!app) throw new Error("piApp unavailable");
+        return app.selectSession({ workspaceId: wId, sessionId });
+      },
+      { workspaceId, sessionId: sessionAId },
+    );
 
     // Show A's progress
     await hold(2500);
 
     // Switch to B
-    await page.evaluate(({ workspaceId: wId, sessionId }) => {
-      const app = (window as PiAppWindow).piApp;
-      if (!app) throw new Error("piApp unavailable");
-      void app.selectSession({ workspaceId: wId, sessionId });
-    }, { workspaceId, sessionId: sessionBId });
+    await page.evaluate(
+      ({ workspaceId: wId, sessionId }) => {
+        const app = (window as PiAppWindow).piApp;
+        if (!app) throw new Error("piApp unavailable");
+        return app.selectSession({ workspaceId: wId, sessionId });
+      },
+      { workspaceId, sessionId: sessionBId },
+    );
 
     // Hold on B
     await hold(2000);

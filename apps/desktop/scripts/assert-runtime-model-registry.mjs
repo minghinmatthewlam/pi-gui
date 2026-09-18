@@ -44,4 +44,8 @@ for (const check of modelChecks) {
   }
 }
 
-console.log(modelChecks.map((check) => `Verified bundled Pi runtime exposes ${check.provider}/${check.id}.`).join("\n"));
+console.log(
+  modelChecks
+    .map((check) => `Verified bundled Pi runtime exposes ${check.provider}/${check.id}.`)
+    .join("\n"),
+);

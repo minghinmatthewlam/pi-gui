@@ -163,7 +163,10 @@ async function createChildThreadRecord(
 
     store.state = {
       ...store.state,
-      orchestrationChildren: projectOrchestrationChildren(store, [childWithEvidence, ...store.state.orchestrationChildren]),
+      orchestrationChildren: projectOrchestrationChildren(store, [
+        childWithEvidence,
+        ...store.state.orchestrationChildren,
+      ]),
     };
     await store.refreshState({
       selectedWorkspaceId: input.parentWorkspaceId,
@@ -185,7 +188,9 @@ async function createChildThreadRecord(
     }
 
     return {
-      child: store.state.orchestrationChildren.find((entry) => entry.id === child.id) ?? childWithEvidence,
+      child:
+        store.state.orchestrationChildren.find((entry) => entry.id === child.id) ??
+        childWithEvidence,
       deliveryStatus,
     };
   } finally {
@@ -231,7 +236,11 @@ async function handleCreateChildThreadToolResult(
   } catch (error) {
     const message = errorMessage(error);
     await store.withError(error);
-    updateThreadToolOutput(store, event, projectionFromToolResult(createChildThreadErrorResult(prompt, message)));
+    updateThreadToolOutput(
+      store,
+      event,
+      projectionFromToolResult(createChildThreadErrorResult(prompt, message)),
+    );
     return true;
   }
 
@@ -313,7 +322,12 @@ export async function sendChildThreadFollowUp(
     deliverAs: "followUp",
     allowCommands: false,
   });
-  updateChildSupervisionLoop(store, child.id, "continue", "Follow-up sent; monitoring child progress.");
+  updateChildSupervisionLoop(
+    store,
+    child.id,
+    "continue",
+    "Follow-up sent; monitoring child progress.",
+  );
   await store.persistUiState();
   return store.emit();
 }
@@ -346,7 +360,10 @@ export async function setChildSupervisionLoopGate(
   return store.emit();
 }
 
-async function cancelChildRun(store: AppStoreInternals, child: OrchestrationChildThread): Promise<void> {
+async function cancelChildRun(
+  store: AppStoreInternals,
+  child: OrchestrationChildThread,
+): Promise<void> {
   if (!child.childSessionId) {
     return;
   }
@@ -358,10 +375,14 @@ async function cancelChildRun(store: AppStoreInternals, child: OrchestrationChil
  * when the parent's own run is cancelled so children don't keep running
  * unsupervised. Best-effort per child.
  */
-export async function cancelChildRunsForParent(store: AppStoreInternals, parentRef: SessionRef): Promise<void> {
+export async function cancelChildRunsForParent(
+  store: AppStoreInternals,
+  parentRef: SessionRef,
+): Promise<void> {
   const children = store.state.orchestrationChildren.filter(
     (child) =>
-      child.parentWorkspaceId === parentRef.workspaceId && child.parentSessionId === parentRef.sessionId,
+      child.parentWorkspaceId === parentRef.workspaceId &&
+      child.parentSessionId === parentRef.sessionId,
   );
   await Promise.all(children.map((child) => cancelChildRun(store, child)));
 }
@@ -447,7 +468,13 @@ async function updateSendMessageToThreadToolOutput(
     updateThreadToolOutput(
       store,
       event,
-      projectionFromToolResult(sendMessageToThreadErrorResult("", "", "send_message_to_thread requires thread_id and message.")),
+      projectionFromToolResult(
+        sendMessageToThreadErrorResult(
+          "",
+          "",
+          "send_message_to_thread requires thread_id and message.",
+        ),
+      ),
     );
     return;
   }
@@ -510,7 +537,9 @@ export async function readThreadToolResult(
   };
 
   return {
-    content: [{ type: "text", text: formatThreadReadResult({ ...details, title, status, messages }) }],
+    content: [
+      { type: "text", text: formatThreadReadResult({ ...details, title, status, messages }) },
+    ],
     details,
   };
 }
@@ -522,7 +551,11 @@ export async function sendMessageToThreadToolResult(
 ): Promise<AgentToolResult<SendMessageToThreadToolDetails>> {
   const target = resolveThreadTarget(store, parentRef, input.threadId);
   if (!target) {
-    return sendMessageToThreadErrorResult(input.threadId, input.message, `Unknown thread: ${input.threadId}`);
+    return sendMessageToThreadErrorResult(
+      input.threadId,
+      input.message,
+      `Unknown thread: ${input.threadId}`,
+    );
   }
 
   await submitComposerToSession(store, target.sessionRef, input.message, [], {
@@ -530,7 +563,12 @@ export async function sendMessageToThreadToolResult(
     allowCommands: false,
   });
   if (target.child) {
-    updateChildSupervisionLoop(store, target.child.id, "continue", "Follow-up sent; monitoring child progress.");
+    updateChildSupervisionLoop(
+      store,
+      target.child.id,
+      "continue",
+      "Follow-up sent; monitoring child progress.",
+    );
     await store.persistUiState();
   }
 
@@ -558,7 +596,9 @@ export function projectOrchestrationChildren(
 ): readonly OrchestrationChildThread[] {
   const now = new Date().toISOString();
   const parentEvidenceByChild = parentEvidenceIndex(store, children);
-  return children.map((child) => projectOrchestrationChild(store, child, now, parentEvidenceByChild.get(child.id) ?? []));
+  return children.map((child) =>
+    projectOrchestrationChild(store, child, now, parentEvidenceByChild.get(child.id) ?? []),
+  );
 }
 
 export function projectOrchestrationChildrenForSession(
@@ -568,7 +608,8 @@ export function projectOrchestrationChildrenForSession(
   const now = new Date().toISOString();
   const parentEvidenceByChild = parentEvidenceIndex(store, store.state.orchestrationChildren);
   return store.state.orchestrationChildren.map((child) =>
-    child.childWorkspaceId === sessionRef.workspaceId && child.childSessionId === sessionRef.sessionId
+    child.childWorkspaceId === sessionRef.workspaceId &&
+    child.childSessionId === sessionRef.sessionId
       ? projectOrchestrationChild(store, child, now, parentEvidenceByChild.get(child.id) ?? [])
       : child,
   );
@@ -584,16 +625,27 @@ export function reconcileDueSupervisionLoops(
   const parentEvidenceByChild = parentEvidenceIndex(store, store.state.orchestrationChildren);
   const children = store.state.orchestrationChildren.map((child) => {
     const beforeKey = supervisionPublishKey(child);
-    const projectedChild = projectOrchestrationChild(store, child, nowIso, parentEvidenceByChild.get(child.id) ?? []);
+    const projectedChild = projectOrchestrationChild(
+      store,
+      child,
+      nowIso,
+      parentEvidenceByChild.get(child.id) ?? [],
+    );
     if (supervisionPublishKey(projectedChild) !== beforeKey) {
       shouldPublish = true;
     }
     if (!projectedChild.childSessionId || projectedChild.supervisionLoop?.status === "stopped") {
       return projectedChild;
     }
-    const loop = projectSupervisionLoop(projectedChild.supervisionLoop, projectedChild.status, nowIso);
+    const loop = projectSupervisionLoop(
+      projectedChild.supervisionLoop,
+      projectedChild.status,
+      nowIso,
+    );
     if (!loop.nextRunAt || Date.parse(loop.nextRunAt) > nowMs) {
-      return loop === projectedChild.supervisionLoop ? projectedChild : { ...projectedChild, supervisionLoop: loop };
+      return loop === projectedChild.supervisionLoop
+        ? projectedChild
+        : { ...projectedChild, supervisionLoop: loop };
     }
     const advancedChild = {
       ...projectedChild,
@@ -634,7 +686,11 @@ export async function hydrateVisibleOrchestrationChildren(store: AppStoreInterna
     }
     const childRef = childSessionRef(child);
     const key = sessionKey(childRef);
-    if (seen.has(key) || !store.sessionFromState(childRef) || store.sessionState.loadedTranscriptKeys.has(key)) {
+    if (
+      seen.has(key) ||
+      !store.sessionFromState(childRef) ||
+      store.sessionState.loadedTranscriptKeys.has(key)
+    ) {
       continue;
     }
     seen.add(key);
@@ -714,7 +770,11 @@ async function launchInitialChildPrompt(
     let settled = false;
     let runningTimer: ReturnType<typeof setTimeout> | undefined;
     const timeout = setTimeout(() => {
-      finish(new Error(`Child thread did not acknowledge its initial prompt within ${CHILD_START_TIMEOUT_MS}ms.`));
+      finish(
+        new Error(
+          `Child thread did not acknowledge its initial prompt within ${CHILD_START_TIMEOUT_MS}ms.`,
+        ),
+      );
     }, CHILD_START_TIMEOUT_MS);
     const unsubscribe = store.subscribeToSessionEvents((event) => {
       if (sessionKey(event.sessionRef) !== sessionKey(childRef)) {
@@ -779,7 +839,11 @@ async function launchInitialChildPrompt(
         }
         acknowledgeCurrentState();
         if (!settled && !runningTimer) {
-          finish(new Error("Child thread prompt submission completed without starting a run or producing a response."));
+          finish(
+            new Error(
+              "Child thread prompt submission completed without starting a run or producing a response.",
+            ),
+          );
         }
       },
       (error) => finish(error instanceof Error ? error : new Error(errorMessage(error))),
@@ -796,7 +860,9 @@ function requireInitialPromptRun(
   if (status) {
     return status;
   }
-  throw new Error("Child thread has no evidence that its initial prompt started a run or produced a response.");
+  throw new Error(
+    "Child thread has no evidence that its initial prompt started a run or produced a response.",
+  );
 }
 
 function initialPromptDeliveryStatus(
@@ -812,7 +878,9 @@ function initialPromptDeliveryStatus(
 
   const session = store.sessionFromState(childRef);
   if (session?.status === "failed") {
-    throw new Error(`Failed to start child thread: ${session.preview || "the child session failed."}`);
+    throw new Error(
+      `Failed to start child thread: ${session.preview || "the child session failed."}`,
+    );
   }
 
   const transcript = store.sessionState.transcriptCache.get(key) ?? [];
@@ -941,7 +1009,10 @@ function projectSupervisionLoop(
       gate: "wake",
       lastCheckedAt: nowIso,
       nextRunAt: undefined,
-      reason: status === "failed" ? "Child failed; parent review is needed." : "Child completed; parent review is ready.",
+      reason:
+        status === "failed"
+          ? "Child failed; parent review is needed."
+          : "Child completed; parent review is ready.",
       lastChildStatus: status,
     };
   }
@@ -1085,7 +1156,9 @@ function updateThreadToolOutput(
 ): void {
   const key = sessionKey(event.sessionRef);
   const transcript = [...(store.sessionState.transcriptCache.get(key) ?? [])];
-  const index = transcript.findIndex((item) => item.kind === "tool" && item.callId === event.callId);
+  const index = transcript.findIndex(
+    (item) => item.kind === "tool" && item.callId === event.callId,
+  );
   const item = transcript[index];
   if (!item || !isTimelineToolCall(item)) {
     return;
@@ -1108,9 +1181,13 @@ function updateThreadToolOutput(
 }
 
 function refreshParentOrchestrationEvidence(store: AppStoreInternals, parentRef: SessionRef): void {
-  if (!store.state.orchestrationChildren.some(
-    (child) => child.parentWorkspaceId === parentRef.workspaceId && child.parentSessionId === parentRef.sessionId,
-  )) {
+  if (
+    !store.state.orchestrationChildren.some(
+      (child) =>
+        child.parentWorkspaceId === parentRef.workspaceId &&
+        child.parentSessionId === parentRef.sessionId,
+    )
+  ) {
     return;
   }
   store.state = {
@@ -1182,7 +1259,10 @@ function sendMessageToThreadErrorResult(
 
 function projectionFromToolResult(
   result: AgentToolResult<
-    CreateChildThreadToolDetails | ListThreadsToolDetails | ReadThreadToolDetails | SendMessageToThreadToolDetails
+    | CreateChildThreadToolDetails
+    | ListThreadsToolDetails
+    | ReadThreadToolDetails
+    | SendMessageToThreadToolDetails
   >,
 ): {
   readonly detail: string;
@@ -1246,19 +1326,21 @@ function detailFromThreadToolDetails(details: Readonly<Record<string, unknown>>)
     return `Listed ${count} thread${count === 1 ? "" : "s"}`;
   }
   if (details.action === createChildThreadAction) {
-    const title = typeof details.title === "string"
-      ? details.title
-      : typeof details.prompt === "string"
-        ? details.prompt
-        : "unknown";
+    const title =
+      typeof details.title === "string"
+        ? details.title
+        : typeof details.prompt === "string"
+          ? details.prompt
+          : "unknown";
     return `Created child thread: ${title}`;
   }
   if (details.action === readThreadAction) {
-    const title = typeof details.title === "string"
-      ? details.title
-      : typeof details.threadId === "string"
-        ? details.threadId
-        : "unknown";
+    const title =
+      typeof details.title === "string"
+        ? details.title
+        : typeof details.threadId === "string"
+          ? details.threadId
+          : "unknown";
     return `Read thread: ${title}`;
   }
   if (details.action === sendMessageToThreadAction) {
@@ -1270,7 +1352,7 @@ function detailFromThreadToolDetails(details: Readonly<Record<string, unknown>>)
 
 function textFromAgentToolResult(result: AgentToolResult<unknown>): string {
   return result.content
-    .map((item) => item.type === "text" ? item.text : "")
+    .map((item) => (item.type === "text" ? item.text : ""))
     .filter(Boolean)
     .join("\n");
 }
@@ -1280,7 +1362,9 @@ function textFromToolOutput(output: { readonly content?: unknown }): string {
     return "";
   }
   return output.content
-    .map((item) => (isRecord(item) && item.type === "text" && typeof item.text === "string" ? item.text : ""))
+    .map((item) =>
+      isRecord(item) && item.type === "text" && typeof item.text === "string" ? item.text : "",
+    )
     .filter(Boolean)
     .join("\n");
 }
@@ -1289,17 +1373,25 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-function listThreadsForContext(store: AppStoreInternals, parentRef: SessionRef): readonly ThreadListEntry[] {
+function listThreadsForContext(
+  store: AppStoreInternals,
+  parentRef: SessionRef,
+): readonly ThreadListEntry[] {
   const entries = new Map<string, ThreadListEntry>();
   const parentChildren = store.state.orchestrationChildren.filter(
-    (child) => child.parentWorkspaceId === parentRef.workspaceId && child.parentSessionId === parentRef.sessionId,
+    (child) =>
+      child.parentWorkspaceId === parentRef.workspaceId &&
+      child.parentSessionId === parentRef.sessionId,
   );
   const childSessionKeys = new Map(
     parentChildren.map((child) => [sessionKey(childSessionRef(child)), child] as const),
   );
 
   for (const workspace of store.state.workspaces) {
-    if (workspace.id !== parentRef.workspaceId && !parentChildren.some((child) => child.childWorkspaceId === workspace.id)) {
+    if (
+      workspace.id !== parentRef.workspaceId &&
+      !parentChildren.some((child) => child.childWorkspaceId === workspace.id)
+    ) {
       continue;
     }
     for (const session of workspace.sessions) {
@@ -1315,7 +1407,11 @@ function listThreadsForContext(store: AppStoreInternals, parentRef: SessionRef):
         title: child?.title ?? session.title,
         status: child?.status ?? session.status,
         ...(child ? threadListSupervisionFields(child) : {}),
-        relationship: child ? "child" : session.id === parentRef.sessionId && workspace.id === parentRef.workspaceId ? "current" : "workspace",
+        relationship: child
+          ? "child"
+          : session.id === parentRef.sessionId && workspace.id === parentRef.workspaceId
+            ? "current"
+            : "workspace",
         updatedAt: child?.updatedAt ?? session.updatedAt,
         preview: child?.latestTranscript ?? session.preview,
         ...(child ? { childThreadId: child.id } : {}),
@@ -1373,7 +1469,9 @@ function threadListSupervisionFields(
   return {
     supervisionGate: child.supervisionLoop.gate,
     supervisionReason: child.supervisionLoop.reason,
-    ...(child.supervisionLoop.nextRunAt ? { nextSupervisionRunAt: child.supervisionLoop.nextRunAt } : {}),
+    ...(child.supervisionLoop.nextRunAt
+      ? { nextSupervisionRunAt: child.supervisionLoop.nextRunAt }
+      : {}),
   };
 }
 
@@ -1416,10 +1514,13 @@ function formatThreadList(threads: readonly ThreadListEntry[]): string {
   }
   return [
     "Visible threads:",
-    ...threads.map((thread) =>
-      `- ${thread.threadId} (${thread.relationship}, ${thread.status}): ${thread.title}` +
-      (thread.supervisionGate ? ` [gate=${thread.supervisionGate}: ${thread.supervisionReason ?? "monitoring"}]` : "") +
-      (thread.preview ? ` - ${thread.preview}` : ""),
+    ...threads.map(
+      (thread) =>
+        `- ${thread.threadId} (${thread.relationship}, ${thread.status}): ${thread.title}` +
+        (thread.supervisionGate
+          ? ` [gate=${thread.supervisionGate}: ${thread.supervisionReason ?? "monitoring"}]`
+          : "") +
+        (thread.preview ? ` - ${thread.preview}` : ""),
     ),
   ].join("\n");
 }
@@ -1446,20 +1547,28 @@ function formatThreadReadResult(result: {
 }
 
 function formatCreateChildThreadResult(result: CreateChildThreadToolDetails): string {
-  return `Created child thread: ${result.title ?? result.prompt}\n` +
+  return (
+    `Created child thread: ${result.title ?? result.prompt}\n` +
     `childThreadId: ${result.childThreadId ?? ""}\n` +
     `childWorkspaceId: ${result.childWorkspaceId ?? ""}\n` +
     `childSessionId: ${result.childSessionId ?? ""}` +
-    (result.deliveryStatus ? `\ninitialPrompt: ${result.deliveryStatus}` : "");
+    (result.deliveryStatus ? `\ninitialPrompt: ${result.deliveryStatus}` : "")
+  );
 }
 
 function formatSendMessageToThreadResult(result: SendMessageToThreadToolDetails): string {
   const verb = result.status === "queued" ? "Queued" : "Sent";
-  return `${verb} message to thread ${result.threadId}.` +
-    (result.queuedMessageCount && result.queuedMessageCount > 0 ? ` Pending messages: ${result.queuedMessageCount}.` : "");
+  return (
+    `${verb} message to thread ${result.threadId}.` +
+    (result.queuedMessageCount && result.queuedMessageCount > 0
+      ? ` Pending messages: ${result.queuedMessageCount}.`
+      : "")
+  );
 }
 
-function toThreadReadMessages(transcript: readonly TranscriptMessage[]): readonly OrchestrationChildTranscriptMessage[] {
+function toThreadReadMessages(
+  transcript: readonly TranscriptMessage[],
+): readonly OrchestrationChildTranscriptMessage[] {
   return toChildTranscript(transcript, MAX_READ_THREAD_MESSAGES);
 }
 
@@ -1477,17 +1586,22 @@ function mergeEvidenceRecords(
       ...record,
     });
   }
-  return capEvidenceRecords([...records.values()].sort((left, right) => right.createdAt.localeCompare(left.createdAt)));
+  return capEvidenceRecords(
+    [...records.values()].sort((left, right) => right.createdAt.localeCompare(left.createdAt)),
+  );
 }
 
-function capEvidenceRecords(records: readonly OrchestrationEvidenceRecord[]): readonly OrchestrationEvidenceRecord[] {
+function capEvidenceRecords(
+  records: readonly OrchestrationEvidenceRecord[],
+): readonly OrchestrationEvidenceRecord[] {
   if (records.length <= MAX_EVIDENCE_RECORDS_PER_CHILD) {
     return records;
   }
-  const priority = records.filter((record) =>
-    record.status === "blocked" ||
-    record.status === "failed" ||
-    record.source === "orchestrator-accepted",
+  const priority = records.filter(
+    (record) =>
+      record.status === "blocked" ||
+      record.status === "failed" ||
+      record.source === "orchestrator-accepted",
   );
   const remaining = records.filter((record) => !priority.includes(record));
   return [...priority, ...remaining].slice(0, MAX_EVIDENCE_RECORDS_PER_CHILD);
@@ -1498,10 +1612,14 @@ function parentEvidenceIndex(
   children: readonly OrchestrationChildThread[],
 ): ReadonlyMap<string, readonly OrchestrationEvidenceRecord[]> {
   const childById = new Map(children.map((child) => [child.id, child] as const));
-  const parentKeys = new Set(children.map((child) => sessionKey({
-    workspaceId: child.parentWorkspaceId,
-    sessionId: child.parentSessionId,
-  })));
+  const parentKeys = new Set(
+    children.map((child) =>
+      sessionKey({
+        workspaceId: child.parentWorkspaceId,
+        sessionId: child.parentSessionId,
+      }),
+    ),
+  );
   const index = new Map<string, OrchestrationEvidenceRecord[]>();
   for (const key of parentKeys) {
     const transcript = store.sessionState.transcriptCache.get(key) ?? [];
@@ -1538,7 +1656,11 @@ function evidenceFromChildTranscript(
         kind: isBlocker ? "blocker" : severity ? "review_finding" : "worker_report",
         source: "worker-reported",
         status: isBlocker ? "blocked" : "reported",
-        title: isBlocker ? "Worker reported blocker" : severity ? `${severity} review finding` : "Worker reported output",
+        title: isBlocker
+          ? "Worker reported blocker"
+          : severity
+            ? `${severity} review finding`
+            : "Worker reported output",
         detail: truncateEvidenceDetail(text),
         ...(severity ? { severity } : {}),
         parentSessionId: child.parentSessionId,
@@ -1585,11 +1707,12 @@ function evidenceFromParentTranscript(
     if (!details) {
       return [];
     }
-    const childId = typeof details.childThreadId === "string"
-      ? details.childThreadId
-      : typeof details.threadId === "string"
-        ? details.threadId
-        : undefined;
+    const childId =
+      typeof details.childThreadId === "string"
+        ? details.childThreadId
+        : typeof details.threadId === "string"
+          ? details.threadId
+          : undefined;
     const child = childId ? childById.get(childId) : undefined;
     if (!child) {
       return [];
@@ -1619,7 +1742,9 @@ function evidenceFromParentTranscript(
           source: "orchestrator-action",
           status: "reported",
           title: "Orchestrator sent follow-up",
-          ...(typeof details.message === "string" ? { detail: truncateEvidenceDetail(details.message) } : {}),
+          ...(typeof details.message === "string"
+            ? { detail: truncateEvidenceDetail(details.message) }
+            : {}),
           parentSessionId: child.parentSessionId,
           childSessionId: child.childSessionId,
           createdAt: message.createdAt,
@@ -1723,7 +1848,12 @@ async function workspaceGitRef(
   workspaceId: string,
   workspacePath: string,
 ): Promise<OrchestrationEvidenceRecord["git"] | undefined> {
-  const [branch, head] = await gitOutputLines(workspacePath, ["rev-parse", "--abbrev-ref", "HEAD", "HEAD"]);
+  const [branch, head] = await gitOutputLines(workspacePath, [
+    "rev-parse",
+    "--abbrev-ref",
+    "HEAD",
+    "HEAD",
+  ]);
   const branchName = branch && branch !== "HEAD" ? branch : undefined;
   if (!branchName && !head) {
     return undefined;
@@ -1735,10 +1865,16 @@ async function workspaceGitRef(
   };
 }
 
-async function gitOutputLines(workspacePath: string, args: readonly string[]): Promise<readonly string[]> {
+async function gitOutputLines(
+  workspacePath: string,
+  args: readonly string[],
+): Promise<readonly string[]> {
   try {
     const { stdout } = await execFileAsync("git", args, { cwd: workspacePath });
-    return stdout.split("\n").map((line) => line.trim()).filter(Boolean);
+    return stdout
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
   } catch {
     return [];
   }
@@ -1828,7 +1964,9 @@ function toChildTranscript(
   return messages.reverse();
 }
 
-function recentTranscriptItems(transcript: readonly TranscriptMessage[]): readonly TranscriptMessage[] {
+function recentTranscriptItems(
+  transcript: readonly TranscriptMessage[],
+): readonly TranscriptMessage[] {
   return transcript.slice(-MAX_CHILD_TRANSCRIPT_MESSAGES);
 }
 

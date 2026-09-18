@@ -27,7 +27,10 @@ export function SettingsNotificationsSection({
 
   return (
     <>
-      <SettingsGroup title="System" description="macOS decides whether pi-gui can show desktop notifications at all.">
+      <SettingsGroup
+        title="System"
+        description="macOS decides whether pi-gui can show desktop notifications at all."
+      >
         <SettingsRow title="macOS notification access" description={statusDescription}>
           <span className="settings-row__value">{statusLabel}</span>
         </SettingsRow>
@@ -66,29 +69,47 @@ export function SettingsNotificationsSection({
         ) : null}
       </SettingsGroup>
 
-      <SettingsGroup title="In-app alerts" description="Choose which background events should try to notify once macOS access is enabled.">
-        <SettingsRow title="Background completion" description="Notify when a background session finishes.">
+      <SettingsGroup
+        title="In-app alerts"
+        description="Choose which background events should try to notify once macOS access is enabled."
+      >
+        <SettingsRow
+          title="Background completion"
+          description="Notify when a background session finishes."
+        >
           <input
             aria-label="Background completion"
             checked={notificationPreferences.backgroundCompletion}
             type="checkbox"
-            onChange={(event) => onSetNotificationPreferences({ backgroundCompletion: event.target.checked })}
+            onChange={(event) =>
+              onSetNotificationPreferences({ backgroundCompletion: event.target.checked })
+            }
           />
         </SettingsRow>
-        <SettingsRow title="Background failures" description="Notify when a background session fails.">
+        <SettingsRow
+          title="Background failures"
+          description="Notify when a background session fails."
+        >
           <input
             aria-label="Background failures"
             checked={notificationPreferences.backgroundFailure}
             type="checkbox"
-            onChange={(event) => onSetNotificationPreferences({ backgroundFailure: event.target.checked })}
+            onChange={(event) =>
+              onSetNotificationPreferences({ backgroundFailure: event.target.checked })
+            }
           />
         </SettingsRow>
-        <SettingsRow title="Needs input or approval" description="Notify when input is needed to continue.">
+        <SettingsRow
+          title="Needs input or approval"
+          description="Notify when input is needed to continue."
+        >
           <input
             aria-label="Needs input or approval"
             checked={notificationPreferences.attentionNeeded}
             type="checkbox"
-            onChange={(event) => onSetNotificationPreferences({ attentionNeeded: event.target.checked })}
+            onChange={(event) =>
+              onSetNotificationPreferences({ attentionNeeded: event.target.checked })
+            }
           />
         </SettingsRow>
       </SettingsGroup>

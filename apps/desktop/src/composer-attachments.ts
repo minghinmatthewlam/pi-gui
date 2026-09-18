@@ -1,7 +1,11 @@
 /// <reference lib="dom" />
 
 import type { KeyboardEvent } from "react";
-import type { ComposerAttachment, ComposerFileAttachment, ComposerImageAttachment } from "./desktop-state";
+import type {
+  ComposerAttachment,
+  ComposerFileAttachment,
+  ComposerImageAttachment,
+} from "./desktop-state";
 
 export function handleClipboardImageShortcut(
   event: KeyboardEvent<HTMLTextAreaElement>,
@@ -33,7 +37,9 @@ export const SUPPORTED_COMPOSER_IMAGE_TYPES = [
 type ComposerImageMimeType = (typeof SUPPORTED_COMPOSER_IMAGE_TYPES)[number]["mimeType"];
 type FileWithPath = File & { readonly path?: string };
 
-const SUPPORTED_COMPOSER_IMAGE_MIME_TYPES = new Set(SUPPORTED_COMPOSER_IMAGE_TYPES.map((type) => type.mimeType));
+const SUPPORTED_COMPOSER_IMAGE_MIME_TYPES = new Set(
+  SUPPORTED_COMPOSER_IMAGE_TYPES.map((type) => type.mimeType),
+);
 const IMAGE_MIME_TYPE_BY_EXTENSION = new Map(
   SUPPORTED_COMPOSER_IMAGE_TYPES.map((type) => [type.extension, type.mimeType] as const),
 );
@@ -92,7 +98,9 @@ export function hasFilesInDataTransfer(dataTransfer: DataTransfer | null | undef
   return (dataTransfer.files?.length ?? 0) > 0;
 }
 
-export function extractImageFilesFromClipboardData(clipboardData: DataTransfer | null | undefined): File[] {
+export function extractImageFilesFromClipboardData(
+  clipboardData: DataTransfer | null | undefined,
+): File[] {
   if (!clipboardData) {
     return [];
   }
@@ -106,7 +114,9 @@ export function extractImageFilesFromClipboardData(clipboardData: DataTransfer |
   return dedupeFiles([...itemFiles, ...clipboardFiles]);
 }
 
-export function extractFilesFromDataTransfer(dataTransfer: DataTransfer | null | undefined): File[] {
+export function extractFilesFromDataTransfer(
+  dataTransfer: DataTransfer | null | undefined,
+): File[] {
   if (!dataTransfer) {
     return [];
   }
@@ -119,7 +129,9 @@ export function extractFilesFromDataTransfer(dataTransfer: DataTransfer | null |
   return dedupeFiles([...itemFiles, ...transferFiles]);
 }
 
-export async function readComposerAttachmentsFromFiles(files: readonly File[]): Promise<ComposerAttachment[]> {
+export async function readComposerAttachmentsFromFiles(
+  files: readonly File[],
+): Promise<ComposerAttachment[]> {
   const attachments = await Promise.all(dedupeFiles(files).map(readComposerAttachmentFromFile));
   return attachments.filter((attachment): attachment is ComposerAttachment => Boolean(attachment));
 }

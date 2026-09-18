@@ -34,10 +34,12 @@ test("sidebar thread order is stable after creation and does not flicker", async
     // Create thread B — it should now be at the top.
     await createNamedThread(window, "Thread B", { workspaceName: basename(workspacePath) });
 
-    await expect.poll(async () => {
-      const state = await getDesktopState(window);
-      return state.workspaces.find((w) => w.id === workspace.id)?.sessions.length ?? 0;
-    }).toBe(2);
+    await expect
+      .poll(async () => {
+        const state = await getDesktopState(window);
+        return state.workspaces.find((w) => w.id === workspace.id)?.sessions.length ?? 0;
+      })
+      .toBe(2);
 
     const afterB = await getDesktopState(window);
     const wsAfterB = afterB.workspaces.find((w) => w.id === workspace.id)!;
@@ -103,12 +105,16 @@ test("pinned sidebar threads stay above history, persist across relaunch, and un
     const pinnedSection = window.getByRole("region", { name: "Pinned threads" });
     await expect(pinnedSection).toBeVisible();
     await expect(pinnedSection.locator(".session-row__title")).toHaveText(["Thread A"]);
-    await expect(pinnedSection.locator(".session-row__context")).toHaveText([basename(workspacePath)]);
+    await expect(pinnedSection.locator(".session-row__context")).toHaveText([
+      basename(workspacePath),
+    ]);
 
-    await expect.poll(async () => {
-      const state = await getDesktopState(window);
-      return Object.values(state.pinnedAtBySession).length;
-    }).toBe(1);
+    await expect
+      .poll(async () => {
+        const state = await getDesktopState(window);
+        return Object.values(state.pinnedAtBySession).length;
+      })
+      .toBe(1);
 
     await harness.close();
     harness = await launchDesktop(userDataDir, { testMode: "background" });
@@ -122,10 +128,12 @@ test("pinned sidebar threads stay above history, persist across relaunch, and un
     await reopenedPinnedSection.getByRole("button", { name: /Unpin Thread A/ }).click();
     await expect(reopenedWindow.getByRole("region", { name: "Pinned threads" })).toHaveCount(0);
 
-    await expect.poll(async () => {
-      const state = await getDesktopState(reopenedWindow);
-      return Object.values(state.pinnedAtBySession).length;
-    }).toBe(0);
+    await expect
+      .poll(async () => {
+        const state = await getDesktopState(reopenedWindow);
+        return Object.values(state.pinnedAtBySession).length;
+      })
+      .toBe(0);
 
     const rows = reopenedWindow.locator(".session-row__select");
     const titles = await rows.allTextContents();
@@ -168,13 +176,18 @@ test("pinned sidebar threads can be reordered and repinned threads return to the
     await dragPinnedThreadAfter(window, pinnedSection, "Thread B", "Thread A");
     await expect(pinnedSection.locator(".session-row__title")).toHaveText(["Thread A", "Thread B"]);
 
-    await expect.poll(async () => {
-      const state = await getDesktopState(window);
-      const workspaceState = state.workspaces.find((entry) => entry.id === workspace.id);
-      const threadA = workspaceState?.sessions.find((session) => session.title === "Thread A");
-      const threadB = workspaceState?.sessions.find((session) => session.title === "Thread B");
-      return state.pinnedSessionOrder.join("\n") === `${workspace.id}:${threadA?.id}\n${workspace.id}:${threadB?.id}`;
-    }).toBe(true);
+    await expect
+      .poll(async () => {
+        const state = await getDesktopState(window);
+        const workspaceState = state.workspaces.find((entry) => entry.id === workspace.id);
+        const threadA = workspaceState?.sessions.find((session) => session.title === "Thread A");
+        const threadB = workspaceState?.sessions.find((session) => session.title === "Thread B");
+        return (
+          state.pinnedSessionOrder.join("\n") ===
+          `${workspace.id}:${threadA?.id}\n${workspace.id}:${threadB?.id}`
+        );
+      })
+      .toBe(true);
 
     await harness.close();
     harness = await launchDesktop(userDataDir, { testMode: "background" });
@@ -182,7 +195,10 @@ test("pinned sidebar threads can be reordered and repinned threads return to the
     const reopenedWindow = await harness.firstWindow();
     await waitForWorkspaceByPath(reopenedWindow, workspacePath);
     const reopenedPinnedSection = reopenedWindow.getByRole("region", { name: "Pinned threads" });
-    await expect(reopenedPinnedSection.locator(".session-row__title")).toHaveText(["Thread A", "Thread B"]);
+    await expect(reopenedPinnedSection.locator(".session-row__title")).toHaveText([
+      "Thread A",
+      "Thread B",
+    ]);
 
     await reopenedPinnedSection.getByRole("button", { name: /Unpin Thread A/ }).click();
     await expect(reopenedPinnedSection.locator(".session-row__title")).toHaveText(["Thread B"]);
@@ -190,7 +206,10 @@ test("pinned sidebar threads can be reordered and repinned threads return to the
     const threadAHistoryRow = reopenedWindow.locator(".session-row", { hasText: "Thread A" });
     await threadAHistoryRow.hover();
     await reopenedWindow.getByRole("button", { name: /Pin Thread A/ }).click();
-    await expect(reopenedPinnedSection.locator(".session-row__title")).toHaveText(["Thread A", "Thread B"]);
+    await expect(reopenedPinnedSection.locator(".session-row__title")).toHaveText([
+      "Thread A",
+      "Thread B",
+    ]);
   } finally {
     await harness.close();
   }
@@ -208,8 +227,12 @@ async function dragPinnedThreadAfter(
   sourceTitle: string,
   targetTitle: string,
 ): Promise<void> {
-  const sourceBox = await pinnedSection.locator(".session-row", { hasText: sourceTitle }).boundingBox();
-  const targetBox = await pinnedSection.locator(".session-row", { hasText: targetTitle }).boundingBox();
+  const sourceBox = await pinnedSection
+    .locator(".session-row", { hasText: sourceTitle })
+    .boundingBox();
+  const targetBox = await pinnedSection
+    .locator(".session-row", { hasText: targetTitle })
+    .boundingBox();
   expect(sourceBox).not.toBeNull();
   expect(targetBox).not.toBeNull();
   if (!sourceBox || !targetBox) {
@@ -218,6 +241,8 @@ async function dragPinnedThreadAfter(
 
   await window.mouse.move(sourceBox.x + sourceBox.width / 2, sourceBox.y + sourceBox.height / 2);
   await window.mouse.down();
-  await window.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + targetBox.height / 2, { steps: 8 });
+  await window.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + targetBox.height / 2, {
+    steps: 8,
+  });
   await window.mouse.up();
 }

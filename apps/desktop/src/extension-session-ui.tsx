@@ -26,7 +26,9 @@ export function hasExtensionDockContent(uiState?: SessionExtensionUiStateRecord)
   return uiState.statuses.length > 0 || uiState.widgets.length > 0;
 }
 
-export function buildExtensionDockModel(uiState?: SessionExtensionUiStateRecord): ExtensionDockModel | undefined {
+export function buildExtensionDockModel(
+  uiState?: SessionExtensionUiStateRecord,
+): ExtensionDockModel | undefined {
   if (!hasExtensionDockContent(uiState)) {
     return undefined;
   }
@@ -57,7 +59,10 @@ export function ExtensionDock({
   readonly onToggle: () => void;
 }) {
   return (
-    <div className={`extension-dock ${expanded ? "extension-dock--expanded" : ""}`} data-testid="extension-dock">
+    <div
+      className={`extension-dock ${expanded ? "extension-dock--expanded" : ""}`}
+      data-testid="extension-dock"
+    >
       <button
         aria-controls="extension-dock-body"
         aria-expanded={expanded}
@@ -75,7 +80,11 @@ export function ExtensionDock({
         </span>
       </button>
       {expanded ? (
-        <pre className="extension-dock__body" data-testid="extension-dock-body" id="extension-dock-body">
+        <pre
+          className="extension-dock__body"
+          data-testid="extension-dock-body"
+          id="extension-dock-body"
+        >
           {dock.bodyText}
         </pre>
       ) : null}
@@ -282,7 +291,9 @@ function buildDockBodyText(
   const needsLabels = totalBlocks > 1;
   const primaryLines = [
     ...statuses.flatMap((status, index) => renderStatusBlock(status, needsLabels, index > 0)),
-    ...primaryBlocks.flatMap((block, index) => renderWidgetBlock(block, needsLabels, statuses.length + index > 0)),
+    ...primaryBlocks.flatMap((block, index) =>
+      renderWidgetBlock(block, needsLabels, statuses.length + index > 0),
+    ),
   ];
   const secondaryLines = secondaryBlocks.flatMap((block, index) =>
     renderWidgetBlock(block, needsLabels, index > 0),
@@ -308,7 +319,11 @@ function renderStatusBlock(
   return addLeadingGap ? ["", ...lines] : lines;
 }
 
-function renderWidgetBlock(block: ExtensionDockBlock, needsLabel: boolean, addLeadingGap: boolean): string[] {
+function renderWidgetBlock(
+  block: ExtensionDockBlock,
+  needsLabel: boolean,
+  addLeadingGap: boolean,
+): string[] {
   const lines = needsLabel ? [`${block.key}:`, ...block.lines] : [...block.lines];
   return addLeadingGap ? ["", ...lines] : lines;
 }

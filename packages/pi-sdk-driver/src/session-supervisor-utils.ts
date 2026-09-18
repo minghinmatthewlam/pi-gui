@@ -45,7 +45,9 @@ export function buildSnapshot(source: SnapshotSource): SessionSnapshot {
             ...message,
             ...(message.attachments
               ? {
-                  attachments: message.attachments.map((attachment: SessionAttachment) => ({ ...attachment })),
+                  attachments: message.attachments.map((attachment: SessionAttachment) => ({
+                    ...attachment,
+                  })),
                 }
               : {}),
           })),
@@ -63,7 +65,9 @@ export function deriveSessionConfig(sessionManager: {
   const context = sessionManager.buildSessionContext();
   const config: SessionConfig = {
     ...(context.model ? { provider: context.model.provider, modelId: context.model.modelId } : {}),
-    ...(context.thinkingLevel && context.thinkingLevel !== "off" ? { thinkingLevel: context.thinkingLevel } : {}),
+    ...(context.thinkingLevel && context.thinkingLevel !== "off"
+      ? { thinkingLevel: context.thinkingLevel }
+      : {}),
   };
   return Object.keys(config).length > 0 ? config : undefined;
 }
@@ -86,7 +90,11 @@ export function sessionKey(sessionRef: SessionRef): string {
   return `${sessionRef.workspaceId}:${sessionRef.sessionId}`;
 }
 
-export function workspaceToRef(workspace: { workspaceId: string; path: string; displayName: string }): WorkspaceRef {
+export function workspaceToRef(workspace: {
+  workspaceId: string;
+  path: string;
+  displayName: string;
+}): WorkspaceRef {
   return {
     workspaceId: workspace.workspaceId,
     path: workspace.path,
@@ -209,7 +217,11 @@ export function injectFileAttachmentPreamble(
   text: string,
   attachments: readonly SessionAttachment[] | undefined,
 ): string {
-  const files = attachments?.filter((attachment): attachment is Extract<SessionAttachment, { readonly kind: "file" }> => attachment.kind === "file") ?? [];
+  const files =
+    attachments?.filter(
+      (attachment): attachment is Extract<SessionAttachment, { readonly kind: "file" }> =>
+        attachment.kind === "file",
+    ) ?? [];
   if (files.length === 0) {
     return text;
   }
@@ -228,7 +240,10 @@ export function injectFileAttachmentPreamble(
   return text ? `${block}\n${text}` : block;
 }
 
-export function transcriptFromMessages(messages: readonly unknown[], fallbackTimestamp = nowIso()): SessionTranscriptItem[] {
+export function transcriptFromMessages(
+  messages: readonly unknown[],
+  fallbackTimestamp = nowIso(),
+): SessionTranscriptItem[] {
   const transcript: SessionTranscriptItem[] = [];
   const toolIndexByCallId = new Map<string, number>();
 
@@ -245,7 +260,12 @@ export function transcriptFromMessages(messages: readonly unknown[], fallbackTim
       continue;
     }
 
-    if (role !== "user" && role !== "assistant" && role !== "branchSummary" && role !== "compactionSummary") {
+    if (
+      role !== "user" &&
+      role !== "assistant" &&
+      role !== "branchSummary" &&
+      role !== "compactionSummary"
+    ) {
       continue;
     }
 
@@ -386,7 +406,12 @@ function messageAttachments(message: Record<string, unknown>) {
       return stripSerializedFileAttachments(part.text, message.role).attachments;
     }
 
-    if (!isRecord(part) || part.type !== "image" || typeof part.data !== "string" || typeof part.mimeType !== "string") {
+    if (
+      !isRecord(part) ||
+      part.type !== "image" ||
+      typeof part.data !== "string" ||
+      typeof part.mimeType !== "string"
+    ) {
       return [];
     }
 
@@ -438,13 +463,22 @@ function stripSerializedFileAttachments(
 
 function parseSerializedFileAttachments(payload: string): SessionTranscriptAttachment[] {
   try {
-    const parsed = JSON.parse(payload) as { readonly version?: unknown; readonly files?: readonly unknown[] };
+    const parsed = JSON.parse(payload) as {
+      readonly version?: unknown;
+      readonly files?: readonly unknown[];
+    };
     if (parsed.version !== 1 || !Array.isArray(parsed.files)) {
       return [];
     }
 
     return parsed.files.flatMap((entry) => {
-      if (!isRecord(entry) || entry.kind !== "file" || typeof entry.name !== "string" || typeof entry.mimeType !== "string" || typeof entry.fsPath !== "string") {
+      if (
+        !isRecord(entry) ||
+        entry.kind !== "file" ||
+        typeof entry.name !== "string" ||
+        typeof entry.mimeType !== "string" ||
+        typeof entry.fsPath !== "string"
+      ) {
         return [];
       }
 

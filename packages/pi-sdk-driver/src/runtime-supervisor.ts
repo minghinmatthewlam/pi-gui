@@ -26,7 +26,10 @@ import type {
 } from "@pi-gui/session-driver/runtime-types";
 import type { WorkspaceRef } from "@pi-gui/session-driver";
 import { createRuntimeDependencies } from "./runtime-deps.js";
-import { createSettingsManagerWithoutNpmPackages, isGlobalNpmLookupError } from "./npm-package-fallback.js";
+import {
+  createSettingsManagerWithoutNpmPackages,
+  isGlobalNpmLookupError,
+} from "./npm-package-fallback.js";
 import { skillSlashCommand } from "./runtime-command-utils.js";
 import type { AuthStatus, AuthStorage, ModelRegistry } from "@earendil-works/pi-coding-agent";
 import {
@@ -42,7 +45,11 @@ export {
   isValidHttpBaseUrl,
   OPENAI_COMPLETIONS_API,
 } from "./custom-provider-store.js";
-export type { CustomProviderEntry, CustomProviderInput, CustomProviderModelInput } from "./custom-provider-store.js";
+export type {
+  CustomProviderEntry,
+  CustomProviderInput,
+  CustomProviderModelInput,
+} from "./custom-provider-store.js";
 
 interface ModelSettingsSnapshot {
   readonly defaultProvider?: string;
@@ -111,7 +118,7 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
 
   async refreshRuntime(workspace: WorkspaceRef): Promise<RuntimeSnapshot> {
     const context = await this.ensureContext(workspace);
-    context.settingsManager.reload();
+    await context.settingsManager.reload();
     this.authStorage.reload();
     this.modelRegistry.refresh();
     await context.resourceLoader.reload();
@@ -119,7 +126,11 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
     return this.buildSnapshot(context);
   }
 
-  async login(workspace: WorkspaceRef, providerId: string, callbacks: RuntimeLoginCallbacks): Promise<RuntimeSnapshot> {
+  async login(
+    workspace: WorkspaceRef,
+    providerId: string,
+    callbacks: RuntimeLoginCallbacks,
+  ): Promise<RuntimeSnapshot> {
     const context = await this.ensureContext(workspace);
     await this.authStorage.login(providerId, toPiOAuthLoginCallbacks(callbacks));
     this.modelRegistry.refresh();
@@ -136,7 +147,11 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
     return this.buildSnapshot(context);
   }
 
-  async setProviderApiKey(workspace: WorkspaceRef, providerId: string, apiKey: string): Promise<RuntimeSnapshot> {
+  async setProviderApiKey(
+    workspace: WorkspaceRef,
+    providerId: string,
+    apiKey: string,
+  ): Promise<RuntimeSnapshot> {
     const context = await this.ensureContext(workspace);
     const normalized = apiKey.trim();
     if (!normalized) {
@@ -156,8 +171,13 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
     return this.customProviderStore.list();
   }
 
-  async setCustomProvider(workspace: WorkspaceRef, input: CustomProviderInput): Promise<RuntimeSnapshot> {
-    const oauthProviderIds = new Set(this.authStorage.getOAuthProviders().map((provider) => provider.id));
+  async setCustomProvider(
+    workspace: WorkspaceRef,
+    input: CustomProviderInput,
+  ): Promise<RuntimeSnapshot> {
+    const oauthProviderIds = new Set(
+      this.authStorage.getOAuthProviders().map((provider) => provider.id),
+    );
     if (BUILT_IN_PROVIDER_IDS.has(input.providerId) || oauthProviderIds.has(input.providerId)) {
       throw new Error(
         `Provider ID "${input.providerId}" conflicts with a built-in provider. Pick a unique ID.`,
@@ -171,7 +191,10 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
     return this.buildSnapshot(context);
   }
 
-  async deleteCustomProvider(workspace: WorkspaceRef, providerId: string): Promise<RuntimeSnapshot> {
+  async deleteCustomProvider(
+    workspace: WorkspaceRef,
+    providerId: string,
+  ): Promise<RuntimeSnapshot> {
     const context = await this.ensureContext(workspace);
     await this.customProviderStore.delete(providerId);
     this.modelRegistry.refresh();
@@ -208,7 +231,7 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
     settingsManager.markProjectModified("defaultModel");
     settingsManager.saveProjectSettings(projectSettings);
     await context.settingsManager.flush();
-    context.settingsManager.reload();
+    await context.settingsManager.reload();
     return this.buildSnapshot(context);
   }
 
@@ -239,11 +262,14 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
     settingsManager.markProjectModified("defaultThinkingLevel");
     settingsManager.saveProjectSettings(projectSettings);
     await context.settingsManager.flush();
-    context.settingsManager.reload();
+    await context.settingsManager.reload();
     return this.buildSnapshot(context);
   }
 
-  async setEnableSkillCommands(workspace: WorkspaceRef, enabled: boolean): Promise<RuntimeSnapshot> {
+  async setEnableSkillCommands(
+    workspace: WorkspaceRef,
+    enabled: boolean,
+  ): Promise<RuntimeSnapshot> {
     const context = await this.ensureContext(workspace);
     context.settingsManager.setEnableSkillCommands(enabled);
     await context.settingsManager.flush();
@@ -251,14 +277,20 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
     return this.buildSnapshot(context);
   }
 
-  async setScopedModelPatterns(workspace: WorkspaceRef, patterns: readonly string[]): Promise<RuntimeSnapshot> {
+  async setScopedModelPatterns(
+    workspace: WorkspaceRef,
+    patterns: readonly string[],
+  ): Promise<RuntimeSnapshot> {
     const context = await this.ensureContext(workspace);
     context.settingsManager.setEnabledModels(patterns.length > 0 ? [...patterns] : undefined);
     await context.settingsManager.flush();
     return this.buildSnapshot(context);
   }
 
-  async setProjectScopedModelPatterns(workspace: WorkspaceRef, patterns: readonly string[]): Promise<RuntimeSnapshot> {
+  async setProjectScopedModelPatterns(
+    workspace: WorkspaceRef,
+    patterns: readonly string[],
+  ): Promise<RuntimeSnapshot> {
     const context = await this.ensureContext(workspace);
     const settingsManager = context.settingsManager as unknown as ProjectWritableSettingsManager;
     const projectSettings = context.settingsManager.getProjectSettings() as Record<string, unknown>;
@@ -266,13 +298,15 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
     settingsManager.markProjectModified("enabledModels");
     settingsManager.saveProjectSettings(projectSettings);
     await context.settingsManager.flush();
-    context.settingsManager.reload();
+    await context.settingsManager.reload();
     return this.buildSnapshot(context);
   }
 
   async getGlobalModelSettings(workspace: WorkspaceRef): Promise<ModelSettingsSnapshot> {
     const context = await this.ensureContext(workspace);
-    return toModelSettingsSnapshot(context.settingsManager.getGlobalSettings() as Record<string, unknown>);
+    return toModelSettingsSnapshot(
+      context.settingsManager.getGlobalSettings() as Record<string, unknown>,
+    );
   }
 
   async getCurrentModelSettings(workspace: WorkspaceRef): Promise<ModelSettingsSnapshot> {
@@ -318,10 +352,16 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
     return snapshot;
   }
 
-  async setSkillEnabled(workspace: WorkspaceRef, filePath: string, enabled: boolean): Promise<RuntimeSnapshot> {
+  async setSkillEnabled(
+    workspace: WorkspaceRef,
+    filePath: string,
+    enabled: boolean,
+  ): Promise<RuntimeSnapshot> {
     const context = await this.ensureContext(workspace);
     const resolvedPaths = await this.resolveRuntimePaths(context);
-    const resource = resolvedPaths.skills.find((entry) => resolve(entry.path) === resolve(filePath));
+    const resource = resolvedPaths.skills.find(
+      (entry) => resolve(entry.path) === resolve(filePath),
+    );
     if (!resource) {
       throw new Error(`Unknown skill: ${filePath}`);
     }
@@ -332,10 +372,16 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
     return this.buildSnapshot(context);
   }
 
-  async setExtensionEnabled(workspace: WorkspaceRef, filePath: string, enabled: boolean): Promise<RuntimeSnapshot> {
+  async setExtensionEnabled(
+    workspace: WorkspaceRef,
+    filePath: string,
+    enabled: boolean,
+  ): Promise<RuntimeSnapshot> {
     const context = await this.ensureContext(workspace);
     const resolvedPaths = await this.resolveRuntimePaths(context);
-    const resource = resolvedPaths.extensions.find((entry) => resolve(entry.path) === resolve(filePath));
+    const resource = resolvedPaths.extensions.find(
+      (entry) => resolve(entry.path) === resolve(filePath),
+    );
     if (!resource) {
       throw new Error(`Unknown extension: ${filePath}`);
     }
@@ -445,7 +491,9 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
         throw error;
       }
 
-      const fallbackSettingsManager = createSettingsManagerWithoutNpmPackages(context.settingsManager);
+      const fallbackSettingsManager = createSettingsManagerWithoutNpmPackages(
+        context.settingsManager,
+      );
       if (!fallbackSettingsManager) {
         throw error;
       }
@@ -466,7 +514,9 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
   }
 
   private async buildProviderRecords(): Promise<readonly RuntimeProviderRecord[]> {
-    const oauthProviders = new Map(this.authStorage.getOAuthProviders().map((provider) => [provider.id, provider]));
+    const oauthProviders = new Map(
+      this.authStorage.getOAuthProviders().map((provider) => [provider.id, provider]),
+    );
     const providerIds = new Set<string>([
       ...this.modelRegistry.getAll().map((model) => model.provider),
       ...oauthProviders.keys(),
@@ -498,7 +548,9 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
     const availableKeys = new Set(
       (await this.modelRegistry.getAvailable()).map((model) => `${model.provider}:${model.id}`),
     );
-    const providers = new Map((await this.buildProviderRecords()).map((provider) => [provider.id, provider]));
+    const providers = new Map(
+      (await this.buildProviderRecords()).map((provider) => [provider.id, provider]),
+    );
 
     return this.modelRegistry
       .getAll()
@@ -533,17 +585,16 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
 
     const providers = await this.buildProviderRecords();
     const models = await this.buildModelRecords();
-    const hasSelectableModels = models.some((model) =>
-      model.available && currentPatterns.includes(`${model.providerId}/${model.modelId}`),
+    const hasSelectableModels = models.some(
+      (model) =>
+        model.available && currentPatterns.includes(`${model.providerId}/${model.modelId}`),
     );
     const candidateProviderIds =
       providerIds && providerIds.length > 0
         ? providerIds
         : hasSelectableModels
           ? []
-          : providers
-              .filter((provider) => provider.hasAuth)
-              .map((provider) => provider.id);
+          : providers.filter((provider) => provider.hasAuth).map((provider) => provider.id);
     if (candidateProviderIds.length === 0) {
       return;
     }
@@ -579,8 +630,10 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
         const loaded = loadedSkills.get(filePath);
         const fallback = loaded ? undefined : await readSkillMetadata(filePath);
         const name = loaded?.name ?? fallback?.name ?? inferSkillName(filePath);
-        const description = loaded?.description ?? fallback?.description ?? "No description provided.";
-        const disableModelInvocation = loaded?.disableModelInvocation ?? fallback?.disableModelInvocation ?? false;
+        const description =
+          loaded?.description ?? fallback?.description ?? "No description provided.";
+        const disableModelInvocation =
+          loaded?.disableModelInvocation ?? fallback?.disableModelInvocation ?? false;
 
         return {
           name,
@@ -595,7 +648,9 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
       }),
     );
 
-    return records.sort((left: RuntimeSkillRecord, right: RuntimeSkillRecord) => left.name.localeCompare(right.name));
+    return records.sort((left: RuntimeSkillRecord, right: RuntimeSkillRecord) =>
+      left.name.localeCompare(right.name),
+    );
   }
 
   private async buildExtensionRecords(
@@ -605,7 +660,9 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
     const loadedResult = context.resourceLoader.getExtensions();
     const packageMetadataCache = new Map<string, Promise<PackageMetadata>>();
     const loadedByPath = new Map(
-      loadedResult.extensions.map((extension) => [resolve(extension.resolvedPath || extension.path), extension] as const),
+      loadedResult.extensions.map(
+        (extension) => [resolve(extension.resolvedPath || extension.path), extension] as const,
+      ),
     );
     const diagnosticsByPath = new Map<string, RuntimeExtensionDiagnostic[]>();
 
@@ -623,28 +680,41 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
       resolvedExtensions.map<Promise<RuntimeExtensionRecord>>(async (resource) => {
         const path = resolve(resource.path);
         const loaded = loadedByPath.get(path);
-        const packageMetadata = await inferExtensionPackageMetadata(resource.metadata, packageMetadataCache);
+        const packageMetadata = await inferExtensionPackageMetadata(
+          resource.metadata,
+          packageMetadataCache,
+        );
         return {
           path,
           displayName: packageMetadata?.displayName ?? inferExtensionEntryName(path),
           ...(packageMetadata?.description ? { description: packageMetadata.description } : {}),
           enabled: resource.enabled,
           sourceInfo: toRuntimeSourceInfo(path, resource.metadata),
-          commands: loaded ? [...loaded.commands.keys()].sort((left, right) => left.localeCompare(right)) : [],
+          commands: loaded
+            ? [...loaded.commands.keys()].sort((left, right) => left.localeCompare(right))
+            : [],
           tools: loaded
             ? [...loaded.tools.values()]
                 .map((tool) => tool.definition.name)
                 .sort((left, right) => left.localeCompare(right))
             : [],
-          flags: loaded ? [...loaded.flags.keys()].sort((left, right) => left.localeCompare(right)) : [],
-          shortcuts: loaded ? [...loaded.shortcuts.keys()].sort((left, right) => left.localeCompare(right)) : [],
+          flags: loaded
+            ? [...loaded.flags.keys()].sort((left, right) => left.localeCompare(right))
+            : [],
+          shortcuts: loaded
+            ? [...loaded.shortcuts.keys()].sort((left, right) => left.localeCompare(right))
+            : [],
           diagnostics: diagnosticsByPath.get(path) ?? [],
         };
       }),
     );
     const resolvedRecordPaths = new Set(records.map((record) => resolve(record.path)));
     const inlineRecords = loadedResult.extensions
-      .filter((extension) => extension.path.startsWith("<inline:") && !resolvedRecordPaths.has(resolve(extension.path)))
+      .filter(
+        (extension) =>
+          extension.path.startsWith("<inline:") &&
+          !resolvedRecordPaths.has(resolve(extension.path)),
+      )
       .map((extension) => this.buildInlineExtensionRecord(extension));
     records.push(...inlineRecords);
 
@@ -655,7 +725,9 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
     );
   }
 
-  private buildInlineExtensionRecord(extension: ReturnType<DefaultResourceLoader["getExtensions"]>["extensions"][number]): RuntimeExtensionRecord {
+  private buildInlineExtensionRecord(
+    extension: ReturnType<DefaultResourceLoader["getExtensions"]>["extensions"][number],
+  ): RuntimeExtensionRecord {
     const metadata = inlineExtensionMetadataForPath(extension.path, this.inlineExtensionMetadata);
     return {
       path: extension.path,
@@ -690,11 +762,15 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
       throw new Error(`Cannot update ${kind} at scope ${scope}`);
     }
     const origin = resource.metadata.origin;
-    const settings = scope === "project" ? settingsManager.getProjectSettings() : settingsManager.getGlobalSettings();
+    const settings =
+      scope === "project"
+        ? settingsManager.getProjectSettings()
+        : settingsManager.getGlobalSettings();
     const pattern = this.relativeResourcePattern(resource.path, resource.metadata, scope, origin);
 
     if (origin === "top-level") {
-      const currentPaths = kind === "skill" ? [...(settings.skills ?? [])] : [...(settings.extensions ?? [])];
+      const currentPaths =
+        kind === "skill" ? [...(settings.skills ?? [])] : [...(settings.extensions ?? [])];
       const updated = replaceResourcePattern(currentPaths, pattern, enabled);
       this.setTopLevelResourcePaths(settingsManager, scope, kind, updated);
       return;
@@ -702,14 +778,20 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
 
     const packages = [...(settings.packages ?? [])];
     const source = resource.metadata.source;
-    const packageIndex = packages.findIndex((entry) => (typeof entry === "string" ? entry : entry.source) === source);
+    const packageIndex = packages.findIndex(
+      (entry) => (typeof entry === "string" ? entry : entry.source) === source,
+    );
     if (packageIndex < 0) {
-      throw new Error(`${titleForResourceKind(kind)} package source not found for ${resource.path}`);
+      throw new Error(
+        `${titleForResourceKind(kind)} package source not found for ${resource.path}`,
+      );
     }
 
     const currentPackage = packages[packageIndex];
-    const nextPackage = typeof currentPackage === "string" ? { source: currentPackage } : { ...currentPackage };
-    const currentPatterns = kind === "skill" ? [...(nextPackage.skills ?? [])] : [...(nextPackage.extensions ?? [])];
+    const nextPackage =
+      typeof currentPackage === "string" ? { source: currentPackage } : { ...currentPackage };
+    const currentPatterns =
+      kind === "skill" ? [...(nextPackage.skills ?? [])] : [...(nextPackage.extensions ?? [])];
     const updatedPatterns = replaceResourcePattern(currentPatterns, pattern, enabled);
     if (updatedPatterns.length > 0) {
       if (kind === "skill") {
@@ -778,21 +860,27 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
 async function readJsonRecord(filePath: string): Promise<Record<string, unknown>> {
   try {
     const raw = await readFile(filePath, "utf8");
-    const parsed = JSON.parse(raw);
+    const parsed: unknown = JSON.parse(raw);
     return typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : {};
   } catch {
     return {};
   }
 }
 
-function replaceResourcePattern(patterns: readonly string[], resourcePattern: string, enabled: boolean): string[] {
+function replaceResourcePattern(
+  patterns: readonly string[],
+  resourcePattern: string,
+  enabled: boolean,
+): string[] {
   const next = patterns.filter((pattern) => stripPrefix(pattern) !== resourcePattern);
   next.push(`${enabled ? "+" : "-"}${resourcePattern}`);
   return next;
 }
 
 function stripPrefix(pattern: string): string {
-  return pattern.startsWith("+") || pattern.startsWith("-") || pattern.startsWith("!") ? pattern.slice(1) : pattern;
+  return pattern.startsWith("+") || pattern.startsWith("-") || pattern.startsWith("!")
+    ? pattern.slice(1)
+    : pattern;
 }
 
 async function readSkillMetadata(
@@ -864,7 +952,7 @@ async function inferPackageMetadata(
 
 async function readPackageMetadata(packageRoot: string): Promise<PackageMetadata> {
   const folderName = basename(packageRoot).trim();
-  const packageJson = await readJsonRecord(join(packageRoot, "package.json")) as {
+  const packageJson = (await readJsonRecord(join(packageRoot, "package.json"))) as {
     readonly displayName?: unknown;
     readonly description?: unknown;
   };
@@ -910,15 +998,26 @@ type PiOAuthLoginCallbacks = Parameters<AuthStorage["login"]>[1];
 
 function toPiOAuthLoginCallbacks(callbacks: RuntimeLoginCallbacks): PiOAuthLoginCallbacks {
   return {
-    onAuth: callbacks.onAuth,
-    onDeviceCode: (info) =>
-      callbacks.onAuth({
-        url: info.verificationUri,
-        instructions: [
-          `Enter code: ${info.userCode}`,
-          info.expiresInSeconds ? `Expires in ${info.expiresInSeconds} seconds.` : undefined,
-        ].filter((line): line is string => Boolean(line)).join("\n"),
-      }),
+    onAuth: (info) => {
+      Promise.resolve(callbacks.onAuth(info)).catch((error: unknown) => {
+        console.error("OAuth authorization callback failed", error);
+      });
+    },
+    onDeviceCode: (info) => {
+      Promise.resolve(
+        callbacks.onAuth({
+          url: info.verificationUri,
+          instructions: [
+            `Enter code: ${info.userCode}`,
+            info.expiresInSeconds ? `Expires in ${info.expiresInSeconds} seconds.` : undefined,
+          ]
+            .filter((line): line is string => Boolean(line))
+            .join("\n"),
+        }),
+      ).catch((error: unknown) => {
+        console.error("OAuth device-code callback failed", error);
+      });
+    },
     onPrompt: callbacks.onPrompt,
     onSelect: async (prompt) => {
       const defaultOption = prompt.options[0];
@@ -932,12 +1031,26 @@ function toPiOAuthLoginCallbacks(callbacks: RuntimeLoginCallbacks): PiOAuthLogin
         return defaultOption?.id;
       }
       const selectedIndex = Number.parseInt(normalizedChoice, 10);
-      if (Number.isInteger(selectedIndex) && selectedIndex >= 1 && selectedIndex <= prompt.options.length) {
+      if (
+        Number.isInteger(selectedIndex) &&
+        selectedIndex >= 1 &&
+        selectedIndex <= prompt.options.length
+      ) {
         return prompt.options[selectedIndex - 1]?.id;
       }
-      return prompt.options.find((option) => option.id === normalizedChoice || option.label === normalizedChoice)?.id;
+      return prompt.options.find(
+        (option) => option.id === normalizedChoice || option.label === normalizedChoice,
+      )?.id;
     },
-    ...(callbacks.onProgress ? { onProgress: callbacks.onProgress } : {}),
+    ...(callbacks.onProgress
+      ? {
+          onProgress: (message: string) => {
+            Promise.resolve(callbacks.onProgress?.(message)).catch((error: unknown) => {
+              console.error("OAuth progress callback failed", error);
+            });
+          },
+        }
+      : {}),
     ...(callbacks.onManualCodeInput ? { onManualCodeInput: callbacks.onManualCodeInput } : {}),
     ...(callbacks.signal ? { signal: callbacks.signal } : {}),
   };
@@ -999,10 +1112,15 @@ function toModelSettingsSnapshot(settings: Record<string, unknown>): ModelSettin
     enabledModelPatterns: Array.isArray(settings.enabledModels)
       ? settings.enabledModels.filter((value): value is string => typeof value === "string")
       : [],
-    ...(typeof settings.defaultProvider === "string" ? { defaultProvider: settings.defaultProvider } : {}),
+    ...(typeof settings.defaultProvider === "string"
+      ? { defaultProvider: settings.defaultProvider }
+      : {}),
     ...(typeof settings.defaultModel === "string" ? { defaultModelId: settings.defaultModel } : {}),
     ...(typeof settings.defaultThinkingLevel === "string"
-      ? { defaultThinkingLevel: settings.defaultThinkingLevel as ModelSettingsSnapshot["defaultThinkingLevel"] }
+      ? {
+          defaultThinkingLevel:
+            settings.defaultThinkingLevel as ModelSettingsSnapshot["defaultThinkingLevel"],
+        }
       : {}),
   } satisfies ModelSettingsSnapshot;
 }

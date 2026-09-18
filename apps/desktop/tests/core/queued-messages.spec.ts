@@ -1,5 +1,10 @@
 import { expect, test } from "@playwright/test";
-import type { SessionDriverEvent, SessionQueuedMessage, SessionRef, WorkspaceRef } from "@pi-gui/session-driver";
+import type {
+  SessionDriverEvent,
+  SessionQueuedMessage,
+  SessionRef,
+  WorkspaceRef,
+} from "@pi-gui/session-driver";
 import {
   TINY_PNG_BASE64,
   createNamedThread,
@@ -85,10 +90,14 @@ async function emitQueuedMessageStarted(
   await emitRunningSnapshot(harness, window, remainingQueuedMessages);
 }
 
-async function transcriptMessages(window: Parameters<typeof getDesktopState>[0]): Promise<string[]> {
-  return (await getSelectedTranscript(window))?.transcript.flatMap((item) =>
-    item.kind === "message" ? [`${item.role}:${item.text}`] : [],
-  ) ?? [];
+async function transcriptMessages(
+  window: Parameters<typeof getDesktopState>[0],
+): Promise<string[]> {
+  return (
+    (await getSelectedTranscript(window))?.transcript.flatMap((item) =>
+      item.kind === "message" ? [`${item.role}:${item.text}`] : [],
+    ) ?? []
+  );
 }
 
 test("shows queued messages while running and preserves attachments through inline edit", async () => {
@@ -121,7 +130,9 @@ test("shows queued messages while running and preserves attachments through inli
     };
     await emitRunningSnapshot(harness, window, [queuedMessage]);
     await expect
-      .poll(async () => (await getDesktopState(window)).queuedComposerMessages.map((message) => message.text))
+      .poll(async () =>
+        (await getDesktopState(window)).queuedComposerMessages.map((message) => message.text),
+      )
       .toEqual(["Inspect the queued screenshot"]);
 
     const composer = window.getByTestId("composer");
@@ -133,9 +144,13 @@ test("shows queued messages while running and preserves attachments through inli
 
     const queuedCard = window.getByTestId("queued-composer-message").first();
     await expect(queuedCard.locator(".queued-composer-message__mode")).toHaveCount(0);
-    await expect(queuedCard.locator(".queued-composer-message__header .queued-composer-message__text")).toContainText("Inspect the queued screenshot");
+    await expect(
+      queuedCard.locator(".queued-composer-message__header .queued-composer-message__text"),
+    ).toContainText("Inspect the queued screenshot");
     await queuedCard.getByRole("button", { name: "Edit" }).click();
-    await expect(window.getByTestId("queued-composer-editing")).toContainText("Editing queued message");
+    await expect(window.getByTestId("queued-composer-editing")).toContainText(
+      "Editing queued message",
+    );
     await expect(composer).toHaveValue("Inspect the queued screenshot");
     await expect(window.locator(".composer-attachment__name")).toContainText("queued-image.png");
 
@@ -176,8 +191,12 @@ test("delineates queued follow-ups and submitted steers in the timeline", async 
     };
     await emitRunningSnapshot(harness, window, [queuedSteer, queuedFollowUp]);
 
-    await expect(window.getByTestId("queued-composer-message").filter({ hasText: queuedSteer.text })).toHaveCount(1);
-    await expect(window.getByTestId("queued-composer-message").filter({ hasText: queuedFollowUp.text })).toHaveCount(1);
+    await expect(
+      window.getByTestId("queued-composer-message").filter({ hasText: queuedSteer.text }),
+    ).toHaveCount(1);
+    await expect(
+      window.getByTestId("queued-composer-message").filter({ hasText: queuedFollowUp.text }),
+    ).toHaveCount(1);
     await expect(window.locator(".queued-composer-message__mode")).toHaveCount(0);
     await expect(window.getByTestId("transcript")).not.toContainText(queuedSteer.text);
     await expect(window.getByTestId("transcript")).not.toContainText(queuedFollowUp.text);
@@ -187,14 +206,20 @@ test("delineates queued follow-ups and submitted steers in the timeline", async 
       .filter({ hasText: queuedSteer.text })
       .getByRole("button", { name: "Steer", exact: true })
       .click();
-    await expect(window.getByTestId("queued-composer-message").filter({ hasText: queuedSteer.text })).toHaveCount(0);
+    await expect(
+      window.getByTestId("queued-composer-message").filter({ hasText: queuedSteer.text }),
+    ).toHaveCount(0);
     await expect(window.getByTestId("transcript")).toContainText(queuedSteer.text);
 
     const composer = window.getByTestId("composer");
     await composer.fill("Steer the current run now");
     await composer.press(desktopShortcut("Enter"));
 
-    await expect(window.getByTestId("queued-composer-message").filter({ hasText: "Steer the current run now" })).toHaveCount(0);
+    await expect(
+      window
+        .getByTestId("queued-composer-message")
+        .filter({ hasText: "Steer the current run now" }),
+    ).toHaveCount(0);
     await expect(window.getByTestId("transcript")).toContainText("Steer the current run now");
 
     await emitQueuedMessageStarted(harness, window, queuedFollowUp, []);

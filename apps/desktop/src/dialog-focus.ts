@@ -8,7 +8,10 @@ function getFocusableElements(dialog: HTMLElement): HTMLElement[] {
   ).filter((element) => !element.hasAttribute("disabled") && !element.getAttribute("aria-hidden"));
 }
 
-export function trapDialogFocus(event: KeyboardEvent<HTMLElement>, dialog: HTMLElement | null): void {
+export function trapDialogFocus(
+  event: KeyboardEvent<HTMLElement>,
+  dialog: HTMLElement | null,
+): void {
   if (!dialog) {
     return;
   }

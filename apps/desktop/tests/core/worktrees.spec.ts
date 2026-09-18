@@ -22,7 +22,11 @@ async function git(repoPath: string, ...args: string[]): Promise<string> {
   return stdout.trim();
 }
 
-async function addLinkedWorktree(repoPath: string, worktreePath: string, branchName: string): Promise<void> {
+async function addLinkedWorktree(
+  repoPath: string,
+  worktreePath: string,
+  branchName: string,
+): Promise<void> {
   await mkdir(dirname(worktreePath), { recursive: true });
   await git(repoPath, "worktree", "add", "-b", branchName, worktreePath, "HEAD");
 }
@@ -59,14 +63,21 @@ test("creates and selects a worktree-backed workspace from the desktop UI", asyn
     const window = await harness.firstWindow();
     const rootWorkspace = await waitForWorkspaceByPath(window, workspacePath);
 
-    await window.getByRole("button", { name: `Workspace actions for ${rootWorkspace.name}` }).click();
+    await window
+      .getByRole("button", { name: `Workspace actions for ${rootWorkspace.name}` })
+      .click();
     await window.getByRole("button", { name: "Create permanent worktree" }).click();
 
     await expect
       .poll(async () => {
         const state = await getDesktopState(window);
-        const selected = state.workspaces.find((workspace) => workspace.id === state.selectedWorkspaceId);
-        return selected?.kind === "worktree" && (state.worktreesByWorkspace[rootWorkspace.id]?.length ?? 0) > 0;
+        const selected = state.workspaces.find(
+          (workspace) => workspace.id === state.selectedWorkspaceId,
+        );
+        return (
+          selected?.kind === "worktree" &&
+          (state.worktreesByWorkspace[rootWorkspace.id]?.length ?? 0) > 0
+        );
       })
       .toBe(true);
 
@@ -74,12 +85,17 @@ test("creates and selects a worktree-backed workspace from the desktop UI", asyn
     const worktreeWorkspace = stateAfterCreate.workspaces.find(
       (workspace) => workspace.id === stateAfterCreate.selectedWorkspaceId,
     );
-    assertExists(worktreeWorkspace, "Expected the selected workspace to be the newly created worktree");
+    assertExists(
+      worktreeWorkspace,
+      "Expected the selected workspace to be the newly created worktree",
+    );
     if (worktreeWorkspace.kind !== "worktree") {
       throw new Error("Expected the selected workspace to be the newly created worktree");
     }
 
-    await expect(window.locator(".environment-picker__button")).toContainText(worktreeWorkspace.name);
+    await expect(window.locator(".environment-picker__button")).toContainText(
+      worktreeWorkspace.name,
+    );
     await expect(window.locator(".empty-panel")).toContainText("Create a thread for this folder");
     await expect(window.locator(".empty-panel")).not.toContainText("/Users/");
 
@@ -118,19 +134,25 @@ test("scopes worktree creation and startup collection to the active profile", as
       const legacyWorkspace = await waitForWorkspaceByPath(window, canonicalLegacyWorktree);
       expect(legacyWorkspace.kind).toBe("worktree");
 
-      await window.getByRole("button", { name: `Workspace actions for ${rootWorkspace.name}` }).click();
+      await window
+        .getByRole("button", { name: `Workspace actions for ${rootWorkspace.name}` })
+        .click();
       await window.getByRole("button", { name: "Create permanent worktree" }).click();
 
       await expect
         .poll(async () => {
           const state = await getDesktopState(window);
-          const selected = state.workspaces.find((workspace) => workspace.id === state.selectedWorkspaceId);
+          const selected = state.workspaces.find(
+            (workspace) => workspace.id === state.selectedWorkspaceId,
+          );
           return selected?.kind === "worktree" && selected.path !== canonicalLegacyWorktree;
         })
         .toBe(true);
 
       const state = await getDesktopState(window);
-      profileAWorktree = state.workspaces.find((workspace) => workspace.id === state.selectedWorkspaceId)?.path;
+      profileAWorktree = state.workspaces.find(
+        (workspace) => workspace.id === state.selectedWorkspaceId,
+      )?.path;
       assertExists(profileAWorktree, "Expected profile A to create a worktree");
       expect(isPathWithin(await realpath(profileARoot), profileAWorktree)).toBe(true);
       expect(await pathExists(profileAWorktree)).toBe(true);
@@ -168,7 +190,7 @@ test("scopes worktree creation and startup collection to the active profile", as
       expect(await pathExists(rememberedProfileAWorktree.path)).toBe(true);
       expect(legacyWorkspace.kind).toBe("worktree");
       await window.evaluate(async (workspaceId) => {
-        await window.piApp.selectWorkspace(workspaceId);
+        await globalThis.window.piApp.selectWorkspace(workspaceId);
       }, legacyWorkspace.id);
       const state = await getDesktopState(window);
       expect(state.selectedWorkspaceId).toBe(legacyWorkspace.id);
@@ -193,7 +215,9 @@ test("scopes worktree creation and startup collection to the active profile", as
   } finally {
     for (const worktreePath of [profileAWorktree, profileBOrphan, legacyWorktree]) {
       if (worktreePath) {
-        await git(workspacePath, "worktree", "remove", "--force", worktreePath).catch(() => undefined);
+        await git(workspacePath, "worktree", "remove", "--force", worktreePath).catch(
+          () => undefined,
+        );
       }
     }
     await rm(profileA, { recursive: true, force: true });
@@ -222,13 +246,17 @@ test("shows a worktree icon in the sidebar without a local text badge", async ()
     await expect(localRow).toHaveAttribute("data-sidebar-indicator", "none");
     await expect(localRow.locator(".session-row__workspace-icon")).toHaveCount(0);
 
-    await window.getByRole("button", { name: `Workspace actions for ${rootWorkspace.name}` }).click();
+    await window
+      .getByRole("button", { name: `Workspace actions for ${rootWorkspace.name}` })
+      .click();
     await window.getByRole("button", { name: "Create permanent worktree" }).click();
 
     await expect
       .poll(async () => {
         const state = await getDesktopState(window);
-        const selected = state.workspaces.find((workspace) => workspace.id === state.selectedWorkspaceId);
+        const selected = state.workspaces.find(
+          (workspace) => workspace.id === state.selectedWorkspaceId,
+        );
         return selected?.kind === "worktree";
       })
       .toBe(true);
@@ -263,26 +291,32 @@ test("keeps orphaned worktree workspaces visible after removing the root workspa
     const window = await harness.firstWindow();
     const rootWorkspace = await waitForWorkspaceByPath(window, workspacePath);
 
-    await window.getByRole("button", { name: `Workspace actions for ${rootWorkspace.name}` }).click();
+    await window
+      .getByRole("button", { name: `Workspace actions for ${rootWorkspace.name}` })
+      .click();
     await window.getByRole("button", { name: "Create permanent worktree" }).click();
 
     await expect
       .poll(async () => {
         const state = await getDesktopState(window);
-        const selected = state.workspaces.find((workspace) => workspace.id === state.selectedWorkspaceId);
+        const selected = state.workspaces.find(
+          (workspace) => workspace.id === state.selectedWorkspaceId,
+        );
         return selected?.kind === "worktree";
       })
       .toBe(true);
 
     const createdState = await getDesktopState(window);
-    const createdWorkspace = createdState.workspaces.find((workspace) => workspace.id === createdState.selectedWorkspaceId);
+    const createdWorkspace = createdState.workspaces.find(
+      (workspace) => workspace.id === createdState.selectedWorkspaceId,
+    );
     assertExists(createdWorkspace, "Expected created worktree workspace");
 
-    await window.getByRole("button", { name: `Workspace actions for ${rootWorkspace.name}` }).click();
-    window.once("dialog", (dialog) => {
-      void dialog.accept();
-    });
-    await window.getByRole("button", { name: "Remove" }).click();
+    await window
+      .getByRole("button", { name: `Workspace actions for ${rootWorkspace.name}` })
+      .click();
+    const acceptRemoval = window.waitForEvent("dialog").then((dialog) => dialog.accept());
+    await Promise.all([window.getByRole("button", { name: "Remove" }).click(), acceptRemoval]);
 
     await expect(window.getByTestId("empty-state")).toHaveCount(0);
     await expect

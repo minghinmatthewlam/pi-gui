@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+} from "react";
 import { Terminal } from "@xterm/xterm";
 import { ClipboardAddon } from "@xterm/addon-clipboard";
 import { FitAddon } from "@xterm/addon-fit";
@@ -63,7 +70,9 @@ export function TerminalPanel({
   useEffect(() => {
     setPanel(null);
     setError("");
-    void requestPanel();
+    void requestPanel().catch((error: unknown) => {
+      setError(error instanceof Error ? error.message : String(error));
+    });
   }, [requestPanel]);
 
   const createTerminal = useCallback(async () => {
@@ -74,26 +83,32 @@ export function TerminalPanel({
     setPanel(nextPanel);
   }, [api, sessionId, workspace.id]);
 
-  const setActiveTerminal = useCallback(async (terminalId: string) => {
-    if (!api) {
-      return;
-    }
-    const nextPanel = await api.setActiveTerminalSession(workspace.id, sessionId, terminalId);
-    setPanel(nextPanel);
-  }, [api, sessionId, workspace.id]);
-
-  const closeTerminal = useCallback(async (terminalId: string) => {
-    if (!api) {
-      return;
-    }
-    const nextPanel = await api.closeTerminalSession(terminalId);
-    if (nextPanel) {
+  const setActiveTerminal = useCallback(
+    async (terminalId: string) => {
+      if (!api) {
+        return;
+      }
+      const nextPanel = await api.setActiveTerminalSession(workspace.id, sessionId, terminalId);
       setPanel(nextPanel);
-    } else {
-      setPanel(null);
-      onHide();
-    }
-  }, [api, onHide]);
+    },
+    [api, sessionId, workspace.id],
+  );
+
+  const closeTerminal = useCallback(
+    async (terminalId: string) => {
+      if (!api) {
+        return;
+      }
+      const nextPanel = await api.closeTerminalSession(terminalId);
+      if (nextPanel) {
+        setPanel(nextPanel);
+      } else {
+        setPanel(null);
+        onHide();
+      }
+    },
+    [api, onHide],
+  );
 
   const restartTerminal = useCallback(async () => {
     if (!api || !activeSession) {
@@ -117,7 +132,9 @@ export function TerminalPanel({
       return;
     }
     lastSizeRef.current = nextSize;
-    void api.resizeTerminal(terminalId, nextSize);
+    void api.resizeTerminal(terminalId, nextSize).catch((error: unknown) => {
+      setError(error instanceof Error ? error.message : String(error));
+    });
   }, [api]);
 
   useEffect(() => {
@@ -126,20 +143,26 @@ export function TerminalPanel({
       return undefined;
     }
     const markFocused = () => {
-      void api.setTerminalFocused(true);
+      void api.setTerminalFocused(true).catch((error: unknown) => {
+        setError(error instanceof Error ? error.message : String(error));
+      });
     };
     const markBlurred = (event: FocusEvent) => {
       if (event.relatedTarget instanceof Node && panelElement.contains(event.relatedTarget)) {
         return;
       }
-      void api.setTerminalFocused(false);
+      void api.setTerminalFocused(false).catch((error: unknown) => {
+        setError(error instanceof Error ? error.message : String(error));
+      });
     };
     panelElement.addEventListener("focusin", markFocused);
     panelElement.addEventListener("focusout", markBlurred);
     return () => {
       panelElement.removeEventListener("focusin", markFocused);
       panelElement.removeEventListener("focusout", markBlurred);
-      void api.setTerminalFocused(false);
+      void api.setTerminalFocused(false).catch((error: unknown) => {
+        setError(error instanceof Error ? error.message : String(error));
+      });
     };
   }, [api]);
 
@@ -148,28 +171,34 @@ export function TerminalPanel({
       return undefined;
     }
     const removeData = api.onTerminalData((event) => {
-      setPanel((currentPanel) => updateSession(currentPanel, event.terminalId, (session) => ({
-        ...session,
-        ...appendTerminalReplay(session.replay, event.data, session.truncated),
-      })));
+      setPanel((currentPanel) =>
+        updateSession(currentPanel, event.terminalId, (session) => ({
+          ...session,
+          ...appendTerminalReplay(session.replay, event.data, session.truncated),
+        })),
+      );
       if (event.terminalId === activeTerminalIdRef.current) {
         terminalRef.current?.write(event.data);
       }
     });
     const removeExit = api.onTerminalExit((event) => {
-      setPanel((currentPanel) => updateSession(currentPanel, event.terminalId, (session) => ({
-        ...session,
-        status: "exited",
-        exitCode: event.exitCode,
-        signal: event.signal,
-      })));
+      setPanel((currentPanel) =>
+        updateSession(currentPanel, event.terminalId, (session) => ({
+          ...session,
+          status: "exited",
+          exitCode: event.exitCode,
+          signal: event.signal,
+        })),
+      );
     });
     const removeError = api.onTerminalError((event) => {
-      setPanel((currentPanel) => updateSession(currentPanel, event.terminalId, (session) => ({
-        ...session,
-        status: "error",
-        ...appendTerminalReplay(session.replay, `${event.message}\r\n`, session.truncated),
-      })));
+      setPanel((currentPanel) =>
+        updateSession(currentPanel, event.terminalId, (session) => ({
+          ...session,
+          status: "error",
+          ...appendTerminalReplay(session.replay, `${event.message}\r\n`, session.truncated),
+        })),
+      );
     });
     return () => {
       removeData();
@@ -202,7 +231,9 @@ export function TerminalPanel({
     const fitAddon = new FitAddon();
     const clipboardAddon = new ClipboardAddon();
     const webLinksAddon = new WebLinksAddon((_event, uri) => {
-      void api.openExternal(uri);
+      void api.openExternal(uri).catch((error: unknown) => {
+        setError(error instanceof Error ? error.message : String(error));
+      });
     });
 
     terminal.loadAddon(fitAddon);
@@ -215,27 +246,37 @@ export function TerminalPanel({
       const commandModifier = api.platform === "darwin" ? event.metaKey : event.ctrlKey;
       const key = event.key.toLowerCase();
       if (commandModifier && !event.shiftKey && key === "t") {
-        void createTerminal();
+        void createTerminal().catch((error: unknown) => {
+          setError(error instanceof Error ? error.message : String(error));
+        });
         return false;
       }
       if (api.platform === "darwin" && event.metaKey) {
         const sequence = macTerminalSequenceForEvent(event);
         if (sequence) {
-          void api.writeTerminal(activeSession.id, sequence);
+          void api.writeTerminal(activeSession.id, sequence).catch((error: unknown) => {
+            setError(error instanceof Error ? error.message : String(error));
+          });
           return false;
         }
       }
       return true;
     });
     terminal.onData((data) => {
-      void api.writeTerminal(activeSession.id, data);
+      void api.writeTerminal(activeSession.id, data).catch((error: unknown) => {
+        setError(error instanceof Error ? error.message : String(error));
+      });
     });
     terminal.onTitleChange((title) => {
-      void api.setTerminalTitle(activeSession.id, title);
-      setPanel((currentPanel) => updateSession(currentPanel, activeSession.id, (session) => ({
-        ...session,
-        title: title.trim() || session.title,
-      })));
+      void api.setTerminalTitle(activeSession.id, title).catch((error: unknown) => {
+        setError(error instanceof Error ? error.message : String(error));
+      });
+      setPanel((currentPanel) =>
+        updateSession(currentPanel, activeSession.id, (session) => ({
+          ...session,
+          title: title.trim() || session.title,
+        })),
+      );
     });
     terminal.open(container);
     if (activeSession.replay) {
@@ -262,11 +303,15 @@ export function TerminalPanel({
     event.preventDefault();
     resizeCleanupRef.current?.();
     const startY = event.clientY;
-    const startHeight = containerRef.current?.closest<HTMLElement>(".terminal-panel")?.offsetHeight ?? height;
+    const startHeight =
+      containerRef.current?.closest<HTMLElement>(".terminal-panel")?.offsetHeight ?? height;
     const maxHeight = Math.max(MIN_TERMINAL_HEIGHT, window.innerHeight - 140);
 
     const handleMove = (moveEvent: MouseEvent) => {
-      const nextHeight = Math.min(maxHeight, Math.max(MIN_TERMINAL_HEIGHT, startHeight + startY - moveEvent.clientY));
+      const nextHeight = Math.min(
+        maxHeight,
+        Math.max(MIN_TERMINAL_HEIGHT, startHeight + startY - moveEvent.clientY),
+      );
       onHeightChange(nextHeight);
     };
     const handleUp = () => {
@@ -307,9 +352,15 @@ export function TerminalPanel({
                 role="tab"
                 aria-selected={session.id === panel?.activeSessionId}
                 data-testid="terminal-tab"
-                onClick={() => void setActiveTerminal(session.id)}
+                onClick={() =>
+                  void setActiveTerminal(session.id).catch((error: unknown) => {
+                    setError(error instanceof Error ? error.message : String(error));
+                  })
+                }
               >
-                <span className={`terminal-panel__status terminal-panel__status--${session.status}`} />
+                <span
+                  className={`terminal-panel__status terminal-panel__status--${session.status}`}
+                />
                 <span className="terminal-panel__tab-title">{session.title}</span>
               </button>
               <button
@@ -318,7 +369,9 @@ export function TerminalPanel({
                 aria-label={`Close ${session.title}`}
                 onClick={(event) => {
                   event.stopPropagation();
-                  void closeTerminal(session.id);
+                  void closeTerminal(session.id).catch((error: unknown) => {
+                    setError(error instanceof Error ? error.message : String(error));
+                  });
                 }}
               >
                 <CloseIcon />
@@ -327,10 +380,30 @@ export function TerminalPanel({
           ))}
         </div>
         <div className="terminal-panel__actions">
-          <button type="button" className="icon-button terminal-panel__action" title="New terminal" aria-label="New terminal" onClick={() => void createTerminal()}>
+          <button
+            type="button"
+            className="icon-button terminal-panel__action"
+            title="New terminal"
+            aria-label="New terminal"
+            onClick={() =>
+              void createTerminal().catch((error: unknown) => {
+                setError(error instanceof Error ? error.message : String(error));
+              })
+            }
+          >
             <PlusIcon />
           </button>
-          <button type="button" className="icon-button terminal-panel__action" title="Restart terminal" aria-label="Restart terminal" onClick={() => void restartTerminal()}>
+          <button
+            type="button"
+            className="icon-button terminal-panel__action"
+            title="Restart terminal"
+            aria-label="Restart terminal"
+            onClick={() =>
+              void restartTerminal().catch((error: unknown) => {
+                setError(error instanceof Error ? error.message : String(error));
+              })
+            }
+          >
             <RefreshIcon />
           </button>
           <button
@@ -342,7 +415,13 @@ export function TerminalPanel({
           >
             {isTakeover ? <MinimizeIcon /> : <MaximizeIcon />}
           </button>
-          <button type="button" className="icon-button terminal-panel__action" title="Hide terminal" aria-label="Hide terminal" onClick={onHide}>
+          <button
+            type="button"
+            className="icon-button terminal-panel__action"
+            title="Hide terminal"
+            aria-label="Hide terminal"
+            onClick={onHide}
+          >
             <CloseIcon />
           </button>
         </div>
@@ -366,7 +445,9 @@ function updateSession(
   }
   return {
     ...panel,
-    sessions: panel.sessions.map((session) => session.id === terminalId ? update(session) : session),
+    sessions: panel.sessions.map((session) =>
+      session.id === terminalId ? update(session) : session,
+    ),
   };
 }
 

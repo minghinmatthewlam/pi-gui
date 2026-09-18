@@ -1,7 +1,16 @@
 import { randomUUID } from "node:crypto";
-import type { SessionCatalogEntry, WorkspaceCatalogEntry, WorktreeCatalogEntry } from "@pi-gui/catalogs";
+import type {
+  SessionCatalogEntry,
+  WorkspaceCatalogEntry,
+  WorktreeCatalogEntry,
+} from "@pi-gui/catalogs";
 import { sessionKey } from "@pi-gui/pi-sdk-driver";
-import type { SessionAttachment, SessionConfig, SessionQueuedMessage, SessionRef } from "@pi-gui/session-driver";
+import type {
+  SessionAttachment,
+  SessionConfig,
+  SessionQueuedMessage,
+  SessionRef,
+} from "@pi-gui/session-driver";
 import type {
   ComposerAttachment,
   QueuedComposerMessage,
@@ -66,7 +75,9 @@ export function buildWorktreeRecords(
   worktrees: readonly WorktreeCatalogEntry[],
 ): Record<string, readonly WorktreeRecord[]> {
   const workspaceRoots = resolveWorkspaceRoots(workspaces, worktrees);
-  const linkedWorkspaceIdsByPath = new Map(workspaces.map((workspace) => [workspace.path, workspace.workspaceId] as const));
+  const linkedWorkspaceIdsByPath = new Map(
+    workspaces.map((workspace) => [workspace.path, workspace.workspaceId] as const),
+  );
   const groups = new Map<string, WorktreeRecord[]>();
 
   for (const worktree of worktrees) {
@@ -74,7 +85,9 @@ export function buildWorktreeRecords(
       continue;
     }
     const linkedWorkspaceId = linkedWorkspaceIdsByPath.get(worktree.path);
-    const resolvedRootWorkspaceId = linkedWorkspaceId ? workspaceRoots.get(linkedWorkspaceId) : undefined;
+    const resolvedRootWorkspaceId = linkedWorkspaceId
+      ? workspaceRoots.get(linkedWorkspaceId)
+      : undefined;
     if (linkedWorkspaceId) {
       if (!resolvedRootWorkspaceId || resolvedRootWorkspaceId !== worktree.workspaceId) {
         continue;
@@ -114,7 +127,9 @@ function resolveWorkspaceRoots(
   workspaces: readonly WorkspaceCatalogEntry[],
   worktrees: readonly WorktreeCatalogEntry[],
 ): Map<string, string | undefined> {
-  const workspacesById = new Map(workspaces.map((workspace) => [workspace.workspaceId, workspace] as const));
+  const workspacesById = new Map(
+    workspaces.map((workspace) => [workspace.workspaceId, workspace] as const),
+  );
   const linkedEntriesByPath = new Map<string, WorktreeCatalogEntry[]>();
   for (const worktree of worktrees) {
     if (worktree.kind !== "linked") {
@@ -149,8 +164,14 @@ function resolveWorkspaceRoots(
     }
     const reciprocalRootId = candidateRootByWorkspaceId.get(candidateRootId);
     if (reciprocalRootId === workspace.workspaceId) {
-      const primaryId = pickPreferredWorkspaceId([workspace.workspaceId, candidateRootId], workspacesById);
-      resolvedRoots.set(workspace.workspaceId, primaryId === workspace.workspaceId ? undefined : primaryId);
+      const primaryId = pickPreferredWorkspaceId(
+        [workspace.workspaceId, candidateRootId],
+        workspacesById,
+      );
+      resolvedRoots.set(
+        workspace.workspaceId,
+        primaryId === workspace.workspaceId ? undefined : primaryId,
+      );
       continue;
     }
     resolvedRoots.set(workspace.workspaceId, candidateRootId);
@@ -223,7 +244,12 @@ function buildSessionRecord(
     preview,
     status: session.status,
     runningSince: runningSinceBySession.get(key),
-    hasUnseenUpdate: hasUnseenSessionUpdate(session.status, session.updatedAt, lastViewedAt, transcript),
+    hasUnseenUpdate: hasUnseenSessionUpdate(
+      session.status,
+      session.updatedAt,
+      lastViewedAt,
+      transcript,
+    ),
     config: sessionConfigBySession.get(key),
   };
 }
@@ -242,7 +268,10 @@ export function hasUnseenSessionUpdate(
   return activityAt > lastViewedAt;
 }
 
-export function latestSessionActivityAt(updatedAt: string, transcript: readonly TranscriptMessage[]): string {
+export function latestSessionActivityAt(
+  updatedAt: string,
+  transcript: readonly TranscriptMessage[],
+): string {
   let latest = updatedAt;
   for (const item of transcript) {
     if (item.createdAt > latest) {
@@ -276,7 +305,9 @@ export function makeTranscriptMessageWithAttachments(
 ): TranscriptMessage {
   return {
     ...makeTranscriptMessage(role, text),
-    ...(attachments?.length ? { attachments: attachments.map((attachment) => ({ ...attachment })) } : {}),
+    ...(attachments?.length
+      ? { attachments: attachments.map((attachment) => ({ ...attachment })) }
+      : {}),
   };
 }
 
@@ -304,7 +335,9 @@ export function cloneComposerAttachments(
   attachments: readonly ComposerAttachment[],
 ): ComposerAttachment[] {
   return attachments.flatMap((attachment) => {
-    const normalized = normalizeComposerAttachment(attachment as unknown as Record<string, unknown>);
+    const normalized = normalizeComposerAttachment(
+      attachment as unknown as Record<string, unknown>,
+    );
     return normalized ? [normalized] : [];
   });
 }
@@ -313,7 +346,9 @@ export function toSessionAttachments(
   attachments: readonly ComposerAttachment[],
 ): SessionAttachment[] {
   return attachments.map((attachment) =>
-    attachment.kind === "image" ? toImageAttachmentPayload(attachment) : toFileAttachmentPayload(attachment),
+    attachment.kind === "image"
+      ? toImageAttachmentPayload(attachment)
+      : toFileAttachmentPayload(attachment),
   );
 }
 
@@ -349,7 +384,11 @@ export function mergeQueuedComposerMessages(
       id: message.id,
       mode: message.mode,
       text: message.text,
-      attachments: mergeQueuedComposerAttachments(existing?.attachments, message.attachments, message.id),
+      attachments: mergeQueuedComposerAttachments(
+        existing?.attachments,
+        message.attachments,
+        message.id,
+      ),
       createdAt: message.createdAt,
       updatedAt: message.updatedAt,
     };
@@ -360,7 +399,9 @@ export function toTranscriptAttachments(
   attachments: readonly ComposerAttachment[],
 ): NonNullable<Extract<TranscriptMessage, { kind: "message" }>["attachments"]> {
   return attachments.map((attachment) =>
-    attachment.kind === "image" ? toImageAttachmentPayload(attachment) : toFileAttachmentPayload(attachment),
+    attachment.kind === "image"
+      ? toImageAttachmentPayload(attachment)
+      : toFileAttachmentPayload(attachment),
   );
 }
 
@@ -403,8 +444,17 @@ function mergeQueuedComposerAttachments(
 
   return next.map((attachment, index) => {
     const existing = previous?.[index];
-    if (existing && existing.kind === attachment.kind && existing.name === attachment.name && existing.mimeType === attachment.mimeType) {
-      if (existing.kind === "image" && attachment.kind === "image" && existing.data === attachment.data) {
+    if (
+      existing &&
+      existing.kind === attachment.kind &&
+      existing.name === attachment.name &&
+      existing.mimeType === attachment.mimeType
+    ) {
+      if (
+        existing.kind === "image" &&
+        attachment.kind === "image" &&
+        existing.data === attachment.data
+      ) {
         return existing;
       }
       if (
@@ -477,7 +527,10 @@ function normalizeComposerAttachment(value: Record<string, unknown>): ComposerAt
 
 export function makeActivityItem(
   label: string,
-  options: Pick<Extract<TranscriptMessage, { kind: "activity" }>, "detail" | "metadata" | "tone"> = {},
+  options: Pick<
+    Extract<TranscriptMessage, { kind: "activity" }>,
+    "detail" | "metadata" | "tone"
+  > = {},
 ): TranscriptMessage {
   return {
     kind: "activity",
@@ -490,7 +543,9 @@ export function makeActivityItem(
 
 export function makeSummaryItem(
   label: string,
-  options: Partial<Pick<Extract<TranscriptMessage, { kind: "summary" }>, "metadata" | "presentation">> = {},
+  options: Partial<
+    Pick<Extract<TranscriptMessage, { kind: "summary" }>, "metadata" | "presentation">
+  > = {},
 ): TranscriptMessage {
   return {
     kind: "summary",
@@ -507,7 +562,10 @@ export function makeToolItem(
   toolName: string,
   status: "running" | "success" | "error",
   label: string,
-  options: Pick<Extract<TranscriptMessage, { kind: "tool" }>, "detail" | "metadata" | "input" | "output"> = {},
+  options: Pick<
+    Extract<TranscriptMessage, { kind: "tool" }>,
+    "detail" | "metadata" | "input" | "output"
+  > = {},
 ): TranscriptMessage {
   return {
     kind: "tool",
@@ -521,7 +579,9 @@ export function makeToolItem(
   };
 }
 
-export function previewFromTranscript(transcript: readonly TranscriptMessage[]): string | undefined {
+export function previewFromTranscript(
+  transcript: readonly TranscriptMessage[],
+): string | undefined {
   for (let index = transcript.length - 1; index >= 0; index -= 1) {
     const item = transcript[index];
     if (!item) {

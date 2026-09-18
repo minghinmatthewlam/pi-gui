@@ -83,8 +83,9 @@ export function ForkModal({
 
         <div className="tree-modal__summary-step">
           <div className="tree-modal__summary-copy">
-            Forks the conversation up to and including this response into a new sidebar thread with an empty
-            composer, so you can continue it in a different direction. The original thread stays untouched.
+            Forks the conversation up to and including this response into a new sidebar thread with
+            an empty composer, so you can continue it in a different direction. The original thread
+            stays untouched.
           </div>
 
           {messagePreview ? (
@@ -93,7 +94,11 @@ export function ForkModal({
             </div>
           ) : null}
 
-          <div className="new-thread__environment-group" role="radiogroup" aria-label="Fork environment">
+          <div
+            className="new-thread__environment-group"
+            role="radiogroup"
+            aria-label="Fork environment"
+          >
             <button
               aria-pressed={environment === "local"}
               className={`new-thread__environment ${environment === "local" ? "new-thread__environment--active" : ""}`}
@@ -123,7 +128,12 @@ export function ForkModal({
                 : "The forked thread opens in the same folder as the original."}
             </div>
             <div className="tree-modal__actions">
-              <button className="button button--secondary" disabled={submitting} type="button" onClick={onClose}>
+              <button
+                className="button button--secondary"
+                disabled={submitting}
+                type="button"
+                onClick={onClose}
+              >
                 Cancel
               </button>
               <button

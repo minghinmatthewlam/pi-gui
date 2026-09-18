@@ -1,6 +1,7 @@
 import { defineConfig } from "@playwright/test";
 
 export default defineConfig({
+  forbidOnly: Boolean(process.env.CI),
   testDir: "./tests",
   // Demo specs record marketing videos on demand; keep them out of default/CI discovery.
   testIgnore: "**/demo/**",

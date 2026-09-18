@@ -1,8 +1,22 @@
 import type { SessionTranscriptMessage } from "@pi-gui/pi-sdk-driver";
-import type { DisplayTimelineItem, TimelineActivity, TimelineToolCall, TimelineSummary, TimelineTurnMarker } from "./timeline-types";
+import type {
+  DisplayTimelineItem,
+  TimelineActivity,
+  TimelineToolCall,
+  TimelineSummary,
+  TimelineTurnMarker,
+} from "./timeline-types";
 import { MessageMarkdown } from "./message-markdown";
 import { InlineDiff, extractDiffFromOutput } from "./diff-inline";
-import { ChevronRightIcon, CopyIcon, DiffIcon, FileIcon, ForkIcon, SparkIcon, TerminalIcon } from "./icons";
+import {
+  ChevronRightIcon,
+  CopyIcon,
+  DiffIcon,
+  FileIcon,
+  ForkIcon,
+  SparkIcon,
+  TerminalIcon,
+} from "./icons";
 import { extensionToLanguage } from "./syntax-highlight";
 
 export function TimelineItem({
@@ -152,13 +166,17 @@ function TimelineToolCallItem({
   const diffText = isWriteTool(item.toolName) ? extractDiffFromOutput(item.output) : undefined;
   const diffStats = diffText ? countDiffStats(diffText) : undefined;
   const compactLabel = buildCompactLabel(item, diffStats);
-  const filePath = isWriteTool(item.toolName) ? extractFilename(item.input) || undefined : undefined;
+  const filePath = isWriteTool(item.toolName)
+    ? extractFilename(item.input) || undefined
+    : undefined;
   const diffLanguage = diffText && filePath ? extensionToLanguage(filePath) : undefined;
   const inlineDetail = item.status === "error" ? item.detail : undefined;
 
   const handleCopy = () => {
     const text = diffText ?? formatToolContent(item.input, item.output);
-    void navigator.clipboard.writeText(text);
+    void navigator.clipboard.writeText(text).catch((error: unknown) => {
+      console.error("[renderer] navigator.clipboard.writeText failed", error);
+    });
   };
 
   return (
@@ -175,7 +193,9 @@ function TimelineToolCallItem({
           onClick={() => onToggle?.(item.callId)}
         >
           {hasContent ? (
-            <span className={`timeline-tool__chevron ${expanded ? "timeline-tool__chevron--expanded" : ""}`}>
+            <span
+              className={`timeline-tool__chevron ${expanded ? "timeline-tool__chevron--expanded" : ""}`}
+            >
               <ChevronRightIcon />
             </span>
           ) : null}
@@ -183,8 +203,7 @@ function TimelineToolCallItem({
           {inlineDetail ? <span className="timeline-tool__detail">{inlineDetail}</span> : null}
           {diffStats ? (
             <span className="timeline-tool__diff-stats">
-              <span className="timeline-tool__stat-add">+{diffStats.added}</span>
-              {" "}
+              <span className="timeline-tool__stat-add">+{diffStats.added}</span>{" "}
               <span className="timeline-tool__stat-del">-{diffStats.removed}</span>
             </span>
           ) : null}
@@ -217,12 +236,18 @@ function TimelineToolCallItem({
                   {extractFilename(item.input)}
                   {diffStats ? (
                     <span className="timeline-tool__diff-stats">
-                      {" "}<span className="timeline-tool__stat-add">+{diffStats.added}</span>
-                      {" "}<span className="timeline-tool__stat-del">-{diffStats.removed}</span>
+                      {" "}
+                      <span className="timeline-tool__stat-add">+{diffStats.added}</span>{" "}
+                      <span className="timeline-tool__stat-del">-{diffStats.removed}</span>
                     </span>
                   ) : null}
                 </span>
-                <button className="icon-button timeline-tool__copy" type="button" onClick={handleCopy} aria-label="Copy">
+                <button
+                  className="icon-button timeline-tool__copy"
+                  type="button"
+                  onClick={handleCopy}
+                  aria-label="Copy"
+                >
                   <CopyIcon />
                 </button>
               </div>
@@ -231,7 +256,12 @@ function TimelineToolCallItem({
           ) : (
             <>
               <div className="timeline-tool__body-actions">
-                <button className="icon-button timeline-tool__copy" type="button" onClick={handleCopy} aria-label="Copy">
+                <button
+                  className="icon-button timeline-tool__copy"
+                  type="button"
+                  onClick={handleCopy}
+                  aria-label="Copy"
+                >
                   <CopyIcon />
                 </button>
               </div>
@@ -261,7 +291,10 @@ function toolGlyph(toolName: string) {
   return <SparkIcon />;
 }
 
-function buildCompactLabel(item: TimelineToolCall, diffStats: { added: number; removed: number } | undefined): string {
+function buildCompactLabel(
+  item: TimelineToolCall,
+  diffStats: { added: number; removed: number } | undefined,
+): string {
   if (isWriteTool(item.toolName)) {
     const filename = extractFilename(item.input);
     if (filename) {

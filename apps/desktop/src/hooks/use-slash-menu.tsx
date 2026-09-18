@@ -1,6 +1,11 @@
 import { useEffect, useState, type Dispatch, type KeyboardEvent, type SetStateAction } from "react";
 import type { RuntimeCommandRecord, RuntimeSnapshot } from "@pi-gui/session-driver/runtime-types";
-import type { DesktopAppState, ExtensionCommandCompatibilityRecord, SessionRecord, WorkspaceRecord } from "../desktop-state";
+import type {
+  DesktopAppState,
+  ExtensionCommandCompatibilityRecord,
+  SessionRecord,
+  WorkspaceRecord,
+} from "../desktop-state";
 import {
   buildModelOptions,
   isExactSlashCommand,
@@ -68,7 +73,6 @@ interface UseSlashMenuParams {
   readonly focusComposer: () => void;
   readonly openSettings: (workspaceId?: string, section?: SettingsSection) => void;
   readonly updateSnapshot: (
-    api: PiDesktopApi,
     setSnapshot: Dispatch<SetStateAction<DesktopAppState | null>>,
     action: () => Promise<DesktopAppState>,
   ) => Promise<DesktopAppState>;
@@ -93,7 +97,10 @@ export interface SlashMenuState {
   readonly activeSlashFlow: ActiveSlashFlow | undefined;
   readonly activeSlashOptionCommand: ComposerSlashCommand | undefined;
   readonly resetSlashUi: () => void;
-  readonly applySlashCommandSelection: (command: ComposerSlashCommand, mode: "click" | "tab" | "enter") => void;
+  readonly applySlashCommandSelection: (
+    command: ComposerSlashCommand,
+    mode: "click" | "tab" | "enter",
+  ) => void;
   readonly applySlashOptionSelection: (option: ComposerSlashOption) => void;
   readonly handleSlashKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => boolean;
   readonly fillComposerFromSlash: (draft: string, options?: { suppressMenu?: boolean }) => void;
@@ -132,32 +139,38 @@ export function useSlashMenu(params: UseSlashMenuParams): SlashMenuState {
 
   const activeSlashQuery = extractActiveSlashQuery(composerDraft);
   const slashQuery = activeSlashQuery?.query ?? "";
-  const slashSections =
-    activeSlashQuery
-      ? buildSlashCommandSections(slashQuery, selectedRuntime, sessionCommands, commandCompatibility, {
+  const slashSections = activeSlashQuery
+    ? buildSlashCommandSections(
+        slashQuery,
+        selectedRuntime,
+        sessionCommands,
+        commandCompatibility,
+        {
           allowTreeCommand,
-        })
-      : [];
+        },
+      )
+    : [];
   const slashSuggestions = flattenSlashSections(slashSections);
   const exactSlashCommand = slashSuggestions.find((cmd) => isExactSlashCommand(slashQuery, cmd));
   const activeSlashOptionCommand =
-    activeSlashFlow?.command ?? (exactSlashCommand?.submitMode === "pick-option" ? exactSlashCommand : undefined);
+    activeSlashFlow?.command ??
+    (exactSlashCommand?.submitMode === "pick-option" ? exactSlashCommand : undefined);
   const showSlashMenu =
     !isRunning &&
     Boolean(activeSlashQuery) &&
     !activeSlashOptionCommand &&
     composerDraft !== slashMenuSuppressedDraft &&
     slashSuggestions.length > 0;
-  const selectedSlashCommand = showSlashMenu ? slashSuggestions[slashIndex % slashSuggestions.length] : undefined;
+  const selectedSlashCommand = showSlashMenu
+    ? slashSuggestions[slashIndex % slashSuggestions.length]
+    : undefined;
   const slashOptions =
     activeSlashOptionCommand?.kind === "model"
       ? buildModelOptions(selectedModelRuntime)
       : slashOptionsForCommand(activeSlashOptionCommand, selectedRuntime);
   const activeSlashOptionEmptyState = slashOptionEmptyState(
     activeSlashOptionCommand,
-    activeSlashOptionCommand?.kind === "model"
-      ? undefined
-      : selectedRuntime,
+    activeSlashOptionCommand?.kind === "model" ? undefined : selectedRuntime,
   );
   const modelSlashEmptyState =
     activeSlashOptionCommand?.kind === "model" && slashOptions.length === 0
@@ -176,7 +189,9 @@ export function useSlashMenu(params: UseSlashMenuParams): SlashMenuState {
     !isRunning &&
     Boolean(activeSlashOptionCommand) &&
     (slashOptions.length > 0 || Boolean(modelSlashEmptyState ?? activeSlashOptionEmptyState));
-  const selectedSlashOption = showSlashOptionMenu ? slashOptions[slashOptionIndex % slashOptions.length] : undefined;
+  const selectedSlashOption = showSlashOptionMenu
+    ? slashOptions[slashOptionIndex % slashOptions.length]
+    : undefined;
 
   useEffect(() => {
     setSlashIndex(0);
@@ -198,7 +213,10 @@ export function useSlashMenu(params: UseSlashMenuParams): SlashMenuState {
       return;
     }
 
-    if (activeSlashFlow?.command && slashQuery.trim().length > activeSlashFlow.command.command.length) {
+    if (
+      activeSlashFlow?.command &&
+      slashQuery.trim().length > activeSlashFlow.command.command.length
+    ) {
       setActiveSlashFlow(undefined);
       setSlashOptionIndex(0);
     }
@@ -242,7 +260,10 @@ export function useSlashMenu(params: UseSlashMenuParams): SlashMenuState {
     focusComposer();
   };
 
-  const applySlashCommandSelection = (command: ComposerSlashCommand, mode: "click" | "tab" | "enter") => {
+  const applySlashCommandSelection = (
+    command: ComposerSlashCommand,
+    mode: "click" | "tab" | "enter",
+  ) => {
     const submitMode = command.submitMode ?? "prefill";
     if (submitMode === "pick-option") {
       openSlashOptionMenu(command);
@@ -251,7 +272,9 @@ export function useSlashMenu(params: UseSlashMenuParams): SlashMenuState {
 
     if (!activeSlashQuery?.isPrimary) {
       closeSlashOptionMenu();
-      fillComposerFromSlash(submitMode === "prefill" ? command.template : command.command, { suppressMenu: true });
+      fillComposerFromSlash(submitMode === "prefill" ? command.template : command.command, {
+        suppressMenu: true,
+      });
       return;
     }
 
@@ -279,9 +302,13 @@ export function useSlashMenu(params: UseSlashMenuParams): SlashMenuState {
         }
         resetSlashUi();
         setComposerDraft(command.command);
-        void updateSnapshot(api, setSnapshot, () => api.submitComposer(command.command)).then((state) => {
-          setComposerDraft(state.composerDraft);
-        });
+        void updateSnapshot(setSnapshot, () => api.submitComposer(command.command))
+          .then((state) => {
+            setComposerDraft(state.composerDraft);
+          })
+          .catch((error: unknown) => {
+            console.error("[renderer] submitComposer failed", error);
+          });
         return;
       }
 
@@ -301,12 +328,16 @@ export function useSlashMenu(params: UseSlashMenuParams): SlashMenuState {
 
     if (!activeSlashQuery?.isPrimary) {
       closeSlashOptionMenu();
-      fillComposerFromSlash(`${activeSlashOptionCommand.command} ${option.value}`, { suppressMenu: true });
+      fillComposerFromSlash(`${activeSlashOptionCommand.command} ${option.value}`, {
+        suppressMenu: true,
+      });
       return;
     }
 
     if (activeSlashOptionCommand.kind === "model") {
-      const modelOption = option as Extract<ComposerSlashOption, { value: string }> & { providerId?: string };
+      const modelOption = option as Extract<ComposerSlashOption, { value: string }> & {
+        providerId?: string;
+      };
       const providerId = modelOption.providerId;
       if (!providerId) {
         return;
@@ -320,11 +351,15 @@ export function useSlashMenu(params: UseSlashMenuParams): SlashMenuState {
       if (!selectedWorkspace || !selectedSession || !api) {
         return;
       }
-      void updateSnapshot(api, setSnapshot, () =>
+      void updateSnapshot(setSnapshot, () =>
         api.setSessionModel(selectedWorkspace.id, selectedSession.id, providerId, option.value),
-      ).then((state) => {
-        setComposerDraft(state.composerDraft);
-      });
+      )
+        .then((state) => {
+          setComposerDraft(state.composerDraft);
+        })
+        .catch((error: unknown) => {
+          console.error("[renderer] updateSnapshot failed", error);
+        });
       return;
     }
 
@@ -338,15 +373,19 @@ export function useSlashMenu(params: UseSlashMenuParams): SlashMenuState {
       if (!selectedWorkspace || !selectedSession || !api) {
         return;
       }
-      void updateSnapshot(api, setSnapshot, () =>
+      void updateSnapshot(setSnapshot, () =>
         api.setSessionThinkingLevel(
           selectedWorkspace.id,
           selectedSession.id,
           option.value as NonNullable<RuntimeSnapshot["settings"]["defaultThinkingLevel"]>,
         ),
-      ).then((state) => {
-        setComposerDraft(state.composerDraft);
-      });
+      )
+        .then((state) => {
+          setComposerDraft(state.composerDraft);
+        })
+        .catch((error: unknown) => {
+          console.error("[renderer] updateSnapshot failed", error);
+        });
       return;
     }
 
@@ -360,9 +399,13 @@ export function useSlashMenu(params: UseSlashMenuParams): SlashMenuState {
       if (!selectedWorkspace || !api) {
         return;
       }
-      void updateSnapshot(api, setSnapshot, () => api.loginProvider(selectedWorkspace.id, option.value)).then((state) => {
-        setComposerDraft(state.composerDraft);
-      });
+      void updateSnapshot(setSnapshot, () => api.loginProvider(selectedWorkspace.id, option.value))
+        .then((state) => {
+          setComposerDraft(state.composerDraft);
+        })
+        .catch((error: unknown) => {
+          console.error("[renderer] loginProvider failed", error);
+        });
       return;
     }
 
@@ -376,9 +419,13 @@ export function useSlashMenu(params: UseSlashMenuParams): SlashMenuState {
       if (!selectedWorkspace || !api) {
         return;
       }
-      void updateSnapshot(api, setSnapshot, () => api.logoutProvider(selectedWorkspace.id, option.value)).then((state) => {
-        setComposerDraft(state.composerDraft);
-      });
+      void updateSnapshot(setSnapshot, () => api.logoutProvider(selectedWorkspace.id, option.value))
+        .then((state) => {
+          setComposerDraft(state.composerDraft);
+        })
+        .catch((error: unknown) => {
+          console.error("[renderer] logoutProvider failed", error);
+        });
       return;
     }
 
@@ -395,11 +442,17 @@ export function useSlashMenu(params: UseSlashMenuParams): SlashMenuState {
 
     if (showSlashOptionMenu && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
       event.preventDefault();
-      setSlashOptionIndex((current) => nextMenuIndex(current, event.key === "ArrowDown" ? 1 : -1, slashOptions.length));
+      setSlashOptionIndex((current) =>
+        nextMenuIndex(current, event.key === "ArrowDown" ? 1 : -1, slashOptions.length),
+      );
       return true;
     }
 
-    if (showSlashOptionMenu && (event.key === "Tab" || event.key === "Enter") && selectedSlashOption) {
+    if (
+      showSlashOptionMenu &&
+      (event.key === "Tab" || event.key === "Enter") &&
+      selectedSlashOption
+    ) {
       event.preventDefault();
       applySlashOptionSelection(selectedSlashOption);
       return true;
@@ -407,7 +460,9 @@ export function useSlashMenu(params: UseSlashMenuParams): SlashMenuState {
 
     if (showSlashMenu && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
       event.preventDefault();
-      setSlashIndex((current) => nextMenuIndex(current, event.key === "ArrowDown" ? 1 : -1, slashSuggestions.length));
+      setSlashIndex((current) =>
+        nextMenuIndex(current, event.key === "ArrowDown" ? 1 : -1, slashSuggestions.length),
+      );
       return true;
     }
 
@@ -417,7 +472,12 @@ export function useSlashMenu(params: UseSlashMenuParams): SlashMenuState {
       return true;
     }
 
-    if (showSlashMenu && event.key === "Enter" && selectedSlashCommand && !slashQuery.includes(" ")) {
+    if (
+      showSlashMenu &&
+      event.key === "Enter" &&
+      selectedSlashCommand &&
+      !slashQuery.includes(" ")
+    ) {
       event.preventDefault();
       applySlashCommandSelection(selectedSlashCommand, "enter");
       return true;

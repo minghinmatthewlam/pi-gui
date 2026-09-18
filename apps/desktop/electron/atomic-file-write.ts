@@ -139,7 +139,12 @@ function isMissingFileError(error: unknown): boolean {
 }
 
 function isReplaceRenameError(error: unknown): boolean {
-  return typeof error === "object" && error !== null && "code" in error && (error.code === "EEXIST" || error.code === "EPERM");
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error.code === "EEXIST" || error.code === "EPERM")
+  );
 }
 
 async function cleanupTempFile(filePath: string): Promise<void> {

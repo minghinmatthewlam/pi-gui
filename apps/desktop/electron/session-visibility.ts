@@ -5,7 +5,8 @@ import type { SessionRef } from "@pi-gui/session-driver";
 type SessionVisibilityOverride = "active" | "inactive" | undefined;
 
 export function isSessionActivelyViewed(
-  state: Pick<DesktopAppState, "activeView" | "selectedWorkspaceId" | "selectedSessionId"> | undefined,
+  state:
+    Pick<DesktopAppState, "activeView" | "selectedWorkspaceId" | "selectedSessionId"> | undefined,
   sessionRef: SessionRef,
   window: BrowserWindow | null,
 ): boolean {
@@ -26,7 +27,8 @@ export function isSessionActivelyViewed(
 }
 
 export function isSessionVisibleInWindow(
-  state: Pick<DesktopAppState, "activeView" | "selectedWorkspaceId" | "selectedSessionId"> | undefined,
+  state:
+    Pick<DesktopAppState, "activeView" | "selectedWorkspaceId" | "selectedSessionId"> | undefined,
   sessionRef: SessionRef,
   window: BrowserWindow | null,
 ): boolean {
@@ -37,7 +39,8 @@ export function isSessionVisibleInWindow(
 }
 
 function isSelectedSession(
-  state: Pick<DesktopAppState, "activeView" | "selectedWorkspaceId" | "selectedSessionId"> | undefined,
+  state:
+    Pick<DesktopAppState, "activeView" | "selectedWorkspaceId" | "selectedSessionId"> | undefined,
   sessionRef: SessionRef,
 ): boolean {
   if (!state) {
@@ -46,7 +49,10 @@ function isSelectedSession(
   if (state.activeView !== "threads") {
     return false;
   }
-  return state.selectedWorkspaceId === sessionRef.workspaceId && state.selectedSessionId === sessionRef.sessionId;
+  return (
+    state.selectedWorkspaceId === sessionRef.workspaceId &&
+    state.selectedSessionId === sessionRef.sessionId
+  );
 }
 
 function sessionVisibilityOverride(): SessionVisibilityOverride {

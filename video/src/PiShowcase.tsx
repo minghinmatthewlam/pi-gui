@@ -21,24 +21,15 @@ export const PiShowcase: React.FC = () => {
       </Series.Sequence>
 
       <Series.Sequence durationInFrames={Math.ceil(clipDurations.parallel * fps) + 15}>
-        <FeatureScene
-          clip="parallel-sessions.mp4"
-          label="Run multiple sessions in parallel"
-        />
+        <FeatureScene clip="parallel-sessions.mp4" label="Run multiple sessions in parallel" />
       </Series.Sequence>
 
       <Series.Sequence durationInFrames={Math.ceil(clipDurations.slash * fps) + 15}>
-        <FeatureScene
-          clip="slash-commands.mp4"
-          label="Context-aware command palette"
-        />
+        <FeatureScene clip="slash-commands.mp4" label="Context-aware command palette" />
       </Series.Sequence>
 
       <Series.Sequence durationInFrames={Math.ceil(clipDurations.skills * fps) + 15}>
-        <FeatureScene
-          clip="skills-settings.mp4"
-          label="Workspace-scoped skills & config"
-        />
+        <FeatureScene clip="skills-settings.mp4" label="Workspace-scoped skills & config" />
       </Series.Sequence>
 
       <Series.Sequence durationInFrames={3 * fps}>

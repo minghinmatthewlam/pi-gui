@@ -252,11 +252,11 @@ declare module "@pi-gui/session-driver" {
         readonly kind: "editorText";
         readonly requestId: string;
         readonly text: string;
-    }
+      }
     | {
         readonly kind: "reset";
         readonly requestId: string;
-    };
+      };
 
   export interface HostUiRequestEvent extends SessionEventBase {
     readonly type: "hostUiRequest";
@@ -317,14 +317,20 @@ declare module "@pi-gui/session-driver" {
   }
 
   export interface SessionDriver {
-    createSession(workspace: WorkspaceRef, options?: CreateSessionOptions): Promise<SessionSnapshot>;
+    createSession(
+      workspace: WorkspaceRef,
+      options?: CreateSessionOptions,
+    ): Promise<SessionSnapshot>;
     validateForkSession(sourceRef: SessionRef, options: ForkSessionOptions): Promise<void>;
     forkSession(sourceRef: SessionRef, options: ForkSessionOptions): Promise<ForkSessionResult>;
     openSession(sessionRef: SessionRef): Promise<SessionSnapshot>;
     archiveSession(sessionRef: SessionRef): Promise<void>;
     unarchiveSession(sessionRef: SessionRef): Promise<void>;
     sendUserMessage(sessionRef: SessionRef, input: SessionMessageInput): Promise<void>;
-    replaceQueuedMessages(sessionRef: SessionRef, messages: readonly SessionQueuedMessage[]): Promise<void>;
+    replaceQueuedMessages(
+      sessionRef: SessionRef,
+      messages: readonly SessionQueuedMessage[],
+    ): Promise<void>;
     cancelCurrentRun(sessionRef: SessionRef): Promise<void>;
     setSessionModel(sessionRef: SessionRef, selection: SessionModelSelection): Promise<void>;
     setSessionThinkingLevel(sessionRef: SessionRef, thinkingLevel: string): Promise<void>;
@@ -452,9 +458,17 @@ declare module "@pi-gui/session-driver/runtime-types" {
   export interface RuntimeResourceDriver {
     getRuntimeSnapshot(workspace: WorkspaceRef): Promise<RuntimeSnapshot>;
     refreshRuntime(workspace: WorkspaceRef): Promise<RuntimeSnapshot>;
-    login(workspace: WorkspaceRef, providerId: string, callbacks: RuntimeLoginCallbacks): Promise<RuntimeSnapshot>;
+    login(
+      workspace: WorkspaceRef,
+      providerId: string,
+      callbacks: RuntimeLoginCallbacks,
+    ): Promise<RuntimeSnapshot>;
     logout(workspace: WorkspaceRef, providerId: string): Promise<RuntimeSnapshot>;
-    setProviderApiKey(workspace: WorkspaceRef, providerId: string, apiKey: string): Promise<RuntimeSnapshot>;
+    setProviderApiKey(
+      workspace: WorkspaceRef,
+      providerId: string,
+      apiKey: string,
+    ): Promise<RuntimeSnapshot>;
     setDefaultModel(
       workspace: WorkspaceRef,
       selection: {
@@ -467,8 +481,19 @@ declare module "@pi-gui/session-driver/runtime-types" {
       thinkingLevel: RuntimeSettingsSnapshot["defaultThinkingLevel"],
     ): Promise<RuntimeSnapshot>;
     setEnableSkillCommands(workspace: WorkspaceRef, enabled: boolean): Promise<RuntimeSnapshot>;
-    setScopedModelPatterns(workspace: WorkspaceRef, patterns: readonly string[]): Promise<RuntimeSnapshot>;
-    setSkillEnabled(workspace: WorkspaceRef, filePath: string, enabled: boolean): Promise<RuntimeSnapshot>;
-    setExtensionEnabled(workspace: WorkspaceRef, filePath: string, enabled: boolean): Promise<RuntimeSnapshot>;
+    setScopedModelPatterns(
+      workspace: WorkspaceRef,
+      patterns: readonly string[],
+    ): Promise<RuntimeSnapshot>;
+    setSkillEnabled(
+      workspace: WorkspaceRef,
+      filePath: string,
+      enabled: boolean,
+    ): Promise<RuntimeSnapshot>;
+    setExtensionEnabled(
+      workspace: WorkspaceRef,
+      filePath: string,
+      enabled: boolean,
+    ): Promise<RuntimeSnapshot>;
   }
 }

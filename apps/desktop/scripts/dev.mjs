@@ -12,7 +12,18 @@ const packageFilters = ["@pi-gui/session-driver", "@pi-gui/pi-sdk-driver", "@pi-
 async function main() {
   await run(
     "pnpm",
-    ["--dir", repoRoot, "--filter", packageFilters[0], "--filter", packageFilters[1], "--filter", packageFilters[2], "run", "build"],
+    [
+      "--dir",
+      repoRoot,
+      "--filter",
+      packageFilters[0],
+      "--filter",
+      packageFilters[1],
+      "--filter",
+      packageFilters[2],
+      "run",
+      "build",
+    ],
     desktopDir,
   );
 

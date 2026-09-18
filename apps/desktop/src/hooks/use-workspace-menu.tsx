@@ -1,4 +1,12 @@
-import { useEffect, useRef, useState, type Dispatch, type MouseEvent as ReactMouseEvent, type RefObject, type SetStateAction } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type Dispatch,
+  type MouseEvent as ReactMouseEvent,
+  type RefObject,
+  type SetStateAction,
+} from "react";
 import type { DesktopAppState, WorkspaceRecord, WorktreeRecord } from "../desktop-state";
 import type { PiDesktopApi } from "../ipc";
 
@@ -6,7 +14,6 @@ interface UseWorkspaceMenuParams {
   readonly api: PiDesktopApi | undefined;
   readonly setSnapshot: Dispatch<SetStateAction<DesktopAppState | null>>;
   readonly updateSnapshot: (
-    api: PiDesktopApi,
     setSnapshot: Dispatch<SetStateAction<DesktopAppState | null>>,
     action: () => Promise<DesktopAppState>,
   ) => Promise<DesktopAppState>;
@@ -34,10 +41,17 @@ export interface WorkspaceMenuState {
   readonly toggleArchived: (workspaceId: string, open: boolean) => void;
   readonly toggleWorkspaceCollapsed: (workspaceId: string) => void;
   readonly expandWorkspace: (workspaceId: string) => void;
-  readonly createWorktree: (workspaceId: string, fromSessionWorkspaceId?: string, fromSessionId?: string) => void;
+  readonly createWorktree: (
+    workspaceId: string,
+    fromSessionWorkspaceId?: string,
+    fromSessionId?: string,
+  ) => void;
   readonly removeWorktree: (workspaceId: string, worktree: WorktreeRecord) => void;
   readonly selectWorkspace: (workspaceId: string) => void;
-  readonly runWorkspaceMenuAction: (event: ReactMouseEvent<HTMLElement>, action: () => void) => void;
+  readonly runWorkspaceMenuAction: (
+    event: ReactMouseEvent<HTMLElement>,
+    action: () => void,
+  ) => void;
 }
 
 export function useWorkspaceMenu(params: UseWorkspaceMenuParams): WorkspaceMenuState {
@@ -46,7 +60,9 @@ export function useWorkspaceMenu(params: UseWorkspaceMenuParams): WorkspaceMenuS
   const [workspaceMenuId, setWorkspaceMenuId] = useState<string | null>(null);
   const [workspaceRenameId, setWorkspaceRenameId] = useState<string | null>(null);
   const [workspaceRenameDraft, setWorkspaceRenameDraft] = useState("");
-  const [expandedArchivedByWorkspace, setExpandedArchivedByWorkspace] = useState<Record<string, boolean>>({});
+  const [expandedArchivedByWorkspace, setExpandedArchivedByWorkspace] = useState<
+    Record<string, boolean>
+  >({});
   const [collapsedWorkspaces, setCollapsedWorkspaces] = useState<Record<string, boolean>>({});
   const [environmentMenuOpen, setEnvironmentMenuOpen] = useState(false);
 
@@ -125,7 +141,11 @@ export function useWorkspaceMenu(params: UseWorkspaceMenuParams): WorkspaceMenuS
     if (!api) {
       return;
     }
-    void updateSnapshot(api, setSnapshot, () => api.renameWorkspace(workspace.id, nextName));
+    void updateSnapshot(setSnapshot, () => api.renameWorkspace(workspace.id, nextName)).catch(
+      (error: unknown) => {
+        console.error("[renderer] renameWorkspace failed", error);
+      },
+    );
   };
 
   const cancelRename = () => {
@@ -134,13 +154,19 @@ export function useWorkspaceMenu(params: UseWorkspaceMenuParams): WorkspaceMenuS
   };
 
   const removeWorkspace = (workspace: WorkspaceRecord) => {
-    const confirmed = window.confirm(`Remove ${workspace.name} from pi-gui? This will not delete any files.`);
+    const confirmed = window.confirm(
+      `Remove ${workspace.name} from pi-gui? This will not delete any files.`,
+    );
     setWorkspaceMenuId(null);
     setWorkspaceRenameId(null);
     if (!confirmed || !api) {
       return;
     }
-    void updateSnapshot(api, setSnapshot, () => api.removeWorkspace(workspace.id));
+    void updateSnapshot(setSnapshot, () => api.removeWorkspace(workspace.id)).catch(
+      (error: unknown) => {
+        console.error("[renderer] removeWorkspace failed", error);
+      },
+    );
   };
 
   const toggleArchived = (workspaceId: string, open: boolean) => {
@@ -158,26 +184,36 @@ export function useWorkspaceMenu(params: UseWorkspaceMenuParams): WorkspaceMenuS
     });
   };
 
-  const createWorktree = (workspaceId: string, fromSessionWorkspaceId?: string, fromSessionId?: string) => {
+  const createWorktree = (
+    workspaceId: string,
+    fromSessionWorkspaceId?: string,
+    fromSessionId?: string,
+  ) => {
     setWorkspaceMenuId(null);
     setEnvironmentMenuOpen(false);
     if (!api) {
       return;
     }
-    void updateSnapshot(api, setSnapshot, () =>
+    void updateSnapshot(setSnapshot, () =>
       api.createWorktree({ workspaceId, fromSessionWorkspaceId, fromSessionId }),
-    );
+    ).catch((error: unknown) => {
+      console.error("[renderer] updateSnapshot failed", error);
+    });
   };
 
   const removeWorktree = (workspaceId: string, worktree: WorktreeRecord) => {
-    const confirmed = window.confirm(`Remove worktree ${worktree.name}? This removes the git worktree from disk.`);
+    const confirmed = window.confirm(
+      `Remove worktree ${worktree.name}? This removes the git worktree from disk.`,
+    );
     setEnvironmentMenuOpen(false);
     if (!confirmed || !api) {
       return;
     }
-    void updateSnapshot(api, setSnapshot, () =>
+    void updateSnapshot(setSnapshot, () =>
       api.removeWorktree({ workspaceId, worktreeId: worktree.id }),
-    );
+    ).catch((error: unknown) => {
+      console.error("[renderer] updateSnapshot failed", error);
+    });
   };
 
   const selectWorkspace = (workspaceId: string) => {
@@ -185,13 +221,14 @@ export function useWorkspaceMenu(params: UseWorkspaceMenuParams): WorkspaceMenuS
     if (!api) {
       return;
     }
-    void updateSnapshot(api, setSnapshot, () => api.selectWorkspace(workspaceId));
+    void updateSnapshot(setSnapshot, () => api.selectWorkspace(workspaceId)).catch(
+      (error: unknown) => {
+        console.error("[renderer] selectWorkspace failed", error);
+      },
+    );
   };
 
-  const runWorkspaceMenuAction = (
-    event: ReactMouseEvent<HTMLElement>,
-    action: () => void,
-  ) => {
+  const runWorkspaceMenuAction = (event: ReactMouseEvent<HTMLElement>, action: () => void) => {
     event.preventDefault();
     event.stopPropagation();
     setWorkspaceMenuId(null);

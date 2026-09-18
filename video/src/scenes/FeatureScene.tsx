@@ -1,10 +1,4 @@
-import {
-  AbsoluteFill,
-  OffthreadVideo,
-  interpolate,
-  staticFile,
-  useCurrentFrame,
-} from "remotion";
+import { AbsoluteFill, OffthreadVideo, interpolate, staticFile, useCurrentFrame } from "remotion";
 import { theme } from "../lib/theme";
 
 interface FeatureSceneProps {

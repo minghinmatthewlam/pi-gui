@@ -4,26 +4,31 @@ declare module "highlight.js/lib/core" {
 }
 
 declare module "highlight.js/lib/languages/bash" {
-  const language: any;
+  import hljs from "highlight.js";
+  const language: Parameters<typeof hljs.registerLanguage>[1];
   export default language;
 }
 
 declare module "highlight.js/lib/languages/javascript" {
-  const language: any;
+  import hljs from "highlight.js";
+  const language: Parameters<typeof hljs.registerLanguage>[1];
   export default language;
 }
 
 declare module "highlight.js/lib/languages/json" {
-  const language: any;
+  import hljs from "highlight.js";
+  const language: Parameters<typeof hljs.registerLanguage>[1];
   export default language;
 }
 
 declare module "highlight.js/lib/languages/python" {
-  const language: any;
+  import hljs from "highlight.js";
+  const language: Parameters<typeof hljs.registerLanguage>[1];
   export default language;
 }
 
 declare module "highlight.js/lib/languages/typescript" {
-  const language: any;
+  import hljs from "highlight.js";
+  const language: Parameters<typeof hljs.registerLanguage>[1];
   export default language;
 }

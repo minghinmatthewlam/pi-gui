@@ -45,12 +45,19 @@ function verifyPathContract() {
     delimiter: POSIX_DELIMITER,
   });
   assert.ok(!noHome.path.includes("undefined"), "must not inject `undefined/.npm-global/bin`");
-  assert.deepEqual(noHome.path.split(POSIX_DELIMITER), ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"]);
+  assert.deepEqual(noHome.path.split(POSIX_DELIMITER), [
+    "/opt/homebrew/bin",
+    "/usr/local/bin",
+    "/usr/bin",
+  ]);
 
   // Idempotent: entries already present are not duplicated.
   const already = augmentPosixPath({
     platform: "darwin",
-    env: { PATH: "/opt/homebrew/bin:/usr/local/bin:/Users/pi/.npm-global/bin:/usr/bin", HOME: "/Users/pi" },
+    env: {
+      PATH: "/opt/homebrew/bin:/usr/local/bin:/Users/pi/.npm-global/bin:/usr/bin",
+      HOME: "/Users/pi",
+    },
     delimiter: POSIX_DELIMITER,
   });
   assert.equal(already.changed, false, "already-present entries must not be re-added");
@@ -125,7 +132,11 @@ async function verifyLauncherContract() {
       delete process.env.ARGV_OUT;
     }
     const receivedArgv = JSON.parse(readFileSync(argvOut, "utf8"));
-    assert.deepEqual(receivedArgv, FORWARDED_ARGV, "argv must be forwarded exactly (no shell re-interpretation)");
+    assert.deepEqual(
+      receivedArgv,
+      FORWARDED_ARGV,
+      "argv must be forwarded exactly (no shell re-interpretation)",
+    );
     console.log("ok - argv preserved exactly from a path containing spaces");
 
     // 2) a `.cmd`/executable shim resolves by name off PATH (no `spawn ENOENT`).
@@ -135,11 +146,16 @@ async function verifyLauncherContract() {
       cwd: workdir,
       env: { ...process.env, PATH: `${workdir}${path.delimiter}${process.env.PATH ?? ""}` },
     });
-    assert.ok(shimOutput.includes(marker), `shim must launch without ENOENT (got: ${JSON.stringify(shimOutput)})`);
+    assert.ok(
+      shimOutput.includes(marker),
+      `shim must launch without ENOENT (got: ${JSON.stringify(shimOutput)})`,
+    );
     console.log("ok - .cmd/executable shim resolves without ENOENT");
 
     // 3) none of the above emitted the DEP0190 shell-spawn deprecation.
-    const dep0190 = warnings.find((w) => w?.code === "DEP0190" || /DEP0190/.test(String(w?.message)));
+    const dep0190 = warnings.find(
+      (w) => w?.code === "DEP0190" || /DEP0190/.test(String(w?.message)),
+    );
     assert.equal(dep0190, undefined, "launcher must not emit the DEP0190 shell-spawn deprecation");
     console.log("ok - no DEP0190 deprecation warning");
   } finally {

@@ -202,13 +202,17 @@ test("opening the first workspace from the empty state hydrates provider and mod
     await emptyState.getByRole("button", { name: "Open first folder" }).click();
 
     await expect(emptyState).toHaveCount(0);
-    await expect(window.getByTestId("workspace-list")).toContainText("provider-settings-first-workspace");
+    await expect(window.getByTestId("workspace-list")).toContainText(
+      "provider-settings-first-workspace",
+    );
     await expect(window.getByTestId("new-thread-composer")).toBeVisible();
 
     await window.keyboard.press(desktopShortcut(","));
     const settingsSurface = window.getByTestId("settings-surface");
     await expect(settingsSurface).toBeVisible();
-    await expect(settingsSurface.getByRole("button", { name: "Refresh", exact: true })).toHaveCount(0);
+    await expect(settingsSurface.getByRole("button", { name: "Refresh", exact: true })).toHaveCount(
+      0,
+    );
 
     await window.getByRole("button", { name: "Providers", exact: true }).click();
     await expect(window.locator(".view-header__title")).toHaveText("Providers");

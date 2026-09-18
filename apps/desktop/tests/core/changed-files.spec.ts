@@ -22,7 +22,7 @@ test("preserves an exact changed-file path through diff and stage actions", asyn
   test.setTimeout(30_000);
   const userDataDir = await makeUserDataDir();
   const workspacePath = await makeWorkspace("changed-file-path");
-  const filePath = " leading\t\"quoted\" -> destination\n.txt ";
+  const filePath = ' leading\t"quoted" -> destination\n.txt ';
   const displayCollisionPath = JSON.stringify(filePath);
   await initGitRepo(workspacePath);
   await commitAllInGitRepo(workspacePath, "init");
@@ -47,7 +47,9 @@ test("preserves an exact changed-file path through diff and stage actions", asyn
     );
     const changedRow = changedRows.nth(rowPaths.indexOf(filePath));
     await expect(changedRow).toHaveAttribute("data-file-path", filePath);
-    expect(await changedRow.locator(".diff-panel__file-path").textContent()).toBe(JSON.stringify(filePath));
+    expect(await changedRow.locator(".diff-panel__file-path").textContent()).toBe(
+      JSON.stringify(filePath),
+    );
     expect(await changedRows.locator(".diff-panel__file-path").allTextContents()).toEqual(
       expect.arrayContaining([JSON.stringify(filePath), JSON.stringify(displayCollisionPath)]),
     );
@@ -112,7 +114,9 @@ test("shows Git status as unavailable without losing reviewed files", async () =
     await expect(diffPanel.getByTestId("changed-files-unavailable")).toHaveText(
       "Git status is unavailable for this workspace.",
     );
-    await expect(diffPanel.locator(".file-workbench__section-header")).toContainText(/unavailable/i);
+    await expect(diffPanel.locator(".file-workbench__section-header")).toContainText(
+      /unavailable/i,
+    );
     await expect(diffPanel.getByText("No changes", { exact: true })).toHaveCount(0);
     await expect
       .poll(() => window.evaluate((key) => globalThis.localStorage.getItem(key), storageKey))
@@ -126,10 +130,7 @@ test("shows Git status as unavailable without losing reviewed files", async () =
   }
 });
 
-async function saveProof(
-  window: Page,
-  fileName: string,
-): Promise<void> {
+async function saveProof(window: Page, fileName: string): Promise<void> {
   if (!proofDir) {
     return;
   }

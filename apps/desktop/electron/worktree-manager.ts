@@ -57,9 +57,14 @@ export class GitWorktreeManager {
 
   async refreshWorktrees(workspace: WorkspaceRef): Promise<WorktreeCatalogSnapshot> {
     const repoRoot = await resolveRepositoryRoot(workspace.path);
-    const existing = await this.options.catalogStorage.worktrees.listWorktrees(workspace.workspaceId);
+    const existing = await this.options.catalogStorage.worktrees.listWorktrees(
+      workspace.workspaceId,
+    );
     const discovered = await listGitWorktrees(repoRoot, workspace, existing.worktrees);
-    await this.options.catalogStorage.worktrees.replaceWorkspaceWorktrees(workspace.workspaceId, discovered);
+    await this.options.catalogStorage.worktrees.replaceWorkspaceWorktrees(
+      workspace.workspaceId,
+      discovered,
+    );
     return { worktrees: discovered.map((entry) => ({ ...entry })) };
   }
 
@@ -67,7 +72,10 @@ export class GitWorktreeManager {
     return inspectGitWorkspace(workspace.path);
   }
 
-  async createWorktree(workspace: WorkspaceRef, input: CreateWorktreeOptions): Promise<WorktreeCatalogEntry> {
+  async createWorktree(
+    workspace: WorkspaceRef,
+    input: CreateWorktreeOptions,
+  ): Promise<WorktreeCatalogEntry> {
     const repoRoot = await resolveRepositoryRoot(workspace.path);
     const normalizedPath = input.path.trim();
     if (!normalizedPath) {
@@ -88,7 +96,9 @@ export class GitWorktreeManager {
     const snapshot = await this.refreshWorktrees(workspace);
     const created = snapshot.worktrees.find((entry) => entry.worktreeId === canonicalWorktreePath);
     if (!created) {
-      throw new Error(`Worktree ${canonicalWorktreePath} was created but is missing from the catalog.`);
+      throw new Error(
+        `Worktree ${canonicalWorktreePath} was created but is missing from the catalog.`,
+      );
     }
     if (input.displayName?.trim()) {
       const next = { ...created, displayName: input.displayName.trim() };
@@ -107,7 +117,10 @@ export class GitWorktreeManager {
     const resolvedId = await canonicalPath(worktreeId);
     const existing = await this.options.catalogStorage.worktrees.getWorktree(resolvedId);
     const targetPath = await canonicalPath(existing?.path ? existing.path : resolvedId);
-    if (existing?.kind === "primary" || (!existing && targetPath === await canonicalPath(workspace.path))) {
+    if (
+      existing?.kind === "primary" ||
+      (!existing && targetPath === (await canonicalPath(workspace.path)))
+    ) {
       throw new Error("The primary workspace cannot be removed as a git worktree.");
     }
 
@@ -139,7 +152,10 @@ export class GitWorktreeManager {
    * brand-new artifacts owned by the failed call, so nothing pre-existing is
    * touched. Best-effort: never throws.
    */
-  async destroyWorktree(workspace: WorkspaceRef, input: DestroyCreatedWorktreeInput): Promise<void> {
+  async destroyWorktree(
+    workspace: WorkspaceRef,
+    input: DestroyCreatedWorktreeInput,
+  ): Promise<void> {
     let repoRoot: string;
     try {
       repoRoot = await resolveRepositoryRoot(workspace.path);
@@ -169,7 +185,9 @@ export class GitWorktreeManager {
    * `git worktree remove` refuses when the tree is modified), so user work is
    * never destroyed — protected worktrees are skipped and reported instead.
    */
-  async pruneOrphanedWorktrees(input: PruneOrphanedWorktreesInput): Promise<PruneOrphanedWorktreesResult> {
+  async pruneOrphanedWorktrees(
+    input: PruneOrphanedWorktreesInput,
+  ): Promise<PruneOrphanedWorktreesResult> {
     const worktreeRoot = await canonicalPath(input.worktreeRoot);
     const removed: string[] = [];
     const skipped: string[] = [];
@@ -219,20 +237,32 @@ export class GitWorktreeManager {
  * touches `pi/*` branches, and uses the safe `git branch -d` (refuses to delete
  * unmerged work) so a leaked branch is preferred over lost commits.
  */
-async function deleteAppWorktreeBranch(repoRoot: string, branchName: string | undefined): Promise<void> {
+async function deleteAppWorktreeBranch(
+  repoRoot: string,
+  branchName: string | undefined,
+): Promise<void> {
   if (!branchName || !branchName.startsWith("pi/")) {
     return;
   }
   try {
     await runGit(["-C", repoRoot, "branch", "-d", branchName]);
   } catch (error) {
-    console.warn(`pi-gui: kept branch ${branchName} after worktree removal: ${errorMessage(error)}`);
+    console.warn(
+      `pi-gui: kept branch ${branchName} after worktree removal: ${errorMessage(error)}`,
+    );
   }
 }
 
 async function isBranchMergedIntoHead(repoRoot: string, branchName: string): Promise<boolean> {
   try {
-    await runGit(["-C", repoRoot, "merge-base", "--is-ancestor", `refs/heads/${branchName}`, "HEAD"]);
+    await runGit([
+      "-C",
+      repoRoot,
+      "merge-base",
+      "--is-ancestor",
+      `refs/heads/${branchName}`,
+      "HEAD",
+    ]);
     return true;
   } catch {
     return false;
@@ -381,7 +411,8 @@ async function parseWorktreeBlock(
   const headLine = lines.find((line) => line.startsWith("HEAD "));
   const branchLine = lines.find((line) => line.startsWith("branch "));
   const status: WorktreeCatalogEntry["status"] = lines.includes("prunable") ? "missing" : "ready";
-  const displayName = existing.get(path)?.displayName?.trim() || defaultWorktreeDisplayName(workspace, path, kind);
+  const displayName =
+    existing.get(path)?.displayName?.trim() || defaultWorktreeDisplayName(workspace, path, kind);
   const entry: WorktreeCatalogEntry = {
     worktreeId: path,
     workspaceId: workspace.workspaceId,
@@ -390,7 +421,9 @@ async function parseWorktreeBlock(
     kind,
     status,
     ...(headLine ? { headSha: headLine.slice("HEAD ".length).trim() } : {}),
-    ...(branchLine ? { branchName: normalizeBranchName(branchLine.slice("branch ".length).trim()) } : {}),
+    ...(branchLine
+      ? { branchName: normalizeBranchName(branchLine.slice("branch ".length).trim()) }
+      : {}),
     createdAt: existing.get(path)?.createdAt ?? nowIso(),
     updatedAt: nowIso(),
     ...(existing.get(path)?.pinned !== undefined ? { pinned: existing.get(path)?.pinned } : {}),
@@ -404,7 +437,9 @@ function mergeWorktreeEntry(
   existingEntry: WorktreeCatalogEntry | undefined,
 ): WorktreeCatalogEntry {
   const updatedAt =
-    existingEntry && hasSameWorktreeIdentity(existingEntry, nextEntry) ? existingEntry.updatedAt : nextEntry.updatedAt;
+    existingEntry && hasSameWorktreeIdentity(existingEntry, nextEntry)
+      ? existingEntry.updatedAt
+      : nextEntry.updatedAt;
   return {
     ...nextEntry,
     displayName: existingEntry?.displayName?.trim() || nextEntry.displayName,
@@ -437,7 +472,11 @@ function compareWorktreeEntries(left: WorktreeCatalogEntry, right: WorktreeCatal
   return left.displayName.localeCompare(right.displayName);
 }
 
-function defaultWorktreeDisplayName(workspace: WorkspaceRef, path: string, kind: WorktreeCatalogEntry["kind"]): string {
+function defaultWorktreeDisplayName(
+  workspace: WorkspaceRef,
+  path: string,
+  kind: WorktreeCatalogEntry["kind"],
+): string {
   if (kind === "primary") {
     return workspace.displayName?.trim() || basename(path) || path;
   }

@@ -19,7 +19,10 @@ async function openNotificationSettings(window: Page): Promise<void> {
 test("shows not enabled yet in the packaged app and enables after Ask macOS updates the authoritative macOS status", async () => {
   const userDataDir = await makeUserDataDir();
   const workspacePath = await makeWorkspace("notification-settings-packaged-default-workspace");
-  const helperStatusFilePath = join(userDataDir, "notification-settings-packaged-default-status.txt");
+  const helperStatusFilePath = join(
+    userDataDir,
+    "notification-settings-packaged-default-status.txt",
+  );
   await writeFile(helperStatusFilePath, "default\n", "utf8");
   const harness = await launchPackagedDesktop(userDataDir, {
     initialWorkspaces: [workspacePath],
@@ -35,17 +38,25 @@ test("shows not enabled yet in the packaged app and enables after Ask macOS upda
     const window = await harness.firstWindow();
     await openNotificationSettings(window);
 
-    await expect.poll(() => window.evaluate(() => window.piApp.getNotificationPermissionStatus())).toBe("default");
+    await expect
+      .poll(() => window.evaluate(() => globalThis.window.piApp.getNotificationPermissionStatus()))
+      .toBe("default");
     await expect(window.locator(".settings-view")).toContainText("Not enabled yet");
     await expect(window.getByRole("button", { name: "Ask macOS", exact: true })).toHaveCount(1);
-    await expect(window.getByRole("button", { name: "Open System Settings", exact: true })).toHaveCount(0);
+    await expect(
+      window.getByRole("button", { name: "Open System Settings", exact: true }),
+    ).toHaveCount(0);
 
     await window.getByRole("button", { name: "Ask macOS", exact: true }).click();
 
-    await expect.poll(() => window.evaluate(() => window.piApp.getNotificationPermissionStatus())).toBe("granted");
+    await expect
+      .poll(() => window.evaluate(() => globalThis.window.piApp.getNotificationPermissionStatus()))
+      .toBe("granted");
     await expect(window.locator(".settings-view")).toContainText("Enabled");
     await expect(window.getByRole("button", { name: "Ask macOS", exact: true })).toHaveCount(0);
-    await expect(window.getByRole("button", { name: "Open System Settings", exact: true })).toHaveCount(0);
+    await expect(
+      window.getByRole("button", { name: "Open System Settings", exact: true }),
+    ).toHaveCount(0);
   } finally {
     await harness.close();
   }
@@ -53,7 +64,9 @@ test("shows not enabled yet in the packaged app and enables after Ask macOS upda
 
 test("keeps showing not enabled yet when Ask macOS does not change packaged macOS notification access", async () => {
   const userDataDir = await makeUserDataDir();
-  const workspacePath = await makeWorkspace("notification-settings-packaged-stale-request-workspace");
+  const workspacePath = await makeWorkspace(
+    "notification-settings-packaged-stale-request-workspace",
+  );
   const harness = await launchPackagedDesktop(userDataDir, {
     initialWorkspaces: [workspacePath],
     testMode: "background",
@@ -67,15 +80,21 @@ test("keeps showing not enabled yet when Ask macOS does not change packaged macO
     const window = await harness.firstWindow();
     await openNotificationSettings(window);
 
-    await expect.poll(() => window.evaluate(() => window.piApp.getNotificationPermissionStatus())).toBe("default");
+    await expect
+      .poll(() => window.evaluate(() => globalThis.window.piApp.getNotificationPermissionStatus()))
+      .toBe("default");
     await expect(window.locator(".settings-view")).toContainText("Not enabled yet");
 
     await window.getByRole("button", { name: "Ask macOS", exact: true }).click();
 
-    await expect.poll(() => window.evaluate(() => window.piApp.getNotificationPermissionStatus())).toBe("default");
+    await expect
+      .poll(() => window.evaluate(() => globalThis.window.piApp.getNotificationPermissionStatus()))
+      .toBe("default");
     await expect(window.locator(".settings-view")).toContainText("Not enabled yet");
     await expect(window.getByRole("button", { name: "Ask macOS", exact: true })).toHaveCount(1);
-    await expect(window.getByRole("button", { name: "Open System Settings", exact: true })).toHaveCount(0);
+    await expect(
+      window.getByRole("button", { name: "Open System Settings", exact: true }),
+    ).toHaveCount(0);
   } finally {
     await harness.close();
   }
@@ -84,7 +103,10 @@ test("keeps showing not enabled yet when Ask macOS does not change packaged macO
 test("refreshes packaged notification status after returning from System Settings", async () => {
   const userDataDir = await makeUserDataDir();
   const workspacePath = await makeWorkspace("notification-settings-packaged-refresh-workspace");
-  const helperStatusFilePath = join(userDataDir, "notification-settings-packaged-refresh-status.txt");
+  const helperStatusFilePath = join(
+    userDataDir,
+    "notification-settings-packaged-refresh-status.txt",
+  );
   const settingsLogPath = join(userDataDir, "notification-settings-packaged-refresh.log");
   await writeFile(helperStatusFilePath, "denied\n", "utf8");
   const harness = await launchPackagedDesktop(userDataDir, {
@@ -101,10 +123,14 @@ test("refreshes packaged notification status after returning from System Setting
     await harness.focusWindow();
     await openNotificationSettings(window);
 
-    await expect.poll(() => window.evaluate(() => window.piApp.getNotificationPermissionStatus())).toBe("denied");
+    await expect
+      .poll(() => window.evaluate(() => globalThis.window.piApp.getNotificationPermissionStatus()))
+      .toBe("denied");
     await expect(window.locator(".settings-view")).toContainText("Turned off");
     await expect(window.getByRole("button", { name: "Ask macOS", exact: true })).toHaveCount(0);
-    await expect(window.getByRole("button", { name: "Open System Settings", exact: true })).toHaveCount(1);
+    await expect(
+      window.getByRole("button", { name: "Open System Settings", exact: true }),
+    ).toHaveCount(1);
 
     await window.getByRole("button", { name: "Open System Settings", exact: true }).click();
     await expect.poll(() => readSettingsLog(settingsLogPath), { timeout: 5_000 }).not.toBe("");
@@ -116,10 +142,14 @@ test("refreshes packaged notification status after returning from System Setting
     await writeFile(helperStatusFilePath, "granted\n", "utf8");
     await harness.focusWindow();
 
-    await expect.poll(() => window.evaluate(() => window.piApp.getNotificationPermissionStatus())).toBe("granted");
+    await expect
+      .poll(() => window.evaluate(() => globalThis.window.piApp.getNotificationPermissionStatus()))
+      .toBe("granted");
     await expect(window.locator(".settings-view")).toContainText("Enabled");
     await expect(window.getByRole("button", { name: "Ask macOS", exact: true })).toHaveCount(0);
-    await expect(window.getByRole("button", { name: "Open System Settings", exact: true })).toHaveCount(0);
+    await expect(
+      window.getByRole("button", { name: "Open System Settings", exact: true }),
+    ).toHaveCount(0);
   } finally {
     await harness.close();
   }

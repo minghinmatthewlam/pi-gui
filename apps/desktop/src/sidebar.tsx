@@ -11,15 +11,36 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
-import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import {
+  arrayMove,
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { AppView, SessionRecord, WorkspaceRecord, WorktreeRecord } from "./desktop-state";
-import { ArchiveIcon, ChevronDownIcon, ExtensionIcon, FolderIcon, PinIcon, PlusIcon, RestoreIcon, SettingsIcon, SkillIcon, WorktreeIcon } from "./icons";
+import {
+  ArchiveIcon,
+  ChevronDownIcon,
+  ExtensionIcon,
+  FolderIcon,
+  PinIcon,
+  PlusIcon,
+  RestoreIcon,
+  SettingsIcon,
+  SkillIcon,
+  WorktreeIcon,
+} from "./icons";
 import type { PiDesktopApi } from "./ipc";
 import { formatRelativeTime } from "./string-utils";
 import type { WorkspaceMenuState } from "./hooks/use-workspace-menu";
 import { useThreadMenu, type ThreadMenuState } from "./hooks/use-thread-menu";
-import { comparePinnedThreads, sessionThreadKey, type ThreadGroup, type ThreadListEntry } from "./thread-groups";
+import {
+  comparePinnedThreads,
+  sessionThreadKey,
+  type ThreadGroup,
+  type ThreadListEntry,
+} from "./thread-groups";
 import type { Dispatch, SetStateAction } from "react";
 import type { DesktopAppState } from "./desktop-state";
 
@@ -35,7 +56,6 @@ interface SidebarProps {
   readonly api: PiDesktopApi;
   readonly setSnapshot: Dispatch<SetStateAction<DesktopAppState | null>>;
   readonly updateSnapshot: (
-    api: PiDesktopApi,
     setSnapshot: Dispatch<SetStateAction<DesktopAppState | null>>,
     action: () => Promise<DesktopAppState>,
   ) => Promise<DesktopAppState>;
@@ -46,7 +66,10 @@ interface SidebarProps {
   readonly onOpenSettings: (workspaceId?: string) => void;
   readonly onArchiveSession: (target: { workspaceId: string; sessionId: string }) => void;
   readonly onSelectSession: (target: { workspaceId: string; sessionId: string }) => void;
-  readonly onSetSessionPinned: (target: { workspaceId: string; sessionId: string }, pinned: boolean) => void;
+  readonly onSetSessionPinned: (
+    target: { workspaceId: string; sessionId: string },
+    pinned: boolean,
+  ) => void;
   readonly onUnarchiveSession: (target: { workspaceId: string; sessionId: string }) => void;
 }
 
@@ -85,7 +108,7 @@ export function Sidebar(props: SidebarProps) {
   useEffect(() => {
     const handleRenameShortcut = (event: KeyboardEvent) => {
       if (!(event.metaKey || event.ctrlKey) || !event.shiftKey) return;
-      if ((event.key.toLowerCase() !== "r" && event.code !== "KeyR")) return;
+      if (event.key.toLowerCase() !== "r" && event.code !== "KeyR") return;
       if (activeView !== "threads" || !selectedWorkspace || !selectedSession) return;
       const entry = threadGroups
         .flatMap((group) => [...group.pinnedThreads, ...group.threads, ...group.archivedThreads])
@@ -99,7 +122,8 @@ export function Sidebar(props: SidebarProps) {
   }, [activeView, selectedWorkspace, selectedSession, threadGroups, threadMenu]);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
   const pinnedSortableId = (thread: ThreadListEntry) => `pinned:${sessionThreadKey(thread)}`;
-  const pinnedSessionKeyFromSortableId = (id: string) => id.startsWith("pinned:") ? id.slice("pinned:".length) : id;
+  const pinnedSessionKeyFromSortableId = (id: string) =>
+    id.startsWith("pinned:") ? id.slice("pinned:".length) : id;
 
   // Collision detection based on workspace row headers only (~30px top of each group),
   // not the full group height including all sessions.
@@ -121,7 +145,18 @@ export function Sidebar(props: SidebarProps) {
           closest = { id: containerId, distance };
         }
       }
-      return closest ? [{ id: closest.id, data: { droppableContainer: args.droppableContainers.find((c) => String(c.id) === closest!.id)! } }] : [];
+      return closest
+        ? [
+            {
+              id: closest.id,
+              data: {
+                droppableContainer: args.droppableContainers.find(
+                  (c) => String(c.id) === closest!.id,
+                )!,
+              },
+            },
+          ]
+        : [];
     }
     const pointerY = args.pointerCoordinates?.y;
     if (pointerY == null) return [];
@@ -139,7 +174,18 @@ export function Sidebar(props: SidebarProps) {
         closest = { id: String(container.id), distance };
       }
     }
-    return closest ? [{ id: closest.id, data: { droppableContainer: args.droppableContainers.find((c) => String(c.id) === closest!.id)! } }] : [];
+    return closest
+      ? [
+          {
+            id: closest.id,
+            data: {
+              droppableContainer: args.droppableContainers.find(
+                (c) => String(c.id) === closest!.id,
+              )!,
+            },
+          },
+        ]
+      : [];
   };
 
   const rootGroups = threadGroups.filter((g) => g.rootWorkspace.kind === "primary");
@@ -165,7 +211,9 @@ export function Sidebar(props: SidebarProps) {
       const newIndex = pinnedSortableIds.indexOf(String(over.id));
       if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return;
 
-      const newOrder = arrayMove(pinnedSortableIds, oldIndex, newIndex).map(pinnedSessionKeyFromSortableId);
+      const newOrder = arrayMove(pinnedSortableIds, oldIndex, newIndex).map(
+        pinnedSessionKeyFromSortableId,
+      );
       applyOptimisticReorder(
         (prev) => ({ ...prev, pinnedSessionOrder: newOrder }),
         () => api.reorderPinnedSessions(newOrder),
@@ -201,7 +249,9 @@ export function Sidebar(props: SidebarProps) {
     );
   }
 
-  const activeGroup = activeId ? rootGroups.find((g) => g.rootWorkspace.id === activeId) : undefined;
+  const activeGroup = activeId
+    ? rootGroups.find((g) => g.rootWorkspace.id === activeId)
+    : undefined;
   const activePinnedThread = activeId?.startsWith("pinned:")
     ? pinnedThreads.find((thread) => pinnedSortableId(thread) === activeId)
     : undefined;
@@ -231,7 +281,9 @@ export function Sidebar(props: SidebarProps) {
           <button
             className="sidebar__nav-item"
             type="button"
-            onClick={() => onOpenSkills(selectedWorkspace?.rootWorkspaceId ?? selectedWorkspace?.id)}
+            onClick={() =>
+              onOpenSkills(selectedWorkspace?.rootWorkspaceId ?? selectedWorkspace?.id)
+            }
           >
             <SkillIcon />
             <span>Skills</span>
@@ -239,7 +291,9 @@ export function Sidebar(props: SidebarProps) {
           <button
             className="sidebar__nav-item"
             type="button"
-            onClick={() => onOpenExtensions(selectedWorkspace?.rootWorkspaceId ?? selectedWorkspace?.id)}
+            onClick={() =>
+              onOpenExtensions(selectedWorkspace?.rootWorkspaceId ?? selectedWorkspace?.id)
+            }
           >
             <ExtensionIcon />
             <span>Extensions</span>
@@ -247,7 +301,9 @@ export function Sidebar(props: SidebarProps) {
           <button
             className="sidebar__nav-item"
             type="button"
-            onClick={() => onOpenSettings(selectedWorkspace?.rootWorkspaceId ?? selectedWorkspace?.id)}
+            onClick={() =>
+              onOpenSettings(selectedWorkspace?.rootWorkspaceId ?? selectedWorkspace?.id)
+            }
           >
             <SettingsIcon />
             <span>Settings</span>
@@ -264,7 +320,11 @@ export function Sidebar(props: SidebarProps) {
               className="icon-button"
               type="button"
               onClick={() => {
-                void updateSnapshot(api, setSnapshot, () => api.pickWorkspace());
+                void updateSnapshot(setSnapshot, () => api.pickWorkspace()).catch(
+                  (error: unknown) => {
+                    console.error("[renderer] pickWorkspace failed", error);
+                  },
+                );
               }}
             >
               <FolderIcon />
@@ -280,14 +340,23 @@ export function Sidebar(props: SidebarProps) {
               className="button button--primary"
               type="button"
               onClick={() => {
-                void updateSnapshot(api, setSnapshot, () => api.pickWorkspace());
+                void updateSnapshot(setSnapshot, () => api.pickWorkspace()).catch(
+                  (error: unknown) => {
+                    console.error("[renderer] pickWorkspace failed", error);
+                  },
+                );
               }}
             >
               Open first folder
             </button>
           </div>
         ) : (
-          <DndContext sensors={sensors} collisionDetection={headerCollision} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+          <DndContext
+            sensors={sensors}
+            collisionDetection={headerCollision}
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+          >
             <div className="workspace-list" data-testid="workspace-list">
               {pinnedThreads.length > 0 ? (
                 <PinnedThreadsSection
@@ -342,7 +411,10 @@ export function Sidebar(props: SidebarProps) {
             <DragOverlay>
               {activePinnedThread ? (
                 <ThreadSessionRow
-                  active={activePinnedThread.workspaceId === selectedWorkspace?.id && activePinnedThread.session.id === selectedSession?.id}
+                  active={
+                    activePinnedThread.workspaceId === selectedWorkspace?.id &&
+                    activePinnedThread.session.id === selectedSession?.id
+                  }
                   thread={activePinnedThread}
                   showContext
                   overlay
@@ -389,7 +461,10 @@ interface WorkspaceGroupProps {
   readonly threadMenu: ThreadMenuState;
   readonly onArchiveSession: (target: { workspaceId: string; sessionId: string }) => void;
   readonly onSelectSession: (target: { workspaceId: string; sessionId: string }) => void;
-  readonly onSetSessionPinned: (target: { workspaceId: string; sessionId: string }, pinned: boolean) => void;
+  readonly onSetSessionPinned: (
+    target: { workspaceId: string; sessionId: string },
+    pinned: boolean,
+  ) => void;
   readonly onUnarchiveSession: (target: { workspaceId: string; sessionId: string }) => void;
 }
 
@@ -463,17 +538,29 @@ function WorkspaceGroupContent(
             wsMenu.toggleWorkspaceCollapsed(rootWorkspace.id);
           }}
           type="button"
-          {...(dragHandleProps ? { ...dragHandleProps.attributes, ...dragHandleProps.listeners } : {})}
+          {...(dragHandleProps
+            ? { ...dragHandleProps.attributes, ...dragHandleProps.listeners }
+            : {})}
         >
-          <span className="workspace-row__icon" aria-hidden="true" data-collapsed={isCollapsed || undefined}>
-            <span className="workspace-row__icon-folder"><FolderIcon /></span>
-            <span className="workspace-row__icon-chevron"><ChevronDownIcon /></span>
+          <span
+            className="workspace-row__icon"
+            aria-hidden="true"
+            data-collapsed={isCollapsed || undefined}
+          >
+            <span className="workspace-row__icon-folder">
+              <FolderIcon />
+            </span>
+            <span className="workspace-row__icon-chevron">
+              <ChevronDownIcon />
+            </span>
           </span>
           <span className="workspace-row__name">{rootWorkspace.name}</span>
         </button>
         <span
           className="workspace-row__menu-wrap"
-          ref={wsMenu.workspaceMenuId === rootWorkspace.id ? wsMenu.workspaceMenuWrapRef : undefined}
+          ref={
+            wsMenu.workspaceMenuId === rootWorkspace.id ? wsMenu.workspaceMenuWrapRef : undefined
+          }
         >
           <button
             aria-label={`Workspace actions for ${rootWorkspace.name}`}
@@ -496,7 +583,9 @@ function WorkspaceGroupContent(
                 type="button"
                 onClick={(event) =>
                   wsMenu.runWorkspaceMenuAction(event, () => {
-                    void api.openWorkspaceInFinder(rootWorkspace.id);
+                    void api.openWorkspaceInFinder(rootWorkspace.id).catch((error: unknown) => {
+                      console.error("[renderer] openWorkspaceInFinder failed", error);
+                    });
                   })
                 }
               >
@@ -508,7 +597,10 @@ function WorkspaceGroupContent(
                   type="button"
                   onClick={(event) =>
                     wsMenu.runWorkspaceMenuAction(event, () =>
-                      wsMenu.removeWorktree(linkedWorktree.rootWorkspaceId || rootWorkspace.id, linkedWorktree),
+                      wsMenu.removeWorktree(
+                        linkedWorktree.rootWorkspaceId || rootWorkspace.id,
+                        linkedWorktree,
+                      ),
                     )
                   }
                 >
@@ -519,7 +611,9 @@ function WorkspaceGroupContent(
                   className="workspace-menu__item"
                   type="button"
                   onClick={(event) =>
-                    wsMenu.runWorkspaceMenuAction(event, () => wsMenu.createWorktree(rootWorkspace.id))
+                    wsMenu.runWorkspaceMenuAction(event, () =>
+                      wsMenu.createWorktree(rootWorkspace.id),
+                    )
                   }
                 >
                   Create permanent worktree
@@ -528,14 +622,18 @@ function WorkspaceGroupContent(
               <button
                 className="workspace-menu__item"
                 type="button"
-                onClick={(event) => wsMenu.runWorkspaceMenuAction(event, () => wsMenu.startRename(rootWorkspace))}
+                onClick={(event) =>
+                  wsMenu.runWorkspaceMenuAction(event, () => wsMenu.startRename(rootWorkspace))
+                }
               >
                 Edit name
               </button>
               <button
                 className="workspace-menu__item workspace-menu__item--danger"
                 type="button"
-                onClick={(event) => wsMenu.runWorkspaceMenuAction(event, () => wsMenu.removeWorkspace(rootWorkspace))}
+                onClick={(event) =>
+                  wsMenu.runWorkspaceMenuAction(event, () => wsMenu.removeWorkspace(rootWorkspace))
+                }
               >
                 Remove
               </button>
@@ -568,10 +666,17 @@ function WorkspaceGroupContent(
             }}
           />
           <div className="workspace-rename__actions">
-            <button className="workspace-rename__button" type="button" onClick={wsMenu.cancelRename}>
+            <button
+              className="workspace-rename__button"
+              type="button"
+              onClick={wsMenu.cancelRename}
+            >
               Cancel
             </button>
-            <button className="workspace-rename__button workspace-rename__button--primary" type="submit">
+            <button
+              className="workspace-rename__button workspace-rename__button--primary"
+              type="submit"
+            >
               Save
             </button>
           </div>
@@ -581,7 +686,9 @@ function WorkspaceGroupContent(
         <>
           <div className="session-list">
             {threads.map((thread) => {
-              const active = thread.workspaceId === selectedWorkspace?.id && thread.session.id === selectedSession?.id;
+              const active =
+                thread.workspaceId === selectedWorkspace?.id &&
+                thread.session.id === selectedSession?.id;
               return (
                 <ThreadSessionRow
                   key={`${thread.workspaceId}:${thread.session.id}`}
@@ -594,7 +701,12 @@ function WorkspaceGroupContent(
                       sessionId: thread.session.id,
                     })
                   }
-                  onSelect={() => onSelectSession({ workspaceId: thread.workspaceId, sessionId: thread.session.id })}
+                  onSelect={() =>
+                    onSelectSession({
+                      workspaceId: thread.workspaceId,
+                      sessionId: thread.session.id,
+                    })
+                  }
                   onTogglePinned={() =>
                     onSetSessionPinned(
                       { workspaceId: thread.workspaceId, sessionId: thread.session.id },
@@ -626,7 +738,8 @@ function WorkspaceGroupContent(
                 <div className="session-list session-list--archived">
                   {archivedThreads.map((thread) => {
                     const active =
-                      thread.workspaceId === selectedWorkspace?.id && thread.session.id === selectedSession?.id;
+                      thread.workspaceId === selectedWorkspace?.id &&
+                      thread.session.id === selectedSession?.id;
                     return (
                       <ThreadSessionRow
                         key={`${thread.workspaceId}:${thread.session.id}`}
@@ -640,7 +753,12 @@ function WorkspaceGroupContent(
                             sessionId: thread.session.id,
                           })
                         }
-                        onSelect={() => onSelectSession({ workspaceId: thread.workspaceId, sessionId: thread.session.id })}
+                        onSelect={() =>
+                          onSelectSession({
+                            workspaceId: thread.workspaceId,
+                            sessionId: thread.session.id,
+                          })
+                        }
                         onTogglePinned={() =>
                           onSetSessionPinned(
                             { workspaceId: thread.workspaceId, sessionId: thread.session.id },
@@ -679,7 +797,10 @@ function PinnedThreadsSection({
   readonly threadMenu: ThreadMenuState;
   readonly onArchiveSession: (target: { workspaceId: string; sessionId: string }) => void;
   readonly onSelectSession: (target: { workspaceId: string; sessionId: string }) => void;
-  readonly onSetSessionPinned: (target: { workspaceId: string; sessionId: string }, pinned: boolean) => void;
+  readonly onSetSessionPinned: (
+    target: { workspaceId: string; sessionId: string },
+    pinned: boolean,
+  ) => void;
 }) {
   return (
     <section className="pinned-thread-group" aria-label="Pinned threads">
@@ -690,7 +811,9 @@ function PinnedThreadsSection({
       <SortableContext items={[...sortableIds]} strategy={verticalListSortingStrategy}>
         <div className="session-list session-list--pinned">
           {pinnedThreads.map((thread) => {
-            const active = thread.workspaceId === selectedWorkspace?.id && thread.session.id === selectedSession?.id;
+            const active =
+              thread.workspaceId === selectedWorkspace?.id &&
+              thread.session.id === selectedSession?.id;
             return (
               <SortablePinnedThreadRow
                 key={`${thread.workspaceId}:${thread.session.id}`}
@@ -704,7 +827,9 @@ function PinnedThreadsSection({
                     sessionId: thread.session.id,
                   })
                 }
-                onSelect={() => onSelectSession({ workspaceId: thread.workspaceId, sessionId: thread.session.id })}
+                onSelect={() =>
+                  onSelectSession({ workspaceId: thread.workspaceId, sessionId: thread.session.id })
+                }
                 onTogglePinned={() =>
                   onSetSessionPinned(
                     { workspaceId: thread.workspaceId, sessionId: thread.session.id },
@@ -739,7 +864,9 @@ function SortablePinnedThreadRow({
   readonly onSelect: () => void;
   readonly onTogglePinned: () => void;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id,
+  });
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
@@ -763,7 +890,9 @@ function SortablePinnedThreadRow({
   );
 }
 
-function sessionIndicatorVariant(thread: ThreadListEntry): "running" | "failed" | "unseen" | "none" {
+function sessionIndicatorVariant(
+  thread: ThreadListEntry,
+): "running" | "failed" | "unseen" | "none" {
   if (thread.session.status === "running") {
     return "running";
   }
@@ -792,193 +921,237 @@ interface ThreadSessionRowProps {
   readonly onTogglePinned: () => void;
 }
 
-const ThreadSessionRow = forwardRef<HTMLDivElement, ThreadSessionRowProps>(function ThreadSessionRow({
-  active,
-  archived = false,
-  showContext = false,
-  overlay = false,
-  dragging = false,
-  style,
-  dragAttributes,
-  dragListeners,
-  thread,
-  threadMenu,
-  onAction,
-  onSelect,
-  onTogglePinned,
-}, ref) {
-  const indicatorVariant = sessionIndicatorVariant(thread);
-  const pinned = Boolean(thread.session.pinnedAt);
-  const actionContext = showContext ? ` in ${thread.contextLabel}` : "";
-  const classes = [
-    "session-row",
-    active ? "session-row--active" : "",
-    pinned ? "session-row--pinned" : "",
-    dragging ? "session-row--dragging" : "",
-    overlay ? "session-row--overlay" : "",
-  ].filter(Boolean).join(" ");
-  return (
-    <>
-    <div
-      ref={ref}
-      style={style}
-      className={classes}
-      data-sidebar-indicator={indicatorVariant}
-      data-session-pinned={pinned ? "true" : "false"}
-      data-session-id={thread.session.id}
-      onClick={() => {
-        if (!dragging) onSelect();
-      }}
-      onContextMenu={(event) => {
-        if (!threadMenu || overlay) return;
-        event.preventDefault();
-        event.stopPropagation();
-        threadMenu.openMenu(thread.session.id);
-      }}
-    >
-      <button
-        className="session-row__select"
-        onClick={(event) => {
-          event.stopPropagation();
-          onSelect();
-        }}
-        type="button"
-        {...dragAttributes}
-        {...dragListeners}
-      >
-        <span className="session-row__leading" aria-hidden="true">
-          {indicatorVariant === "running" ? <span className="session-row__status session-row__status--running" /> : null}
-          {indicatorVariant === "failed" ? <span className="session-row__status session-row__status--failed" /> : null}
-          {indicatorVariant === "unseen" ? <span className="session-row__status session-row__status--unseen" /> : null}
-        </span>
-        <span className="session-row__body">
-          <span className="session-row__title-line">
-            <span className="session-row__title">{thread.session.title}</span>
-          </span>
-          {showContext ? <span className="session-row__context">{thread.contextLabel}</span> : null}
-          {thread.session.preview ? <span className="session-row__preview">{thread.session.preview}</span> : null}
-        </span>
-      </button>
-      <span className="session-row__trailing">
-        {thread.environment.kind === "worktree" ? (
-          <span className="session-row__workspace-icon" aria-hidden="true" title="Worktree">
-            <WorktreeIcon />
-          </span>
-        ) : null}
-        <span className="session-row__time">{formatRelativeTime(thread.session.updatedAt)}</span>
-        <span className="session-row__action-cluster">
-          {!archived ? (
-            <button
-              aria-label={`${pinned ? "Unpin" : "Pin"} ${thread.session.title}${actionContext}`}
-              aria-pressed={pinned}
-              className="icon-button session-row__action session-row__pin-action"
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation();
-                onTogglePinned();
-              }}
-            >
-              <PinIcon filled={pinned} />
-            </button>
-          ) : null}
+const ThreadSessionRow = forwardRef<HTMLDivElement, ThreadSessionRowProps>(
+  function ThreadSessionRow(
+    {
+      active,
+      archived = false,
+      showContext = false,
+      overlay = false,
+      dragging = false,
+      style,
+      dragAttributes,
+      dragListeners,
+      thread,
+      threadMenu,
+      onAction,
+      onSelect,
+      onTogglePinned,
+    },
+    ref,
+  ) {
+    const indicatorVariant = sessionIndicatorVariant(thread);
+    const pinned = Boolean(thread.session.pinnedAt);
+    const actionContext = showContext ? ` in ${thread.contextLabel}` : "";
+    const classes = [
+      "session-row",
+      active ? "session-row--active" : "",
+      pinned ? "session-row--pinned" : "",
+      dragging ? "session-row--dragging" : "",
+      overlay ? "session-row--overlay" : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+    return (
+      <>
+        <div
+          ref={ref}
+          style={style}
+          className={classes}
+          data-sidebar-indicator={indicatorVariant}
+          data-session-pinned={pinned ? "true" : "false"}
+          data-session-id={thread.session.id}
+          onClick={() => {
+            if (!dragging) onSelect();
+          }}
+          onContextMenu={(event) => {
+            if (!threadMenu || overlay) return;
+            event.preventDefault();
+            event.stopPropagation();
+            threadMenu.openMenu(thread.session.id);
+          }}
+        >
           <button
-            aria-label={`${archived ? "Restore" : "Archive"} ${thread.session.title}${actionContext}`}
-            className="icon-button session-row__action"
-            type="button"
+            className="session-row__select"
             onClick={(event) => {
               event.stopPropagation();
-              onAction();
+              onSelect();
+            }}
+            type="button"
+            {...dragAttributes}
+            {...dragListeners}
+          >
+            <span className="session-row__leading" aria-hidden="true">
+              {indicatorVariant === "running" ? (
+                <span className="session-row__status session-row__status--running" />
+              ) : null}
+              {indicatorVariant === "failed" ? (
+                <span className="session-row__status session-row__status--failed" />
+              ) : null}
+              {indicatorVariant === "unseen" ? (
+                <span className="session-row__status session-row__status--unseen" />
+              ) : null}
+            </span>
+            <span className="session-row__body">
+              <span className="session-row__title-line">
+                <span className="session-row__title">{thread.session.title}</span>
+              </span>
+              {showContext ? (
+                <span className="session-row__context">{thread.contextLabel}</span>
+              ) : null}
+              {thread.session.preview ? (
+                <span className="session-row__preview">{thread.session.preview}</span>
+              ) : null}
+            </span>
+          </button>
+          <span className="session-row__trailing">
+            {thread.environment.kind === "worktree" ? (
+              <span className="session-row__workspace-icon" aria-hidden="true" title="Worktree">
+                <WorktreeIcon />
+              </span>
+            ) : null}
+            <span className="session-row__time">
+              {formatRelativeTime(thread.session.updatedAt)}
+            </span>
+            <span className="session-row__action-cluster">
+              {!archived ? (
+                <button
+                  aria-label={`${pinned ? "Unpin" : "Pin"} ${thread.session.title}${actionContext}`}
+                  aria-pressed={pinned}
+                  className="icon-button session-row__action session-row__pin-action"
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onTogglePinned();
+                  }}
+                >
+                  <PinIcon filled={pinned} />
+                </button>
+              ) : null}
+              <button
+                aria-label={`${archived ? "Restore" : "Archive"} ${thread.session.title}${actionContext}`}
+                className="icon-button session-row__action"
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onAction();
+                }}
+              >
+                {archived ? <RestoreIcon /> : <ArchiveIcon />}
+              </button>
+              {threadMenu && !overlay ? (
+                <span
+                  className="session-row__menu-wrap"
+                  ref={
+                    threadMenu.menuSessionId === thread.session.id
+                      ? threadMenu.menuWrapRef
+                      : undefined
+                  }
+                >
+                  <button
+                    aria-label={`Thread actions for ${thread.session.title}${actionContext}`}
+                    aria-haspopup="menu"
+                    aria-expanded={threadMenu.menuSessionId === thread.session.id}
+                    className="icon-button session-row__action session-row__menu-button"
+                    type="button"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      threadMenu.toggleMenu(thread.session.id);
+                    }}
+                  >
+                    …
+                  </button>
+                  {threadMenu.menuSessionId === thread.session.id ? (
+                    <div className="workspace-menu session-row__menu" role="menu">
+                      <button
+                        className="workspace-menu__item"
+                        type="button"
+                        onClick={(event) =>
+                          threadMenu.runMenuAction(event, () => threadMenu.startRename(thread))
+                        }
+                      >
+                        <span>Rename thread</span>
+                        <span className="workspace-menu__shortcut" aria-hidden="true">
+                          {RENAME_THREAD_SHORTCUT_HINT}
+                        </span>
+                      </button>
+                      <button
+                        className="workspace-menu__item"
+                        type="button"
+                        onClick={(event) =>
+                          threadMenu.runMenuAction(event, () => threadMenu.archiveOrRestore(thread))
+                        }
+                      >
+                        {archived ? "Restore" : "Archive"}
+                      </button>
+                      {thread.session.hasUnseenUpdate ? (
+                        <button
+                          className="workspace-menu__item"
+                          type="button"
+                          onClick={(event) =>
+                            threadMenu.runMenuAction(event, () => threadMenu.markRead(thread))
+                          }
+                        >
+                          Mark as read
+                        </button>
+                      ) : null}
+                      <button
+                        className="workspace-menu__item"
+                        type="button"
+                        onClick={(event) =>
+                          threadMenu.runMenuAction(event, () => threadMenu.copySessionId(thread))
+                        }
+                      >
+                        Copy session id
+                      </button>
+                    </div>
+                  ) : null}
+                </span>
+              ) : null}
+            </span>
+          </span>
+        </div>
+        {threadMenu?.renameSessionId === thread.session.id ? (
+          <form
+            className="workspace-rename session-rename"
+            ref={threadMenu.renamePanelRef}
+            onSubmit={(event) => {
+              event.preventDefault();
+              threadMenu.submitRename(thread);
             }}
           >
-            {archived ? <RestoreIcon /> : <ArchiveIcon />}
-          </button>
-          {threadMenu && !overlay ? (
-          <span
-            className="session-row__menu-wrap"
-            ref={threadMenu.menuSessionId === thread.session.id ? threadMenu.menuWrapRef : undefined}
-          >
-            <button
-              aria-label={`Thread actions for ${thread.session.title}${actionContext}`}
-              aria-haspopup="menu"
-              aria-expanded={threadMenu.menuSessionId === thread.session.id}
-              className="icon-button session-row__action session-row__menu-button"
-              type="button"
-              onClick={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                threadMenu.toggleMenu(thread.session.id);
+            <input
+              aria-label={`Rename thread ${thread.session.title}`}
+              className="workspace-rename__input"
+              ref={threadMenu.renameInputRef}
+              value={threadMenu.renameDraft}
+              onChange={(event) => threadMenu.setRenameDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  event.preventDefault();
+                  threadMenu.cancelRename();
+                }
               }}
-            >
-              …
-            </button>
-            {threadMenu.menuSessionId === thread.session.id ? (
-              <div className="workspace-menu session-row__menu" role="menu">
-                <button
-                  className="workspace-menu__item"
-                  type="button"
-                  onClick={(event) => threadMenu.runMenuAction(event, () => threadMenu.startRename(thread))}
-                >
-                  <span>Rename thread</span>
-                  <span className="workspace-menu__shortcut" aria-hidden="true">{RENAME_THREAD_SHORTCUT_HINT}</span>
-                </button>
-                <button
-                  className="workspace-menu__item"
-                  type="button"
-                  onClick={(event) => threadMenu.runMenuAction(event, () => threadMenu.archiveOrRestore(thread))}
-                >
-                  {archived ? "Restore" : "Archive"}
-                </button>
-                {thread.session.hasUnseenUpdate ? (
-                  <button
-                    className="workspace-menu__item"
-                    type="button"
-                    onClick={(event) => threadMenu.runMenuAction(event, () => threadMenu.markRead(thread))}
-                  >
-                    Mark as read
-                  </button>
-                ) : null}
-                <button
-                  className="workspace-menu__item"
-                  type="button"
-                  onClick={(event) => threadMenu.runMenuAction(event, () => threadMenu.copySessionId(thread))}
-                >
-                  Copy session id
-                </button>
-              </div>
-            ) : null}
-          </span>
-          ) : null}
-        </span>
-      </span>
-    </div>
-    {threadMenu?.renameSessionId === thread.session.id ? (
-      <form
-        className="workspace-rename session-rename"
-        ref={threadMenu.renamePanelRef}
-        onSubmit={(event) => {
-          event.preventDefault();
-          threadMenu.submitRename(thread);
-        }}
-      >
-        <input
-          aria-label={`Rename thread ${thread.session.title}`}
-          className="workspace-rename__input"
-          ref={threadMenu.renameInputRef}
-          value={threadMenu.renameDraft}
-          onChange={(event) => threadMenu.setRenameDraft(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Escape") {
-              event.preventDefault();
-              threadMenu.cancelRename();
-            }
-          }}
-        />
-        <div className="workspace-rename__actions">
-          <button className="workspace-rename__button" type="button" onClick={threadMenu.cancelRename}>Cancel</button>
-          <button className="workspace-rename__button workspace-rename__button--primary" type="submit">Save</button>
-        </div>
-      </form>
-    ) : null}
-  </>
-  );
-});
+            />
+            <div className="workspace-rename__actions">
+              <button
+                className="workspace-rename__button"
+                type="button"
+                onClick={threadMenu.cancelRename}
+              >
+                Cancel
+              </button>
+              <button
+                className="workspace-rename__button workspace-rename__button--primary"
+                type="submit"
+              >
+                Save
+              </button>
+            </div>
+          </form>
+        ) : null}
+      </>
+    );
+  },
+);

@@ -49,10 +49,7 @@ function runText(step) {
 }
 
 function validateCiWorkflow(workflow) {
-  const versionCheck = stepNamed(
-    workflow.jobs?.typecheck,
-    "Verify release version consistency",
-  );
+  const versionCheck = stepNamed(workflow.jobs?.typecheck, "Verify release version consistency");
   assert(
     runText(versionCheck).includes("pnpm verify:release-version"),
     "CI must reject drift between product package versions",
@@ -67,15 +64,11 @@ function validateCiWorkflow(workflow) {
     "Linux package CI must validate release configuration before packaging",
   );
   assert(
-    runText(stepNamed(linuxJob, "Package Linux AppImage and deb")).includes(
-      "run package:linux",
-    ),
+    runText(stepNamed(linuxJob, "Package Linux AppImage and deb")).includes("run package:linux"),
     "Linux package CI must build the configured AppImage and deb targets",
   );
   assert(
-    runText(stepNamed(linuxJob, "Verify Linux packages")).includes(
-      "verify-linux-release.sh",
-    ) &&
+    runText(stepNamed(linuxJob, "Verify Linux packages")).includes("verify-linux-release.sh") &&
       runText(stepNamed(linuxJob, "Verify Linux packages")).includes("--install"),
     "Linux package CI must run native archive and install lifecycle verification",
   );
@@ -211,18 +204,10 @@ function validateBuildJob(job, platform) {
   );
 }
 
-function validateWorkflow(
-  workflow,
-  finalizerSource,
-  linuxVerifierSource,
-  windowsVerifierSource,
-) {
+function validateWorkflow(workflow, finalizerSource, linuxVerifierSource, windowsVerifierSource) {
   const jobs = workflow.jobs ?? {};
   const releasePreflight = jobs["release-preflight"];
-  const versionCheck = stepNamed(
-    releasePreflight,
-    "Verify release tag and product versions",
-  );
+  const versionCheck = stepNamed(releasePreflight, "Verify release tag and product versions");
   assert(
     runText(versionCheck).includes("verify-release-version.mjs") &&
       runText(versionCheck).includes('--tag "$GITHUB_REF_NAME"'),
@@ -258,10 +243,7 @@ function validateWorkflow(
     runText(macFinalize).includes("finalize-macos-release.sh"),
     "macOS build must run final DMG notarization and trust validation",
   );
-  assert(
-    macFinalize["continue-on-error"] !== true,
-    "Final macOS validation must be fatal",
-  );
+  assert(macFinalize["continue-on-error"] !== true, "Final macOS validation must be fatal");
   for (const command of [
     "set -euo pipefail",
     "notarytool submit",
@@ -278,8 +260,7 @@ function validateWorkflow(
   assert(
     jobs["build-macos"].steps.indexOf(macFinalize) <
       jobs["build-macos"].steps.indexOf(macRefresh) &&
-      jobs["build-macos"].steps.indexOf(macRefresh) <
-        jobs["build-macos"].steps.indexOf(macStage),
+      jobs["build-macos"].steps.indexOf(macRefresh) < jobs["build-macos"].steps.indexOf(macStage),
     "macOS metadata refresh must run after stapling and before artifact staging",
   );
 
@@ -332,10 +313,7 @@ function validateWorkflow(
     "xauth",
     "xvfb",
   ]) {
-    assert(
-      linuxVerifierSource.includes(marker),
-      `Linux package verifier must contain: ${marker}`,
-    );
+    assert(linuxVerifierSource.includes(marker), `Linux package verifier must contain: ${marker}`);
   }
 
   const windowsJob = jobs["build-windows"];
@@ -361,7 +339,7 @@ function validateWorkflow(
   );
   for (const marker of [
     "Get-AuthenticodeSignature",
-    'Start-Process `',
+    "Start-Process `",
     '"/S"',
     '"t", $setup',
     '"t", $portable',
@@ -388,14 +366,14 @@ function validateWorkflow(
   );
 
   const steps = stageDraft.steps ?? [];
-  const candidateIndex = steps.findIndex(({ name }) => name === "Validate combined release candidate");
+  const candidateIndex = steps.findIndex(
+    ({ name }) => name === "Validate combined release candidate",
+  );
   const stateCheck = stepNamed(stageDraft, "Check existing release state");
   const stateCheckIndex = steps.indexOf(stateCheck);
   const uploadIndex = steps.findIndex(({ uses }) => uses === "softprops/action-gh-release@v2");
   assert(
-    candidateIndex >= 0 &&
-      candidateIndex < stateCheckIndex &&
-      stateCheckIndex < uploadIndex,
+    candidateIndex >= 0 && candidateIndex < stateCheckIndex && stateCheckIndex < uploadIndex,
     "Candidate validation and fail-closed state lookup must precede draft upload",
   );
   assert(
@@ -435,7 +413,7 @@ function validateWorkflow(
     ) &&
       runText(stepNamed(jobs["verify-draft-linux"], "Verify draft Linux packages")).includes(
         "--install",
-    ),
+      ),
     "Downloaded draft Linux packages must be installed and validated",
   );
   assert(
@@ -451,8 +429,14 @@ function validateWorkflow(
       JSON.stringify(["verify-draft-macos", "verify-draft-linux", "verify-draft-windows"]),
     "Final publication must wait for all native draft trust checks",
   );
-  assert(publish.environment === "release", "Final publication must use the release environment gate");
-  assert(publish.permissions?.contents === "write", "Final publication needs release write permission");
+  assert(
+    publish.environment === "release",
+    "Final publication must use the release environment gate",
+  );
+  assert(
+    publish.permissions?.contents === "write",
+    "Final publication needs release write permission",
+  );
 
   const publishSteps = publish.steps ?? [];
   const requireIndex = publishSteps.findIndex(({ name }) => name === "Require the validated draft");
@@ -488,9 +472,7 @@ function validateWorkflow(
   );
 
   const draftClears = Object.entries(jobs).flatMap(([jobName, job]) =>
-    (job.steps ?? [])
-      .filter((step) => runText(step).includes("--draft=false"))
-      .map(() => jobName),
+    (job.steps ?? []).filter((step) => runText(step).includes("--draft=false")).map(() => jobName),
   );
   assert(
     JSON.stringify(draftClears) === JSON.stringify(["publish"]),
@@ -524,9 +506,9 @@ function validateWorkflow(
     stepNamed(job, trustStep);
   }
   assert(
-    runText(
-      stepNamed(jobs["verify-published-linux"], "Verify published Linux packages"),
-    ).includes("verify-linux-release.sh") &&
+    runText(stepNamed(jobs["verify-published-linux"], "Verify published Linux packages")).includes(
+      "verify-linux-release.sh",
+    ) &&
       runText(
         stepNamed(jobs["verify-published-linux"], "Verify published Linux packages"),
       ).includes("--install"),
@@ -573,10 +555,5 @@ const [
 await validateConfiguration(builderConfig, new DebugLogger(false));
 validateBuilderConfig(builderConfig, JSON.parse(desktopPackageSource), afterRemoveSource);
 validateCiWorkflow(ciWorkflow);
-validateWorkflow(
-  workflow,
-  finalizerSource,
-  linuxVerifierSource,
-  windowsVerifierSource,
-);
+validateWorkflow(workflow, finalizerSource, linuxVerifierSource, windowsVerifierSource);
 console.log("Release package and workflow configuration are valid.");

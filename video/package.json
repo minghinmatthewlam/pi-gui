@@ -5,7 +5,8 @@
   "scripts": {
     "preview": "remotion preview src/index.ts",
     "render": "remotion render src/index.ts PiShowcase out/pi-showcase.mp4 --codec h264",
-    "build": "remotion render src/index.ts PiShowcase out/pi-showcase.mp4 --codec h264 --crf 18"
+    "build": "remotion render src/index.ts PiShowcase out/pi-showcase.mp4 --codec h264 --crf 18",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@remotion/cli": "4.0.438",

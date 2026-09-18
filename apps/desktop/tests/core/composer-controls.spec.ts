@@ -91,7 +91,9 @@ test("supports keyboard shortcuts, slash menus, and topbar controls through the 
     const composerBox = await composer.boundingBox();
     expect(slashMenuBox).not.toBeNull();
     expect(composerBox).not.toBeNull();
-    expect((slashMenuBox?.y ?? 0) + (slashMenuBox?.height ?? 0)).toBeLessThanOrEqual((composerBox?.y ?? 0) + 2);
+    expect((slashMenuBox?.y ?? 0) + (slashMenuBox?.height ?? 0)).toBeLessThanOrEqual(
+      (composerBox?.y ?? 0) + 2,
+    );
 
     await composer.press("Tab");
     await expect(slashMenu).toHaveCount(0);
@@ -131,13 +133,16 @@ test("supports keyboard shortcuts, slash menus, and topbar controls through the 
 
     const selectedWorkspaceId = (await getDesktopState(window)).selectedWorkspaceId;
     expect(selectedWorkspaceId).toBeTruthy();
-    await window.evaluate(async ({ workspaceId }) => {
-      const app = window.piApp;
-      if (!app) {
-        throw new Error("piApp IPC bridge is unavailable");
-      }
-      await app.setScopedModelPatterns(workspaceId, ["fake-provider/fake-model"]);
-    }, { workspaceId: selectedWorkspaceId });
+    await window.evaluate(
+      async ({ workspaceId }) => {
+        const app = globalThis.window.piApp;
+        if (!app) {
+          throw new Error("piApp IPC bridge is unavailable");
+        }
+        await app.setScopedModelPatterns(workspaceId, ["fake-provider/fake-model"]);
+      },
+      { workspaceId: selectedWorkspaceId },
+    );
 
     await composer.fill("/model");
     await expect(optionsMenu).toBeVisible();
@@ -162,7 +167,9 @@ test("supports keyboard shortcuts, slash menus, and topbar controls through the 
       const actionButton = document.querySelector<HTMLElement>(".topbar__actions button");
       return {
         topbar: topbar ? getComputedStyle(topbar).getPropertyValue("-webkit-app-region") : "",
-        actionButton: actionButton ? getComputedStyle(actionButton).getPropertyValue("-webkit-app-region") : "",
+        actionButton: actionButton
+          ? getComputedStyle(actionButton).getPropertyValue("-webkit-app-region")
+          : "",
       };
     });
     expect(appRegions.topbar).toBe("drag");
@@ -174,7 +181,9 @@ test("supports keyboard shortcuts, slash menus, and topbar controls through the 
     await window.getByTestId("topbar").dblclick({ position: { x: 140, y: 12 } });
     await expect
       .poll(() =>
-        harness.electronApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.isMaximized() ?? false),
+        harness.electronApp.evaluate(
+          ({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.isMaximized() ?? false,
+        ),
       )
       .toBe(!maximizedBefore);
   } finally {
@@ -203,7 +212,10 @@ test("dark mode keeps the send button visible before and after typing", async ()
     await expect(settingsSurface).toBeVisible();
     await settingsSurface.getByRole("button", { name: "Appearance", exact: true }).click();
     await expect(window.locator(".view-header__title")).toHaveText("Appearance");
-    await settingsSurface.locator(".settings-row", { hasText: "Dark" }).locator('input[type="radio"]').click();
+    await settingsSurface
+      .locator(".settings-row", { hasText: "Dark" })
+      .locator('input[type="radio"]')
+      .click();
     await expect
       .poll(() => window.evaluate(() => document.documentElement.classList.contains("dark")))
       .toBe(true);

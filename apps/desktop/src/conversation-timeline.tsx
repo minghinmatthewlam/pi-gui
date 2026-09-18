@@ -1,4 +1,13 @@
-import { useCallback, useLayoutEffect, useMemo, useRef, useState, type MutableRefObject, type RefCallback, type RefObject } from "react";
+import {
+  useCallback,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MutableRefObject,
+  type RefCallback,
+  type RefObject,
+} from "react";
 import type { TranscriptMessage } from "./desktop-state";
 import type { DisplayTimelineItem } from "./timeline-types";
 import { buildDisplayTimelineItems } from "./timeline-turns";
@@ -75,7 +84,8 @@ export function ConversationTimeline({
   // Giant prose blocks and attachment-heavy rows routinely blow past the estimator,
   // so keep those transcripts on the exact DOM path instead of restoring to a fake bottom.
   const hasUnreliableVirtualizedHeights = transcript.some(
-    (item) => item.kind === "message" && (item.text.length > 2000 || Boolean(item.attachments?.length)),
+    (item) =>
+      item.kind === "message" && (item.text.length > 2000 || Boolean(item.attachments?.length)),
   );
   const shouldVirtualize =
     !threadSearch.isOpen &&
@@ -88,7 +98,11 @@ export function ConversationTimeline({
 
   useLayoutEffect(() => {
     const availableToolCallIds = new Set(
-      transcript.filter((item): item is Extract<TranscriptMessage, { kind: "tool" }> => item.kind === "tool").map((item) => item.callId),
+      transcript
+        .filter(
+          (item): item is Extract<TranscriptMessage, { kind: "tool" }> => item.kind === "tool",
+        )
+        .map((item) => item.callId),
     );
     setExpandedToolCallIds((current) => {
       if (current.size === 0) {
@@ -131,7 +145,13 @@ export function ConversationTimeline({
       return;
     }
     onDisableVirtualizationReady?.();
-  }, [disableVirtualization, isTranscriptLoading, measurementVersion, onDisableVirtualizationReady, transcript]);
+  }, [
+    disableVirtualization,
+    isTranscriptLoading,
+    measurementVersion,
+    onDisableVirtualizationReady,
+    transcript,
+  ]);
 
   const toggleToolCall = useCallback((callId: string) => {
     setExpandedToolCallIds((current) => {
@@ -155,10 +175,13 @@ export function ConversationTimeline({
     setMeasurementVersion((current) => current + 1);
   }, []);
 
-  const assignTimelinePaneRef = useCallback((node: HTMLDivElement | null) => {
-    timelinePaneRef.current = node;
-    timelinePaneElementRef?.(node);
-  }, [timelinePaneElementRef, timelinePaneRef]);
+  const assignTimelinePaneRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      timelinePaneRef.current = node;
+      timelinePaneElementRef?.(node);
+    },
+    [timelinePaneElementRef, timelinePaneRef],
+  );
 
   const userPrompts = useMemo<readonly UserPromptEntry[]>(() => {
     const prompts: UserPromptEntry[] = [];
@@ -173,47 +196,55 @@ export function ConversationTimeline({
     return prompts;
   }, [transcript]);
 
-  const scrollToMessage = useCallback((messageId: string) => {
-    const pane = timelinePaneRef.current;
-    if (!pane) {
-      return;
-    }
-
-    // Mark this as a deliberate scroll so the bottom-pinning engine treats it as
-    // intent and does not snap the view back to the latest activity.
-    onTimelineScrollIntent?.();
-
-    const scrollToExisting = (): boolean => {
-      const target = pane.querySelector<HTMLElement>(`[data-message-id="${cssEscape(messageId)}"]`);
-      if (!target) {
-        return false;
+  const scrollToMessage = useCallback(
+    (messageId: string) => {
+      const pane = timelinePaneRef.current;
+      if (!pane) {
+        return;
       }
-      const paneRect = pane.getBoundingClientRect();
-      const targetRect = target.getBoundingClientRect();
-      const nextTop = Math.max(0, pane.scrollTop + (targetRect.top - paneRect.top) - SCROLL_TO_PADDING_PX);
-      pane.scrollTo({ top: nextTop, behavior: "smooth" });
-      return true;
-    };
 
-    if (scrollToExisting()) {
-      return;
-    }
+      // Mark this as a deliberate scroll so the bottom-pinning engine treats it as
+      // intent and does not snap the view back to the latest activity.
+      onTimelineScrollIntent?.();
 
-    // Virtualized rows outside the render window are absent from the DOM, so jump
-    // to the computed offset first, then let the row mount and fine-tune.
-    let offset = 0;
-    for (const item of displayItems) {
-      if (item.id === messageId) {
-        break;
+      const scrollToExisting = (): boolean => {
+        const target = pane.querySelector<HTMLElement>(
+          `[data-message-id="${cssEscape(messageId)}"]`,
+        );
+        if (!target) {
+          return false;
+        }
+        const paneRect = pane.getBoundingClientRect();
+        const targetRect = target.getBoundingClientRect();
+        const nextTop = Math.max(
+          0,
+          pane.scrollTop + (targetRect.top - paneRect.top) - SCROLL_TO_PADDING_PX,
+        );
+        pane.scrollTo({ top: nextTop, behavior: "smooth" });
+        return true;
+      };
+
+      if (scrollToExisting()) {
+        return;
       }
-      offset += measuredHeightsRef.current.get(item.id) ?? estimateTimelineItemHeight(item);
-      offset += ROW_GAP_PX;
-    }
-    pane.scrollTop = Math.max(0, offset - SCROLL_TO_PADDING_PX);
-    window.requestAnimationFrame(() => {
-      scrollToExisting();
-    });
-  }, [displayItems, onTimelineScrollIntent, timelinePaneRef]);
+
+      // Virtualized rows outside the render window are absent from the DOM, so jump
+      // to the computed offset first, then let the row mount and fine-tune.
+      let offset = 0;
+      for (const item of displayItems) {
+        if (item.id === messageId) {
+          break;
+        }
+        offset += measuredHeightsRef.current.get(item.id) ?? estimateTimelineItemHeight(item);
+        offset += ROW_GAP_PX;
+      }
+      pane.scrollTop = Math.max(0, offset - SCROLL_TO_PADDING_PX);
+      window.requestAnimationFrame(() => {
+        scrollToExisting();
+      });
+    },
+    [displayItems, onTimelineScrollIntent, timelinePaneRef],
+  );
 
   useLayoutEffect(() => {
     const pane = timelinePaneRef.current;
@@ -229,69 +260,74 @@ export function ConversationTimeline({
 
   return (
     <div className="timeline-surface">
-    <div
-      className="timeline-pane timeline-pane--thread"
-      data-testid="timeline-pane"
-      ref={assignTimelinePaneRef}
-      onPointerDown={onTimelineScrollIntent}
-      onWheel={onTimelineScrollIntent}
-    >
-      {threadSearch.isOpen ? (
-        <ThreadSearchBar
-          query={threadSearch.query}
-          matchCount={threadSearch.matchCount}
-          activeIndex={threadSearch.activeIndex}
-          inputRef={threadSearch.inputRef}
-          onSearch={threadSearch.search}
-          onNext={() => threadSearch.goToMatch(1)}
-          onPrev={() => threadSearch.goToMatch(-1)}
-          onClose={threadSearch.close}
-        />
-      ) : null}
-      {isTranscriptLoading ? (
-        <div className="timeline" data-testid="transcript">
-          <TranscriptSkeleton />
-        </div>
-      ) : transcript.length === 0 ? (
-        <div className="timeline" data-testid="transcript">
-          <TranscriptEmptyState />
-        </div>
-      ) : shouldVirtualize ? (
-        <VirtualizedTranscriptList
-          displayItems={displayItems}
-          timelinePaneRef={timelinePaneRef}
-          onContentHeightChange={onContentHeightChange}
-          measuredHeightsRef={measuredHeightsRef}
-          measurementVersion={measurementVersion}
-          expandedToolCallIds={expandedToolCallIds}
-          onHeightChange={updateMeasuredHeight}
-          onToggleToolCall={toggleToolCall}
-          onViewFileInDiff={onViewFileInDiff}
-          renderedMessageIndexById={renderedMessageIndexById}
-          onForkFromMessage={onForkFromMessage}
-        />
-      ) : (
-        <div className="timeline" data-testid="transcript">
-          {displayItems.map((item) => (
-            <MeasuredTimelineItem
-              item={item}
-              key={item.id}
-              onHeightChange={updateMeasuredHeight}
-              expandedToolCallIds={expandedToolCallIds}
-              onToggleToolCall={toggleToolCall}
-              onViewFileInDiff={onViewFileInDiff}
-              sourceMessageIndex={renderedMessageIndexById.get(item.id)}
-              onForkFromMessage={onForkFromMessage}
-            />
-          ))}
-        </div>
-      )}
-      {showJumpToLatest ? (
-        <button className="timeline-jump" data-testid="timeline-jump" type="button" onClick={onJumpToLatest}>
-          New activity below
-        </button>
-      ) : null}
-    </div>
+      <div
+        className="timeline-pane timeline-pane--thread"
+        data-testid="timeline-pane"
+        ref={assignTimelinePaneRef}
+        onPointerDown={onTimelineScrollIntent}
+        onWheel={onTimelineScrollIntent}
+      >
+        {threadSearch.isOpen ? (
+          <ThreadSearchBar
+            query={threadSearch.query}
+            matchCount={threadSearch.matchCount}
+            activeIndex={threadSearch.activeIndex}
+            inputRef={threadSearch.inputRef}
+            onSearch={threadSearch.search}
+            onNext={() => threadSearch.goToMatch(1)}
+            onPrev={() => threadSearch.goToMatch(-1)}
+            onClose={threadSearch.close}
+          />
+        ) : null}
+        {isTranscriptLoading ? (
+          <div className="timeline" data-testid="transcript">
+            <TranscriptSkeleton />
+          </div>
+        ) : transcript.length === 0 ? (
+          <div className="timeline" data-testid="transcript">
+            <TranscriptEmptyState />
+          </div>
+        ) : shouldVirtualize ? (
+          <VirtualizedTranscriptList
+            displayItems={displayItems}
+            timelinePaneRef={timelinePaneRef}
+            onContentHeightChange={onContentHeightChange}
+            measuredHeightsRef={measuredHeightsRef}
+            measurementVersion={measurementVersion}
+            expandedToolCallIds={expandedToolCallIds}
+            onHeightChange={updateMeasuredHeight}
+            onToggleToolCall={toggleToolCall}
+            onViewFileInDiff={onViewFileInDiff}
+            renderedMessageIndexById={renderedMessageIndexById}
+            onForkFromMessage={onForkFromMessage}
+          />
+        ) : (
+          <div className="timeline" data-testid="transcript">
+            {displayItems.map((item) => (
+              <MeasuredTimelineItem
+                item={item}
+                key={item.id}
+                onHeightChange={updateMeasuredHeight}
+                expandedToolCallIds={expandedToolCallIds}
+                onToggleToolCall={toggleToolCall}
+                onViewFileInDiff={onViewFileInDiff}
+                sourceMessageIndex={renderedMessageIndexById.get(item.id)}
+                onForkFromMessage={onForkFromMessage}
+              />
+            ))}
+          </div>
+        )}
+        {showJumpToLatest ? (
+          <button
+            className="timeline-jump"
+            data-testid="timeline-jump"
+            type="button"
+            onClick={onJumpToLatest}
+          >
+            New activity below
+          </button>
+        ) : null}
+      </div>
       {promptRailVisible && !isTranscriptLoading && userPrompts.length > 1 ? (
         <TimelineContextRail prompts={userPrompts} onSelect={scrollToMessage} />
       ) : null}
@@ -313,7 +349,11 @@ function TimelineContextRail({
   readonly onSelect: (messageId: string) => void;
 }) {
   return (
-    <nav className="timeline-context-rail" data-testid="timeline-context-rail" aria-label="Prompts in this thread">
+    <nav
+      className="timeline-context-rail"
+      data-testid="timeline-context-rail"
+      aria-label="Prompts in this thread"
+    >
       <div className="timeline-context-rail__title">Prompts</div>
       <ol className="timeline-context-rail__list">
         {prompts.map((prompt) => (
@@ -336,7 +376,11 @@ function TimelineContextRail({
 }
 
 function buildPromptPreview(text: string): string {
-  const firstLine = text.split("\n").map((line) => line.trim()).find((line) => line.length > 0) ?? "";
+  const firstLine =
+    text
+      .split("\n")
+      .map((line) => line.trim())
+      .find((line) => line.length > 0) ?? "";
   return firstLine.length > 80 ? `${firstLine.slice(0, 80)}…` : firstLine || "Prompt";
 }
 
@@ -440,7 +484,9 @@ function VirtualizedTranscriptList({
     };
   }, [timelinePaneRef]);
 
-  const rowHeights = displayItems.map((item) => measuredHeightsRef.current.get(item.id) ?? estimateTimelineItemHeight(item));
+  const rowHeights = displayItems.map(
+    (item) => measuredHeightsRef.current.get(item.id) ?? estimateTimelineItemHeight(item),
+  );
   const rowOffsets: number[] = [];
   let totalHeight = 0;
   for (const [index, rowHeight] of rowHeights.entries()) {
@@ -458,9 +504,10 @@ function VirtualizedTranscriptList({
     }
     previousTotalHeightRef.current = totalHeight;
     const pane = timelinePaneRef.current;
-    const wasAtBottom = previousTotalHeight > 0 && pane
-      ? previousTotalHeight - pane.scrollTop - pane.clientHeight < 32
-      : false;
+    const wasAtBottom =
+      previousTotalHeight > 0 && pane
+        ? previousTotalHeight - pane.scrollTop - pane.clientHeight < 32
+        : false;
     onContentHeightChange({ wasAtBottom });
   }, [onContentHeightChange, totalHeight]);
 
@@ -470,7 +517,11 @@ function VirtualizedTranscriptList({
   const endIndex = findEndIndex(rowOffsets, endOffset);
 
   return (
-    <div className="timeline timeline--virtualized" data-testid="transcript" style={{ height: `${totalHeight}px` }}>
+    <div
+      className="timeline timeline--virtualized"
+      data-testid="transcript"
+      style={{ height: `${totalHeight}px` }}
+    >
       {displayItems.slice(startIndex, endIndex).map((item, offsetIndex) => {
         const index = startIndex + offsetIndex;
         return (
@@ -555,7 +606,11 @@ function MeasuredTimelineItem({
   );
 }
 
-function findStartIndex(offsets: readonly number[], heights: readonly number[], targetOffset: number): number {
+function findStartIndex(
+  offsets: readonly number[],
+  heights: readonly number[],
+  targetOffset: number,
+): number {
   let low = 0;
   let high = offsets.length - 1;
 

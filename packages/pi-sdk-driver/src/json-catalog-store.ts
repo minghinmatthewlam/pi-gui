@@ -59,7 +59,9 @@ export class JsonCatalogStore implements SessionFileCatalogStorage {
   private loadGeneration = -1;
 
   constructor(options: JsonCatalogStoreOptions = {}) {
-    this.filePath = options.catalogFilePath ? resolve(options.catalogFilePath) : defaultCatalogFilePath();
+    this.filePath = options.catalogFilePath
+      ? resolve(options.catalogFilePath)
+      : defaultCatalogFilePath();
     this.coordinator = coordinatorForPath(this.filePath);
   }
 
@@ -77,7 +79,9 @@ export class JsonCatalogStore implements SessionFileCatalogStorage {
     },
     upsertWorkspace: async (entry: WorkspaceCatalogEntry): Promise<void> => {
       await this.mutateState((state) => {
-        const index = state.workspaces.findIndex((workspace) => workspace.workspaceId === entry.workspaceId);
+        const index = state.workspaces.findIndex(
+          (workspace) => workspace.workspaceId === entry.workspaceId,
+        );
         const next = cloneWorkspaceEntry(entry);
         if (index >= 0) {
           state.workspaces[index] = next;
@@ -88,7 +92,9 @@ export class JsonCatalogStore implements SessionFileCatalogStorage {
     },
     deleteWorkspace: async (workspaceId: WorkspaceId): Promise<void> => {
       await this.mutateState((state) => {
-        state.workspaces = state.workspaces.filter((workspace) => workspace.workspaceId !== workspaceId);
+        state.workspaces = state.workspaces.filter(
+          (workspace) => workspace.workspaceId !== workspaceId,
+        );
         state.sessions = state.sessions.filter((session) => session.workspaceId !== workspaceId);
         state.worktrees = state.worktrees.filter(
           (worktree) => !(worktree.workspaceId === workspaceId && worktree.kind === "primary"),
@@ -119,7 +125,9 @@ export class JsonCatalogStore implements SessionFileCatalogStorage {
     },
     upsertWorktree: async (entry: WorktreeCatalogEntry): Promise<void> => {
       await this.mutateState((state) => {
-        const index = state.worktrees.findIndex((worktree) => worktree.worktreeId === entry.worktreeId);
+        const index = state.worktrees.findIndex(
+          (worktree) => worktree.worktreeId === entry.worktreeId,
+        );
         const next = cloneWorktreeEntry(entry);
         if (index >= 0) {
           state.worktrees[index] = next;
@@ -146,7 +154,10 @@ export class JsonCatalogStore implements SessionFileCatalogStorage {
           return false;
         }
 
-        state.worktrees = [...state.worktrees.filter((worktree) => worktree.workspaceId !== workspaceId), ...nextEntries];
+        state.worktrees = [
+          ...state.worktrees.filter((worktree) => worktree.workspaceId !== workspaceId),
+          ...nextEntries,
+        ];
       });
     },
   };
@@ -162,12 +173,16 @@ export class JsonCatalogStore implements SessionFileCatalogStorage {
     },
     getSession: async (sessionRef: SessionRef): Promise<SessionCatalogEntry | undefined> => {
       const state = await this.getState();
-      const entry = state.sessions.find((session) => sessionKey(session.sessionRef) === sessionKey(sessionRef));
+      const entry = state.sessions.find(
+        (session) => sessionKey(session.sessionRef) === sessionKey(sessionRef),
+      );
       return entry ? cloneSessionEntry(entry) : undefined;
     },
     upsertSession: async (entry: SessionCatalogEntry): Promise<void> => {
       await this.mutateState((state) => {
-        const index = state.sessions.findIndex((session) => sessionKey(session.sessionRef) === sessionKey(entry.sessionRef));
+        const index = state.sessions.findIndex(
+          (session) => sessionKey(session.sessionRef) === sessionKey(entry.sessionRef),
+        );
         const next = cloneSessionEntry(entry);
         if (index >= 0) {
           state.sessions[index] = next;
@@ -342,7 +357,10 @@ function parseState(raw: string, filePath: string): CatalogFileState {
   };
 }
 
-function compareWorkspaceEntries(left: WorkspaceCatalogEntry, right: WorkspaceCatalogEntry): number {
+function compareWorkspaceEntries(
+  left: WorkspaceCatalogEntry,
+  right: WorkspaceCatalogEntry,
+): number {
   if (left.pinned && !right.pinned) return -1;
   if (!left.pinned && right.pinned) return 1;
   if (left.sortOrder !== right.sortOrder) return left.sortOrder - right.sortOrder;

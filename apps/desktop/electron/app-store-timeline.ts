@@ -31,18 +31,26 @@ interface TimelineRuntimeState {
   readonly activeWorkingActivityBySession: Map<string, string>;
 }
 
-export function timelineFromDriverTranscript(items: readonly SessionTranscriptItem[]): TranscriptMessage[] {
+export function timelineFromDriverTranscript(
+  items: readonly SessionTranscriptItem[],
+): TranscriptMessage[] {
   return items.map((item) => {
     if (item.kind !== "tool") {
       return item;
     }
     const detail = detailFromOutput(item.output);
     return {
-      ...makeToolItem(item.callId, item.toolName, item.status, toolLabel(item.toolName, item.input), {
-        ...(detail !== undefined ? { detail } : {}),
-        ...(item.input !== undefined ? { input: item.input } : {}),
-        ...(item.output !== undefined ? { output: item.output } : {}),
-      }),
+      ...makeToolItem(
+        item.callId,
+        item.toolName,
+        item.status,
+        toolLabel(item.toolName, item.input),
+        {
+          ...(detail !== undefined ? { detail } : {}),
+          ...(item.input !== undefined ? { input: item.input } : {}),
+          ...(item.output !== undefined ? { output: item.output } : {}),
+        },
+      ),
       createdAt: item.createdAt,
     };
   });
@@ -57,7 +65,9 @@ export function appendUserMessage(
   const key = sessionKey(sessionRef);
   const transcript = [...(transcriptCache.get(key) ?? [])];
   const message =
-    attachments.length > 0 ? makeTranscriptMessageWithAttachments("user", text, attachments) : makeTranscriptMessage("user", text);
+    attachments.length > 0
+      ? makeTranscriptMessageWithAttachments("user", text, attachments)
+      : makeTranscriptMessage("user", text);
   transcript.push(message);
   transcriptCache.set(key, transcript);
   return message.id;
@@ -70,7 +80,9 @@ export function appendQueuedUserMessage(
 ): void {
   const key = sessionKey(sessionRef);
   const transcript = [...(transcriptCache.get(key) ?? [])];
-  const existingIndex = transcript.findIndex((item) => item.kind === "message" && item.id === message.id);
+  const existingIndex = transcript.findIndex(
+    (item) => item.kind === "message" && item.id === message.id,
+  );
   const nextMessage = {
     kind: "message" as const,
     id: message.id,
@@ -146,17 +158,23 @@ export function applyTimelineEvent(
 
   switch (event.type) {
     case "sessionOpened":
-      transcript.push(makeActivityItem("Resumed session", { metadata: relativeDetail(event.timestamp) }));
+      transcript.push(
+        makeActivityItem("Resumed session", { metadata: relativeDetail(event.timestamp) }),
+      );
       break;
     case "sessionUpdated":
-      if (event.snapshot.status === "running" && event.snapshot.runningRunId && !state.runningSinceBySession.has(key)) {
+      if (
+        event.snapshot.status === "running" &&
+        event.snapshot.runningRunId &&
+        !state.runningSinceBySession.has(key)
+      ) {
         state.runningSinceBySession.set(key, event.timestamp);
         state.runMetricsBySession.set(key, {
           startedAt: event.timestamp,
           toolCount: 0,
           searchCount: 0,
           fileCount: 0,
-        });        
+        });
         const activity = makeActivityItem("Working…");
         state.activeWorkingActivityBySession.set(key, activity.id);
         transcript.push(activity);
@@ -182,11 +200,26 @@ export function applyTimelineEvent(
         metrics.fileCount += 1;
       }
       state.runMetricsBySession.set(key, metrics);
-      upsertToolRow(transcript, event.callId, event.toolName, "running", toolLabel(event.toolName, event.input), undefined, event.input);
+      upsertToolRow(
+        transcript,
+        event.callId,
+        event.toolName,
+        "running",
+        toolLabel(event.toolName, event.input),
+        undefined,
+        event.input,
+      );
       break;
     }
     case "toolUpdated":
-      upsertToolRow(transcript, event.callId, undefined, "running", undefined, event.text ?? progressLabel(event.progress));
+      upsertToolRow(
+        transcript,
+        event.callId,
+        undefined,
+        "running",
+        undefined,
+        event.text ?? progressLabel(event.progress),
+      );
       break;
     case "toolFinished":
       upsertToolRow(
@@ -208,18 +241,26 @@ export function applyTimelineEvent(
         if (label) {
           transcript.push(makeSummaryItem(label, { presentation: "inline" }));
         }
-        transcript.push(makeSummaryItem(workedForLabel(metrics.startedAt, event.timestamp), { presentation: "divider" }));
+        transcript.push(
+          makeSummaryItem(workedForLabel(metrics.startedAt, event.timestamp), {
+            presentation: "divider",
+          }),
+        );
       } else {
-        transcript.push(makeSummaryItem("Completed", {
-          presentation: "divider",
-          metadata: relativeDetail(event.timestamp),
-        }));
+        transcript.push(
+          makeSummaryItem("Completed", {
+            presentation: "divider",
+            metadata: relativeDetail(event.timestamp),
+          }),
+        );
       }
       break;
     }
     case "runFailed": {
       const metrics = currentMetrics;
-      const latestToolError = metrics ? latestErrorToolDetail(transcript, metrics.startedAt) : undefined;
+      const latestToolError = metrics
+        ? latestErrorToolDetail(transcript, metrics.startedAt)
+        : undefined;
       const failureLabel = clearerRunFailureLabel(event.error.message, latestToolError);
       const failureDetail = event.error.code;
       clearRunState(transcript, key, event.sessionRef, state);
@@ -238,7 +279,9 @@ export function applyTimelineEvent(
       break;
     case "hostUiRequest":
       if (event.request.kind === "notify") {
-        transcript.push(makeActivityItem(event.request.message, { metadata: relativeDetail(event.timestamp) }));
+        transcript.push(
+          makeActivityItem(event.request.message, { metadata: relativeDetail(event.timestamp) }),
+        );
       }
       break;
     default:
@@ -263,9 +306,9 @@ function upsertToolRow(
   const existingTool = existing?.kind === "tool" ? existing : undefined;
   const next = makeToolItem(
     callId,
-    toolName ?? (existingTool?.toolName ?? "tool"),
-    status ?? (existingTool?.status ?? "running"),
-    label ?? (existingTool?.label ?? "Working"),
+    toolName ?? existingTool?.toolName ?? "tool",
+    status ?? existingTool?.status ?? "running",
+    label ?? existingTool?.label ?? "Working",
     {
       detail: detail ?? existingTool?.detail,
       metadata: existingTool?.metadata,
@@ -285,7 +328,10 @@ function upsertToolRow(
   transcript.push(next);
 }
 
-function removeWorkingActivity(transcript: TranscriptMessage[], activityId: string | undefined): void {
+function removeWorkingActivity(
+  transcript: TranscriptMessage[],
+  activityId: string | undefined,
+): void {
   if (!activityId) {
     return;
   }
@@ -347,14 +393,18 @@ function progressLabel(progress: number | undefined): string | undefined {
 function detailFromOutput(output: unknown): string | undefined {
   if (isRecord(output)) {
     const directError =
-      stringProperty(output, "error") ?? stringProperty(output, "message") ?? stringProperty(output, "stderr");
+      stringProperty(output, "error") ??
+      stringProperty(output, "message") ??
+      stringProperty(output, "stderr");
     if (directError) {
       return summarizeToolDetail(directError);
     }
   }
   if (isRecord(output) && Array.isArray(output.content)) {
     const text = output.content
-      .map((part) => (isRecord(part) && part.type === "text" && typeof part.text === "string" ? part.text : ""))
+      .map((part) =>
+        isRecord(part) && part.type === "text" && typeof part.text === "string" ? part.text : "",
+      )
       .join("\n")
       .trim();
     if (text) {
@@ -426,7 +476,18 @@ function inputLabel(input: unknown): string | undefined {
     return undefined;
   }
 
-  const candidates = ["path", "filePath", "query", "q", "url", "command", "text", "prompt", "title", "app"];
+  const candidates = [
+    "path",
+    "filePath",
+    "query",
+    "q",
+    "url",
+    "command",
+    "text",
+    "prompt",
+    "title",
+    "app",
+  ];
   for (const key of candidates) {
     const value = input[key];
     if (typeof value === "string" && value.trim()) {
@@ -437,7 +498,10 @@ function inputLabel(input: unknown): string | undefined {
   return undefined;
 }
 
-function latestErrorToolDetail(transcript: readonly TranscriptMessage[], runStartedAt: string): string | undefined {
+function latestErrorToolDetail(
+  transcript: readonly TranscriptMessage[],
+  runStartedAt: string,
+): string | undefined {
   const runStartedAtMs = Date.parse(runStartedAt);
   for (let index = transcript.length - 1; index >= 0; index -= 1) {
     const item = transcript[index];
@@ -459,13 +523,21 @@ function clearerRunFailureLabel(message: string, latestToolError: string | undef
     return message;
   }
   const normalized = message.trim().toLowerCase();
-  if (normalized === "terminated" || normalized === "failed" || normalized === "error" || normalized === "run failed") {
+  if (
+    normalized === "terminated" ||
+    normalized === "failed" ||
+    normalized === "error" ||
+    normalized === "run failed"
+  ) {
     return latestToolError;
   }
   return message;
 }
 
-function stringProperty(record: Readonly<Record<string, unknown>>, key: string): string | undefined {
+function stringProperty(
+  record: Readonly<Record<string, unknown>>,
+  key: string,
+): string | undefined {
   const value = record[key];
   return typeof value === "string" && value.trim() ? value : undefined;
 }

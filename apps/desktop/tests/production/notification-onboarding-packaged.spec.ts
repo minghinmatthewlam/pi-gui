@@ -1,9 +1,18 @@
 import { join } from "node:path";
 import { writeFile } from "node:fs/promises";
 import { expect, test } from "@playwright/test";
-import { getDesktopState, launchPackagedDesktop, makeUserDataDir, makeWorkspace } from "../helpers/electron-app";
+import {
+  getDesktopState,
+  launchPackagedDesktop,
+  makeUserDataDir,
+  makeWorkspace,
+} from "../helpers/electron-app";
 import { emitRunningEvent, readOptionalLog } from "../helpers/notification-events";
-import { createThread, selectSessionByTitle, setSessionVisibilityOverride } from "../live/session-event-test-helpers";
+import {
+  createThread,
+  selectSessionByTitle,
+  setSessionVisibilityOverride,
+} from "../live/session-event-test-helpers";
 
 test("requests notification permission in the packaged app when active work moves to the background", async () => {
   const userDataDir = await makeUserDataDir();
@@ -24,7 +33,9 @@ test("requests notification permission in the packaged app when active work move
 
   try {
     const window = await harness.firstWindow();
-    await expect.poll(() => window.evaluate(() => window.piApp.getNotificationPermissionStatus())).toBe("default");
+    await expect
+      .poll(() => window.evaluate(() => globalThis.window.piApp.getNotificationPermissionStatus()))
+      .toBe("default");
     const sessionA = await createThread(window, "Packaged Session A");
     await createThread(window, "Packaged Session B");
     await setSessionVisibilityOverride(harness, "active");

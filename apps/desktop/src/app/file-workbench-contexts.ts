@@ -19,11 +19,13 @@ export function buildFileWorkbenchContexts({
   }
 
   const workspacesById = new Map(workspaces.map((workspace) => [workspace.id, workspace] as const));
-  const contexts: FileWorkbenchContext[] = [{
-    workspace: selectedWorkspace,
-    role: "thread",
-    sessionTitle: selectedSessionTitle,
-  }];
+  const contexts: FileWorkbenchContext[] = [
+    {
+      workspace: selectedWorkspace,
+      role: "thread",
+      sessionTitle: selectedSessionTitle,
+    },
+  ];
   const seenWorkspaceIds = new Set([selectedWorkspace.id]);
 
   const addWorkspace = (

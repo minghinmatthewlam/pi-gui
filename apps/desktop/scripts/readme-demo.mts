@@ -9,6 +9,7 @@ import {
   addWorkspaceViaIpc,
   createSessionViaIpc,
   getDesktopState,
+  getSelectedTranscript,
   launchDesktop,
   makeWorkspace,
 } from "../tests/helpers/electron-app.ts";
@@ -123,8 +124,15 @@ async function waitForLiveResponse(
     const state = await getDesktopState(page);
     const workspace = state.workspaces.find((entry) => entry.id === state.selectedWorkspaceId);
     const session = workspace?.sessions.find((entry) => entry.id === state.selectedSessionId);
-    const transcript = session?.transcript ?? [];
-    const assistantMessages = transcript.filter((item) => item.kind === "message" && item.role === "assistant");
+    const selectedTranscript = await getSelectedTranscript(page);
+    const transcript =
+      selectedTranscript?.workspaceId === workspace?.id &&
+      selectedTranscript?.sessionId === session?.id
+        ? (selectedTranscript?.transcript ?? [])
+        : [];
+    const assistantMessages = transcript.flatMap((item) =>
+      item.kind === "message" && item.role === "assistant" ? [item.text] : [],
+    );
     const latestAssistant = assistantMessages.at(-1);
 
     if (state.lastError) {
@@ -134,7 +142,7 @@ async function waitForLiveResponse(
     if (
       session?.status === "idle" &&
       latestAssistant &&
-      latestAssistant.text.trim().length >= options.minimumAssistantLength
+      latestAssistant.trim().length >= options.minimumAssistantLength
     ) {
       return;
     }

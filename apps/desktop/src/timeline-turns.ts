@@ -12,7 +12,9 @@ const MIN_WORKED_DURATION_MS = 1_000;
  * downstream work and both endpoints carry parseable timestamps spanning at
  * least one second.
  */
-export function buildDisplayTimelineItems(transcript: readonly TranscriptMessage[]): readonly DisplayTimelineItem[] {
+export function buildDisplayTimelineItems(
+  transcript: readonly TranscriptMessage[],
+): readonly DisplayTimelineItem[] {
   const result: DisplayTimelineItem[] = [];
 
   for (let index = 0; index < transcript.length; index += 1) {

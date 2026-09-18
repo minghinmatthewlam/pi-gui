@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
-import { CUSTOM_PROVIDER_ID_PATTERN, isValidHttpBaseUrl } from "@pi-gui/pi-sdk-driver/custom-provider-types";
+import {
+  CUSTOM_PROVIDER_ID_PATTERN,
+  isValidHttpBaseUrl,
+} from "@pi-gui/pi-sdk-driver/custom-provider-types";
 import { trapDialogFocus } from "./dialog-focus";
 import type { CustomProviderConfig, CustomProviderModelConfig } from "./ipc";
 import { SettingsGroup } from "./settings-utils";
@@ -10,7 +13,8 @@ interface SettingsCustomEndpointsSectionProps {
   readonly onDeleteCustomProvider: (providerId: string) => Promise<string | undefined>;
 }
 
-type DialogMode = { kind: "closed" } | { kind: "create" } | { kind: "edit"; original: CustomProviderConfig };
+type DialogMode =
+  { kind: "closed" } | { kind: "create" } | { kind: "edit"; original: CustomProviderConfig };
 
 export function SettingsCustomEndpointsSection({
   existingProviderIds,
@@ -92,7 +96,8 @@ export function SettingsCustomEndpointsSection({
               <div className="settings-row__label">
                 <div className="settings-row__title">{entry.providerId}</div>
                 <div className="settings-row__description">
-                  {entry.baseUrl} · {entry.models.length} model{entry.models.length === 1 ? "" : "s"}
+                  {entry.baseUrl} · {entry.models.length} model
+                  {entry.models.length === 1 ? "" : "s"}
                 </div>
               </div>
               <div className="settings-row__control">
@@ -106,7 +111,11 @@ export function SettingsCustomEndpointsSection({
                 <button
                   className="button button--secondary"
                   type="button"
-                  onClick={() => void handleDelete(entry.providerId)}
+                  onClick={() =>
+                    void handleDelete(entry.providerId).catch((error: unknown) => {
+                      setLoadError(error instanceof Error ? error.message : String(error));
+                    })
+                  }
                 >
                   Remove
                 </button>
@@ -148,7 +157,12 @@ interface CustomEndpointDialogProps {
   readonly onSave: (config: CustomProviderConfig) => Promise<string | undefined>;
 }
 
-function CustomEndpointDialog({ mode, existingProviderIds, onClose, onSave }: CustomEndpointDialogProps) {
+function CustomEndpointDialog({
+  mode,
+  existingProviderIds,
+  onClose,
+  onSave,
+}: CustomEndpointDialogProps) {
   const titleId = useId();
   const initial = mode.kind === "edit" ? mode.original : undefined;
   const [providerId, setProviderId] = useState(initial?.providerId ?? "");
@@ -169,16 +183,18 @@ function CustomEndpointDialog({ mode, existingProviderIds, onClose, onSave }: Cu
   const selectedModelIds = useMemo(() => new Set(models.map((model) => model.id)), [models]);
   const isEdit = mode.kind === "edit";
 
-  const idValidationError = useMemo(() => validateProviderId(providerId, existingProviderIds, initial?.providerId), [
-    providerId,
-    existingProviderIds,
-    initial?.providerId,
-  ]);
+  const idValidationError = useMemo(
+    () => validateProviderId(providerId, existingProviderIds, initial?.providerId),
+    [providerId, existingProviderIds, initial?.providerId],
+  );
 
   useEffect(() => {
     if (!probePending && restoreProbeFocusRef.current) {
       restoreProbeFocusRef.current = false;
-      if (document.activeElement === document.body || document.activeElement === probeButtonRef.current) {
+      if (
+        document.activeElement === document.body ||
+        document.activeElement === probeButtonRef.current
+      ) {
         probeButtonRef.current?.focus();
       }
     }
@@ -280,12 +296,16 @@ function CustomEndpointDialog({ mode, existingProviderIds, onClose, onSave }: Cu
         ref={dialogRef}
         role="dialog"
       >
-        <div className="custom-endpoint-dialog__content" data-testid="custom-endpoint-dialog-content">
+        <div
+          className="custom-endpoint-dialog__content"
+          data-testid="custom-endpoint-dialog-content"
+        >
           <div className="extension-dialog__title" id={titleId}>
             {isEdit ? "Edit custom endpoint" : "Add custom endpoint"}
           </div>
           <p className="extension-dialog__body">
-            Configure an OpenAI-compatible server. The endpoint and API key are stored in plaintext at
+            Configure an OpenAI-compatible server. The endpoint and API key are stored in plaintext
+            at
             <code> ~/.pi/agent/models.json</code>.
           </p>
           <label className="settings-field">
@@ -300,7 +320,9 @@ function CustomEndpointDialog({ mode, existingProviderIds, onClose, onSave }: Cu
               onChange={(event) => setProviderId(event.target.value.trim().toLowerCase())}
             />
             {idValidationError ? (
-              <span className="settings-row__description settings-warning">{idValidationError}</span>
+              <span className="settings-row__description settings-warning">
+                {idValidationError}
+              </span>
             ) : (
               <span className="settings-row__description">
                 Lowercase letters, digits, and dashes. Cannot be changed later.
@@ -318,8 +340,8 @@ function CustomEndpointDialog({ mode, existingProviderIds, onClose, onSave }: Cu
               onChange={(event) => setBaseUrl(event.target.value)}
             />
             <span className="settings-row__description">
-              Include the <code>/v1</code> suffix. Ollama: <code>http://localhost:11434/v1</code>. vLLM:{" "}
-              <code>http://localhost:8000/v1</code>.
+              Include the <code>/v1</code> suffix. Ollama: <code>http://localhost:11434/v1</code>.
+              vLLM: <code>http://localhost:8000/v1</code>.
             </span>
           </label>
           <label className="settings-field">
@@ -334,8 +356,9 @@ function CustomEndpointDialog({ mode, existingProviderIds, onClose, onSave }: Cu
               onChange={(event) => setApiKey(event.target.value)}
             />
             <span className="settings-row__description">
-              Required by the storage format. For vLLM started with <code>--api-key</code>, enter that key. For Ollama
-              or other servers without auth, leave blank and a placeholder is saved.
+              Required by the storage format. For vLLM started with <code>--api-key</code>, enter
+              that key. For Ollama or other servers without auth, leave blank and a placeholder is
+              saved.
             </span>
           </label>
 
@@ -347,7 +370,12 @@ function CustomEndpointDialog({ mode, existingProviderIds, onClose, onSave }: Cu
                 disabled={probePending || savePending}
                 ref={probeButtonRef}
                 type="button"
-                onClick={() => void handleProbe()}
+                onClick={() =>
+                  void handleProbe().catch((error: unknown) => {
+                    setProbePending(false);
+                    setProbeError(error instanceof Error ? error.message : String(error));
+                  })
+                }
               >
                 {probePending ? "Detecting…" : "Detect models"}
               </button>
@@ -363,22 +391,37 @@ function CustomEndpointDialog({ mode, existingProviderIds, onClose, onSave }: Cu
               disabled={savePending}
             />
             <p className="settings-row__description">
-              Tool calling is required. Smaller models (&lt; 7B) often do not emit OpenAI-style function calls cleanly.
+              Tool calling is required. Smaller models (&lt; 7B) often do not emit OpenAI-style
+              function calls cleanly.
             </p>
           </div>
         </div>
 
         <div className="custom-endpoint-dialog__footer" data-testid="custom-endpoint-dialog-footer">
-          {formError ? <p className="extension-dialog__body settings-warning">{formError}</p> : null}
+          {formError ? (
+            <p className="extension-dialog__body settings-warning">{formError}</p>
+          ) : null}
           <div className="extension-dialog__actions">
-            <button className="button button--secondary" disabled={savePending} type="button" onClick={onClose}>
+            <button
+              className="button button--secondary"
+              disabled={savePending}
+              type="button"
+              onClick={onClose}
+            >
               Cancel
             </button>
             <button
               className="button"
-              disabled={savePending || Boolean(idValidationError) || models.length === 0 || !baseUrl.trim()}
+              disabled={
+                savePending || Boolean(idValidationError) || models.length === 0 || !baseUrl.trim()
+              }
               type="button"
-              onClick={() => void handleSave()}
+              onClick={() =>
+                void handleSave().catch((error: unknown) => {
+                  setSavePending(false);
+                  setFormError(error instanceof Error ? error.message : String(error));
+                })
+              }
             >
               {isEdit ? "Save changes" : "Add endpoint"}
             </button>
@@ -397,10 +440,19 @@ interface ModelChecklistProps {
   readonly disabled: boolean;
 }
 
-function ModelChecklist({ probed, selected, onToggle, onManualAdd, disabled }: ModelChecklistProps) {
+function ModelChecklist({
+  probed,
+  selected,
+  onToggle,
+  onManualAdd,
+  disabled,
+}: ModelChecklistProps) {
   const [manualDraft, setManualDraft] = useState("");
   const selectedIds = useMemo(() => new Set(selected.map((model) => model.id)), [selected]);
-  const knownIds = useMemo(() => new Set([...probed, ...selected.map((model) => model.id)]), [probed, selected]);
+  const knownIds = useMemo(
+    () => new Set([...probed, ...selected.map((model) => model.id)]),
+    [probed, selected],
+  );
 
   const submitManual = () => {
     onManualAdd(manualDraft);
@@ -415,20 +467,22 @@ function ModelChecklist({ probed, selected, onToggle, onManualAdd, disabled }: M
         </p>
       ) : (
         <ul className="settings-list custom-endpoint-model-list">
-          {[...knownIds].sort((a, b) => a.localeCompare(b)).map((id) => (
-            <li key={id} className="settings-row">
-              <label className="settings-row__label">
-                <input
-                  aria-label={`Enable ${id}`}
-                  type="checkbox"
-                  checked={selectedIds.has(id)}
-                  disabled={disabled}
-                  onChange={() => onToggle(id)}
-                />
-                <span className="settings-row__title">{id}</span>
-              </label>
-            </li>
-          ))}
+          {[...knownIds]
+            .sort((a, b) => a.localeCompare(b))
+            .map((id) => (
+              <li key={id} className="settings-row">
+                <label className="settings-row__label">
+                  <input
+                    aria-label={`Enable ${id}`}
+                    type="checkbox"
+                    checked={selectedIds.has(id)}
+                    disabled={disabled}
+                    onChange={() => onToggle(id)}
+                  />
+                  <span className="settings-row__title">{id}</span>
+                </label>
+              </li>
+            ))}
         </ul>
       )}
       <div className="settings-row">

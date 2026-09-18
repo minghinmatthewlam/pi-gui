@@ -8,9 +8,9 @@ async function main() {
       "asset-url": { type: "string" },
       "cask-token": { type: "string", default: "pi-gui" },
       "dry-run": { type: "boolean", default: false },
-      "sha256": { type: "string" },
+      sha256: { type: "string" },
       "tap-dir": { type: "string" },
-      "version": { type: "string" },
+      version: { type: "string" },
     },
     strict: true,
   });

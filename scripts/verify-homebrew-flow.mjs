@@ -118,9 +118,7 @@ async function verifyExecutableLaunch(executablePath, tempRoot) {
   });
 
   if (stayedAlive !== true) {
-    throw new Error(
-      `Upgraded app exited too early: ${JSON.stringify(stayedAlive)}.`,
-    );
+    throw new Error(`Upgraded app exited too early: ${JSON.stringify(stayedAlive)}.`);
   }
 
   child.kill("SIGTERM");
@@ -193,10 +191,15 @@ async function main() {
     await run("git", ["config", "user.name", "Codex"], { cwd: tapDir });
     await run("git", ["config", "user.email", "codex@example.com"], { cwd: tapDir });
     await run("git", ["add", "."], { cwd: tapDir });
-    await run("git", ["commit", "-m", `Seed ${values["cask-token"]} ${values["version-a"]}`], { cwd: tapDir });
+    await run("git", ["commit", "-m", `Seed ${values["cask-token"]} ${values["version-a"]}`], {
+      cwd: tapDir,
+    });
 
     await ensureBrewCommand(["untap", values["tap-name"]], brewEnv).catch(() => undefined);
-    await ensureBrewCommand(["uninstall", "--cask", "--force", values["cask-token"]], brewEnv).catch(() => undefined);
+    await ensureBrewCommand(
+      ["uninstall", "--cask", "--force", values["cask-token"]],
+      brewEnv,
+    ).catch(() => undefined);
     await ensureBrewCommand(["tap", "--custom-remote", values["tap-name"], tapDir], brewEnv);
     const tappedRepoDir = await brewRepo(values["tap-name"], brewEnv);
     const tappedCaskPath = resolveCaskPath(tappedRepoDir, values["cask-token"]);
@@ -215,9 +218,13 @@ async function main() {
       "utf8",
     );
     await run("git", ["add", tappedCaskPath], { cwd: tappedRepoDir });
-    await run("git", ["commit", "-m", `Upgrade ${values["cask-token"]} to ${values["version-b"]}`], {
-      cwd: tappedRepoDir,
-    });
+    await run(
+      "git",
+      ["commit", "-m", `Upgrade ${values["cask-token"]} to ${values["version-b"]}`],
+      {
+        cwd: tappedRepoDir,
+      },
+    );
 
     await ensureBrewCommand(["upgrade", "--cask", qualifiedToken, "--appdir", appDir], brewEnv);
     assert.equal(await plistVersion(appBundlePath), values["version-b"]);
@@ -225,7 +232,10 @@ async function main() {
 
     process.stdout.write(`Verified Homebrew install and upgrade flow in ${tempRoot}.\n`);
   } finally {
-    await ensureBrewCommand(["uninstall", "--cask", "--force", values["cask-token"]], brewEnv).catch(() => undefined);
+    await ensureBrewCommand(
+      ["uninstall", "--cask", "--force", values["cask-token"]],
+      brewEnv,
+    ).catch(() => undefined);
     await ensureBrewCommand(["untap", values["tap-name"]], brewEnv).catch(() => undefined);
     if (!values["keep-temp"]) {
       await rm(tempRoot, { recursive: true, force: true });
@@ -234,6 +244,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error(error instanceof Error ? error.stack ?? error.message : error);
+  console.error(error instanceof Error ? (error.stack ?? error.message) : error);
   process.exitCode = 1;
 });

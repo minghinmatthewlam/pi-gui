@@ -1,7 +1,11 @@
 import { sessionKey } from "@pi-gui/pi-sdk-driver";
 import type { SessionDriverEvent, SessionSnapshot } from "@pi-gui/session-driver";
 import type { DesktopAppState, SessionRecord, TranscriptMessage } from "../src/desktop-state";
-import { cloneTranscriptMessage, hasUnseenSessionUpdate, previewFromTranscript } from "./app-store-utils";
+import {
+  cloneTranscriptMessage,
+  hasUnseenSessionUpdate,
+  previewFromTranscript,
+} from "./app-store-utils";
 import { NEW_THREAD_PLACEHOLDER_TITLE } from "./thread-title-constants";
 
 export function applySessionEventState(
@@ -61,7 +65,7 @@ export function updateSessionRecord(
   const title =
     snapshotTitle === NEW_THREAD_PLACEHOLDER_TITLE && session.title !== NEW_THREAD_PLACEHOLDER_TITLE
       ? session.title
-      : snapshotTitle ?? session.title;
+      : (snapshotTitle ?? session.title);
   return {
     ...session,
     title,
@@ -71,7 +75,12 @@ export function updateSessionRecord(
     preview: options.preview ?? options.snapshot?.preview ?? session.preview,
     status: nextStatus,
     runningSince: options.runningSince,
-    hasUnseenUpdate: hasUnseenSessionUpdate(nextStatus, updatedAt, options.lastViewedAt, options.transcript),
+    hasUnseenUpdate: hasUnseenSessionUpdate(
+      nextStatus,
+      updatedAt,
+      options.lastViewedAt,
+      options.transcript,
+    ),
     config: options.snapshot?.config ?? session.config,
   };
 }
@@ -87,7 +96,10 @@ function snapshotForEvent(event: SessionDriverEvent) {
   }
 }
 
-function statusForEvent(sessionStatus: SessionRecord["status"], event: SessionDriverEvent): SessionRecord["status"] {
+function statusForEvent(
+  sessionStatus: SessionRecord["status"],
+  event: SessionDriverEvent,
+): SessionRecord["status"] {
   switch (event.type) {
     case "sessionOpened":
     case "sessionUpdated":

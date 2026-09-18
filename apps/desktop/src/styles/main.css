@@ -649,7 +649,12 @@
 .terminal-panel__error {
   padding: 18px;
   color: var(--error-ink);
-  font: 12px Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font:
+    12px Menlo,
+    Monaco,
+    Consolas,
+    "Liberation Mono",
+    monospace;
   white-space: pre-wrap;
 }
 
@@ -761,9 +766,14 @@
   border: 1px solid var(--theme-control-border, var(--line));
   background: var(--theme-control-bg, var(--surface));
   width: 100%;
-  box-shadow: 0 0 0 1px var(--theme-focus-ring, transparent), var(--shadow-md);
+  box-shadow:
+    0 0 0 1px var(--theme-focus-ring, transparent),
+    var(--shadow-md);
   overflow: visible;
-  transition: border-color var(--motion-base) var(--ease-out), box-shadow var(--motion-base) var(--ease-out), background-color var(--motion-base) var(--ease-out);
+  transition:
+    border-color var(--motion-base) var(--ease-out),
+    box-shadow var(--motion-base) var(--ease-out),
+    background-color var(--motion-base) var(--ease-out);
 }
 
 .composer__surface--drag-active {
@@ -1427,7 +1437,12 @@
 }
 
 .slash-menu__command--skill {
-  font-family: ui-monospace, SFMono-Regular, SF Mono, Menlo, monospace;
+  font-family:
+    ui-monospace,
+    SFMono-Regular,
+    SF Mono,
+    Menlo,
+    monospace;
   font-size: 11px;
   letter-spacing: 0.01em;
   color: var(--muted);

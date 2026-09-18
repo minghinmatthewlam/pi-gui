@@ -14,7 +14,7 @@ async function withTempDir(fn: (dir: string) => Promise<void>): Promise<void> {
   }
 }
 
-test("writes new content and creates missing directories", async () => {
+await test("writes new content and creates missing directories", async () => {
   await withTempDir(async (dir) => {
     const target = join(dir, "nested", "catalog.json");
     await writeFileAtomic(target, "hello");
@@ -22,7 +22,7 @@ test("writes new content and creates missing directories", async () => {
   });
 });
 
-test("leaves only the target file behind, no lingering temp files", async () => {
+await test("leaves only the target file behind, no lingering temp files", async () => {
   await withTempDir(async (dir) => {
     const target = join(dir, "catalog.json");
     await writeFileAtomic(target, "one");
@@ -33,7 +33,7 @@ test("leaves only the target file behind, no lingering temp files", async () => 
   });
 });
 
-test("concurrent writes never collide or leave a partial file; result is one of the inputs", async () => {
+await test("concurrent writes never collide or leave a partial file; result is one of the inputs", async () => {
   await withTempDir(async (dir) => {
     const target = join(dir, "catalog.json");
     const payloads = Array.from({ length: 40 }, (_, i) => `payload-${i}-${"x".repeat(i * 32)}`);

@@ -1,7 +1,6 @@
 import { app, net, Notification, shell } from "electron";
 
-const RELEASES_URL =
-  "https://api.github.com/repos/minghinmatthewlam/pi-gui/releases?per_page=1";
+const RELEASES_URL = "https://api.github.com/repos/minghinmatthewlam/pi-gui/releases?per_page=1";
 const RELEASES_PAGE = "https://github.com/minghinmatthewlam/pi-gui/releases";
 
 const CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000; // 4 hours
@@ -40,7 +39,9 @@ export function showUpdateNotification(
     body: `Version ${latestVersion} is available (you have ${currentVersion}). Click to view the release.`,
   });
   notification.on("click", () => {
-    void openReleasesPage(releaseUrl);
+    void openReleasesPage(releaseUrl).catch((error: unknown) => {
+      console.error("[update-checker] openReleasesPage failed", error);
+    });
   });
   notification.show();
 }
@@ -130,8 +131,20 @@ export function initUpdateChecker(): () => void {
     }
   };
 
-  const timeout = setTimeout(() => void runAutoCheck(), INITIAL_DELAY_MS);
-  const interval = setInterval(() => void runAutoCheck(), CHECK_INTERVAL_MS);
+  const timeout = setTimeout(
+    () =>
+      void runAutoCheck().catch((error: unknown) => {
+        console.error("[update-checker] runAutoCheck failed", error);
+      }),
+    INITIAL_DELAY_MS,
+  );
+  const interval = setInterval(
+    () =>
+      void runAutoCheck().catch((error: unknown) => {
+        console.error("[update-checker] runAutoCheck failed", error);
+      }),
+    CHECK_INTERVAL_MS,
+  );
 
   return () => {
     clearTimeout(timeout);
@@ -194,7 +207,9 @@ export function compareSemver(a: string, b: string): number {
   return comparePrerelease(pa.pre, pb.pre);
 }
 
-function parseSemver(version: string): { nums: [number, number, number]; pre: string[] } | undefined {
+function parseSemver(
+  version: string,
+): { nums: [number, number, number]; pre: string[] } | undefined {
   const match = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?/.exec(version.trim());
   if (!match) {
     return undefined;

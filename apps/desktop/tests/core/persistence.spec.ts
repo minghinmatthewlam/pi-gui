@@ -108,7 +108,11 @@ test("persists attachments separately from ui state and restores the current dra
     expect(uiState.transcripts).toBeUndefined();
     expect(uiState.composerAttachmentsBySession).toBeUndefined();
 
-    const attachmentPath = join(userDataDir, "attachments", encodeURIComponent(`${workspaceId}:${sessionId}`) + ".json");
+    const attachmentPath = join(
+      userDataDir,
+      "attachments",
+      encodeURIComponent(`${workspaceId}:${sessionId}`) + ".json",
+    );
     await expect
       .poll(async () => {
         try {
@@ -117,7 +121,7 @@ test("persists attachments separately from ui state and restores the current dra
           return "";
         }
       })
-      .toContain("\"kind\": \"image\"");
+      .toContain('"kind": "image"');
     await expect
       .poll(async () => {
         try {
@@ -126,7 +130,7 @@ test("persists attachments separately from ui state and restores the current dra
           return "";
         }
       })
-      .toContain("\"kind\": \"file\"");
+      .toContain('"kind": "file"');
   } finally {
     await firstRun.close();
   }
@@ -193,8 +197,12 @@ test("recovers persisted ui state from the backup when ui-state.json is corrupt"
   const secondRun = await launchDesktop(userDataDir, { testMode: "background" });
   try {
     const window = await secondRun.firstWindow();
-    await expect(window.getByTestId("workspace-list")).toContainText("corruption-recovery-workspace");
-    await expect(window.getByTestId("composer")).toHaveValue("recover me from backup", { timeout: 15_000 });
+    await expect(window.getByTestId("workspace-list")).toContainText(
+      "corruption-recovery-workspace",
+    );
+    await expect(window.getByTestId("composer")).toHaveValue("recover me from backup", {
+      timeout: 15_000,
+    });
   } finally {
     await secondRun.close();
   }
@@ -238,16 +246,16 @@ test("recovers from parseable malformed nested state without overwriting valid f
     workspaceId = state.selectedWorkspaceId;
     sessionId = state.selectedSessionId;
     await createSessionViaIpc(window, workspaceId, "Supervised child session");
-    childSessionId = (await getDesktopState(window)).workspaces
-      .find((entry) => entry.id === workspaceId)
-      ?.sessions.find((entry) => entry.title === "Supervised child session")
-      ?.id ?? "";
+    childSessionId =
+      (await getDesktopState(window)).workspaces
+        .find((entry) => entry.id === workspaceId)
+        ?.sessions.find((entry) => entry.title === "Supervised child session")?.id ?? "";
     expect(childSessionId).toBeTruthy();
     await selectSession(window, "Malformed nested state session");
     await window.getByTestId("composer").fill("valid draft survives malformed nested state");
-    await expect.poll(async () => readFile(uiStatePath, "utf8")).toContain(
-      "valid draft survives malformed nested state",
-    );
+    await expect
+      .poll(async () => readFile(uiStatePath, "utf8"))
+      .toContain("valid draft survives malformed nested state");
   } finally {
     await firstRun.close();
   }
@@ -325,9 +333,15 @@ test("recovers from parseable malformed nested state without overwriting valid f
   });
   try {
     const window = await secondRun.firstWindow();
-    await expect(window.getByTestId("workspace-list")).toContainText("malformed-nested-state-workspace");
-    await expect(window.locator(".session-row--active")).toContainText("Malformed nested state session");
-    await expect(window.getByTestId("composer")).toHaveValue("valid draft survives malformed nested state");
+    await expect(window.getByTestId("workspace-list")).toContainText(
+      "malformed-nested-state-workspace",
+    );
+    await expect(window.locator(".session-row--active")).toContainText(
+      "Malformed nested state session",
+    );
+    await expect(window.getByTestId("composer")).toHaveValue(
+      "valid draft survives malformed nested state",
+    );
     await expect(window.getByTestId("transcript")).toContainText(
       "valid catalog transcript survives malformed nested state",
     );
@@ -339,14 +353,19 @@ test("recovers from parseable malformed nested state without overwriting valid f
     expect(state.selectedSessionId).toBe(sessionId);
     expect(state.lastError).toBeUndefined();
     expect(state.startupDiagnostics).toEqual([]);
-    expect(state.extensionCommandCompatibilityByWorkspace[workspaceId]).toEqual([validCompatibility]);
+    expect(state.extensionCommandCompatibilityByWorkspace[workspaceId]).toEqual([
+      validCompatibility,
+    ]);
     await expect
-      .poll(async () => {
-        const child = (await getDesktopState(window)).orchestrationChildren.find(
-          (entry) => entry.id === "persisted-supervised-child",
-        );
-        return child?.supervisionLoop?.iterationCount ?? 0;
-      }, { timeout: 10_000 })
+      .poll(
+        async () => {
+          const child = (await getDesktopState(window)).orchestrationChildren.find(
+            (entry) => entry.id === "persisted-supervised-child",
+          );
+          return child?.supervisionLoop?.iterationCount ?? 0;
+        },
+        { timeout: 10_000 },
+      )
       .toBeGreaterThan(7);
 
     const recovered = JSON.parse(await readFile(uiStatePath, "utf8")) as Record<string, unknown>;
@@ -390,63 +409,74 @@ test("preserves durable ui state when one startup workspace is unavailable", asy
   let unavailableSessionId = "";
   try {
     const window = await firstRun.firstWindow();
-    const seededState = await window.evaluate(async ({ healthyPath, unavailablePath }) => {
-      const app = window.piApp;
-      if (!app) {
-        throw new Error("piApp IPC bridge is unavailable");
-      }
-      let state = await app.getState();
-      const healthy = state.workspaces.find((entry) => entry.path === healthyPath);
-      const unavailable = state.workspaces.find((entry) => entry.path === unavailablePath);
-      if (!healthy || !unavailable) {
-        throw new Error("Expected both seeded workspaces");
-      }
+    const seededState = await window.evaluate(
+      async ({ healthyPath, unavailablePath }) => {
+        const app = globalThis.window.piApp;
+        if (!app) {
+          throw new Error("piApp IPC bridge is unavailable");
+        }
+        let state = await app.getState();
+        const healthy = state.workspaces.find((entry) => entry.path === healthyPath);
+        const unavailable = state.workspaces.find((entry) => entry.path === unavailablePath);
+        if (!healthy || !unavailable) {
+          throw new Error("Expected both seeded workspaces");
+        }
 
-      await app.selectWorkspace(unavailable.id);
-      state = await app.createSession({ workspaceId: unavailable.id, title: "Unavailable workspace session" });
-      const session = state.workspaces
-        .find((entry) => entry.id === unavailable.id)
-        ?.sessions.find((entry) => entry.title === "Unavailable workspace session");
-      if (!session) {
-        throw new Error("Expected seeded unavailable-workspace session");
-      }
+        await app.selectWorkspace(unavailable.id);
+        state = await app.createSession({
+          workspaceId: unavailable.id,
+          title: "Unavailable workspace session",
+        });
+        const session = state.workspaces
+          .find((entry) => entry.id === unavailable.id)
+          ?.sessions.find((entry) => entry.title === "Unavailable workspace session");
+        if (!session) {
+          throw new Error("Expected seeded unavailable-workspace session");
+        }
 
-      await app.selectSession({ workspaceId: unavailable.id, sessionId: session.id });
-      await app.updateComposerDraft("draft survives unavailable workspace");
-      // Let the renderer's draft debounce settle before unrelated durable writes.
-      // A stale local snapshot must not enqueue a later write that clears this draft.
-      await new Promise((resolve) => window.setTimeout(resolve, 500));
-      await app.setSessionPinned({ workspaceId: unavailable.id, sessionId: session.id }, true);
-      await app.reorderWorkspaces([unavailable.id, healthy.id]);
-      await app.setNotificationPreferences({
-        backgroundCompletion: false,
-        backgroundFailure: true,
-        attentionNeeded: false,
-      });
-      await app.setIntegratedTerminalShell("/bin/zsh");
-      await app.setThemePresetId("github");
-      await app.setSidebarCollapsed(true);
-      state = await app.getState();
-      return {
-        state,
-        healthyWorkspaceId: healthy.id,
-        unavailableWorkspaceId: unavailable.id,
-        unavailableSessionId: session.id,
-      };
-    }, { healthyPath: healthyWorkspacePath, unavailablePath: unavailableWorkspacePath });
+        await app.selectSession({ workspaceId: unavailable.id, sessionId: session.id });
+        await app.updateComposerDraft("draft survives unavailable workspace");
+        // Let the renderer's draft debounce settle before unrelated durable writes.
+        // A stale local snapshot must not enqueue a later write that clears this draft.
+        await new Promise((resolve) => globalThis.window.setTimeout(resolve, 500));
+        await app.setSessionPinned({ workspaceId: unavailable.id, sessionId: session.id }, true);
+        await app.reorderWorkspaces([unavailable.id, healthy.id]);
+        await app.setNotificationPreferences({
+          backgroundCompletion: false,
+          backgroundFailure: true,
+          attentionNeeded: false,
+        });
+        await app.setIntegratedTerminalShell("/bin/zsh");
+        await app.setThemePresetId("github");
+        await app.setSidebarCollapsed(true);
+        state = await app.getState();
+        return {
+          state,
+          healthyWorkspaceId: healthy.id,
+          unavailableWorkspaceId: unavailable.id,
+          unavailableSessionId: session.id,
+        };
+      },
+      { healthyPath: healthyWorkspacePath, unavailablePath: unavailableWorkspacePath },
+    );
 
     healthyWorkspaceId = seededState.healthyWorkspaceId;
     unavailableWorkspaceId = seededState.unavailableWorkspaceId;
     unavailableSessionId = seededState.unavailableSessionId;
     expect(seededState.state.selectedWorkspaceId).toBe(unavailableWorkspaceId);
     expect(seededState.state.selectedSessionId).toBe(unavailableSessionId);
-    await expect.poll(async () => readFile(uiStatePath, "utf8")).toContain("draft survives unavailable workspace");
+    await expect
+      .poll(async () => readFile(uiStatePath, "utf8"))
+      .toContain("draft survives unavailable workspace");
   } finally {
     await firstRun.close();
   }
 
   const sessionKey = `${unavailableWorkspaceId}:${unavailableSessionId}`;
-  const existingUiState = JSON.parse(await readFile(uiStatePath, "utf8")) as Record<string, unknown>;
+  const existingUiState = JSON.parse(await readFile(uiStatePath, "utf8")) as Record<
+    string,
+    unknown
+  >;
   const beforeFailure = {
     ...existingUiState,
     selectedWorkspaceId: unavailableWorkspaceId,
@@ -501,7 +531,9 @@ test("preserves durable ui state when one startup workspace is unavailable", asy
         workspacePath: unavailableWorkspacePath,
       }),
     ]);
-    await expect(window.getByTestId("startup-diagnostics")).toContainText("unavailable-startup-workspace");
+    await expect(window.getByTestId("startup-diagnostics")).toContainText(
+      "unavailable-startup-workspace",
+    );
 
     const afterFailure = JSON.parse(await readFile(uiStatePath, "utf8")) as Record<string, unknown>;
     for (const key of [
@@ -520,25 +552,31 @@ test("preserves durable ui state when one startup workspace is unavailable", asy
     }
 
     const healthySelection = await window.evaluate(async (workspaceId) => {
-      const app = window.piApp;
+      const app = globalThis.window.piApp;
       if (!app) {
         throw new Error("piApp IPC bridge is unavailable");
       }
       return app.selectWorkspace(workspaceId);
     }, healthyWorkspaceId);
     expect(healthySelection.selectedWorkspaceId).toBe(healthyWorkspaceId);
-    await window.evaluate(async ({ workspaceId, sessionId }) => {
-      const app = window.piApp;
-      if (!app) {
-        throw new Error("piApp IPC bridge is unavailable");
-      }
-      await app.selectSession({ workspaceId, sessionId });
-    }, { workspaceId: unavailableWorkspaceId, sessionId: unavailableSessionId });
+    await window.evaluate(
+      async ({ workspaceId, sessionId }) => {
+        const app = globalThis.window.piApp;
+        if (!app) {
+          throw new Error("piApp IPC bridge is unavailable");
+        }
+        await app.selectSession({ workspaceId, sessionId });
+      },
+      { workspaceId: unavailableWorkspaceId, sessionId: unavailableSessionId },
+    );
 
     const proofDir = process.env.PI_APP_PERSISTENCE_PROOF_DIR?.trim();
     if (proofDir) {
       await mkdir(proofDir, { recursive: true });
-      await window.screenshot({ path: join(proofDir, "unavailable-workspace-recovery.png"), fullPage: true });
+      await window.screenshot({
+        path: join(proofDir, "unavailable-workspace-recovery.png"),
+        fullPage: true,
+      });
       await writeFile(
         join(proofDir, "unavailable-workspace-second-launch.json"),
         `${JSON.stringify({ diagnostics, state }, null, 2)}\n`,
@@ -557,11 +595,16 @@ test("preserves durable ui state when one startup workspace is unavailable", asy
     expect(state.selectedSessionId).toBe(unavailableSessionId);
     expect(state.composerDraft).toBe("draft survives unavailable workspace");
     expect(state.workspaces.some((entry) => entry.id === healthyWorkspaceId)).toBe(true);
-    await expect(window.getByTestId("startup-diagnostics")).toContainText("unavailable-startup-workspace");
+    await expect(window.getByTestId("startup-diagnostics")).toContainText(
+      "unavailable-startup-workspace",
+    );
 
     const proofDir = process.env.PI_APP_PERSISTENCE_PROOF_DIR?.trim();
     if (proofDir) {
-      await window.screenshot({ path: join(proofDir, "unavailable-workspace-third-launch.png"), fullPage: true });
+      await window.screenshot({
+        path: join(proofDir, "unavailable-workspace-third-launch.png"),
+        fullPage: true,
+      });
     }
   } finally {
     await thirdRun.close();
@@ -617,7 +660,7 @@ test("migrates legacy inline attachment persistence and drops legacy inline tran
           return "";
         }
       })
-      .toContain("\"kind\": \"image\"");
+      .toContain('"kind": "image"');
   } finally {
     await firstRun.close();
   }
@@ -631,6 +674,7 @@ test("migrates legacy inline attachment persistence and drops legacy inline tran
     readFile(join(userDataDir, "ui-state.json"), "utf8"),
   ]);
 
+  const legacyAttachments: unknown = JSON.parse(attachmentRaw);
   const uiState = JSON.parse(uiStateRaw) as Record<string, unknown>;
   await unlink(attachmentPath);
   await writeFile(
@@ -640,11 +684,17 @@ test("migrates legacy inline attachment persistence and drops legacy inline tran
         ...uiState,
         transcripts: {
           [rawSessionKey]: [
-            { kind: "message", id: "legacy-1", role: "user", text: "legacy text", createdAt: new Date().toISOString() },
+            {
+              kind: "message",
+              id: "legacy-1",
+              role: "user",
+              text: "legacy text",
+              createdAt: new Date().toISOString(),
+            },
           ],
         },
         composerAttachmentsBySession: {
-          [rawSessionKey]: JSON.parse(attachmentRaw),
+          [rawSessionKey]: legacyAttachments,
         },
       },
       null,
@@ -656,12 +706,18 @@ test("migrates legacy inline attachment persistence and drops legacy inline tran
   const secondRun = await launchDesktop(userDataDir, { testMode: "background" });
   try {
     const window = await secondRun.firstWindow();
-    await expect(window.getByTestId("workspace-list")).toContainText("legacy-persistence-workspace");
-    await expect(window.locator(".session-row--active")).toContainText("Legacy persistence session");
+    await expect(window.getByTestId("workspace-list")).toContainText(
+      "legacy-persistence-workspace",
+    );
+    await expect(window.locator(".session-row--active")).toContainText(
+      "Legacy persistence session",
+    );
     await expect(window.getByTestId("composer")).toHaveValue("legacy draft", { timeout: 15_000 });
     await expect(window.locator(".composer-attachment")).toHaveCount(1);
 
-    const rewrittenUiState = JSON.parse(await readFile(join(userDataDir, "ui-state.json"), "utf8")) as Record<string, unknown>;
+    const rewrittenUiState = JSON.parse(
+      await readFile(join(userDataDir, "ui-state.json"), "utf8"),
+    ) as Record<string, unknown>;
     expect(rewrittenUiState.transcripts).toBeUndefined();
     expect(rewrittenUiState.composerAttachmentsBySession).toBeUndefined();
     await expect
@@ -672,7 +728,7 @@ test("migrates legacy inline attachment persistence and drops legacy inline tran
           return "";
         }
       })
-      .toContain("\"mimeType\": \"image/png\"");
+      .toContain('"mimeType": "image/png"');
   } finally {
     await secondRun.close();
   }

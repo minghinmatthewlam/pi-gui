@@ -24,7 +24,9 @@ export function isGlobalNpmLookupError(error: unknown): boolean {
   return message.includes("npm root -g");
 }
 
-export function createSettingsManagerWithoutNpmPackages(current: SettingsManager): SettingsManager | null {
+export function createSettingsManagerWithoutNpmPackages(
+  current: SettingsManager,
+): SettingsManager | null {
   const globalSettings = current.getGlobalSettings() as Record<string, unknown>;
   const projectSettings = current.getProjectSettings() as Record<string, unknown>;
   const nextGlobalPackages = filterOutNpmPackageSources(globalSettings.packages);
@@ -36,8 +38,12 @@ export function createSettingsManagerWithoutNpmPackages(current: SettingsManager
     return null;
   }
 
-  const nextGlobalSettings = globalChanged ? { ...globalSettings, packages: nextGlobalPackages } : globalSettings;
-  const nextProjectSettings = projectChanged ? { ...projectSettings, packages: nextProjectPackages } : projectSettings;
+  const nextGlobalSettings = globalChanged
+    ? { ...globalSettings, packages: nextGlobalPackages }
+    : globalSettings;
+  const nextProjectSettings = projectChanged
+    ? { ...projectSettings, packages: nextProjectPackages }
+    : projectSettings;
   return SettingsManager.fromStorage({
     withLock(scope, fn) {
       const currentJson =
@@ -52,7 +58,10 @@ export function createSettingsManagerWithoutNpmPackages(current: SettingsManager
 async function createAgentSessionServicesWithNpmFallback(
   cwd: string,
   agentDir: string,
-  options?: Pick<PiCreateAgentSessionOptions, "authStorage" | "settingsManager" | "modelRegistry" | "resourceLoaderOptions">,
+  options?: Pick<
+    PiCreateAgentSessionOptions,
+    "authStorage" | "settingsManager" | "modelRegistry" | "resourceLoaderOptions"
+  >,
 ) {
   try {
     return await createAgentSessionServices({
@@ -61,14 +70,17 @@ async function createAgentSessionServicesWithNpmFallback(
       ...(options?.authStorage ? { authStorage: options.authStorage } : {}),
       ...(options?.settingsManager ? { settingsManager: options.settingsManager } : {}),
       ...(options?.modelRegistry ? { modelRegistry: options.modelRegistry } : {}),
-      ...(options?.resourceLoaderOptions ? { resourceLoaderOptions: options.resourceLoaderOptions } : {}),
+      ...(options?.resourceLoaderOptions
+        ? { resourceLoaderOptions: options.resourceLoaderOptions }
+        : {}),
     });
   } catch (error) {
     if (!isGlobalNpmLookupError(error)) {
       throw error;
     }
 
-    const currentSettingsManager = options?.settingsManager ?? SettingsManager.create(cwd, agentDir);
+    const currentSettingsManager =
+      options?.settingsManager ?? SettingsManager.create(cwd, agentDir);
     const fallbackSettingsManager = createSettingsManagerWithoutNpmPackages(currentSettingsManager);
     if (!fallbackSettingsManager) {
       throw error;
@@ -86,7 +98,9 @@ async function createAgentSessionServicesWithNpmFallback(
       ...(options?.authStorage ? { authStorage: options.authStorage } : {}),
       settingsManager: fallbackSettingsManager,
       ...(options?.modelRegistry ? { modelRegistry: options.modelRegistry } : {}),
-      ...(options?.resourceLoaderOptions ? { resourceLoaderOptions: options.resourceLoaderOptions } : {}),
+      ...(options?.resourceLoaderOptions
+        ? { resourceLoaderOptions: options.resourceLoaderOptions }
+        : {}),
     });
   }
 }
@@ -144,13 +158,17 @@ export async function createAgentSessionRuntimeWithNpmFallback(
       useInitialSessionOptions = false;
       return createAgentSessionResultWithNpmFallback(runtimeCwd, runtimeAgentDir, sessionManager, {
         ...stableOptions,
-        ...(stableResourceLoaderOptions ? { resourceLoaderOptions: stableResourceLoaderOptions } : {}),
+        ...(stableResourceLoaderOptions
+          ? { resourceLoaderOptions: stableResourceLoaderOptions }
+          : {}),
         cwd: runtimeCwd,
         agentDir: runtimeAgentDir,
         sessionManager,
         ...(sessionStartEvent ? { sessionStartEvent } : {}),
         ...(includeInitialSessionOptions && initialModel ? { model: initialModel } : {}),
-        ...(includeInitialSessionOptions && initialThinkingLevel ? { thinkingLevel: initialThinkingLevel } : {}),
+        ...(includeInitialSessionOptions && initialThinkingLevel
+          ? { thinkingLevel: initialThinkingLevel }
+          : {}),
       });
     },
     {

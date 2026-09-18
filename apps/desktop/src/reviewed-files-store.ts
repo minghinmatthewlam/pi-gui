@@ -8,7 +8,7 @@ export function loadReviewed(workspaceId: string, sessionId: string): ReadonlySe
   const raw = readStorage(reviewedFilesKey(workspaceId, sessionId));
   if (!raw) return new Set();
   try {
-    const parsed = JSON.parse(raw);
+    const parsed: unknown = JSON.parse(raw);
     if (Array.isArray(parsed)) {
       return new Set(parsed.filter((entry): entry is string => typeof entry === "string"));
     }

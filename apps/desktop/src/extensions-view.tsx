@@ -47,8 +47,11 @@ export function ExtensionsView({
     );
   }, [extensions, query]);
   const selectedExtension =
-    filteredExtensions.find((extension) => extension.path === selectedExtensionPath) ?? filteredExtensions[0];
-  const selectedExtensionCanBeManaged = selectedExtension ? isManageableExtension(selectedExtension) : false;
+    filteredExtensions.find((extension) => extension.path === selectedExtensionPath) ??
+    filteredExtensions[0];
+  const selectedExtensionCanBeManaged = selectedExtension
+    ? isManageableExtension(selectedExtension)
+    : false;
   const selectedCompatibilityRecords = useMemo(
     () =>
       selectedExtension
@@ -65,7 +68,10 @@ export function ExtensionsView({
         <div className="empty-panel">
           <div className="session-header__eyebrow">Extensions</div>
           <h1>Select a workspace</h1>
-          <p>Extensions are discovered from the selected workspace plus your user-level extension directories.</p>
+          <p>
+            Extensions are discovered from the selected workspace plus your user-level extension
+            directories.
+          </p>
         </div>
       </section>
     );
@@ -117,7 +123,9 @@ export function ExtensionsView({
                 >
                   <span className="skill-card__title-row">
                     <span className="skill-card__title">{extension.displayName}</span>
-                    <span className={`skill-card__badge ${extension.enabled ? "skill-card__badge--enabled" : ""}`}>
+                    <span
+                      className={`skill-card__badge ${extension.enabled ? "skill-card__badge--enabled" : ""}`}
+                    >
                       {extension.enabled ? "Enabled" : "Disabled"}
                     </span>
                   </span>
@@ -126,9 +134,15 @@ export function ExtensionsView({
                   </span>
                   <span className="skill-card__meta">
                     <span>{extension.sourceInfo.source}</span>
-                    {extension.commands.length > 0 ? <span>{extension.commands.length} commands</span> : null}
-                    {extension.tools.length > 0 ? <span>{extension.tools.length} tools</span> : null}
-                    {extension.diagnostics.length > 0 ? <span>{extension.diagnostics.length} issues</span> : null}
+                    {extension.commands.length > 0 ? (
+                      <span>{extension.commands.length} commands</span>
+                    ) : null}
+                    {extension.tools.length > 0 ? (
+                      <span>{extension.tools.length} tools</span>
+                    ) : null}
+                    {extension.diagnostics.length > 0 ? (
+                      <span>{extension.diagnostics.length} issues</span>
+                    ) : null}
                   </span>
                 </button>
               ))
@@ -143,7 +157,9 @@ export function ExtensionsView({
                     <h2>{selectedExtension.displayName}</h2>
                     <div className="skill-detail__slash">{selectedExtension.sourceInfo.source}</div>
                   </div>
-                  <span className={`skill-detail__status ${selectedExtension.enabled ? "skill-detail__status--enabled" : ""}`}>
+                  <span
+                    className={`skill-detail__status ${selectedExtension.enabled ? "skill-detail__status--enabled" : ""}`}
+                  >
                     {selectedExtension.enabled ? "Enabled" : "Disabled"}
                   </span>
                 </div>
@@ -152,32 +168,58 @@ export function ExtensionsView({
                   <DetailItem label="Origin" value={selectedExtension.sourceInfo.origin} />
                   <DetailItem label="Path" value={selectedExtension.path} mono />
                   {selectedExtension.sourceInfo.baseDir ? (
-                    <DetailItem label="Base dir" value={selectedExtension.sourceInfo.baseDir} mono />
+                    <DetailItem
+                      label="Base dir"
+                      value={selectedExtension.sourceInfo.baseDir}
+                      mono
+                    />
                   ) : null}
                 </div>
                 {selectedExtensionCanBeManaged ? (
                   <div className="skill-detail__actions">
-                    <button className="button button--secondary" type="button" onClick={() => onOpenExtensionFolder(selectedExtension.path)}>
+                    <button
+                      className="button button--secondary"
+                      type="button"
+                      onClick={() => onOpenExtensionFolder(selectedExtension.path)}
+                    >
                       Open folder
                     </button>
                     <button
                       className="button button--secondary"
                       type="button"
-                      onClick={() => onToggleExtension(selectedExtension.path, !selectedExtension.enabled)}
+                      onClick={() =>
+                        onToggleExtension(selectedExtension.path, !selectedExtension.enabled)
+                      }
                     >
                       {selectedExtension.enabled ? "Disable" : "Enable"}
                     </button>
                   </div>
                 ) : null}
 
-                <ExtensionContributionSection title="Commands" items={selectedExtension.commands} emptyLabel="No commands contributed." />
+                <ExtensionContributionSection
+                  title="Commands"
+                  items={selectedExtension.commands}
+                  emptyLabel="No commands contributed."
+                />
                 <ExtensionCompatibilitySection
                   commands={selectedExtension.commands}
                   compatibilityRecords={selectedCompatibilityRecords}
                 />
-                <ExtensionContributionSection title="Tools" items={selectedExtension.tools} emptyLabel="No tools contributed." />
-                <ExtensionContributionSection title="Flags" items={selectedExtension.flags} emptyLabel="No flags contributed." />
-                <ExtensionContributionSection title="Shortcuts" items={selectedExtension.shortcuts} emptyLabel="No shortcuts contributed." />
+                <ExtensionContributionSection
+                  title="Tools"
+                  items={selectedExtension.tools}
+                  emptyLabel="No tools contributed."
+                />
+                <ExtensionContributionSection
+                  title="Flags"
+                  items={selectedExtension.flags}
+                  emptyLabel="No flags contributed."
+                />
+                <ExtensionContributionSection
+                  title="Shortcuts"
+                  items={selectedExtension.shortcuts}
+                  emptyLabel="No shortcuts contributed."
+                />
                 <ExtensionDiagnostics diagnostics={selectedExtension.diagnostics} />
               </>
             ) : (
@@ -252,9 +294,14 @@ function ExtensionDiagnostics({
         {diagnostics.length > 0 ? (
           <div className="extension-detail__diagnostics">
             {diagnostics.map((diagnostic, index) => (
-              <div className={`activity-item activity-item--${diagnostic.type === "error" ? "error" : "info"}`} key={`${diagnostic.message}:${index}`}>
+              <div
+                className={`activity-item activity-item--${diagnostic.type === "error" ? "error" : "info"}`}
+                key={`${diagnostic.message}:${index}`}
+              >
                 <div className="activity-item__text">{diagnostic.message}</div>
-                {diagnostic.path ? <div className="activity-item__meta">{diagnostic.path}</div> : null}
+                {diagnostic.path ? (
+                  <div className="activity-item__meta">{diagnostic.path}</div>
+                ) : null}
               </div>
             ))}
           </div>
@@ -277,7 +324,8 @@ function ExtensionCompatibilitySection({
   const terminalOnly = compatibilityRecords.filter((record) => record.status === "terminal-only");
   const unknown = commands.filter((commandName) =>
     compatibilityRecords.every(
-      (record) => record.commandName !== commandName && !record.commandName.startsWith(`${commandName}:`),
+      (record) =>
+        record.commandName !== commandName && !record.commandName.startsWith(`${commandName}:`),
     ),
   );
 
@@ -295,7 +343,10 @@ function ExtensionCompatibilitySection({
             </span>
           ))}
           {terminalOnly.map((record) => (
-            <span className="slash-menu__skill-badge slash-menu__skill-badge--warning" key={`terminal:${record.commandName}`}>
+            <span
+              className="slash-menu__skill-badge slash-menu__skill-badge--warning"
+              key={`terminal:${record.commandName}`}
+            >
               {record.commandName} · Terminal-only
             </span>
           ))}

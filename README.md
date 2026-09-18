@@ -19,12 +19,12 @@ execution all run through upstream `pi`.
 
 ## Screenshots
 
-| Thread timeline (dark) | Thread timeline (light) |
-| --- | --- |
+| Thread timeline (dark)                                    | Thread timeline (light)                                     |
+| --------------------------------------------------------- | ----------------------------------------------------------- |
 | ![Thread view, dark theme](./docs/assets/thread-dark.png) | ![Thread view, light theme](./docs/assets/thread-light.png) |
 
-| Inline diff viewer | Integrated terminal |
-| --- | --- |
+| Inline diff viewer                         | Integrated terminal                                     |
+| ------------------------------------------ | ------------------------------------------------------- |
 | ![Diff panel](./docs/assets/diff-dark.png) | ![Integrated terminal](./docs/assets/terminal-dark.png) |
 
 ## Features
@@ -108,7 +108,7 @@ Supporting packages: `packages/session-driver` (shared session driver types) and
 
 ## Development
 
-Requires Node 20+ and [pnpm](https://pnpm.io) (managed via `corepack`). pnpm is
+Requires Node >=22.19.0 <26 and [pnpm](https://pnpm.io) (managed via `corepack`). pnpm is
 the supported package manager, and `pnpm-lock.yaml` is the authoritative lockfile.
 
 ```bash
@@ -120,11 +120,20 @@ Common commands (run from the repo root):
 
 ```bash
 pnpm dev         # run the desktop app in development (electron-vite, hot reload)
+pnpm check       # CI baseline: formatting, lint, renderer boundaries, workspace types, guard/driver/release-helper tests
 pnpm build       # build all workspaces
 pnpm typecheck   # type-check all workspaces
-pnpm lint        # lint all workspaces
+pnpm format      # apply the shared formatter locally
+pnpm format:check # check formatting without changing files
+pnpm lint        # correctness rules plus typed promise and unsafe-any checks
 pnpm test        # run each workspace's tests (desktop runs the core E2E lane)
 ```
+
+`pnpm check` is the shared local/CI baseline. It does not launch Electron or
+replace the desktop, website-build, and package CI jobs. Formatting is enforced;
+typed lint rejects unsafe uses of `any` but does not ban every explicit `any` declaration.
+CI rejects Playwright `.only` tests so one focused test cannot hide the suite.
+See [the CI adoption plan](docs/ci-baseline.md) for current coverage and next steps.
 
 Desktop end-to-end tests use a Playwright + Electron harness and are organized into
 lanes. The default `pnpm test` runs the `core` lane; to run everything:

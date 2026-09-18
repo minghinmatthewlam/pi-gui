@@ -28,7 +28,9 @@ test("supports workspace rename and remove from the sidebar menu", async () => {
     const workspace = state.workspaces.find((entry) => entry.path === workspaceA);
     assertExists(workspace, "Expected first workspace");
 
-    await window.getByRole("button", { name: `Workspace actions for ${basename(workspaceA)}` }).click();
+    await window
+      .getByRole("button", { name: `Workspace actions for ${basename(workspaceA)}` })
+      .click();
     const workspaceMenu = window.locator(".workspace-menu").last();
     await expect(workspaceMenu.getByRole("button", { name: "Open folder" })).toBeVisible();
     await expect(workspaceMenu.getByRole("button", { name: "Edit name" })).toBeVisible();
@@ -39,21 +41,23 @@ test("supports workspace rename and remove from the sidebar menu", async () => {
     await renameInput.fill("Renamed workspace");
     await window.getByRole("button", { name: "Save" }).click();
 
-    await expect.poll(async () => {
-      const latest = await getDesktopState(window);
-      return latest.workspaces.find((entry) => entry.id === workspace.id)?.name;
-    }).toBe("Renamed workspace");
+    await expect
+      .poll(async () => {
+        const latest = await getDesktopState(window);
+        return latest.workspaces.find((entry) => entry.id === workspace.id)?.name;
+      })
+      .toBe("Renamed workspace");
 
-    window.once("dialog", (dialog) => {
-      void dialog.accept();
-    });
+    const acceptRemoval = window.waitForEvent("dialog").then((dialog) => dialog.accept());
     await window.getByRole("button", { name: "Workspace actions for Renamed workspace" }).click();
-    await window.getByRole("button", { name: "Remove" }).click();
+    await Promise.all([window.getByRole("button", { name: "Remove" }).click(), acceptRemoval]);
 
-    await expect.poll(async () => {
-      const latest = await getDesktopState(window);
-      return latest.workspaces.some((entry) => entry.id === workspace.id);
-    }).toBe(false);
+    await expect
+      .poll(async () => {
+        const latest = await getDesktopState(window);
+        return latest.workspaces.some((entry) => entry.id === workspace.id);
+      })
+      .toBe(false);
   } finally {
     await harness.close();
   }

@@ -1,5 +1,8 @@
 import type { SessionConfig } from "@pi-gui/session-driver";
-import { createEmptyExtensionUiState as createBaseExtensionUiState, type ExtensionUiState } from "@pi-gui/pi-sdk-driver";
+import {
+  createEmptyExtensionUiState as createBaseExtensionUiState,
+  type ExtensionUiState,
+} from "@pi-gui/pi-sdk-driver";
 import type { RuntimeCommandRecord } from "@pi-gui/session-driver/runtime-types";
 import type {
   ComposerAttachment,
@@ -110,7 +113,11 @@ export class SessionStateMap {
   /** Remove persisted UI entries for sessions that are no longer in the catalog. */
   prunePersistedUiState(activeKeys: Set<string>): boolean {
     let changed = false;
-    for (const map of [this.composerDraftsBySession, this.lastViewedAtBySession, this.pinnedAtBySession]) {
+    for (const map of [
+      this.composerDraftsBySession,
+      this.lastViewedAtBySession,
+      this.pinnedAtBySession,
+    ]) {
       for (const key of map.keys()) {
         if (!activeKeys.has(key)) {
           map.delete(key);
@@ -159,7 +166,9 @@ export function createEmptyExtensionUiState(): MutableSessionExtensionUiState {
   };
 }
 
-export function serializeExtensionUiState(state: MutableSessionExtensionUiState): SessionExtensionUiStateRecord {
+export function serializeExtensionUiState(
+  state: MutableSessionExtensionUiState,
+): SessionExtensionUiStateRecord {
   return {
     statuses: [...state.statuses.entries()].map(([key, text]) => ({ key, text })),
     widgets: [...state.widgets.values()],

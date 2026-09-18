@@ -122,9 +122,7 @@ export async function checkGithubReleaseState({
     }
   }
 
-  throw new Error(
-    `GitHub release lookup exceeded 100 pages without proving the state of ${tag}`,
-  );
+  throw new Error(`GitHub release lookup exceeded 100 pages without proving the state of ${tag}`);
 }
 
 async function main() {

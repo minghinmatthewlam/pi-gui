@@ -36,7 +36,10 @@ test("shows workspace file mentions from the composer and inserts the selected f
 
     const mentionMenu = window.getByTestId("mention-menu");
     await expect(mentionMenu).toBeVisible();
-    await expect(mentionMenu.locator(".mention-menu__section-title")).toHaveText(["Extensions", "Files"]);
+    await expect(mentionMenu.locator(".mention-menu__section-title")).toHaveText([
+      "Extensions",
+      "Files",
+    ]);
     await expect(mentionMenu.locator(".mention-menu__item")).toHaveCount(3);
 
     await composer.pressSequentially("README");
@@ -98,7 +101,7 @@ test("toggles the diff panel from the keyboard shortcut and renders changed file
     const panelBox = await diffPanel.boundingBox();
     expect(mainBox).not.toBeNull();
     expect(panelBox).not.toBeNull();
-    expect((panelBox?.x ?? 0)).toBeGreaterThan((mainBox?.x ?? 0) + (mainBox?.width ?? 0) / 2);
+    expect(panelBox?.x ?? 0).toBeGreaterThan((mainBox?.x ?? 0) + (mainBox?.width ?? 0) / 2);
 
     await diffPanel.locator(".diff-panel__file-name").click();
     await expect(diffPanel.locator(".diff-inline")).toBeVisible();

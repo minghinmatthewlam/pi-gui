@@ -1,5 +1,8 @@
 import type { ReactNode } from "react";
-import type { RuntimeSettingsSnapshot, RuntimeSnapshot } from "@pi-gui/session-driver/runtime-types";
+import type {
+  RuntimeSettingsSnapshot,
+  RuntimeSnapshot,
+} from "@pi-gui/session-driver/runtime-types";
 
 export type SettingsSection = "appearance" | "general" | "providers" | "models" | "notifications";
 
@@ -15,7 +18,9 @@ export function settingsPill(active: boolean): string {
   return `settings-pill${active ? " settings-pill--active" : ""}`;
 }
 
-export function labelForThinking(level: NonNullable<RuntimeSettingsSnapshot["defaultThinkingLevel"]>): string {
+export function labelForThinking(
+  level: NonNullable<RuntimeSettingsSnapshot["defaultThinkingLevel"]>,
+): string {
   if (level === "xhigh") {
     return "Extra High";
   }
@@ -61,7 +66,9 @@ export function filterProviders(
     return providers;
   }
   return providers.filter((provider) =>
-    [provider.id, provider.name, provider.authType].some((value) => value.toLowerCase().includes(normalized)),
+    [provider.id, provider.name, provider.authType].some((value) =>
+      value.toLowerCase().includes(normalized),
+    ),
   );
 }
 
@@ -120,7 +127,13 @@ export function SettingsRow({
   );
 }
 
-export function SettingsInfoRow({ label, value }: { readonly label: string; readonly value: string }) {
+export function SettingsInfoRow({
+  label,
+  value,
+}: {
+  readonly label: string;
+  readonly value: string;
+}) {
   return (
     <div className="settings-row">
       <div className="settings-row__label">
@@ -144,7 +157,12 @@ export function ProviderRow({
   readonly onLogoutProvider: (providerId: string) => void;
   readonly onConfigureApiKey: (provider: RuntimeSnapshot["providers"][number]) => void;
 }) {
-  const action = resolveProviderAction(provider, onLoginProvider, onLogoutProvider, onConfigureApiKey);
+  const action = resolveProviderAction(
+    provider,
+    onLoginProvider,
+    onLogoutProvider,
+    onConfigureApiKey,
+  );
   return (
     <div className="settings-row">
       <div className="settings-row__label">
@@ -216,7 +234,10 @@ function resolveProviderAction(
     };
   }
 
-  if (provider.apiKeySetupSupported && (provider.authSource === "none" || provider.authSource === "auth_file")) {
+  if (
+    provider.apiKeySetupSupported &&
+    (provider.authSource === "none" || provider.authSource === "auth_file")
+  ) {
     return {
       disabled: false,
       label: provider.authSource === "auth_file" ? "Manage" : "Set API key",

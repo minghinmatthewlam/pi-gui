@@ -31,18 +31,8 @@
   --surface-overlay-border: rgba(210, 215, 226, 0.85);
   --surface-overlay-muted: rgba(255, 255, 255, 0.45);
   --font-ui:
-    ui-sans-serif,
-    -apple-system,
-    BlinkMacSystemFont,
-    "SF Pro Text",
-    "Segoe UI",
-    sans-serif;
-  --font-mono:
-    ui-monospace,
-    "SF Mono",
-    "Cascadia Code",
-    "Consolas",
-    monospace;
+    ui-sans-serif, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Code", "Consolas", monospace;
   --border: var(--line);
   --ink: var(--text);
   --ink-strong: var(--text-strong);

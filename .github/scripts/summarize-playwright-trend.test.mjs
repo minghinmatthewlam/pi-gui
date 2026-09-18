@@ -33,7 +33,12 @@ test("groups failures by spec file without merging unrelated surfaces", () => {
                 tests: [
                   {
                     status: "unexpected",
-                    results: [{ status: "failed", errors: [{ message: "composerDraftsBySession missing" }] }],
+                    results: [
+                      {
+                        status: "failed",
+                        errors: [{ message: "composerDraftsBySession missing" }],
+                      },
+                    ],
                   },
                 ],
               },

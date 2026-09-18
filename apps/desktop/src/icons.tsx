@@ -11,7 +11,12 @@ function Icon({ children }: { readonly children: ReactNode }) {
 export function PlusIcon() {
   return (
     <Icon>
-      <path d="M10 4.25v11.5M4.25 10h11.5" stroke="currentColor" strokeLinecap="round" strokeWidth="1.7" />
+      <path
+        d="M10 4.25v11.5M4.25 10h11.5"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="1.7"
+      />
     </Icon>
   );
 }
@@ -19,8 +24,22 @@ export function PlusIcon() {
 export function TerminalIcon() {
   return (
     <Icon>
-      <rect x="3.3" y="4.1" width="13.4" height="11.8" rx="2" stroke="currentColor" strokeWidth="1.35" />
-      <path d="m6.2 7.4 2.2 2.1-2.2 2.1M9.7 12h3.7" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.35" />
+      <rect
+        x="3.3"
+        y="4.1"
+        width="13.4"
+        height="11.8"
+        rx="2"
+        stroke="currentColor"
+        strokeWidth="1.35"
+      />
+      <path
+        d="m6.2 7.4 2.2 2.1-2.2 2.1M9.7 12h3.7"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.35"
+      />
     </Icon>
   );
 }
@@ -28,10 +47,29 @@ export function TerminalIcon() {
 export function BrowserPreviewIcon() {
   return (
     <Icon>
-      <rect x="3.1" y="4.1" width="13.8" height="11.8" rx="2" stroke="currentColor" strokeWidth="1.35" />
+      <rect
+        x="3.1"
+        y="4.1"
+        width="13.8"
+        height="11.8"
+        rx="2"
+        stroke="currentColor"
+        strokeWidth="1.35"
+      />
       <path d="M3.4 7.4h13.2" stroke="currentColor" strokeLinecap="round" strokeWidth="1.35" />
-      <path d="M6 5.75h.02M8.15 5.75h.02" stroke="currentColor" strokeLinecap="round" strokeWidth="1.7" />
-      <path d="m8.1 10.1 1.8 1.8 3.5-3.6" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.45" />
+      <path
+        d="M6 5.75h.02M8.15 5.75h.02"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="1.7"
+      />
+      <path
+        d="m8.1 10.1 1.8 1.8 3.5-3.6"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.45"
+      />
     </Icon>
   );
 }
@@ -39,9 +77,23 @@ export function BrowserPreviewIcon() {
 export function SidebarToggleIcon() {
   return (
     <Icon>
-      <rect x="3.4" y="4.1" width="13.2" height="11.8" rx="2.2" stroke="currentColor" strokeWidth="1.35" />
+      <rect
+        x="3.4"
+        y="4.1"
+        width="13.2"
+        height="11.8"
+        rx="2.2"
+        stroke="currentColor"
+        strokeWidth="1.35"
+      />
       <path d="M7.4 4.2v11.6" stroke="currentColor" strokeWidth="1.35" />
-      <path d="M11 8.1 8.9 10l2.1 1.9" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.35" />
+      <path
+        d="M11 8.1 8.9 10l2.1 1.9"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.35"
+      />
     </Icon>
   );
 }
@@ -49,7 +101,13 @@ export function SidebarToggleIcon() {
 export function MaximizeIcon() {
   return (
     <Icon>
-      <path d="M6.1 3.8H3.8v2.3M13.9 3.8h2.3v2.3M6.1 16.2H3.8v-2.3M13.9 16.2h2.3v-2.3" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.45" />
+      <path
+        d="M6.1 3.8H3.8v2.3M13.9 3.8h2.3v2.3M6.1 16.2H3.8v-2.3M13.9 16.2h2.3v-2.3"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.45"
+      />
       <path d="M7 7h6v6H7z" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.25" />
     </Icon>
   );
@@ -58,8 +116,19 @@ export function MaximizeIcon() {
 export function MinimizeIcon() {
   return (
     <Icon>
-      <path d="M3.9 7.1h3.2V3.9M16.1 7.1h-3.2V3.9M3.9 12.9h3.2v3.2M16.1 12.9h-3.2v3.2" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.45" />
-      <path d="M7.7 7.7h4.6v4.6H7.7z" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.2" />
+      <path
+        d="M3.9 7.1h3.2V3.9M16.1 7.1h-3.2V3.9M3.9 12.9h3.2v3.2M16.1 12.9h-3.2v3.2"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.45"
+      />
+      <path
+        d="M7.7 7.7h4.6v4.6H7.7z"
+        stroke="currentColor"
+        strokeLinejoin="round"
+        strokeWidth="1.2"
+      />
     </Icon>
   );
 }
@@ -76,7 +145,13 @@ export function ArrowUpIcon() {
   return (
     <Icon>
       <path d="M10 15.2V4.8" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
-      <path d="M5.8 9 10 4.8 14.2 9" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+      <path
+        d="M5.8 9 10 4.8 14.2 9"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.8"
+      />
     </Icon>
   );
 }
@@ -132,7 +207,12 @@ export function FileIcon() {
         strokeLinejoin="round"
         strokeWidth="1.35"
       />
-      <path d="M11.7 3.9v2.4h2.3M7.2 9.15h5.6M7.2 11.8h4.2" stroke="currentColor" strokeLinecap="round" strokeWidth="1.35" />
+      <path
+        d="M11.7 3.9v2.4h2.3M7.2 9.15h5.6M7.2 11.8h4.2"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="1.35"
+      />
     </Icon>
   );
 }
@@ -146,7 +226,12 @@ export function ArchiveIcon() {
         strokeLinejoin="round"
         strokeWidth="1.35"
       />
-      <path d="M3.4 4.1h13.2v2.4H3.4zM7.1 9.15h5.8" stroke="currentColor" strokeLinecap="round" strokeWidth="1.35" />
+      <path
+        d="M3.4 4.1h13.2v2.4H3.4zM7.1 9.15h5.8"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="1.35"
+      />
     </Icon>
   );
 }
@@ -161,7 +246,12 @@ export function RestoreIcon() {
         strokeWidth="1.35"
       />
       <path d="M3.4 5.15h13.2v2.1H3.4z" stroke="currentColor" strokeWidth="1.35" />
-      <path d="M10 12.8V8.4m0 0L8.2 10.2M10 8.4l1.8 1.8" stroke="currentColor" strokeLinecap="round" strokeWidth="1.35" />
+      <path
+        d="M10 12.8V8.4m0 0L8.2 10.2M10 8.4l1.8 1.8"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="1.35"
+      />
     </Icon>
   );
 }
@@ -169,7 +259,13 @@ export function RestoreIcon() {
 export function ChevronDownIcon() {
   return (
     <Icon>
-      <path d="m5.7 8.1 4.3 4.1 4.3-4.1" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
+      <path
+        d="m5.7 8.1 4.3 4.1 4.3-4.1"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.5"
+      />
     </Icon>
   );
 }
@@ -177,7 +273,13 @@ export function ChevronDownIcon() {
 export function ChevronRightIcon() {
   return (
     <Icon>
-      <path d="m8.1 5.7 4.1 4.3-4.1 4.3" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
+      <path
+        d="m8.1 5.7 4.1 4.3-4.1 4.3"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.5"
+      />
     </Icon>
   );
 }
@@ -185,8 +287,23 @@ export function ChevronRightIcon() {
 export function CopyIcon() {
   return (
     <Icon>
-      <rect x="6.5" y="6.5" width="9" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.2" fill="none" />
-      <path d="M4.5 13.5V5a1.5 1.5 0 0 1 1.5-1.5h8.5" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round" />
+      <rect
+        x="6.5"
+        y="6.5"
+        width="9"
+        height="9"
+        rx="1.5"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        fill="none"
+      />
+      <path
+        d="M4.5 13.5V5a1.5 1.5 0 0 1 1.5-1.5h8.5"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        fill="none"
+        strokeLinecap="round"
+      />
     </Icon>
   );
 }
@@ -205,18 +322,8 @@ export function SparkIcon() {
 export function PiGlyphIcon() {
   return (
     <Icon>
-      <path
-        d="M5 5.25h10"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeWidth="1.7"
-      />
-      <path
-        d="M8 5.25v9.5"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeWidth="1.7"
-      />
+      <path d="M5 5.25h10" stroke="currentColor" strokeLinecap="round" strokeWidth="1.7" />
+      <path d="M8 5.25v9.5" stroke="currentColor" strokeLinecap="round" strokeWidth="1.7" />
       <path
         d="M8 10.5c0-1.55 1.15-2.8 2.6-2.8 1.05 0 1.95.5 2.45 1.45"
         stroke="currentColor"
@@ -265,7 +372,12 @@ export function ReasoningIcon() {
         strokeLinejoin="round"
         strokeWidth="1.35"
       />
-      <path d="M7.2 13.6h5.6M8.2 16h3.6" stroke="currentColor" strokeLinecap="round" strokeWidth="1.35" />
+      <path
+        d="M7.2 13.6h5.6M8.2 16h3.6"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="1.35"
+      />
     </Icon>
   );
 }
@@ -341,9 +453,26 @@ export function PinIcon({ filled = false }: { readonly filled?: boolean }) {
 export function WorktreeIcon() {
   return (
     <Icon>
-      <path d="M6 5.3h8.1v8.1" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.45" />
-      <path d="M13.9 5.45 5.9 13.45" stroke="currentColor" strokeLinecap="round" strokeWidth="1.45" />
-      <path d="M5.85 9.75v3.95h3.95" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.45" />
+      <path
+        d="M6 5.3h8.1v8.1"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.45"
+      />
+      <path
+        d="M13.9 5.45 5.9 13.45"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="1.45"
+      />
+      <path
+        d="M5.85 9.75v3.95h3.95"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.45"
+      />
     </Icon>
   );
 }
@@ -355,7 +484,13 @@ export function ForkIcon() {
       <circle cx="6" cy="15" r="1.85" stroke="currentColor" strokeWidth="1.45" />
       <circle cx="14" cy="5" r="1.85" stroke="currentColor" strokeWidth="1.45" />
       <path d="M6 6.85v6.3" stroke="currentColor" strokeLinecap="round" strokeWidth="1.45" />
-      <path d="M14 6.85v1.4c0 2.1-1.6 3.4-3.6 3.7L7.8 11.7" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.45" />
+      <path
+        d="M14 6.85v1.4c0 2.1-1.6 3.4-3.6 3.7L7.8 11.7"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.45"
+      />
     </Icon>
   );
 }
@@ -376,9 +511,22 @@ export function GripIcon() {
 export function PromptRailIcon() {
   return (
     <Icon>
-      <rect x="3.4" y="4.1" width="13.2" height="11.8" rx="2.2" stroke="currentColor" strokeWidth="1.35" />
+      <rect
+        x="3.4"
+        y="4.1"
+        width="13.2"
+        height="11.8"
+        rx="2.2"
+        stroke="currentColor"
+        strokeWidth="1.35"
+      />
       <path d="M12.6 4.2v11.6" stroke="currentColor" strokeWidth="1.35" />
-      <path d="M13.75 7.4h1.55M13.75 10h1.55M13.75 12.6h1.55" stroke="currentColor" strokeLinecap="round" strokeWidth="1.2" />
+      <path
+        d="M13.75 7.4h1.55M13.75 10h1.55M13.75 12.6h1.55"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="1.2"
+      />
     </Icon>
   );
 }
@@ -386,8 +534,22 @@ export function PromptRailIcon() {
 export function DiffIcon() {
   return (
     <Icon>
-      <path d="M7 7h6M7 10h4M7 13h5" stroke="currentColor" strokeLinecap="round" strokeWidth="1.3" />
-      <rect x="4" y="4" width="12" height="12" rx="2" stroke="currentColor" strokeWidth="1.3" fill="none" />
+      <path
+        d="M7 7h6M7 10h4M7 13h5"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="1.3"
+      />
+      <rect
+        x="4"
+        y="4"
+        width="12"
+        height="12"
+        rx="2"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        fill="none"
+      />
     </Icon>
   );
 }

@@ -21,7 +21,10 @@ export interface PersistedUiState {
   readonly activeView?: AppView;
   readonly composerDraft?: string;
   readonly composerDraftsBySession?: Record<string, string>;
-  readonly extensionCommandCompatibilityByWorkspace?: Record<string, readonly ExtensionCommandCompatibilityRecord[]>;
+  readonly extensionCommandCompatibilityByWorkspace?: Record<
+    string,
+    readonly ExtensionCommandCompatibilityRecord[]
+  >;
   readonly notificationPreferences?: Partial<NotificationPreferences>;
   readonly integratedTerminalShell?: string;
   readonly lastViewedAtBySession?: Record<string, string>;
@@ -43,7 +46,9 @@ export interface LegacyPersistedUiState extends PersistedUiState {
   readonly transcripts?: Record<string, readonly unknown[]>;
 }
 
-export async function readPersistedUiState(uiStateFilePath: string): Promise<LegacyPersistedUiState> {
+export async function readPersistedUiState(
+  uiStateFilePath: string,
+): Promise<LegacyPersistedUiState> {
   const result = await readJsonWithBackup<unknown>(uiStateFilePath);
   if (result.corrupted) {
     // Surface corruption instead of silently returning `{}` (which the next
@@ -52,7 +57,9 @@ export async function readPersistedUiState(uiStateFilePath: string): Promise<Leg
     // the operator sees that the primary file needs attention.
     console.error(
       `[app-store] corrupt ui-state at ${uiStateFilePath}` +
-        (result.recovered ? " — recovered from backup" : " — no usable backup, starting from empty state"),
+        (result.recovered
+          ? " — recovered from backup"
+          : " — no usable backup, starting from empty state"),
     );
   }
   const parsed = result.value;
@@ -62,36 +69,42 @@ export async function readPersistedUiState(uiStateFilePath: string): Promise<Leg
   const candidate = parsed as Record<string, unknown>;
 
   return {
-      version: toPersistedVersion(candidate.version),
-      selectedWorkspaceId: stringValue(candidate.selectedWorkspaceId),
-      selectedSessionId: stringValue(candidate.selectedSessionId),
-      activeView: toAppView(candidate.activeView),
-      composerDraft: stringValue(candidate.composerDraft) ?? "",
-      composerDraftsBySession: toStringRecord(candidate.composerDraftsBySession),
-      extensionCommandCompatibilityByWorkspace: toPersistedCompatibilityByWorkspace(
-        candidate.extensionCommandCompatibilityByWorkspace,
-      ),
-      notificationPreferences: toNotificationPreferences(candidate.notificationPreferences),
-      integratedTerminalShell:
-        typeof candidate.integratedTerminalShell === "string" ? candidate.integratedTerminalShell : undefined,
-      lastViewedAtBySession: toStringRecord(candidate.lastViewedAtBySession),
-      pinnedAtBySession: toStringRecord(candidate.pinnedAtBySession),
-      pinnedSessionOrder: toStringArray(candidate.pinnedSessionOrder),
-      workspaceOrder: toStringArray(candidate.workspaceOrder),
-      modelSettingsScopeMode:
-        candidate.modelSettingsScopeMode === "per-repo" || candidate.modelSettingsScopeMode === "app-global"
-          ? candidate.modelSettingsScopeMode
-          : undefined,
-      appGlobalModelSettings: toPersistedModelSettingsSnapshot(candidate.appGlobalModelSettings),
-      sidebarCollapsed: typeof candidate.sidebarCollapsed === "boolean" ? candidate.sidebarCollapsed : undefined,
-      allowMultiple: typeof candidate.allowMultiple === "boolean" ? candidate.allowMultiple : undefined,
-      enableTransparency: typeof candidate.enableTransparency === "boolean" ? candidate.enableTransparency : undefined,
-      themeMode: toThemeMode(candidate.themeMode),
-      themePresetId: toThemePresetId(candidate.themePresetId),
-      orchestrationChildren: toPersistedOrchestrationChildren(candidate.orchestrationChildren),
-      composerAttachmentsBySession: toObjectArrayRecord(candidate.composerAttachmentsBySession),
-      transcripts: toObjectArrayRecord(candidate.transcripts),
-    };
+    version: toPersistedVersion(candidate.version),
+    selectedWorkspaceId: stringValue(candidate.selectedWorkspaceId),
+    selectedSessionId: stringValue(candidate.selectedSessionId),
+    activeView: toAppView(candidate.activeView),
+    composerDraft: stringValue(candidate.composerDraft) ?? "",
+    composerDraftsBySession: toStringRecord(candidate.composerDraftsBySession),
+    extensionCommandCompatibilityByWorkspace: toPersistedCompatibilityByWorkspace(
+      candidate.extensionCommandCompatibilityByWorkspace,
+    ),
+    notificationPreferences: toNotificationPreferences(candidate.notificationPreferences),
+    integratedTerminalShell:
+      typeof candidate.integratedTerminalShell === "string"
+        ? candidate.integratedTerminalShell
+        : undefined,
+    lastViewedAtBySession: toStringRecord(candidate.lastViewedAtBySession),
+    pinnedAtBySession: toStringRecord(candidate.pinnedAtBySession),
+    pinnedSessionOrder: toStringArray(candidate.pinnedSessionOrder),
+    workspaceOrder: toStringArray(candidate.workspaceOrder),
+    modelSettingsScopeMode:
+      candidate.modelSettingsScopeMode === "per-repo" ||
+      candidate.modelSettingsScopeMode === "app-global"
+        ? candidate.modelSettingsScopeMode
+        : undefined,
+    appGlobalModelSettings: toPersistedModelSettingsSnapshot(candidate.appGlobalModelSettings),
+    sidebarCollapsed:
+      typeof candidate.sidebarCollapsed === "boolean" ? candidate.sidebarCollapsed : undefined,
+    allowMultiple:
+      typeof candidate.allowMultiple === "boolean" ? candidate.allowMultiple : undefined,
+    enableTransparency:
+      typeof candidate.enableTransparency === "boolean" ? candidate.enableTransparency : undefined,
+    themeMode: toThemeMode(candidate.themeMode),
+    themePresetId: toThemePresetId(candidate.themePresetId),
+    orchestrationChildren: toPersistedOrchestrationChildren(candidate.orchestrationChildren),
+    composerAttachmentsBySession: toObjectArrayRecord(candidate.composerAttachmentsBySession),
+    transcripts: toObjectArrayRecord(candidate.transcripts),
+  };
 }
 
 export async function writePersistedUiState(
@@ -129,7 +142,7 @@ function toAppView(value: unknown): AppView | undefined {
 
 function toPersistedVersion(value: unknown): NonNullable<PersistedUiState["version"]> | undefined {
   return typeof value === "number" && Number.isInteger(value) && value >= 2 && value <= 15
-    ? value as NonNullable<PersistedUiState["version"]>
+    ? (value as NonNullable<PersistedUiState["version"]>)
     : undefined;
 }
 
@@ -159,7 +172,15 @@ function toPersistedOrchestrationChildren(value: unknown): OrchestrationChildThr
     const goal = stringValue(candidate.goal);
     const createdAt = stringValue(candidate.createdAt);
     const updatedAt = stringValue(candidate.updatedAt);
-    if (!id || !parentWorkspaceId || !parentSessionId || !title || !goal || !createdAt || !updatedAt) {
+    if (
+      !id ||
+      !parentWorkspaceId ||
+      !parentSessionId ||
+      !title ||
+      !goal ||
+      !createdAt ||
+      !updatedAt
+    ) {
       return [];
     }
 
@@ -198,7 +219,8 @@ function toPersistedOrchestrationChildren(value: unknown): OrchestrationChildThr
         title,
         goal,
         status,
-        latestTranscript: stringValue(candidate.latestTranscript) || retainedTranscript.at(-1)?.text || goal,
+        latestTranscript:
+          stringValue(candidate.latestTranscript) || retainedTranscript.at(-1)?.text || goal,
         transcript: retainedTranscript,
         evidence: toPersistedEvidence(candidate.evidence, id),
         ...(supervisionLoop ? { supervisionLoop } : {}),
@@ -230,9 +252,10 @@ function toPersistedEvidence(value: unknown, childThreadId: string): Orchestrati
     }
 
     const gitCandidate = candidate.git;
-    const git = gitCandidate && typeof gitCandidate === "object"
-      ? toEvidenceGit(gitCandidate as Record<string, unknown>)
-      : undefined;
+    const git =
+      gitCandidate && typeof gitCandidate === "object"
+        ? toEvidenceGit(gitCandidate as Record<string, unknown>)
+        : undefined;
 
     return [
       {
@@ -245,19 +268,29 @@ function toPersistedEvidence(value: unknown, childThreadId: string): Orchestrati
         ...(stringValue(candidate.detail) ? { detail: stringValue(candidate.detail) } : {}),
         ...(stringValue(candidate.command) ? { command: stringValue(candidate.command) } : {}),
         ...(stringValue(candidate.toolName) ? { toolName: stringValue(candidate.toolName) } : {}),
-        ...(toEvidenceSeverity(candidate.severity) ? { severity: toEvidenceSeverity(candidate.severity) } : {}),
-        ...(stringValue(candidate.parentSessionId) ? { parentSessionId: stringValue(candidate.parentSessionId) } : {}),
-        ...(stringValue(candidate.childSessionId) ? { childSessionId: stringValue(candidate.childSessionId) } : {}),
+        ...(toEvidenceSeverity(candidate.severity)
+          ? { severity: toEvidenceSeverity(candidate.severity) }
+          : {}),
+        ...(stringValue(candidate.parentSessionId)
+          ? { parentSessionId: stringValue(candidate.parentSessionId) }
+          : {}),
+        ...(stringValue(candidate.childSessionId)
+          ? { childSessionId: stringValue(candidate.childSessionId) }
+          : {}),
         ...(git ? { git } : {}),
         createdAt,
-        ...(stringValue(candidate.updatedAt) ? { updatedAt: stringValue(candidate.updatedAt) } : {}),
+        ...(stringValue(candidate.updatedAt)
+          ? { updatedAt: stringValue(candidate.updatedAt) }
+          : {}),
       },
     ];
   });
   return records.slice(0, MAX_PERSISTED_ORCHESTRATION_EVIDENCE_RECORDS);
 }
 
-function toEvidenceGit(value: Record<string, unknown>): OrchestrationEvidenceRecord["git"] | undefined {
+function toEvidenceGit(
+  value: Record<string, unknown>,
+): OrchestrationEvidenceRecord["git"] | undefined {
   const workspaceId = stringValue(value.workspaceId);
   if (!workspaceId) {
     return undefined;
@@ -323,7 +356,15 @@ function toPersistedSupervisionLoop(
   const iterationCount = numberValue(candidate.iterationCount);
   const lastCheckedAt = stringValue(candidate.lastCheckedAt);
   const reason = stringValue(candidate.reason);
-  if (!id || !status || !gate || !intervalMs || iterationCount === undefined || !lastCheckedAt || !reason) {
+  if (
+    !id ||
+    !status ||
+    !gate ||
+    !intervalMs ||
+    iterationCount === undefined ||
+    !lastCheckedAt ||
+    !reason
+  ) {
     return undefined;
   }
   return {
@@ -365,8 +406,12 @@ function toNotificationPreferences(value: unknown): Partial<NotificationPreferen
     ...(typeof candidate.backgroundCompletion === "boolean"
       ? { backgroundCompletion: candidate.backgroundCompletion }
       : {}),
-    ...(typeof candidate.backgroundFailure === "boolean" ? { backgroundFailure: candidate.backgroundFailure } : {}),
-    ...(typeof candidate.attentionNeeded === "boolean" ? { attentionNeeded: candidate.attentionNeeded } : {}),
+    ...(typeof candidate.backgroundFailure === "boolean"
+      ? { backgroundFailure: candidate.backgroundFailure }
+      : {}),
+    ...(typeof candidate.attentionNeeded === "boolean"
+      ? { attentionNeeded: candidate.attentionNeeded }
+      : {}),
   };
   return Object.keys(preferences).length > 0 ? preferences : undefined;
 }
@@ -377,8 +422,10 @@ function toStringRecord(value: unknown): Record<string, string> | undefined {
     return undefined;
   }
 
-  const entries = Object.entries(candidate)
-    .filter((entry): entry is [string, string] => Boolean(entry[0]) && typeof entry[1] === "string" && Boolean(entry[1]));
+  const entries = Object.entries(candidate).filter(
+    (entry): entry is [string, string] =>
+      Boolean(entry[0]) && typeof entry[1] === "string" && Boolean(entry[1]),
+  );
   return entries.length > 0 ? Object.fromEntries(entries) : undefined;
 }
 
@@ -403,7 +450,9 @@ function toPersistedCompatibilityByWorkspace(
   return entries.length > 0 ? Object.fromEntries(entries) : undefined;
 }
 
-function toPersistedCompatibilityRecord(value: unknown): ExtensionCommandCompatibilityRecord | undefined {
+function toPersistedCompatibilityRecord(
+  value: unknown,
+): ExtensionCommandCompatibilityRecord | undefined {
   const candidate = objectRecord(value);
   if (
     !candidate ||
@@ -444,7 +493,7 @@ function toObjectArrayRecord(value: unknown): Record<string, readonly unknown[]>
 
 function objectRecord(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
+    ? (value as Record<string, unknown>)
     : undefined;
 }
 
@@ -452,8 +501,14 @@ function toOrchestrationStatus(value: unknown): OrchestrationChildThread["status
   return toOptionalOrchestrationStatus(value) ?? "running";
 }
 
-function toOptionalOrchestrationStatus(value: unknown): OrchestrationChildThread["status"] | undefined {
-  return value === "queued" || value === "waiting" || value === "complete" || value === "failed" || value === "running"
+function toOptionalOrchestrationStatus(
+  value: unknown,
+): OrchestrationChildThread["status"] | undefined {
+  return value === "queued" ||
+    value === "waiting" ||
+    value === "complete" ||
+    value === "failed" ||
+    value === "running"
     ? value
     : undefined;
 }
@@ -467,10 +522,17 @@ function toPersistedModelSettingsSnapshot(value: unknown): ModelSettingsSnapshot
     ? candidate.enabledModelPatterns.filter((entry): entry is string => typeof entry === "string")
     : [];
   return {
-    ...(typeof candidate.defaultProvider === "string" ? { defaultProvider: candidate.defaultProvider } : {}),
-    ...(typeof candidate.defaultModelId === "string" ? { defaultModelId: candidate.defaultModelId } : {}),
+    ...(typeof candidate.defaultProvider === "string"
+      ? { defaultProvider: candidate.defaultProvider }
+      : {}),
+    ...(typeof candidate.defaultModelId === "string"
+      ? { defaultModelId: candidate.defaultModelId }
+      : {}),
     ...(typeof candidate.defaultThinkingLevel === "string"
-      ? { defaultThinkingLevel: candidate.defaultThinkingLevel as ModelSettingsSnapshot["defaultThinkingLevel"] }
+      ? {
+          defaultThinkingLevel:
+            candidate.defaultThinkingLevel as ModelSettingsSnapshot["defaultThinkingLevel"],
+        }
       : {}),
     enabledModelPatterns,
   };

@@ -10,7 +10,9 @@ import {
   selectSession,
 } from "../helpers/electron-app";
 
-async function captureOpenedExternalUrls(harness: DesktopHarness): Promise<() => Promise<readonly string[]>> {
+async function captureOpenedExternalUrls(
+  harness: DesktopHarness,
+): Promise<() => Promise<readonly string[]>> {
   await harness.electronApp.evaluate(({ shell }) => {
     const globals = globalThis as typeof globalThis & { __piGuiOpenedExternalUrls?: string[] };
     globals.__piGuiOpenedExternalUrls = [];
@@ -22,7 +24,8 @@ async function captureOpenedExternalUrls(harness: DesktopHarness): Promise<() =>
   return () =>
     harness.electronApp.evaluate(
       () =>
-        (globalThis as typeof globalThis & { __piGuiOpenedExternalUrls?: string[] }).__piGuiOpenedExternalUrls ?? [],
+        (globalThis as typeof globalThis & { __piGuiOpenedExternalUrls?: string[] })
+          .__piGuiOpenedExternalUrls ?? [],
     );
 }
 
@@ -51,7 +54,9 @@ test("opens markdown web links externally without leaving the current session", 
 
     await expect.poll(openedExternalUrls).toEqual([targetUrl]);
     await expect
-      .poll(() => harness.electronApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length))
+      .poll(() =>
+        harness.electronApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length),
+      )
       .toBe(1);
     expect(window.url()).toBe(appUrl);
     await expect(window.getByTestId("transcript")).toContainText("GitHub issue");
@@ -84,7 +89,9 @@ test("refuses non-web markdown links from message content", async () => {
 
     await expect.poll(openedExternalUrls).toEqual([]);
     await expect
-      .poll(() => harness.electronApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length))
+      .poll(() =>
+        harness.electronApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length),
+      )
       .toBe(1);
     expect(window.url()).toBe(appUrl);
     await expect(window.getByTestId("transcript")).toContainText("email fallback");

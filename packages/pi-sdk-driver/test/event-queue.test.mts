@@ -2,21 +2,33 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { chainRecoveringEventQueue, singleFlight } from "../dist/session-supervisor-utils.js";
 
-test("event queue keeps delivering after a work item throws", async () => {
+await test("event queue keeps delivering after a work item throws", async () => {
   const delivered: string[] = [];
   const errors: unknown[] = [];
   const onError = (error: unknown) => errors.push(error);
 
   let queue: Promise<void> = Promise.resolve();
-  queue = chainRecoveringEventQueue(queue, async () => {
-    delivered.push("a");
-  }, onError);
-  queue = chainRecoveringEventQueue(queue, async () => {
-    throw new Error("listener boom");
-  }, onError);
-  queue = chainRecoveringEventQueue(queue, async () => {
-    delivered.push("c");
-  }, onError);
+  queue = chainRecoveringEventQueue(
+    queue,
+    async () => {
+      delivered.push("a");
+    },
+    onError,
+  );
+  queue = chainRecoveringEventQueue(
+    queue,
+    async () => {
+      throw new Error("listener boom");
+    },
+    onError,
+  );
+  queue = chainRecoveringEventQueue(
+    queue,
+    async () => {
+      delivered.push("c");
+    },
+    onError,
+  );
 
   await queue;
 
@@ -27,7 +39,7 @@ test("event queue keeps delivering after a work item throws", async () => {
   assert.match((errors[0] as Error).message, /boom/);
 });
 
-test("singleFlight runs the factory once for concurrent callers and yields one result", async () => {
+await test("singleFlight runs the factory once for concurrent callers and yields one result", async () => {
   const inFlight = new Map<string, Promise<{ id: number }>>();
   let created = 0;
   const factory = async () => {
@@ -48,7 +60,7 @@ test("singleFlight runs the factory once for concurrent callers and yields one r
   assert.equal(inFlight.size, 0, "settled key is cleared for the next call");
 });
 
-test("singleFlight clears the entry on failure and lets the next call retry", async () => {
+await test("singleFlight clears the entry on failure and lets the next call retry", async () => {
   const inFlight = new Map<string, Promise<number>>();
   let attempts = 0;
   const flaky = async () => {
@@ -65,7 +77,7 @@ test("singleFlight clears the entry on failure and lets the next call retry", as
   assert.equal(result, 2);
 });
 
-test("distinct keys run their own factory concurrently", async () => {
+await test("distinct keys run their own factory concurrently", async () => {
   const inFlight = new Map<string, Promise<string>>();
   const a = await singleFlight(inFlight, "a", async () => "ra");
   const b = await singleFlight(inFlight, "b", async () => "rb");

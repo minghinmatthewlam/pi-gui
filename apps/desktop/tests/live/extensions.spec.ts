@@ -140,7 +140,11 @@ async function installPackageBackedExtension(agentDir: string, packagePath: stri
   await writeFile(settingsPath, `${JSON.stringify(settings, null, 2)}\n`, "utf8");
 }
 
-async function installProjectNpmBackedExtension(workspacePath: string, packageName: string, version: string) {
+async function installProjectNpmBackedExtension(
+  workspacePath: string,
+  packageName: string,
+  version: string,
+) {
   const packagePath = join(workspacePath, ".pi", "npm", "node_modules", packageName);
   await writePackageBackedExtension(packagePath, {
     name: packageName,
@@ -162,7 +166,13 @@ async function installProjectNpmBackedExtension(workspacePath: string, packageNa
   return packagePath;
 }
 
-async function installProjectGitBackedExtension(workspacePath: string, source: string, host: string, owner: string, repo: string) {
+async function installProjectGitBackedExtension(
+  workspacePath: string,
+  source: string,
+  host: string,
+  owner: string,
+  repo: string,
+) {
   const packagePath = join(workspacePath, ".pi", "git", host, owner, repo);
   await writePackageBackedExtension(packagePath, {
     name: repo,
@@ -221,7 +231,11 @@ test("shows extensions above files in @ mentions and enables disabled extensions
   test.setTimeout(60_000);
   const userDataDir = await makeUserDataDir();
   const workspacePath = await makeGitWorkspace("extension-mention-workspace");
-  const extensionPath = await writeProjectExtension(workspacePath, "demo-extension.ts", extensionSource);
+  const extensionPath = await writeProjectExtension(
+    workspacePath,
+    "demo-extension.ts",
+    extensionSource,
+  );
 
   const harness = await launchDesktop(userDataDir, {
     initialWorkspaces: [workspacePath],
@@ -238,41 +252,69 @@ test("shows extensions above files in @ mentions and enables disabled extensions
       .poll(async () => {
         const state = await getDesktopState(window);
         const workspace = state.workspaces.find((entry) => entry.path === workspacePath);
-        return Boolean(workspace && state.runtimeByWorkspace[workspace.id]?.extensions.some((entry) => entry.path === extensionPath));
+        return Boolean(
+          workspace &&
+          state.runtimeByWorkspace[workspace.id]?.extensions.some(
+            (entry) => entry.path === extensionPath,
+          ),
+        );
       })
       .toBe(true);
 
-    await window.evaluate(async ({ targetWorkspacePath, targetExtensionPath }) => {
-      const app = (window as any).piApp;
-      if (!app) {
-        throw new Error("piApp IPC bridge is unavailable");
-      }
-      const state = await app.getState();
-      const workspace = state.workspaces.find((entry) => entry.path === targetWorkspacePath);
-      if (!workspace) {
-        throw new Error(`Workspace not found: ${targetWorkspacePath}`);
-      }
-      await app.setExtensionEnabled(workspace.id, targetExtensionPath, false);
-    }, { targetWorkspacePath: workspacePath, targetExtensionPath: extensionPath });
+    await window.evaluate(
+      async ({ targetWorkspacePath, targetExtensionPath }) => {
+        const app = globalThis.window.piApp;
+        if (!app) {
+          throw new Error("piApp IPC bridge is unavailable");
+        }
+        const state = await app.getState();
+        const workspace = state.workspaces.find((entry) => entry.path === targetWorkspacePath);
+        if (!workspace) {
+          throw new Error(`Workspace not found: ${targetWorkspacePath}`);
+        }
+        await app.setExtensionEnabled(workspace.id, targetExtensionPath, false);
+      },
+      { targetWorkspacePath: workspacePath, targetExtensionPath: extensionPath },
+    );
 
     await composer.fill("@");
     const mentionMenu = window.getByTestId("mention-menu");
     await expect(mentionMenu).toBeVisible();
-    await expect(mentionMenu.locator(".mention-menu__section-title")).toHaveText(["Extensions", "Files"]);
-    await expect(mentionMenu.locator(".mention-menu__section").first()).toContainText("demo-extension");
+    await expect(mentionMenu.locator(".mention-menu__section-title")).toHaveText([
+      "Extensions",
+      "Files",
+    ]);
+    await expect(mentionMenu.locator(".mention-menu__section").first()).toContainText(
+      "demo-extension",
+    );
     await expect(mentionMenu.locator(".mention-menu__section").first()).toContainText("Disabled");
-    await expect(mentionMenu.locator(".mention-menu__section").first().getByRole("button", { name: /Enable demo-extension/ })).toBeVisible();
+    await expect(
+      mentionMenu
+        .locator(".mention-menu__section")
+        .first()
+        .getByRole("button", { name: /Enable demo-extension/ }),
+    ).toBeVisible();
 
     await composer.fill("@demo");
-    await expect(mentionMenu.locator(".mention-menu__section-title").first()).toHaveText("Extensions");
-    await expect(mentionMenu.locator(".mention-menu__section").first()).toContainText("demo-extension");
-    await mentionMenu.locator(".mention-menu__section").first().getByRole("button", { name: /Enable demo-extension/ }).click();
+    await expect(mentionMenu.locator(".mention-menu__section-title").first()).toHaveText(
+      "Extensions",
+    );
+    await expect(mentionMenu.locator(".mention-menu__section").first()).toContainText(
+      "demo-extension",
+    );
+    await mentionMenu
+      .locator(".mention-menu__section")
+      .first()
+      .getByRole("button", { name: /Enable demo-extension/ })
+      .click();
     await expect
       .poll(async () => {
         const state = await getDesktopState(window);
         const workspace = state.workspaces.find((entry) => entry.path === workspacePath);
         const extension = workspace
-          ? state.runtimeByWorkspace[workspace.id]?.extensions.find((entry) => entry.path === extensionPath)
+          ? state.runtimeByWorkspace[workspace.id]?.extensions.find(
+              (entry) => entry.path === extensionPath,
+            )
           : undefined;
         return extension?.enabled ?? false;
       })
@@ -324,7 +366,9 @@ test("inserts npm package extension mentions without source prefixes or pinned v
     await composer.fill("@read");
     const mentionMenu = window.getByTestId("mention-menu");
     await expect(mentionMenu).toBeVisible();
-    await expect(mentionMenu.locator(".mention-menu__section-title").first()).toHaveText("Extensions");
+    await expect(mentionMenu.locator(".mention-menu__section-title").first()).toHaveText(
+      "Extensions",
+    );
     await expect(mentionMenu.locator(".mention-menu__section").first()).toContainText(packageName);
 
     await composer.press("Tab");
@@ -368,7 +412,9 @@ test("preserves scoped npm package names in extension mentions", async () => {
     await composer.fill("@acme");
     const mentionMenu = window.getByTestId("mention-menu");
     await expect(mentionMenu).toBeVisible();
-    await expect(mentionMenu.locator(".mention-menu__section-title").first()).toHaveText("Extensions");
+    await expect(mentionMenu.locator(".mention-menu__section-title").first()).toHaveText(
+      "Extensions",
+    );
 
     await composer.press("Tab");
     await expect(composer).toHaveValue("@acme-pi-read-mode ");
@@ -401,7 +447,9 @@ test("inserts git package extension mentions from the resolved package root", as
         const state = await getDesktopState(window);
         const workspace = state.workspaces.find((entry) => entry.path === workspacePath);
         return workspace
-          ? state.runtimeByWorkspace[workspace.id]?.extensions.some((entry) => entry.sourceInfo.source === source)
+          ? state.runtimeByWorkspace[workspace.id]?.extensions.some(
+              (entry) => entry.sourceInfo.source === source,
+            )
           : false;
       })
       .toBe(true);
@@ -409,7 +457,9 @@ test("inserts git package extension mentions from the resolved package root", as
     await composer.fill("@repo");
     const mentionMenu = window.getByTestId("mention-menu");
     await expect(mentionMenu).toBeVisible();
-    await expect(mentionMenu.locator(".mention-menu__section-title").first()).toHaveText("Extensions");
+    await expect(mentionMenu.locator(".mention-menu__section-title").first()).toHaveText(
+      "Extensions",
+    );
     await expect(mentionMenu.locator(".mention-menu__section").first()).toContainText(repo);
 
     await composer.press("Tab");
@@ -482,7 +532,9 @@ test("manages extensions and prefers runtime commands over colliding host action
         }
         const selectedSessionKey = `${state.selectedWorkspaceId}:${state.selectedSessionId}`;
         return (
-          state.sessionCommandsBySession[selectedSessionKey]?.some((command) => command.name === "settings") ?? false
+          state.sessionCommandsBySession[selectedSessionKey]?.some(
+            (command) => command.name === "settings",
+          ) ?? false
         );
       })
       .toBe(true);
@@ -490,8 +542,13 @@ test("manages extensions and prefers runtime commands over colliding host action
       .poll(
         async () => {
           const state = await getDesktopState(window);
-          const selectedWorkspace = state.workspaces.find((entry) => entry.id === state.selectedWorkspaceId);
-          return selectedWorkspace?.sessions.find((session) => session.id === state.selectedSessionId)?.status ?? "unknown";
+          const selectedWorkspace = state.workspaces.find(
+            (entry) => entry.id === state.selectedWorkspaceId,
+          );
+          return (
+            selectedWorkspace?.sessions.find((session) => session.id === state.selectedSessionId)
+              ?.status ?? "unknown"
+          );
         },
         { timeout: 30_000 },
       )
@@ -520,7 +577,11 @@ test("degrades terminal-only custom extension ui without sending stray messages"
   test.setTimeout(60_000);
   const userDataDir = await makeUserDataDir();
   const workspacePath = await makeWorkspace("extensions-custom-fallback-workspace");
-  await writeProjectExtension(workspacePath, "custom-fallback-extension.ts", customFallbackExtensionSource);
+  await writeProjectExtension(
+    workspacePath,
+    "custom-fallback-extension.ts",
+    customFallbackExtensionSource,
+  );
 
   const harness = await launchDesktop(userDataDir, {
     initialWorkspaces: [workspacePath],
@@ -574,7 +635,9 @@ test("keeps a single subscription path when an extension creates a child session
       })
       .not.toBe(beforeSelectedSessionId);
     await expect(composer).toHaveValue("Child draft");
-    await expect(window.getByText("Resumed session", { exact: true })).toHaveCount(resumedCountBefore);
+    await expect(window.getByText("Resumed session", { exact: true })).toHaveCount(
+      resumedCountBefore,
+    );
   } finally {
     await harness.close();
   }

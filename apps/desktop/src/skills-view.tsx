@@ -45,7 +45,10 @@ export function SkillsView({
         <div className="empty-panel">
           <div className="session-header__eyebrow">Skills</div>
           <h1>Select a workspace</h1>
-          <p>Skills are discovered from the selected workspace plus your user-level skill directories.</p>
+          <p>
+            Skills are discovered from the selected workspace plus your user-level skill
+            directories.
+          </p>
         </div>
       </section>
     );
@@ -115,7 +118,9 @@ export function SkillsView({
                 >
                   <span className="skill-card__title-row">
                     <span className="skill-card__title">{titleCase(skill.name)}</span>
-                    <span className={`skill-card__badge ${skill.enabled ? "skill-card__badge--enabled" : ""}`}>
+                    <span
+                      className={`skill-card__badge ${skill.enabled ? "skill-card__badge--enabled" : ""}`}
+                    >
                       {skill.enabled ? "Enabled" : "Disabled"}
                     </span>
                   </span>
@@ -138,7 +143,9 @@ export function SkillsView({
                     <h2>{titleCase(selectedSkill.name)}</h2>
                     <div className="skill-detail__slash">{selectedSkill.slashCommand}</div>
                   </div>
-                  <span className={`skill-detail__status ${selectedSkill.enabled ? "skill-detail__status--enabled" : ""}`}>
+                  <span
+                    className={`skill-detail__status ${selectedSkill.enabled ? "skill-detail__status--enabled" : ""}`}
+                  >
                     {selectedSkill.enabled ? "Enabled" : "Disabled"}
                   </span>
                 </div>
@@ -154,7 +161,11 @@ export function SkillsView({
                   </div>
                 </div>
                 <div className="skill-detail__actions">
-                  <button className="button button--secondary" type="button" onClick={() => onOpenSkillFolder(selectedSkill.filePath)}>
+                  <button
+                    className="button button--secondary"
+                    type="button"
+                    onClick={() => onOpenSkillFolder(selectedSkill.filePath)}
+                  >
                     Open folder
                   </button>
                   <button
@@ -164,7 +175,11 @@ export function SkillsView({
                   >
                     {selectedSkill.enabled ? "Disable" : "Enable"}
                   </button>
-                  <button className="button button--primary" type="button" onClick={() => onTrySkill(selectedSkill)}>
+                  <button
+                    className="button button--primary"
+                    type="button"
+                    onClick={() => onTrySkill(selectedSkill)}
+                  >
                     Try
                   </button>
                 </div>

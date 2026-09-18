@@ -83,11 +83,21 @@ const requiredPackages = [
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const desktopDir = path.resolve(scriptDir, "..");
-const packagePlatform = (process.env.PI_APP_PACKAGE_PLATFORM ?? process.platform).trim().toLowerCase();
+const packagePlatform = (process.env.PI_APP_PACKAGE_PLATFORM ?? process.platform)
+  .trim()
+  .toLowerCase();
 const asarPath = resolveAsarPath(desktopDir, packagePlatform);
 const notificationHelperPath =
   packagePlatform === "darwin"
-    ? path.join(desktopDir, "release", "mac-arm64", "pi-gui.app", "Contents", "MacOS", "pi-gui-notification-status-helper")
+    ? path.join(
+        desktopDir,
+        "release",
+        "mac-arm64",
+        "pi-gui.app",
+        "Contents",
+        "MacOS",
+        "pi-gui-notification-status-helper",
+      )
     : undefined;
 const pnpmBinary = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 const piCodingAgentPackageName = "@earendil-works/pi-coding-agent";
@@ -131,6 +141,7 @@ if (notificationHelperPath && !existsSync(notificationHelperPath)) {
 }
 
 const extractedDir = mkdtempSync(path.join(tmpdir(), "pi-gui-packaged-runtime-"));
+let cleanupError;
 try {
   execFileSync(pnpmBinary, ["exec", "asar", "extract", asarPath, extractedDir], {
     cwd: desktopDir,
@@ -154,16 +165,27 @@ try {
     if (process.platform === "win32") {
       console.warn(`Warning: could not remove temp dir ${extractedDir}: ${error.message}`);
     } else {
-      throw error;
+      cleanupError = error;
     }
   }
 }
+
+// Preserve a verification failure if cleanup also failed.
+if (cleanupError) throw cleanupError;
 
 console.log(`Verified packaged runtime dependencies in ${asarPath}`);
 
 function resolveAsarPath(desktopDir, packagePlatform) {
   if (packagePlatform === "darwin") {
-    return path.join(desktopDir, "release", "mac-arm64", "pi-gui.app", "Contents", "Resources", "app.asar");
+    return path.join(
+      desktopDir,
+      "release",
+      "mac-arm64",
+      "pi-gui.app",
+      "Contents",
+      "Resources",
+      "app.asar",
+    );
   }
 
   if (packagePlatform === "linux") {
@@ -208,7 +230,12 @@ function verifyRequiredPackages(extractedDir) {
 }
 
 async function verifyPackagedPiRuntime(extractedDir) {
-  const packageJsonPath = path.join(extractedDir, "node_modules", ...piCodingAgentPackageName.split("/"), "package.json");
+  const packageJsonPath = path.join(
+    extractedDir,
+    "node_modules",
+    ...piCodingAgentPackageName.split("/"),
+    "package.json",
+  );
   const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8"));
   if (packageJson.version !== requiredPiCodingAgentVersion) {
     throw new Error(
@@ -216,12 +243,20 @@ async function verifyPackagedPiRuntime(extractedDir) {
     );
   }
 
-  const runtimeEntry = path.join(extractedDir, "node_modules", ...piCodingAgentPackageName.split("/"), "dist", "index.js");
+  const runtimeEntry = path.join(
+    extractedDir,
+    "node_modules",
+    ...piCodingAgentPackageName.split("/"),
+    "dist",
+    "index.js",
+  );
   const { AuthStorage, ModelRegistry } = await import(pathToFileURL(runtimeEntry).href);
   const registry = ModelRegistry.inMemory(AuthStorage.inMemory());
   const models = registry.getAll();
   for (const check of modelChecks) {
-    const model = models.find((entry) => entry.provider === check.provider && entry.id === check.id);
+    const model = models.find(
+      (entry) => entry.provider === check.provider && entry.id === check.id,
+    );
     const modelKey = `${check.provider}/${check.id}`;
     if (!model) {
       throw new Error(`Packaged Pi runtime does not expose ${modelKey} for ${check.reason}.`);

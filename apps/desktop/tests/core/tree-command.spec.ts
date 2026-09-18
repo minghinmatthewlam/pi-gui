@@ -50,9 +50,9 @@ test("opens /tree from the composer, navigates branches, and blocks it on the ne
     await expect
       .poll(
         async () =>
-          window.getByTestId("tree-modal-list").evaluate((list) =>
-            list instanceof HTMLElement ? list.scrollTop : -1,
-          ),
+          window
+            .getByTestId("tree-modal-list")
+            .evaluate((list) => (list instanceof HTMLElement ? list.scrollTop : -1)),
         { timeout: 1_500 },
       )
       .toBeGreaterThan(0);

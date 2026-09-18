@@ -49,12 +49,18 @@ export class NotificationManager {
           sessionId: state.selectedSessionId,
         });
       }
-      void this.reevaluateOnboardingState();
+      void this.reevaluateOnboardingState().catch((error: unknown) => {
+        console.error("[notification-manager] reevaluateOnboardingState failed", error);
+      });
     });
     const stopEvents = this.store.subscribeToSessionEvents((event, state) => {
       this.latestState = state;
-      void this.reevaluateOnboardingState();
-      void this.handleEvent(event);
+      void this.reevaluateOnboardingState().catch((error: unknown) => {
+        console.error("[notification-manager] reevaluateOnboardingState failed", error);
+      });
+      void this.handleEvent(event).catch((error: unknown) => {
+        console.error("[notification-manager] handleEvent failed", error);
+      });
     });
     return () => {
       stopState();
@@ -85,7 +91,9 @@ export class NotificationManager {
     }
 
     const reevaluateVisibility = () => {
-      void this.reevaluateOnboardingState(false);
+      void this.reevaluateOnboardingState(false).catch((error: unknown) => {
+        console.error("[notification-manager] reevaluateOnboardingState failed", error);
+      });
     };
     const clearTrackedWindow = () => {
       this.trackWindow(null);
@@ -133,12 +141,20 @@ export class NotificationManager {
         }
         this.completedRunKeys.delete(oldest);
       }
-      await this.showNotification(event.sessionRef, event.snapshot.title, "Agent finished responding");
+      await this.showNotification(
+        event.sessionRef,
+        event.snapshot.title,
+        "Agent finished responding",
+      );
       return;
     }
 
     if (event.type === "runFailed") {
-      await this.showNotification(event.sessionRef, this.titleForSession(event.sessionRef), event.error.message);
+      await this.showNotification(
+        event.sessionRef,
+        this.titleForSession(event.sessionRef),
+        event.error.message,
+      );
       return;
     }
 
@@ -152,7 +168,11 @@ export class NotificationManager {
   }
 
   private shouldNotify(event: SessionDriverEvent): boolean {
-    if (event.type !== "runCompleted" && event.type !== "runFailed" && event.type !== "hostUiRequest") {
+    if (
+      event.type !== "runCompleted" &&
+      event.type !== "runFailed" &&
+      event.type !== "hostUiRequest"
+    ) {
       return false;
     }
 
@@ -197,7 +217,10 @@ export class NotificationManager {
     const previousActivelyViewedSession = this.lastActivelyViewedSession;
     this.lastActivelyViewedSession = nextActivelyViewedSession;
 
-    if (previousActivelyViewedSession && !sameSessionRef(previousActivelyViewedSession, nextActivelyViewedSession)) {
+    if (
+      previousActivelyViewedSession &&
+      !sameSessionRef(previousActivelyViewedSession, nextActivelyViewedSession)
+    ) {
       this.enqueueBackgroundCandidate(previousActivelyViewedSession);
     }
     if (nextActivelyViewedSession) {
@@ -217,12 +240,14 @@ export class NotificationManager {
       return;
     }
 
-    this.backgroundCandidateSessions = this.backgroundCandidateSessions.filter((candidateSessionRef) => {
-      if (isSessionActivelyViewed(state, candidateSessionRef, window)) {
-        return false;
-      }
-      return Boolean(this.sessionFromLatestState(candidateSessionRef));
-    });
+    this.backgroundCandidateSessions = this.backgroundCandidateSessions.filter(
+      (candidateSessionRef) => {
+        if (isSessionActivelyViewed(state, candidateSessionRef, window)) {
+          return false;
+        }
+        return Boolean(this.sessionFromLatestState(candidateSessionRef));
+      },
+    );
 
     const nextRunnableCandidate = this.backgroundCandidateSessions.find((candidateSessionRef) => {
       const candidateSession = this.sessionFromLatestState(candidateSessionRef);
@@ -246,13 +271,21 @@ export class NotificationManager {
   }
 
   private enqueueBackgroundCandidate(sessionRef: SessionRef): void {
-    if (this.backgroundCandidateSessions.some((candidateSessionRef) => sameSessionRef(candidateSessionRef, sessionRef))) {
+    if (
+      this.backgroundCandidateSessions.some((candidateSessionRef) =>
+        sameSessionRef(candidateSessionRef, sessionRef),
+      )
+    ) {
       return;
     }
     this.backgroundCandidateSessions.push(sessionRef);
   }
 
-  private async showNotification(sessionRef: SessionRef, title: string, body: string): Promise<void> {
+  private async showNotification(
+    sessionRef: SessionRef,
+    title: string,
+    body: string,
+  ): Promise<void> {
     this.dismissForSession(sessionRef);
     await this.logNotification(sessionRef, title, body);
     if (process.env.PI_APP_TEST_MODE) {
@@ -264,7 +297,9 @@ export class NotificationManager {
       silent: false,
     });
     notification.on("click", () => {
-      void this.openSession(sessionRef);
+      void this.openSession(sessionRef).catch((error: unknown) => {
+        console.error("[notification-manager] openSession failed", error);
+      });
     });
     notification.on("close", () => {
       this.activeBySession.delete(sessionKey(sessionRef));
@@ -273,7 +308,11 @@ export class NotificationManager {
     notification.show();
   }
 
-  private async logNotification(sessionRef: SessionRef, title: string, body: string): Promise<void> {
+  private async logNotification(
+    sessionRef: SessionRef,
+    title: string,
+    body: string,
+  ): Promise<void> {
     const logPath = process.env.PI_APP_NOTIFICATION_LOG_PATH?.trim();
     if (!logPath) {
       return;
@@ -336,7 +375,11 @@ export class NotificationManager {
 
   private notificationPreferencesEnabled(state: DesktopAppState): boolean {
     const preferences = state.notificationPreferences;
-    return preferences.backgroundCompletion || preferences.backgroundFailure || preferences.attentionNeeded;
+    return (
+      preferences.backgroundCompletion ||
+      preferences.backgroundFailure ||
+      preferences.attentionNeeded
+    );
   }
 
   private syncWindowTracking(): boolean {
@@ -354,11 +397,19 @@ export class NotificationManager {
 }
 
 function requiresAttention(event: Extract<SessionDriverEvent, { type: "hostUiRequest" }>): boolean {
-  return event.request.kind === "confirm" || event.request.kind === "input" || event.request.kind === "select";
+  return (
+    event.request.kind === "confirm" ||
+    event.request.kind === "input" ||
+    event.request.kind === "select"
+  );
 }
 
 function hostUiBody(event: Extract<SessionDriverEvent, { type: "hostUiRequest" }>): string {
-  if (event.request.kind === "confirm" || event.request.kind === "input" || event.request.kind === "select") {
+  if (
+    event.request.kind === "confirm" ||
+    event.request.kind === "input" ||
+    event.request.kind === "select"
+  ) {
     return event.request.title;
   }
   return "Needs your input";

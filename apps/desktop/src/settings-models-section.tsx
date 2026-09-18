@@ -1,5 +1,8 @@
 import { useState } from "react";
-import type { RuntimeSettingsSnapshot, RuntimeSnapshot } from "@pi-gui/session-driver/runtime-types";
+import type {
+  RuntimeSettingsSnapshot,
+  RuntimeSnapshot,
+} from "@pi-gui/session-driver/runtime-types";
 import {
   filterModels,
   labelForThinking,
@@ -12,7 +15,9 @@ import {
 interface SettingsModelsSectionProps {
   readonly runtime?: RuntimeSnapshot;
   readonly onSetDefaultModel: (provider: string, modelId: string) => void;
-  readonly onSetThinkingLevel: (thinkingLevel: RuntimeSettingsSnapshot["defaultThinkingLevel"]) => void;
+  readonly onSetThinkingLevel: (
+    thinkingLevel: RuntimeSettingsSnapshot["defaultThinkingLevel"],
+  ) => void;
   readonly onSetScopedModelPatterns: (patterns: readonly string[]) => void;
 }
 
@@ -40,13 +45,17 @@ export function SettingsModelsSection({
     if (allImplicitlyEnabled) return true;
     return activeScopedSet.has(`${model.providerId}/${model.modelId}`);
   });
-  const enabledAvailablePatterns = enabledAvailableModels.map((model) => `${model.providerId}/${model.modelId}`);
+  const enabledAvailablePatterns = enabledAvailableModels.map(
+    (model) => `${model.providerId}/${model.modelId}`,
+  );
 
   const defaultProvider = runtime?.settings.defaultProvider;
   const defaultModelId = runtime?.settings.defaultModelId;
   const defaultIsEnabled =
     defaultProvider && defaultModelId
-      ? enabledAvailableModels.some((m) => m.providerId === defaultProvider && m.modelId === defaultModelId)
+      ? enabledAvailableModels.some(
+          (m) => m.providerId === defaultProvider && m.modelId === defaultModelId,
+        )
       : false;
 
   const filteredModels = filterModels(models, modelQuery);
@@ -81,13 +90,19 @@ export function SettingsModelsSection({
           >
             <option value="">Choose a model</option>
             {enabledAvailableModels.map((model) => (
-              <option key={`${model.providerId}:${model.modelId}`} value={`${model.providerId}:${model.modelId}`}>
+              <option
+                key={`${model.providerId}:${model.modelId}`}
+                value={`${model.providerId}:${model.modelId}`}
+              >
                 {model.providerName} · {model.label}
               </option>
             ))}
           </select>
         </SettingsRow>
-        <SettingsRow title="Reasoning" description="Set the default reasoning level for new sessions.">
+        <SettingsRow
+          title="Reasoning"
+          description="Set the default reasoning level for new sessions."
+        >
           <div className="settings-pill-row">
             {THINKING_LEVELS.map((level) => (
               <button
@@ -103,7 +118,10 @@ export function SettingsModelsSection({
         </SettingsRow>
       </SettingsGroup>
 
-      <SettingsGroup title="Enabled models" description="Choose which models appear in pickers throughout the app.">
+      <SettingsGroup
+        title="Enabled models"
+        description="Choose which models appear in pickers throughout the app."
+      >
         <div className="settings-row">
           {enabledAvailablePatterns.length > 0 ? (
             <div className="settings-pill-row">
@@ -129,7 +147,8 @@ export function SettingsModelsSection({
         {!defaultIsEnabled && defaultProvider && defaultModelId ? (
           <div className="settings-row">
             <span className="settings-warning">
-              Your default model ({defaultProvider}:{defaultModelId}) is not enabled. Choose a new default above.
+              Your default model ({defaultProvider}:{defaultModelId}) is not enabled. Choose a new
+              default above.
             </span>
           </div>
         ) : null}
@@ -172,7 +191,10 @@ export function SettingsModelsSection({
         </details>
       </SettingsGroup>
 
-      <SettingsGroup title="All models" description="Browse the full model catalog. Enable models above to use them.">
+      <SettingsGroup
+        title="All models"
+        description="Browse the full model catalog. Enable models above to use them."
+      >
         <details className="settings-disclosure">
           <summary className="settings-disclosure__summary">
             <span>Browse full model inventory</span>
@@ -192,11 +214,10 @@ export function SettingsModelsSection({
                 const enabled = activeScopedSet.has(pattern);
                 const isLast = enabled && activeScopedPatterns.length <= 1;
                 return (
-                  <div
-                    className="settings-option"
-                    key={`${model.providerId}:${model.modelId}`}
-                  >
-                    <span className="settings-option__title">{model.providerName} · {model.label}</span>
+                  <div className="settings-option" key={`${model.providerId}:${model.modelId}`}>
+                    <span className="settings-option__title">
+                      {model.providerName} · {model.label}
+                    </span>
                     <span className="settings-option__meta">
                       {model.providerId}:{model.modelId}
                       {model.reasoning ? " · reasoning" : ""}

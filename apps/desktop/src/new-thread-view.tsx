@@ -1,4 +1,11 @@
-import { useEffect, useRef, type ClipboardEvent, type DragEvent, type KeyboardEvent, type RefObject } from "react";
+import {
+  useEffect,
+  useRef,
+  type ClipboardEvent,
+  type DragEvent,
+  type KeyboardEvent,
+  type RefObject,
+} from "react";
 import type { RuntimeSnapshot } from "@pi-gui/session-driver/runtime-types";
 import type { ComposerAttachment, NewThreadEnvironment, WorkspaceRecord } from "./desktop-state";
 import type { MentionOption } from "./hooks/use-mention-menu";
@@ -53,7 +60,9 @@ interface NewThreadViewProps {
   readonly onSelectSlashCommand: (command: ComposerSlashCommand) => void;
   readonly onSelectSlashOption: (option: ComposerSlashOption) => void;
   readonly onSelectMention: (option: MentionOption) => void;
-  readonly onEnableMentionExtension: (option: Extract<MentionOption, { kind: "extension" }>) => void;
+  readonly onEnableMentionExtension: (
+    option: Extract<MentionOption, { kind: "extension" }>,
+  ) => void;
   readonly onAddAttachments: (files: File[]) => void;
   readonly onRemoveAttachment: (attachmentId: string) => void;
   readonly onSubmit: () => void;
@@ -125,7 +134,10 @@ export function NewThreadView({
         <div className="empty-panel">
           <div className="session-header__eyebrow">New thread</div>
           <h1>Open a folder to begin</h1>
-          <p>Select a repository from the sidebar first, then start a local or worktree-backed thread.</p>
+          <p>
+            Select a repository from the sidebar first, then start a local or worktree-backed
+            thread.
+          </p>
         </div>
       </section>
     );
@@ -162,9 +174,12 @@ export function NewThreadView({
               lastError={lastError}
               activeSlashCommand={activeSlashCommand}
               activeSlashCommandMeta={activeSlashCommandMeta}
-              topNotice={(
-                <ModelOnboardingNoticeBanner notice={modelOnboarding.notice} onOpenSettings={onOpenModelSettings} />
-              )}
+              topNotice={
+                <ModelOnboardingNoticeBanner
+                  notice={modelOnboarding.notice}
+                  onOpenSettings={onOpenModelSettings}
+                />
+              }
               queuedMessages={[]}
               composerDraft={prompt}
               setComposerDraft={onChangePrompt}
@@ -197,7 +212,7 @@ export function NewThreadView({
               textareaTestId="new-thread-composer"
               textareaClassName="new-thread__textarea"
               textareaPlaceholder="Ask pi anything, use / for commands and skills"
-              footer={(
+              footer={
                 <NewThreadComposerFooter
                   runtime={runtime}
                   environment={environment}
@@ -213,7 +228,7 @@ export function NewThreadView({
                   onAddAttachments={onAddAttachments}
                   onSubmit={onSubmit}
                 />
-              )}
+              }
             />
           </div>
         </div>

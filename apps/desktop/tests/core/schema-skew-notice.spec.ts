@@ -49,13 +49,18 @@ test("shows a version-skew notice for a session written by a newer pi, dismissib
     let schemaInfoWired = false;
     try {
       await expect
-        .poll(async () => (await getSelectedTranscript(window))?.schemaInfo !== undefined, { timeout: 10_000 })
+        .poll(async () => (await getSelectedTranscript(window))?.schemaInfo !== undefined, {
+          timeout: 10_000,
+        })
         .toBe(true);
       schemaInfoWired = true;
     } catch {
       schemaInfoWired = false;
     }
-    test.skip(!schemaInfoWired, "Requires the app-store transcript schemaInfo projection (w-appstore task #7).");
+    test.skip(
+      !schemaInfoWired,
+      "Requires the app-store transcript schemaInfo projection (w-appstore task #7).",
+    );
 
     const notice = window.getByTestId("schema-skew-notice");
     await expect(notice).toBeVisible({ timeout: 15_000 });

@@ -1,8 +1,17 @@
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { getDesktopState, launchDesktop, makeUserDataDir, makeWorkspace } from "../helpers/electron-app";
+import {
+  getDesktopState,
+  launchDesktop,
+  makeUserDataDir,
+  makeWorkspace,
+} from "../helpers/electron-app";
 import { emitRunningEvent, readOptionalLog } from "../helpers/notification-events";
-import { createThread, selectSessionByTitle, setSessionVisibilityOverride } from "./session-event-test-helpers";
+import {
+  createThread,
+  selectSessionByTitle,
+  setSessionVisibilityOverride,
+} from "./session-event-test-helpers";
 
 async function openNotificationSettings(window: Page): Promise<void> {
   await window.getByRole("button", { name: "Settings", exact: true }).click();
@@ -42,7 +51,9 @@ test("requests notification permission when the user switches away from a runnin
 
     await selectSessionByTitle(window, "Onboarding Session A");
     await selectSessionByTitle(window, "Onboarding Session B");
-    await expect.poll(() => readOptionalLog(requestLogPath), { timeout: 5_000 }).toBe(firstPromptLog);
+    await expect
+      .poll(() => readOptionalLog(requestLogPath), { timeout: 5_000 })
+      .toBe(firstPromptLog);
 
     await openNotificationSettings(window);
     await expect(window.locator(".settings-view")).toContainText("Enabled");
@@ -189,7 +200,9 @@ test("does not request notification permission twice after macOS decides during 
   for (const status of ["denied", "granted"] as const) {
     const userDataDir = await makeUserDataDir(`pi-gui-notification-decides-${status}-`);
     const requestLogPath = join(userDataDir, `notification-onboarding-decides-${status}.log`);
-    const workspacePath = await makeWorkspace(`notification-onboarding-decides-${status}-workspace`);
+    const workspacePath = await makeWorkspace(
+      `notification-onboarding-decides-${status}-workspace`,
+    );
     const harness = await launchDesktop(userDataDir, {
       initialWorkspaces: [workspacePath],
       testMode: "background",
@@ -215,7 +228,9 @@ test("does not request notification permission twice after macOS decides during 
 
       await selectSessionByTitle(window, `${status} Decides Session A`);
       await selectSessionByTitle(window, `${status} Decides Session B`);
-      await expect.poll(() => readOptionalLog(requestLogPath), { timeout: 5_000 }).toBe(firstPromptLog);
+      await expect
+        .poll(() => readOptionalLog(requestLogPath), { timeout: 5_000 })
+        .toBe(firstPromptLog);
     } finally {
       await harness.close();
     }

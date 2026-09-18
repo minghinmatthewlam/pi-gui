@@ -71,13 +71,18 @@ export function useNewThreadController(params: UseNewThreadControllerParams) {
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const previousActiveViewRef = useRef<AppView | null>(null);
 
-  const workspace = rootWorkspaceOptions.find((entry) => entry.id === rootWorkspaceId) ?? rootWorkspaceOptions[0];
+  const workspace =
+    rootWorkspaceOptions.find((entry) => entry.id === rootWorkspaceId) ?? rootWorkspaceOptions[0];
   const runtime = snapshot ? getEffectiveModelRuntime(snapshot, workspace) : undefined;
   const defaultEnabled = buildModelOptions(runtime).some(
-    (m) => m.providerId === runtime?.settings.defaultProvider && m.modelId === runtime?.settings.defaultModelId,
+    (m) =>
+      m.providerId === runtime?.settings.defaultProvider &&
+      m.modelId === runtime?.settings.defaultModelId,
   );
-  const resolvedProvider = provider ?? (defaultEnabled ? runtime?.settings.defaultProvider : undefined);
-  const resolvedModelId = modelId ?? (defaultEnabled ? runtime?.settings.defaultModelId : undefined);
+  const resolvedProvider =
+    provider ?? (defaultEnabled ? runtime?.settings.defaultProvider : undefined);
+  const resolvedModelId =
+    modelId ?? (defaultEnabled ? runtime?.settings.defaultModelId : undefined);
   const resolvedThinkingLevel = thinkingLevel ?? runtime?.settings.defaultThinkingLevel;
   const modelOnboarding = deriveModelOnboardingState(runtime, {
     provider: resolvedProvider,
@@ -96,12 +101,16 @@ export function useNewThreadController(params: UseNewThreadControllerParams) {
   }, []);
 
   const addAttachments = useCallback((files: File[]) => {
-    void readComposerAttachmentsFromFiles(files).then((added) => {
-      if (added.length === 0) {
-        return;
-      }
-      setAttachments((current) => [...current, ...added]);
-    });
+    void readComposerAttachmentsFromFiles(files)
+      .then((added) => {
+        if (added.length === 0) {
+          return;
+        }
+        setAttachments((current) => [...current, ...added]);
+      })
+      .catch((error: unknown) => {
+        setComposerError(error instanceof Error ? error.message : String(error));
+      });
   }, []);
 
   const removeAttachment = useCallback((attachmentId: string) => {
@@ -140,7 +149,11 @@ export function useNewThreadController(params: UseNewThreadControllerParams) {
       setPendingWorkspaceId("");
       resetSurface(workspaceId);
       if (api) {
-        void updateSnapshot(api, setSnapshot, () => api.setActiveView("new-thread"));
+        void updateSnapshot(setSnapshot, () => api.setActiveView("new-thread")).catch(
+          (error: unknown) => {
+            console.error("[renderer] setActiveView failed", error);
+          },
+        );
       }
     },
     [api, resetSurface, setSnapshot],
@@ -183,13 +196,21 @@ export function useNewThreadController(params: UseNewThreadControllerParams) {
       if (!api || !workspace) {
         return;
       }
-      void updateSnapshot(api, setSnapshot, () => api.loginProvider(workspace.id, providerId));
+      void updateSnapshot(setSnapshot, () => api.loginProvider(workspace.id, providerId)).catch(
+        (error: unknown) => {
+          console.error("[renderer] loginProvider failed", error);
+        },
+      );
     },
     onSelectLogoutProvider: (providerId) => {
       if (!api || !workspace) {
         return;
       }
-      void updateSnapshot(api, setSnapshot, () => api.logoutProvider(workspace.id, providerId));
+      void updateSnapshot(setSnapshot, () => api.logoutProvider(workspace.id, providerId)).catch(
+        (error: unknown) => {
+          console.error("[renderer] logoutProvider failed", error);
+        },
+      );
     },
   });
 
@@ -198,9 +219,9 @@ export function useNewThreadController(params: UseNewThreadControllerParams) {
       if (!api || !workspace) {
         return Promise.resolve();
       }
-      return updateSnapshot(api, setSnapshot, () => api.setExtensionEnabled(workspace.id, filePath, true)).then(
-        () => undefined,
-      );
+      return updateSnapshot(setSnapshot, () =>
+        api.setExtensionEnabled(workspace.id, filePath, true),
+      ).then(() => undefined);
     },
     [api, setSnapshot, workspace],
   );
@@ -244,14 +265,18 @@ export function useNewThreadController(params: UseNewThreadControllerParams) {
       thinkingLevel: resolvedThinkingLevel,
     };
     expandWorkspace(rootWorkspaceId);
-    void updateSnapshot(api, setSnapshot, () => api.startThread(input)).then(() => {
-      setPrompt("");
-      setAttachments([]);
-      setProvider(undefined);
-      setModelId(undefined);
-      setThinkingLevel(undefined);
-      setEnvironment("local");
-    });
+    void updateSnapshot(setSnapshot, () => api.startThread(input))
+      .then(() => {
+        setPrompt("");
+        setAttachments([]);
+        setProvider(undefined);
+        setModelId(undefined);
+        setThinkingLevel(undefined);
+        setEnvironment("local");
+      })
+      .catch((error: unknown) => {
+        setComposerError(error instanceof Error ? error.message : String(error));
+      });
   }, [
     api,
     attachments,
@@ -318,7 +343,16 @@ export function useNewThreadController(params: UseNewThreadControllerParams) {
 
       startThread();
     },
-    [api, appendAttachment, attachments.length, mentionMenu, modelOnboarding.requiresModelSelection, prompt, slashMenu, startThread],
+    [
+      api,
+      appendAttachment,
+      attachments.length,
+      mentionMenu,
+      modelOnboarding.requiresModelSelection,
+      prompt,
+      slashMenu,
+      startThread,
+    ],
   );
 
   useEffect(() => {
@@ -330,7 +364,9 @@ export function useNewThreadController(params: UseNewThreadControllerParams) {
       return;
     }
     setRootWorkspaceId((current) =>
-      rootWorkspaceOptions.some((w) => w.id === current) ? current : current || rootWorkspaceOptions[0]?.id || "",
+      rootWorkspaceOptions.some((w) => w.id === current)
+        ? current
+        : current || rootWorkspaceOptions[0]?.id || "",
     );
   }, [rootWorkspaceOptions]);
 
@@ -351,7 +387,10 @@ export function useNewThreadController(params: UseNewThreadControllerParams) {
       return;
     }
     if (snapshot.activeView === "new-thread" && previousActiveViewRef.current !== "new-thread") {
-      const nextRootWorkspaceId = resolveRepoWorkspaceId(snapshot.workspaces, selectedWorkspace?.id);
+      const nextRootWorkspaceId = resolveRepoWorkspaceId(
+        snapshot.workspaces,
+        selectedWorkspace?.id,
+      );
       if (nextRootWorkspaceId) {
         setRootWorkspaceId(nextRootWorkspaceId);
       }

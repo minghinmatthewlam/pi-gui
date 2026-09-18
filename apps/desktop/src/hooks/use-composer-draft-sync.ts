@@ -67,7 +67,8 @@ export function useComposerDraftSync(params: UseComposerDraftSyncParams) {
     handledComposerSyncNonceRef.current = snapshot.composerDraftSyncNonce;
     if (
       localEditGenerationRef.current > acknowledgedLocalEditGenerationRef.current &&
-      (snapshot.composerDraftSyncSource === "persist" || snapshot.composerDraftSyncSource === "state")
+      (snapshot.composerDraftSyncSource === "persist" ||
+        snapshot.composerDraftSyncSource === "state")
     ) {
       return;
     }
@@ -122,10 +123,7 @@ export function useComposerDraftSync(params: UseComposerDraftSyncParams) {
     const inFlightWritesForSession = [...inFlightComposerDraftWritesRef.current.values()].filter(
       (write) => write.sessionKey === selectedSessionKey,
     );
-    if (
-      composerDraft === persistedComposerDraft &&
-      inFlightWritesForSession.length === 0
-    ) {
+    if (composerDraft === persistedComposerDraft && inFlightWritesForSession.length === 0) {
       acknowledgedLocalEditGenerationRef.current = generation;
       pendingComposerDraftRef.current = null;
       return undefined;

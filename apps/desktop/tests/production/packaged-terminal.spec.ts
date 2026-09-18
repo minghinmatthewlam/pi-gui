@@ -29,7 +29,9 @@ test("packaged app opens a real integrated terminal", async () => {
     await terminal.locator(".xterm").click();
     await window.keyboard.type("printf 'PI_PACKAGED_TERMINAL_OK\\n'");
     await window.keyboard.press("Enter");
-    await expect(terminal.locator(".xterm-rows")).toContainText("PI_PACKAGED_TERMINAL_OK", { timeout: 15_000 });
+    await expect(terminal.locator(".xterm-rows")).toContainText("PI_PACKAGED_TERMINAL_OK", {
+      timeout: 15_000,
+    });
   } finally {
     await harness.close();
   }

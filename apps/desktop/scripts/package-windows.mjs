@@ -20,28 +20,25 @@ if (electronBuilderArgs.length === 0) {
 const pathPrefix = [toolsDir, path.join(repoDir, "node_modules", ".bin")];
 const envPath = [...pathPrefix, process.env.PATH ?? ""].filter(Boolean).join(path.delimiter);
 
-const electronBuilderCache = process.env.ELECTRON_BUILDER_CACHE ?? path.join(cacheRoot, "electron-builder");
+const electronBuilderCache =
+  process.env.ELECTRON_BUILDER_CACHE ?? path.join(cacheRoot, "electron-builder");
 const localAppData = process.env.LOCALAPPDATA ?? path.join(cacheRoot, "localappdata");
 mkdirSync(electronBuilderCache, { recursive: true });
 mkdirSync(localAppData, { recursive: true });
 
 const pnpmBinary = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
-const result = spawnSync(
-  pnpmBinary,
-  ["exec", "electron-builder", ...electronBuilderArgs],
-  {
-    cwd: desktopDir,
-    stdio: "inherit",
-    env: {
-      ...process.env,
-      PATH: envPath,
-      ELECTRON_BUILDER_CACHE: electronBuilderCache,
-      LOCALAPPDATA: localAppData,
-      COREPACK_ENABLE_STRICT: "0",
-    },
-    shell: process.platform === "win32",
+const result = spawnSync(pnpmBinary, ["exec", "electron-builder", ...electronBuilderArgs], {
+  cwd: desktopDir,
+  stdio: "inherit",
+  env: {
+    ...process.env,
+    PATH: envPath,
+    ELECTRON_BUILDER_CACHE: electronBuilderCache,
+    LOCALAPPDATA: localAppData,
+    COREPACK_ENABLE_STRICT: "0",
   },
-);
+  shell: process.platform === "win32",
+});
 
 if (result.error) {
   throw result.error;

@@ -27,7 +27,9 @@ export function recordLearnedCommandCompatibility(
   workspaceId: string,
   record: ExtensionCommandCompatibilityRecord,
 ): ExtensionCommandCompatibilityRecord {
-  const byWorkspace = compatibilityByWorkspace.get(workspaceId) ?? new Map<string, ExtensionCommandCompatibilityRecord>();
+  const byWorkspace =
+    compatibilityByWorkspace.get(workspaceId) ??
+    new Map<string, ExtensionCommandCompatibilityRecord>();
   byWorkspace.set(createCompatibilityKey(record.extensionPath, record.commandName), record);
   compatibilityByWorkspace.set(workspaceId, byWorkspace);
   return record;
@@ -76,7 +78,9 @@ export function pruneCompatibilityForRuntimeSnapshot(
     return;
   }
 
-  const liveExtensions = new Map(runtime.extensions.map((extension) => [extension.path, extension] as const));
+  const liveExtensions = new Map(
+    runtime.extensions.map((extension) => [extension.path, extension] as const),
+  );
   for (const [key, record] of [...byWorkspace.entries()]) {
     const extension = liveExtensions.get(record.extensionPath);
     if (!extension) {

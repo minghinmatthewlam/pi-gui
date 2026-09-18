@@ -1,4 +1,11 @@
-import { type ClipboardEvent, type Dispatch, type DragEvent, type KeyboardEvent, type RefObject, type SetStateAction } from "react";
+import {
+  type ClipboardEvent,
+  type Dispatch,
+  type DragEvent,
+  type KeyboardEvent,
+  type RefObject,
+  type SetStateAction,
+} from "react";
 import type { RuntimeSnapshot } from "@pi-gui/session-driver/runtime-types";
 import type { ComposerAttachment, QueuedComposerMessage, SessionRecord } from "./desktop-state";
 import type { MentionOption } from "./hooks/use-mention-menu";
@@ -59,7 +66,9 @@ interface ComposerPanelProps {
   readonly mentionOptions: readonly MentionOption[];
   readonly selectedMentionIndex: number;
   readonly onSelectMention: (option: MentionOption) => void;
-  readonly onEnableMentionExtension: (option: Extract<MentionOption, { kind: "extension" }>) => void;
+  readonly onEnableMentionExtension: (
+    option: Extract<MentionOption, { kind: "extension" }>,
+  ) => void;
   readonly extensionDock?: ExtensionDockModel;
   readonly extensionDockExpanded: boolean;
   readonly onToggleExtensionDock: () => void;
@@ -124,9 +133,12 @@ export function ComposerPanel({
           lastError={lastError}
           activeSlashCommand={activeSlashCommand}
           activeSlashCommandMeta={activeSlashCommandMeta}
-          topNotice={(
-            <ModelOnboardingNoticeBanner notice={modelOnboarding.notice} onOpenSettings={onOpenModelSettings} />
-          )}
+          topNotice={
+            <ModelOnboardingNoticeBanner
+              notice={modelOnboarding.notice}
+              onOpenSettings={onOpenModelSettings}
+            />
+          }
           composerDraft={composerDraft}
           setComposerDraft={setComposerDraft}
           composerRef={composerRef}
@@ -162,7 +174,7 @@ export function ComposerPanel({
           extensionDock={extensionDock}
           extensionDockExpanded={extensionDockExpanded}
           onToggleExtensionDock={onToggleExtensionDock}
-          footer={(
+          footer={
             <div className="composer__footer">
               <div className="composer__footer-row">
                 <div className="composer__hint">
@@ -198,7 +210,8 @@ export function ComposerPanel({
                     type="button"
                     disabled={
                       !primaryActionIsStop &&
-                      ((!composerDraft.trim() && attachments.length === 0) || modelOnboarding.requiresModelSelection)
+                      ((!composerDraft.trim() && attachments.length === 0) ||
+                        modelOnboarding.requiresModelSelection)
                     }
                     onClick={onSubmit}
                   >
@@ -207,7 +220,7 @@ export function ComposerPanel({
                 </div>
               </div>
             </div>
-          )}
+          }
         />
       </div>
     </footer>

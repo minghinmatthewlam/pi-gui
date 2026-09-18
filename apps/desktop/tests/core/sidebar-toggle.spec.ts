@@ -47,7 +47,7 @@ async function readSidebarLayout(window: Page): Promise<SidebarLayout | null> {
     const toggleRect = toggle.getBoundingClientRect();
     const topbarRect = topbar.getBoundingClientRect();
     return {
-      viewportWidth: window.innerWidth,
+      viewportWidth: globalThis.window.innerWidth,
       mainLeft: mainRect.left,
       mainRight: mainRect.right,
       mainWidth: mainRect.width,
@@ -72,19 +72,26 @@ async function setElectronWindowSize(
   width: number,
   height: number,
 ): Promise<void> {
-  const didSetSize = await app.evaluate(({ BrowserWindow }, size) => {
-    const window = BrowserWindow.getAllWindows()[0];
-    if (!window) {
-      return false;
-    }
-    window.setSize(size.width, size.height);
-    return true;
-  }, { width, height });
+  const didSetSize = await app.evaluate(
+    ({ BrowserWindow }, size) => {
+      const window = BrowserWindow.getAllWindows()[0];
+      if (!window) {
+        return false;
+      }
+      window.setSize(size.width, size.height);
+      return true;
+    },
+    { width, height },
+  );
   expect(didSetSize).toBe(true);
-  await expect.poll(() => window.evaluate(() => ({
-    height: window.innerHeight,
-    width: window.innerWidth,
-  }))).toEqual({ height, width });
+  await expect
+    .poll(() =>
+      window.evaluate(() => ({
+        height: globalThis.window.innerHeight,
+        width: globalThis.window.innerWidth,
+      })),
+    )
+    .toEqual({ height, width });
 }
 
 async function writeProofScreenshot(window: Page, name: string): Promise<void> {
@@ -158,7 +165,10 @@ test("toggles and persists the primary sidebar from the button and keyboard shor
     await window.keyboard.press(desktopShortcut(","));
     await expectSecondaryTakeover(window, "settings-surface");
     await window.getByRole("button", { name: "Appearance", exact: true }).click();
-    await window.locator(".settings-row", { hasText: "Light" }).locator('input[type="radio"]').click();
+    await window
+      .locator(".settings-row", { hasText: "Light" })
+      .locator('input[type="radio"]')
+      .click();
     await writeTakeoverProof(window, "settings-light.png");
     await window.keyboard.press(desktopShortcut("B"));
     await expect.poll(async () => (await getDesktopState(window)).sidebarCollapsed).toBe(false);
@@ -182,7 +192,10 @@ test("toggles and persists the primary sidebar from the button and keyboard shor
 
     await window.keyboard.press(desktopShortcut(","));
     await expectSecondaryTakeover(window, "settings-surface");
-    await window.locator(".settings-row", { hasText: "Dark" }).locator('input[type="radio"]').click();
+    await window
+      .locator(".settings-row", { hasText: "Dark" })
+      .locator('input[type="radio"]')
+      .click();
     await writeTakeoverProof(window, "settings-dark.png");
     await window.getByRole("button", { name: "Back to app", exact: true }).click();
 
@@ -250,7 +263,9 @@ test("keeps collapsed sidebar out of narrow windows and reopens from the button"
 
     const collapsedLayout = await readSidebarLayout(window);
     if (!collapsedLayout) {
-      throw new Error("Expected collapsed narrow layout to include main, topbar, and sidebar toggle");
+      throw new Error(
+        "Expected collapsed narrow layout to include main, topbar, and sidebar toggle",
+      );
     }
     expect(collapsedLayout.viewportWidth).toBeLessThanOrEqual(NARROW_WINDOW_WIDTH);
     expect(collapsedLayout.mainLeft).toBeLessThanOrEqual(1);

@@ -12,7 +12,11 @@ import {
   type CustomProviderModelInput,
 } from "./custom-provider-types.js";
 
-export type { CustomProviderEntry, CustomProviderInput, CustomProviderModelInput } from "./custom-provider-types.js";
+export type {
+  CustomProviderEntry,
+  CustomProviderInput,
+  CustomProviderModelInput,
+} from "./custom-provider-types.js";
 export {
   BUILT_IN_PROVIDER_IDS,
   CUSTOM_PROVIDER_ID_PATTERN,
@@ -40,7 +44,11 @@ export class CustomProviderStore {
       const data = await readModelsJson(this.modelsJsonPath);
       const providers = ensureProvidersRecord(data);
       const existing = providers[input.providerId];
-      if (existing && typeof existing === "object" && !isPiGuiCustomProviderConfig(input.providerId, existing as Record<string, unknown>)) {
+      if (
+        existing &&
+        typeof existing === "object" &&
+        !isPiGuiCustomProviderConfig(input.providerId, existing as Record<string, unknown>)
+      ) {
         throw new Error(
           `Provider ID "${input.providerId}" already exists in models.json and is not managed by pi-gui.`,
         );
@@ -58,7 +66,11 @@ export class CustomProviderStore {
         return false;
       }
       const existing = (providers as Record<string, unknown>)[providerId];
-      if (!existing || typeof existing !== "object" || !isPiGuiCustomProviderConfig(providerId, existing as Record<string, unknown>)) {
+      if (
+        !existing ||
+        typeof existing !== "object" ||
+        !isPiGuiCustomProviderConfig(providerId, existing as Record<string, unknown>)
+      ) {
         return false;
       }
       delete (providers as Record<string, unknown>)[providerId];
@@ -81,7 +93,9 @@ function validateInput(input: CustomProviderInput): void {
     );
   }
   if (!isValidHttpBaseUrl(input.baseUrl)) {
-    throw new Error(`Base URL must start with http:// or https://: ${JSON.stringify(input.baseUrl)}`);
+    throw new Error(
+      `Base URL must start with http:// or https://: ${JSON.stringify(input.baseUrl)}`,
+    );
   }
   if (input.models.length === 0) {
     throw new Error("At least one model is required.");

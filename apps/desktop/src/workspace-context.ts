@@ -15,7 +15,9 @@ export interface WorkspaceContext {
   readonly visibleWorkspaces: readonly WorkspaceRecord[];
 }
 
-export function deriveWorkspaceContext(snapshot: DesktopAppState | null | undefined): WorkspaceContext {
+export function deriveWorkspaceContext(
+  snapshot: DesktopAppState | null | undefined,
+): WorkspaceContext {
   if (!snapshot) {
     return {
       selectedWorkspace: undefined,
@@ -28,13 +30,18 @@ export function deriveWorkspaceContext(snapshot: DesktopAppState | null | undefi
   }
 
   const selectedWorkspace = getSelectedWorkspace(snapshot) ?? snapshot.workspaces[0];
-  const workspacesById = new Map(snapshot.workspaces.map((workspace) => [workspace.id, workspace] as const));
+  const workspacesById = new Map(
+    snapshot.workspaces.map((workspace) => [workspace.id, workspace] as const),
+  );
   const primaryWorkspaces = snapshot.workspaces.filter((workspace) => workspace.kind === "primary");
   const orphanWorkspaces = snapshot.workspaces.filter(
-    (workspace) => workspace.kind === "worktree" && !workspacesById.has(workspace.rootWorkspaceId ?? ""),
+    (workspace) =>
+      workspace.kind === "worktree" && !workspacesById.has(workspace.rootWorkspaceId ?? ""),
   );
   const visibleWorkspaces =
-    primaryWorkspaces.length > 0 ? [...primaryWorkspaces, ...orphanWorkspaces] : snapshot.workspaces;
+    primaryWorkspaces.length > 0
+      ? [...primaryWorkspaces, ...orphanWorkspaces]
+      : snapshot.workspaces;
   const linkedWorktreeByWorkspaceId = new Map(
     Object.values(snapshot.worktreesByWorkspace)
       .flat()
@@ -43,17 +50,22 @@ export function deriveWorkspaceContext(snapshot: DesktopAppState | null | undefi
   );
   const rootWorkspaceId = resolveRepoWorkspaceId(snapshot.workspaces, selectedWorkspace?.id);
   const rootWorkspace =
-    (rootWorkspaceId ? snapshot.workspaces.find((workspace) => workspace.id === rootWorkspaceId) : undefined) ??
-    selectedWorkspace;
-  const rootWorkspaceOptions = [...new Set(
-    snapshot.workspaces.map((workspace) => resolveRepoWorkspaceId(snapshot.workspaces, workspace.id) ?? workspace.id),
-  )]
+    (rootWorkspaceId
+      ? snapshot.workspaces.find((workspace) => workspace.id === rootWorkspaceId)
+      : undefined) ?? selectedWorkspace;
+  const rootWorkspaceOptions = [
+    ...new Set(
+      snapshot.workspaces.map(
+        (workspace) => resolveRepoWorkspaceId(snapshot.workspaces, workspace.id) ?? workspace.id,
+      ),
+    ),
+  ]
     .map((workspaceId) => snapshot.workspaces.find((workspace) => workspace.id === workspaceId))
     .filter((workspace): workspace is WorkspaceRecord => Boolean(workspace));
 
   return {
     selectedWorkspace,
-    activeWorktrees: rootWorkspace ? snapshot.worktreesByWorkspace[rootWorkspace.id] ?? [] : [],
+    activeWorktrees: rootWorkspace ? (snapshot.worktreesByWorkspace[rootWorkspace.id] ?? []) : [],
     linkedWorktreeByWorkspaceId,
     rootWorkspace,
     rootWorkspaceOptions,

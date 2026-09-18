@@ -18,7 +18,10 @@ import { NEW_THREAD_PLACEHOLDER_TITLE } from "./thread-title-constants";
 
 /* ── Public methods ─────────────────────────────────────── */
 
-export async function createWorktree(store: AppStoreInternals, input: CreateWorktreeInput): Promise<DesktopAppState> {
+export async function createWorktree(
+  store: AppStoreInternals,
+  input: CreateWorktreeInput,
+): Promise<DesktopAppState> {
   await store.initialize();
   const rootWorkspace = store.workspaceRefFromState(input.workspaceId);
   if (!rootWorkspace) {
@@ -36,10 +39,13 @@ export async function createWorktree(store: AppStoreInternals, input: CreateWork
     try {
       const synced = await store.driver.syncWorkspace(created.path, created.displayName);
       if (input.fromSessionId) {
-        await store.driver.createSession(
-          synced.workspace,
-          { title: sessionTitleForWorktree(store, input.fromSessionWorkspaceId ?? input.workspaceId, input.fromSessionId) },
-        );
+        await store.driver.createSession(synced.workspace, {
+          title: sessionTitleForWorktree(
+            store,
+            input.fromSessionWorkspaceId ?? input.workspaceId,
+            input.fromSessionId,
+          ),
+        });
       }
     } catch (error) {
       await rollbackCreatedWorktree(store, rootWorkspace, createOptions);
@@ -56,7 +62,10 @@ export async function createWorktree(store: AppStoreInternals, input: CreateWork
   });
 }
 
-export async function removeWorktree(store: AppStoreInternals, input: RemoveWorktreeInput): Promise<DesktopAppState> {
+export async function removeWorktree(
+  store: AppStoreInternals,
+  input: RemoveWorktreeInput,
+): Promise<DesktopAppState> {
   await store.initialize();
   const rootWorkspace = store.workspaceRefFromState(input.workspaceId);
   if (!rootWorkspace) {
@@ -71,7 +80,9 @@ export async function removeWorktree(store: AppStoreInternals, input: RemoveWork
     }
 
     const selectedWorkspaceId =
-      store.state.selectedWorkspaceId === input.worktreeId ? input.workspaceId : store.state.selectedWorkspaceId;
+      store.state.selectedWorkspaceId === input.worktreeId
+        ? input.workspaceId
+        : store.state.selectedWorkspaceId;
     const selectedSessionId =
       store.state.selectedWorkspaceId === input.worktreeId ? "" : store.state.selectedSessionId;
     return store.refreshState({
@@ -84,7 +95,10 @@ export async function removeWorktree(store: AppStoreInternals, input: RemoveWork
   });
 }
 
-export async function startThread(store: AppStoreInternals, input: StartThreadInput): Promise<DesktopAppState> {
+export async function startThread(
+  store: AppStoreInternals,
+  input: StartThreadInput,
+): Promise<DesktopAppState> {
   await store.initialize();
   const rootWorkspace = store.workspaceRefFromState(input.rootWorkspaceId);
   if (!rootWorkspace) {
@@ -95,7 +109,13 @@ export async function startThread(store: AppStoreInternals, input: StartThreadIn
     let targetWorkspace = rootWorkspace;
     let rollbackWorktree: (() => Promise<void>) | undefined;
     if (input.environment === "worktree") {
-      const worktreeOptions = buildWorktreeOptions(store, rootWorkspace, undefined, undefined, input.prompt);
+      const worktreeOptions = buildWorktreeOptions(
+        store,
+        rootWorkspace,
+        undefined,
+        undefined,
+        input.prompt,
+      );
       const created = await store.worktreeManager.createWorktree(rootWorkspace, worktreeOptions);
       rollbackWorktree = () => rollbackCreatedWorktree(store, rootWorkspace, worktreeOptions);
       try {
@@ -113,7 +133,8 @@ export async function startThread(store: AppStoreInternals, input: StartThreadIn
     let initialModel: { provider: string; modelId: string } | undefined;
     let initialThinkingLevel: string | undefined;
     try {
-      const createOptions = (await store.buildCreateSessionOptions(targetWorkspace.workspaceId)) ?? {};
+      const createOptions =
+        (await store.buildCreateSessionOptions(targetWorkspace.workspaceId)) ?? {};
       initialModel =
         input.provider && input.modelId
           ? { provider: input.provider, modelId: input.modelId }
@@ -166,7 +187,9 @@ export async function startThread(store: AppStoreInternals, input: StartThreadIn
       void sendMessageToSession(store, session.ref, prompt, attachments, {
         rollbackOptimisticMessageOnError: false,
       }).catch((error) => {
-        void store.withError(error);
+        void store.withError(error).catch((error: unknown) => {
+          console.error("[app-store-worktree] withError failed", error);
+        });
       });
     }
     if (prompt) {
@@ -176,6 +199,8 @@ export async function startThread(store: AppStoreInternals, input: StartThreadIn
         signal: autoTitleAbortController.signal,
         ...(initialModel ? { model: initialModel } : {}),
         ...(initialThinkingLevel ? { thinkingLevel: initialThinkingLevel } : {}),
+      }).catch((error: unknown) => {
+        console.error("[app-store-worktree] generateAndApplyAutoTitle failed", error);
       });
     } else {
       store.clearPendingAutoTitle(session.ref);
@@ -185,7 +210,10 @@ export async function startThread(store: AppStoreInternals, input: StartThreadIn
   });
 }
 
-export async function forkThread(store: AppStoreInternals, input: ForkThreadInput): Promise<DesktopAppState> {
+export async function forkThread(
+  store: AppStoreInternals,
+  input: ForkThreadInput,
+): Promise<DesktopAppState> {
   await store.initialize();
   const sourceWorkspace = store.workspaceRefFromState(input.sourceWorkspaceId);
   if (!sourceWorkspace) {
@@ -196,7 +224,9 @@ export async function forkThread(store: AppStoreInternals, input: ForkThreadInpu
     const sourceRef = { workspaceId: input.sourceWorkspaceId, sessionId: input.sourceSessionId };
     const forkOptions = {
       ...(input.sourceMessageId ? { sourceMessageId: input.sourceMessageId } : {}),
-      ...(input.sourceMessageIndex !== undefined ? { sourceMessageIndex: input.sourceMessageIndex } : {}),
+      ...(input.sourceMessageIndex !== undefined
+        ? { sourceMessageIndex: input.sourceMessageIndex }
+        : {}),
       ...(input.userMessageIndex !== undefined ? { userMessageIndex: input.userMessageIndex } : {}),
       ...(input.position ? { position: input.position } : {}),
     };
@@ -278,7 +308,9 @@ export async function syncAndListWorktrees(
 ): Promise<readonly WorktreeCatalogEntry[]> {
   const existing = await store.catalogStore.worktrees.listWorktrees();
   const existingPrimaryByWorkspaceId = new Set(
-    existing.worktrees.filter((worktree) => worktree.kind === "primary").map((worktree) => worktree.workspaceId),
+    existing.worktrees
+      .filter((worktree) => worktree.kind === "primary")
+      .map((worktree) => worktree.workspaceId),
   );
   const inspected = await Promise.all(
     workspaces.map(async (workspace) => {
@@ -309,24 +341,29 @@ export async function syncAndListWorktrees(
   }
 
   const syncRoots = [...groups.values()]
-    .map((group) =>
-      [...group].sort((left, right) => {
-        const leftIsExistingPrimary = existingPrimaryByWorkspaceId.has(left.workspace.workspaceId);
-        const rightIsExistingPrimary = existingPrimaryByWorkspaceId.has(right.workspace.workspaceId);
-        if (leftIsExistingPrimary !== rightIsExistingPrimary) {
-          return leftIsExistingPrimary ? -1 : 1;
-        }
-        if (left.workspace.sortOrder !== right.workspace.sortOrder) {
-          return left.workspace.sortOrder - right.workspace.sortOrder;
-        }
-        if (left.workspace.lastOpenedAt !== right.workspace.lastOpenedAt) {
-          return left.workspace.lastOpenedAt.localeCompare(right.workspace.lastOpenedAt);
-        }
-        if (left.canonicalPath.length !== right.canonicalPath.length) {
-          return left.canonicalPath.length - right.canonicalPath.length;
-        }
-        return left.workspace.displayName.localeCompare(right.workspace.displayName);
-      })[0],
+    .map(
+      (group) =>
+        [...group].sort((left, right) => {
+          const leftIsExistingPrimary = existingPrimaryByWorkspaceId.has(
+            left.workspace.workspaceId,
+          );
+          const rightIsExistingPrimary = existingPrimaryByWorkspaceId.has(
+            right.workspace.workspaceId,
+          );
+          if (leftIsExistingPrimary !== rightIsExistingPrimary) {
+            return leftIsExistingPrimary ? -1 : 1;
+          }
+          if (left.workspace.sortOrder !== right.workspace.sortOrder) {
+            return left.workspace.sortOrder - right.workspace.sortOrder;
+          }
+          if (left.workspace.lastOpenedAt !== right.workspace.lastOpenedAt) {
+            return left.workspace.lastOpenedAt.localeCompare(right.workspace.lastOpenedAt);
+          }
+          if (left.canonicalPath.length !== right.canonicalPath.length) {
+            return left.canonicalPath.length - right.canonicalPath.length;
+          }
+          return left.workspace.displayName.localeCompare(right.workspace.displayName);
+        })[0],
     )
     .filter((entry): entry is (typeof inspected)[number] => Boolean(entry));
   const syncRootWorkspaceIds = new Set(syncRoots.map((entry) => entry.workspace.workspaceId));
@@ -347,7 +384,9 @@ export async function syncAndListWorktrees(
   );
   await Promise.all(
     staleWorkspaceIds.map((workspaceId) =>
-      store.catalogStore.worktrees.replaceWorkspaceWorktrees(workspaceId, []).catch(() => undefined),
+      store.catalogStore.worktrees
+        .replaceWorkspaceWorktrees(workspaceId, [])
+        .catch(() => undefined),
     ),
   );
 
@@ -371,9 +410,7 @@ export function buildWorktreeOptions(
       : undefined;
   const preferredTitle = shortDisplayTitle(titleHint?.trim() || sessionTitle);
   const suffix = shortUniqueSuffix();
-  const baseLabel = preferredTitle
-    ? clampSlug(slugify(preferredTitle), 18)
-    : "wt";
+  const baseLabel = preferredTitle ? clampSlug(slugify(preferredTitle), 18) : "wt";
   const folderName = `${baseLabel}-${suffix}`;
   const repoName = clampSlug(slugify(basename(workspace.path) || "repo"), 20);
   const displayName = preferredTitle || `Worktree ${suffix}`;
@@ -409,7 +446,9 @@ export async function reconcileWorktrees(store: AppStoreInternals): Promise<void
       referencedPaths,
     });
   } catch (error) {
-    console.warn(`pi-gui: worktree reconcile skipped: ${error instanceof Error ? error.message : String(error)}`);
+    console.warn(
+      `pi-gui: worktree reconcile skipped: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
 }
 
@@ -495,12 +534,19 @@ async function generateAndApplyAutoTitle(
   } catch (error) {
     // Auto-title is best-effort, but a swallowed rename failure must at least
     // be visible — the thread silently keeps its placeholder title otherwise.
-    console.warn(`[app-store] auto-title failed for ${sessionRef.workspaceId}:${sessionRef.sessionId}:`, error);
+    console.warn(
+      `[app-store] auto-title failed for ${sessionRef.workspaceId}:${sessionRef.sessionId}:`,
+      error,
+    );
     clearMatchingPendingTitle();
   }
 }
 
-function sessionTitleForWorktree(store: AppStoreInternals, workspaceId: string, sessionId: string): string | undefined {
+function sessionTitleForWorktree(
+  store: AppStoreInternals,
+  workspaceId: string,
+  sessionId: string,
+): string | undefined {
   return store.state.workspaces
     .find((workspace) => workspace.id === workspaceId)
     ?.sessions.find((session) => session.id === sessionId)

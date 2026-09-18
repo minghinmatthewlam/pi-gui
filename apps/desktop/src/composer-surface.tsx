@@ -1,4 +1,12 @@
-import { useRef, useState, type ClipboardEvent, type DragEvent, type KeyboardEvent, type ReactNode, type RefObject } from "react";
+import {
+  useRef,
+  useState,
+  type ClipboardEvent,
+  type DragEvent,
+  type KeyboardEvent,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import type { ComposerAttachment } from "./desktop-state";
 import type { MentionOption } from "./hooks/use-mention-menu";
 import type {
@@ -9,7 +17,16 @@ import type {
 } from "./composer-commands";
 import { hasFilesInDataTransfer } from "./composer-attachments";
 import { ExtensionDock, type ExtensionDockModel } from "./extension-session-ui";
-import { ExtensionIcon, FileIcon, ModelIcon, ReasoningIcon, SettingsIcon, SkillIcon, SparkIcon, StatusIcon } from "./icons";
+import {
+  ExtensionIcon,
+  FileIcon,
+  ModelIcon,
+  ReasoningIcon,
+  SettingsIcon,
+  SkillIcon,
+  SparkIcon,
+  StatusIcon,
+} from "./icons";
 import { QueuedComposerMessages } from "./queued-composer-messages";
 
 type ExtensionMentionOption = Extract<MentionOption, { kind: "extension" }>;
@@ -192,7 +209,10 @@ export function ComposerSurface({
       {attachments.length > 0 ? (
         <div className="composer__attachments">
           {attachments.map((attachment) => (
-            <div className={`composer-attachment composer-attachment--${attachment.kind}`} key={attachment.id}>
+            <div
+              className={`composer-attachment composer-attachment--${attachment.kind}`}
+              key={attachment.id}
+            >
               {attachment.kind === "image" ? (
                 <img
                   alt={attachment.name}
@@ -218,7 +238,11 @@ export function ComposerSurface({
         </div>
       ) : null}
       {extensionDock && onToggleExtensionDock ? (
-        <ExtensionDock dock={extensionDock} expanded={extensionDockExpanded} onToggle={onToggleExtensionDock} />
+        <ExtensionDock
+          dock={extensionDock}
+          expanded={extensionDockExpanded}
+          onToggle={onToggleExtensionDock}
+        />
       ) : null}
       {lastError ? (
         <div className="composer__error error-banner" data-testid="composer-error-banner">
@@ -229,7 +253,11 @@ export function ComposerSurface({
         {topNotice}
         {showMentionMenu ? (
           <div className="composer__menus">
-            <div className="mention-menu" data-testid="mention-menu" onWheel={(event) => event.stopPropagation()}>
+            <div
+              className="mention-menu"
+              data-testid="mention-menu"
+              onWheel={(event) => event.stopPropagation()}
+            >
               <MentionMenuSections
                 options={mentionOptions}
                 selectedIndex={selectedMentionIndex}
@@ -242,11 +270,17 @@ export function ComposerSurface({
         {showSlashMenu || (showSlashOptionMenu && selectedSlashCommand) ? (
           <div className="composer__menus">
             {showSlashMenu ? (
-              <div className="slash-menu" data-testid="slash-menu" onWheel={(event) => event.stopPropagation()}>
+              <div
+                className="slash-menu"
+                data-testid="slash-menu"
+                onWheel={(event) => event.stopPropagation()}
+              >
                 {slashSections.map((section) => (
                   <div className="slash-menu__section" key={section.id}>
                     {section.title ? (
-                      <div className={`slash-menu__section-title slash-menu__section-title--${section.id}`}>
+                      <div
+                        className={`slash-menu__section-title slash-menu__section-title--${section.id}`}
+                      >
                         <span className="slash-menu__section-icon" aria-hidden="true">
                           {section.id === "runtime" ? <SparkIcon /> : <SettingsIcon />}
                         </span>
@@ -267,14 +301,22 @@ export function ComposerSurface({
                           <span className="slash-menu__content slash-menu__content--skill">
                             <span className="slash-menu__line">
                               <span className="slash-menu__title">{command.title}</span>
-                              {command.sourceLabel ? <span className="slash-menu__skill-badge">{command.sourceLabel}</span> : null}
+                              {command.sourceLabel ? (
+                                <span className="slash-menu__skill-badge">
+                                  {command.sourceLabel}
+                                </span>
+                              ) : null}
                               {command.compatibility?.status === "terminal-only" ? (
-                                <span className="slash-menu__skill-badge slash-menu__skill-badge--warning">Terminal-only</span>
+                                <span className="slash-menu__skill-badge slash-menu__skill-badge--warning">
+                                  Terminal-only
+                                </span>
                               ) : null}
                             </span>
                             <span className="slash-menu__description">{command.description}</span>
                             <span className="slash-menu__meta">
-                              <span className="slash-menu__command slash-menu__command--skill">{command.command}</span>
+                              <span className="slash-menu__command slash-menu__command--skill">
+                                {command.command}
+                              </span>
                             </span>
                           </span>
                         ) : (
@@ -293,26 +335,32 @@ export function ComposerSurface({
               </div>
             ) : null}
             {showSlashOptionMenu && selectedSlashCommand ? (
-              <div className="slash-menu slash-menu--options" data-testid="slash-options-menu" onWheel={(event) => event.stopPropagation()}>
+              <div
+                className="slash-menu slash-menu--options"
+                data-testid="slash-options-menu"
+                onWheel={(event) => event.stopPropagation()}
+              >
                 <div className="slash-menu__search">{selectedSlashCommand.title}</div>
-                {slashOptions.length > 0
-                  ? slashOptions.map((option) => (
-                      <button
-                        className={`slash-menu__option ${selectedSlashOption?.value === option.value ? "slash-menu__option--active" : ""}`}
-                        key={option.value}
-                        type="button"
-                        onClick={() => onSelectSlashOption(option)}
-                      >
-                        <span className="slash-menu__option-title">{option.label}</span>
-                        <span className="slash-menu__option-description">{option.description}</span>
-                      </button>
-                    ))
-                  : slashOptionEmptyState ? (
-                      <div className="slash-menu__empty">
-                        <div className="slash-menu__empty-title">{slashOptionEmptyState.title}</div>
-                        <div className="slash-menu__empty-description">{slashOptionEmptyState.description}</div>
-                      </div>
-                    ) : null}
+                {slashOptions.length > 0 ? (
+                  slashOptions.map((option) => (
+                    <button
+                      className={`slash-menu__option ${selectedSlashOption?.value === option.value ? "slash-menu__option--active" : ""}`}
+                      key={option.value}
+                      type="button"
+                      onClick={() => onSelectSlashOption(option)}
+                    >
+                      <span className="slash-menu__option-title">{option.label}</span>
+                      <span className="slash-menu__option-description">{option.description}</span>
+                    </button>
+                  ))
+                ) : slashOptionEmptyState ? (
+                  <div className="slash-menu__empty">
+                    <div className="slash-menu__empty-title">{slashOptionEmptyState.title}</div>
+                    <div className="slash-menu__empty-description">
+                      {slashOptionEmptyState.description}
+                    </div>
+                  </div>
+                ) : null}
               </div>
             ) : null}
           </div>
@@ -346,8 +394,12 @@ function MentionMenuSections({
   readonly onSelect: (option: MentionOption) => void;
   readonly onEnableExtension: (option: ExtensionMentionOption) => void;
 }) {
-  const extensionOptions = options.filter((option): option is ExtensionMentionOption => option.kind === "extension");
-  const fileOptions = options.filter((option): option is FileMentionOption => option.kind === "file");
+  const extensionOptions = options.filter(
+    (option): option is ExtensionMentionOption => option.kind === "extension",
+  );
+  const fileOptions = options.filter(
+    (option): option is FileMentionOption => option.kind === "file",
+  );
 
   return (
     <>
@@ -441,7 +493,9 @@ function MentionMenuItem({
             <span className="mention-menu__line">
               <span className="mention-menu__filename">{option.displayName}</span>
               {option.enabled ? null : (
-                <span className="mention-menu__badge">{option.enabling ? "Enabling" : "Disabled"}</span>
+                <span className="mention-menu__badge">
+                  {option.enabling ? "Enabling" : "Disabled"}
+                </span>
               )}
             </span>
             <span className="mention-menu__description">{option.description}</span>

@@ -1,5 +1,13 @@
-import type { RuntimeSettingsSnapshot, RuntimeSnapshot } from "@pi-gui/session-driver/runtime-types";
-import type { ModelSettingsScopeMode, NotificationPreferences, ThemePresetId, WorkspaceRecord } from "./desktop-state";
+import type {
+  RuntimeSettingsSnapshot,
+  RuntimeSnapshot,
+} from "@pi-gui/session-driver/runtime-types";
+import type {
+  ModelSettingsScopeMode,
+  NotificationPreferences,
+  ThemePresetId,
+  WorkspaceRecord,
+} from "./desktop-state";
 import type { CustomProviderConfig, DesktopNotificationPermissionStatus } from "./ipc";
 import { SettingsAppearanceSection } from "./settings-appearance-section";
 import { SettingsGeneralSection } from "./settings-general-section";
@@ -24,7 +32,9 @@ interface SettingsViewProps {
   readonly enableTransparency: boolean;
   readonly onSetModelSettingsScopeMode: (mode: ModelSettingsScopeMode) => void;
   readonly onSetDefaultModel: (provider: string, modelId: string) => void;
-  readonly onSetThinkingLevel: (thinkingLevel: RuntimeSettingsSnapshot["defaultThinkingLevel"]) => void;
+  readonly onSetThinkingLevel: (
+    thinkingLevel: RuntimeSettingsSnapshot["defaultThinkingLevel"],
+  ) => void;
   readonly onToggleSkillCommands: (enabled: boolean) => void;
   readonly onSetScopedModelPatterns: (patterns: readonly string[]) => void;
   readonly onLoginProvider: (providerId: string) => void;

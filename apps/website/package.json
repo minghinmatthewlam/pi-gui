@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "next": "^15.3.0",

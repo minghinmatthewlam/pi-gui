@@ -1,0 +1,24 @@
+# Dependencies, generated output, and local verification artifacts.
+**/node_modules/
+**/dist/
+**/dist-electron/
+**/out/
+**/build/
+**/release/
+**/release-*/
+**/.next/
+**/.cache/
+**/.turbo/
+**/test-results/
+**/playwright-report/
+**/*.tsbuildinfo
+.artifacts/
+.cursor/
+.pnpm-store/
+.worktrees/
+.claude/worktrees/
+.codex/worktrees/
+plans/
+pnpm-lock.yaml
+main.js
+patches/

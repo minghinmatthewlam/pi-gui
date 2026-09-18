@@ -22,10 +22,7 @@ export function InlineDiff({
   }
 
   return (
-    <pre
-      className="diff-inline"
-      data-language={highlightActive ? language : undefined}
-    >
+    <pre className="diff-inline" data-language={highlightActive ? language : undefined}>
       {lines.map((line, index) => (
         <div className={`diff-line diff-line--${line.type}`} key={index}>
           {line.lineNumber !== undefined ? (

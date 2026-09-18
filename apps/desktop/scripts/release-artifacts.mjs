@@ -1,13 +1,6 @@
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
-import {
-  copyFile,
-  mkdir,
-  readFile,
-  readdir,
-  stat,
-  writeFile,
-} from "node:fs/promises";
+import { copyFile, mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseDocument } from "yaml";
@@ -38,10 +31,7 @@ function platformSpec(platform, version) {
         manifestName: "release-manifest-linux.json",
         updateManifest: "latest-linux.yml",
         primaryUpdateAsset: `${base}-x86_64.AppImage`,
-        updateAssets: [
-          `${base}-x86_64.AppImage`,
-          `${PRODUCT_NAME}_${version}_amd64.deb`,
-        ],
+        updateAssets: [`${base}-x86_64.AppImage`, `${PRODUCT_NAME}_${version}_amd64.deb`],
         files: [
           { name: `${base}-x86_64.AppImage`, role: "appimage" },
           { name: `${PRODUCT_NAME}_${version}_amd64.deb`, role: "debian-package" },
@@ -180,7 +170,9 @@ async function verifyUpdateManifest(inputDir, platform, version) {
         entry.blockMapSize <= 0 ||
         entry.blockMapSize > digest.size
       ) {
-        throw new Error(`${spec.updateManifest} has an invalid embedded blockmap size for ${entry.url}`);
+        throw new Error(
+          `${spec.updateManifest} has an invalid embedded blockmap size for ${entry.url}`,
+        );
       }
     }
   }
@@ -198,7 +190,9 @@ async function verifyUpdateManifest(inputDir, platform, version) {
   }
   const primaryDigest = await hashFile(path.join(inputDir, spec.primaryUpdateAsset));
   if (manifest.sha512 !== primaryDigest.sha512) {
-    throw new Error(`${spec.updateManifest} primary SHA-512 does not match ${spec.primaryUpdateAsset}`);
+    throw new Error(
+      `${spec.updateManifest} primary SHA-512 does not match ${spec.primaryUpdateAsset}`,
+    );
   }
 }
 
@@ -321,9 +315,7 @@ export async function verifyArtifacts({ platform, version, commit, inputDir }) {
   const manifests = [];
 
   for (const item of platforms) {
-    manifests.push(
-      await verifyPlatformArtifacts({ platform: item, version, commit, inputDir }),
-    );
+    manifests.push(await verifyPlatformArtifacts({ platform: item, version, commit, inputDir }));
   }
 
   if (platform === "all") {
@@ -408,7 +400,9 @@ async function main() {
     );
     return;
   }
-  throw new Error("Usage: release-artifacts.mjs <stage|verify> --platform <name|all> --version <version> --commit <sha> --input <dir> [--output <dir>]");
+  throw new Error(
+    "Usage: release-artifacts.mjs <stage|verify> --platform <name|all> --version <version> --commit <sha> --input <dir> [--output <dir>]",
+  );
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

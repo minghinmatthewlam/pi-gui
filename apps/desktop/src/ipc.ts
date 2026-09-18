@@ -24,12 +24,7 @@ import type {
 } from "./desktop-state";
 
 export type DesktopNotificationPermissionStatus =
-  | "granted"
-  | "denied"
-  | "default"
-  | "unsupported"
-  | "unknown";
-
+  "granted" | "denied" | "default" | "unsupported" | "unknown";
 
 export interface CustomProviderModelConfig {
   readonly id: string;
@@ -163,10 +158,13 @@ export function getDesktopShortcutLabel(platform: NodeJS.Platform, key: string):
 }
 
 export type PiDesktopStateListener = (state: DesktopAppState) => void;
-export type PiDesktopSelectedTranscriptListener = (payload: SelectedTranscriptRecord | null) => void;
+export type PiDesktopSelectedTranscriptListener = (
+  payload: SelectedTranscriptRecord | null,
+) => void;
 export type PiDesktopCommand = (typeof desktopCommands)[keyof typeof desktopCommands];
 
-export type ChangedFileStatus = "added" | "copied" | "deleted" | "modified" | "renamed" | "untracked";
+export type ChangedFileStatus =
+  "added" | "copied" | "deleted" | "modified" | "renamed" | "untracked";
 
 export interface ChangedFileEntry {
   readonly path: string;
@@ -176,7 +174,8 @@ export interface ChangedFileEntry {
   readonly staged: boolean;
 }
 
-export type ChangedFilesErrorCode = "git-status-failed" | "git-status-invalid" | "workspace-unavailable";
+export type ChangedFilesErrorCode =
+  "git-status-failed" | "git-status-invalid" | "workspace-unavailable";
 
 export interface ChangedFilesError {
   readonly code: ChangedFilesErrorCode;
@@ -251,7 +250,9 @@ export interface DesktopShortcutInput {
   readonly code?: string;
 }
 
-export function getDesktopCommandFromShortcut(input: DesktopShortcutInput): PiDesktopCommand | undefined {
+export function getDesktopCommandFromShortcut(
+  input: DesktopShortcutInput,
+): PiDesktopCommand | undefined {
   if (!input.modifier) {
     return undefined;
   }
@@ -340,15 +341,30 @@ export interface PiDesktopApi {
   ): Promise<DesktopAppState>;
   loginProvider(workspaceId: string, providerId: string): Promise<DesktopAppState>;
   logoutProvider(workspaceId: string, providerId: string): Promise<DesktopAppState>;
-  setProviderApiKey(workspaceId: string, providerId: string, apiKey: string): Promise<DesktopAppState>;
+  setProviderApiKey(
+    workspaceId: string,
+    providerId: string,
+    apiKey: string,
+  ): Promise<DesktopAppState>;
   listCustomProviders(): Promise<readonly CustomProviderConfig[]>;
   setCustomProvider(workspaceId: string, config: CustomProviderConfig): Promise<DesktopAppState>;
   deleteCustomProvider(workspaceId: string, providerId: string): Promise<DesktopAppState>;
   probeCustomProviderModels(input: CustomProviderProbeInput): Promise<CustomProviderProbeResult>;
   setEnableSkillCommands(workspaceId: string, enabled: boolean): Promise<DesktopAppState>;
-  setScopedModelPatterns(workspaceId: string, patterns: readonly string[]): Promise<DesktopAppState>;
-  setSkillEnabled(workspaceId: string, filePath: string, enabled: boolean): Promise<DesktopAppState>;
-  setExtensionEnabled(workspaceId: string, filePath: string, enabled: boolean): Promise<DesktopAppState>;
+  setScopedModelPatterns(
+    workspaceId: string,
+    patterns: readonly string[],
+  ): Promise<DesktopAppState>;
+  setSkillEnabled(
+    workspaceId: string,
+    filePath: string,
+    enabled: boolean,
+  ): Promise<DesktopAppState>;
+  setExtensionEnabled(
+    workspaceId: string,
+    filePath: string,
+    enabled: boolean,
+  ): Promise<DesktopAppState>;
   respondToHostUiRequest(
     workspaceId: string,
     sessionId: string,
@@ -357,7 +373,9 @@ export interface PiDesktopApi {
       | { readonly requestId: string; readonly confirmed: boolean }
       | { readonly requestId: string; readonly cancelled: true },
   ): Promise<DesktopAppState>;
-  setNotificationPreferences(preferences: Partial<NotificationPreferences>): Promise<DesktopAppState>;
+  setNotificationPreferences(
+    preferences: Partial<NotificationPreferences>,
+  ): Promise<DesktopAppState>;
   setIntegratedTerminalShell(shell: string): Promise<DesktopAppState>;
   setEnableTransparency(enabled: boolean): Promise<DesktopAppState>;
   setThemePresetId(presetId: ThemePresetId): Promise<DesktopAppState>;
@@ -378,7 +396,10 @@ export interface PiDesktopApi {
   ): Promise<TerminalPanelSnapshot>;
   writeTerminal(terminalId: string, data: string): Promise<void>;
   resizeTerminal(terminalId: string, size: TerminalSize): Promise<void>;
-  restartTerminalSession(terminalId: string, size?: Partial<TerminalSize>): Promise<TerminalPanelSnapshot>;
+  restartTerminalSession(
+    terminalId: string,
+    size?: Partial<TerminalSize>,
+  ): Promise<TerminalPanelSnapshot>;
   closeTerminalSession(terminalId: string): Promise<TerminalPanelSnapshot | null>;
   setTerminalTitle(terminalId: string, title: string): Promise<void>;
   setTerminalFocused(focused: boolean): Promise<void>;
@@ -400,14 +421,20 @@ export interface PiDesktopApi {
   removeQueuedComposerMessage(messageId: string): Promise<DesktopAppState>;
   steerQueuedComposerMessage(messageId: string): Promise<DesktopAppState>;
   updateComposerDraft(composerDraft: string): Promise<DesktopAppState>;
-  submitComposer(text: string, options?: { readonly deliverAs?: "steer" | "followUp" }): Promise<DesktopAppState>;
+  submitComposer(
+    text: string,
+    options?: { readonly deliverAs?: "steer" | "followUp" },
+  ): Promise<DesktopAppState>;
   getSessionTree(target: WorkspaceSessionTarget): Promise<SessionTreeSnapshot>;
   navigateSessionTree(
     target: WorkspaceSessionTarget,
     targetId: string,
     options?: NavigateSessionTreeOptions,
   ): Promise<{ readonly state: DesktopAppState; readonly result: NavigateSessionTreeResult }>;
-  listWorkspaceFiles(workspaceId: string, options?: { readonly force?: boolean }): Promise<string[]>;
+  listWorkspaceFiles(
+    workspaceId: string,
+    options?: { readonly force?: boolean },
+  ): Promise<string[]>;
   readWorkspaceFile(workspaceId: string, filePath: string): Promise<WorkspaceFilePreview>;
   getChangedFiles(workspaceId: string): Promise<ChangedFilesResult>;
   getFileDiff(workspaceId: string, filePath: string): Promise<string>;
