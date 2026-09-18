@@ -2312,9 +2312,30 @@ export class DesktopAppStore {
     }
 
     const unsubscribe = this.driver.subscribe(sessionRef, (event) => {
+      this.applyUrgentRunStatus(event);
       this.enqueueSessionEvent(event, key);
     });
     this.sessionState.sessionSubscriptions.set(key, unsubscribe);
+  }
+
+  private applyUrgentRunStatus(event: SessionDriverEvent): void {
+    const status =
+      event.type === "runFailed"
+        ? "failed"
+        : event.type === "sessionUpdated" || event.type === "runCompleted"
+          ? event.snapshot.status
+          : undefined;
+    if (status !== "stopping" && status !== "idle" && status !== "failed") {
+      return;
+    }
+    this.state = applySessionEventState(
+      this.state,
+      event,
+      this.sessionState.transcriptCache,
+      this.sessionState.runningSinceBySession,
+      this.sessionState.lastViewedAtBySession,
+    );
+    this.emit();
   }
 
   /**
@@ -2329,7 +2350,14 @@ export class DesktopAppStore {
   private enqueueSessionEvent(event: SessionDriverEvent, subscriptionKey: string): void {
     const previous = this.sessionEventQueues.get(subscriptionKey) ?? Promise.resolve();
     const next = previous
-      .then(() => this.handleSessionEvent(event, subscriptionKey))
+      .then(
+        () =>
+          new Promise<void>((resolve, reject) => {
+            setImmediate(() => {
+              this.handleSessionEvent(event, subscriptionKey).then(resolve, reject);
+            });
+          }),
+      )
       .catch((error) => {
         console.error(`[app-store] session event queue error for ${subscriptionKey}`, error);
       });

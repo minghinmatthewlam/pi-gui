@@ -937,10 +937,20 @@ export class SessionSupervisor {
     record.termination = "aborting";
     record.status = "stopping";
     record.updatedAt = nowIso();
-    await this.persistSnapshot(record);
-    await this.emit(record, sessionUpdatedEvent(record));
-
-    return this.awaitAbortWithDeadline(record);
+    const outcome = this.awaitAbortWithDeadline(record);
+    void this.emit(record, sessionUpdatedEvent(record)).catch((error: unknown) => {
+      console.warn(
+        `[pi-sdk-driver] failed to emit stopping for ${sessionKey(record.ref)}:`,
+        error,
+      );
+    });
+    void this.persistSnapshot(record).catch((error: unknown) => {
+      console.warn(
+        `[pi-sdk-driver] failed to persist stopping for ${sessionKey(record.ref)}:`,
+        error,
+      );
+    });
+    return outcome;
   }
 
   async setSessionModel(sessionRef: SessionRef, selection: SessionModelSelection): Promise<void> {
@@ -1347,13 +1357,20 @@ export class SessionSupervisor {
     const abortRetry = (session as AgentSession & { abortRetry?: () => void }).abortRetry;
     const agentAbort = session.agent.abort;
     if (typeof abortRetry === "function" && typeof agentAbort === "function") {
-      abortRetry.call(session);
-      agentAbort.call(session.agent);
-      if (!session.isStreaming) {
-        return Promise.resolve();
-      }
-      return new Promise((resolve) => {
+      return new Promise((resolve, reject) => {
         record.abortConfirm = resolve;
+        try {
+          abortRetry.call(session);
+          agentAbort.call(session.agent);
+        } catch (error) {
+          record.abortConfirm = undefined;
+          reject(error);
+          return;
+        }
+        if (!session.isStreaming) {
+          record.abortConfirm = undefined;
+          resolve();
+        }
       });
     }
     return session.abort();
@@ -2181,6 +2198,14 @@ export class SessionSupervisor {
   }
 
   private handleAgentEvent(record: ManagedSessionRecord, event: AgentSessionEvent): void {
+    if (record.termination === "aborting") {
+      if (event.type === "agent_end" || event.type === "agent_settled") {
+        record.abortConfirm?.();
+        record.abortConfirm = undefined;
+      }
+      return;
+    }
+
     const mapped = this.mapAgentEvent(record, event);
     if (mapped.length === 0) {
       return;
@@ -2200,6 +2225,9 @@ export class SessionSupervisor {
     switch (event.type) {
       case "agent_start":
       case "turn_start":
+        if (record.termination) {
+          return [];
+        }
         record.status = "running";
         return [sessionUpdatedEvent(record)];
       case "message_start":
@@ -2243,6 +2271,9 @@ export class SessionSupervisor {
         }
         return [sessionUpdatedEvent(record)];
       case "tool_execution_start":
+        if (record.termination) {
+          return [];
+        }
         record.status = "running";
         return toDriverEvents(
           {

@@ -533,19 +533,31 @@ function parseSerializedFileAttachments(payload: string): SessionTranscriptAttac
   }
 }
 
+export function yieldMacrotask(): Promise<void> {
+  return new Promise((resolve) => {
+    setImmediate(resolve);
+  });
+}
+
 /**
  * Chain `work` after the current tail of a per-session serial event queue,
  * returning the new tail. Crucially the returned promise is *error-recovering*:
  * if `work` rejects it is reported via `onError` and swallowed, so the tail
  * resolves and later events still run. Chaining onto a rejected promise would
  * otherwise skip every future `.then`, freezing the session's event stream.
+ *
+ * Each item yields a macrotask first so abort deadlines and other timers can
+ * fire during a flood of immediately-resolving session events.
  */
 export function chainRecoveringEventQueue(
   queue: Promise<void>,
   work: () => Promise<void>,
   onError: (error: unknown) => void,
 ): Promise<void> {
-  return queue.then(work).catch(onError);
+  return queue
+    .then(() => yieldMacrotask())
+    .then(work)
+    .catch(onError);
 }
 
 /**

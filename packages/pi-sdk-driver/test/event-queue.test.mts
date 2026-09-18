@@ -39,6 +39,30 @@ await test("event queue keeps delivering after a work item throws", async () => 
   assert.match((errors[0] as Error).message, /boom/);
 });
 
+await test("event queue yields so a timer can fire before the chain drains", async () => {
+  let queue: Promise<void> = Promise.resolve();
+  let workTurn = 0;
+  let timeoutTurn = -1;
+  setTimeout(() => {
+    timeoutTurn = workTurn;
+  }, 0);
+  for (let index = 0; index < 200; index += 1) {
+    queue = chainRecoveringEventQueue(
+      queue,
+      async () => {
+        workTurn += 1;
+      },
+      () => undefined,
+    );
+  }
+  await queue;
+  assert.notEqual(timeoutTurn, -1);
+  assert.ok(
+    timeoutTurn < 200,
+    `timer should run during the yielded chain, not after drain (turn ${timeoutTurn})`,
+  );
+});
+
 await test("singleFlight runs the factory once for concurrent callers and yields one result", async () => {
   const inFlight = new Map<string, Promise<{ id: number }>>();
   let created = 0;
