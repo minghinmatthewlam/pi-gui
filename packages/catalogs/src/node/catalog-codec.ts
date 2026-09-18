@@ -87,7 +87,10 @@ function isSessionEntry(value: unknown): value is SessionCatalogEntry {
     isRecord(value.sessionRef) &&
     hasStrings(value.sessionRef, ["workspaceId", "sessionId"]) &&
     value.sessionRef.workspaceId === value.workspaceId &&
-    (value.status === "idle" || value.status === "running" || value.status === "failed")
+    (value.status === "idle" ||
+      value.status === "running" ||
+      value.status === "stopping" ||
+      value.status === "failed")
   );
 }
 

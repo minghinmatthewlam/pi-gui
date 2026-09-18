@@ -937,20 +937,9 @@ export class SessionSupervisor {
     record.termination = "aborting";
     record.status = "stopping";
     record.updatedAt = nowIso();
-    const outcome = this.awaitAbortWithDeadline(record);
-    void this.emit(record, sessionUpdatedEvent(record)).catch((error: unknown) => {
-      console.warn(
-        `[pi-sdk-driver] failed to emit stopping for ${sessionKey(record.ref)}:`,
-        error,
-      );
-    });
-    void this.persistSnapshot(record).catch((error: unknown) => {
-      console.warn(
-        `[pi-sdk-driver] failed to persist stopping for ${sessionKey(record.ref)}:`,
-        error,
-      );
-    });
-    return outcome;
+    await this.persistSnapshot(record);
+    await this.emit(record, sessionUpdatedEvent(record));
+    return this.awaitAbortWithDeadline(record);
   }
 
   async setSessionModel(sessionRef: SessionRef, selection: SessionModelSelection): Promise<void> {
