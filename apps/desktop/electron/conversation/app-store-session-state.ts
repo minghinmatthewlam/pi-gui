@@ -9,15 +9,6 @@ import { hasUnseenSessionUpdate, previewFromTranscript } from "../application/ap
 import { NEW_THREAD_PLACEHOLDER_TITLE } from "./thread-title-constants";
 
 /**
- * Stream deltas can arrive in a tight loop. Yield a macrotask before handling
- * those so abort timers can fire. Do not yield sessionUpdated: slash commands
- * write local config after the driver emit, and a deferred apply would clobber it.
- */
-export function shouldYieldBeforeSessionEvent(event: SessionDriverEvent): boolean {
-  return event.type === "assistantDelta" || event.type === "toolUpdated";
-}
-
-/**
  * Patch only run status for Stop. A full snapshot apply here would replace
  * composer-owned config (e.g. `/thinking max`) with the driver's clamped value.
  */
@@ -60,6 +51,31 @@ export function applyUrgentRunStatusState(
     ),
     revision: state.revision + 1,
   };
+}
+
+/**
+ * Slash commands stamp a seq after the driver emit is queued. A deferred
+ * sessionUpdated with the same or older seq must not replace that local config.
+ */
+export function shouldPreserveLocalSessionConfig(
+  localWriteSeq: number | undefined,
+  eventSeq: number,
+): boolean {
+  return eventSeq > 0 && (localWriteSeq ?? 0) >= eventSeq;
+}
+
+export function eventWithSessionConfig(
+  event: SessionDriverEvent,
+  config: SessionSnapshot["config"],
+): SessionDriverEvent {
+  if (
+    event.type !== "sessionOpened" &&
+    event.type !== "sessionUpdated" &&
+    event.type !== "runCompleted"
+  ) {
+    return event;
+  }
+  return { ...event, snapshot: { ...event.snapshot, config } };
 }
 
 export function applySessionEventState(

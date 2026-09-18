@@ -7,7 +7,8 @@ import {
 } from "../../contracts/desktop-state";
 import {
   applyUrgentRunStatusState,
-  shouldYieldBeforeSessionEvent,
+  eventWithSessionConfig,
+  shouldPreserveLocalSessionConfig,
 } from "../../electron/conversation/app-store-session-state";
 
 const sessionRef = { workspaceId: "ws-1", sessionId: "sess-1" };
@@ -80,14 +81,17 @@ test("stopping sessionUpdated patches status and keeps composer config", () => {
   });
 });
 
-test("only stream deltas yield before session event handling", () => {
-  expect(shouldYieldBeforeSessionEvent(sessionUpdated("idle"))).toBe(false);
-  expect(
-    shouldYieldBeforeSessionEvent({
-      type: "assistantDelta",
-      sessionRef,
-      timestamp: "2026-01-01T00:00:01.000Z",
-      text: "token",
-    }),
-  ).toBe(true);
+test("slash-command config wins over an in-flight sessionUpdated seq", () => {
+  expect(shouldPreserveLocalSessionConfig(1, 1)).toBe(true);
+  expect(shouldPreserveLocalSessionConfig(2, 1)).toBe(true);
+  expect(shouldPreserveLocalSessionConfig(1, 2)).toBe(false);
+  expect(shouldPreserveLocalSessionConfig(undefined, 1)).toBe(false);
+  const preserved = eventWithSessionConfig(sessionUpdated("idle"), {
+    provider: "openai",
+    modelId: "gpt-5",
+    thinkingLevel: "max",
+  });
+  expect(preserved.type === "sessionUpdated" && preserved.snapshot.config?.thinkingLevel).toBe(
+    "max",
+  );
 });

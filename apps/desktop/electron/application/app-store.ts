@@ -74,7 +74,8 @@ import {
 import {
   applySessionEventState,
   applyUrgentRunStatusState,
-  shouldYieldBeforeSessionEvent,
+  eventWithSessionConfig,
+  shouldPreserveLocalSessionConfig,
   updateSessionRecord,
 } from "../conversation/app-store-session-state";
 import type { RefreshStateOptions } from "./refresh-state-options";
@@ -166,6 +167,8 @@ export class DesktopAppStore {
   private readonly selectedTranscriptListeners = new Set<SelectedTranscriptListener>();
   private readonly sessionEventListeners = new Set<SessionEventListener>();
   private readonly sessionEventQueues = new Map<string, Promise<void>>();
+  private sessionEventSeq = 0;
+  private readonly sessionConfigWrittenAt = new Map<string, number>();
   /**
    * Trailing-edge coalescers for per-session command refreshes, keyed by session
    * key. A refresh request that arrives while one is already in flight marks it
@@ -296,6 +299,7 @@ export class DesktopAppStore {
           revision: this.state.revision + 1,
         };
       },
+      markLocalSessionConfigWrite: (sessionRef) => this.markLocalSessionConfigWrite(sessionRef),
       finishLocalComposerCommand: (sessionRef, update) => {
         this.state = {
           ...this.state,
@@ -2343,6 +2347,10 @@ export class DesktopAppStore {
     this.emit();
   }
 
+  markLocalSessionConfigWrite(sessionRef: SessionRef): void {
+    this.sessionConfigWrittenAt.set(sessionKey(sessionRef), this.sessionEventSeq);
+  }
+
   /**
    * Serialize event handling per subscription key. The driver delivers events
    * synchronously but `handleSessionEvent` is async (it awaits refreshes,
@@ -2351,21 +2359,21 @@ export class DesktopAppStore {
    * The chained promise is error-recovering — mirroring the driver's
    * `chainRecoveringEventQueue` shape — so a rejection is logged and swallowed
    * rather than leaving the tail rejected and freezing the queue for that session.
-   * Stream deltas yield a macrotask so abort timers can fire; other events stay
-   * on the microtask queue so slash-command config is not clobbered after emit.
+   * Each item yields a macrotask so abort timers and scroll restore can run
+   * between events. Slash-command config is preserved via sessionEventSeq, not
+   * by skipping that yield.
    */
   private enqueueSessionEvent(event: SessionDriverEvent, subscriptionKey: string): void {
+    const eventSeq = ++this.sessionEventSeq;
     const previous = this.sessionEventQueues.get(subscriptionKey) ?? Promise.resolve();
-    const run = () => this.handleSessionEvent(event, subscriptionKey);
     const next = previous
-      .then(() =>
-        shouldYieldBeforeSessionEvent(event)
-          ? new Promise<void>((resolve, reject) => {
-              setImmediate(() => {
-                run().then(resolve, reject);
-              });
-            })
-          : run(),
+      .then(
+        () =>
+          new Promise<void>((resolve, reject) => {
+            setImmediate(() => {
+              this.handleSessionEvent(event, subscriptionKey, eventSeq).then(resolve, reject);
+            });
+          }),
       )
       .catch((error) => {
         console.error(`[app-store] session event queue error for ${subscriptionKey}`, error);
@@ -2780,8 +2788,13 @@ export class DesktopAppStore {
   private async handleSessionEvent(
     event: SessionDriverEvent,
     subscriptionKey = sessionKey(event.sessionRef),
+    eventSeq = this.sessionEventSeq,
   ): Promise<void> {
     const key = sessionKey(event.sessionRef);
+    const preserveLocalConfig = shouldPreserveLocalSessionConfig(
+      this.sessionConfigWrittenAt.get(key),
+      eventSeq,
+    );
     if (subscriptionKey !== key) {
       this.migrateSessionSubscriptionKey(subscriptionKey, key);
     }
@@ -2836,12 +2849,16 @@ export class DesktopAppStore {
           break;
         case "sessionOpened":
         case "runCompleted":
-          this.updateSessionConfig(event.sessionRef, event.snapshot.config);
+          if (!preserveLocalConfig) {
+            this.updateSessionConfig(event.sessionRef, event.snapshot.config);
+          }
           this.updateQueuedComposerMessages(event.sessionRef, event.snapshot.queuedMessages);
           await this.refreshSessionCommands(event.sessionRef);
           break;
         case "sessionUpdated":
-          this.updateSessionConfig(event.sessionRef, event.snapshot.config);
+          if (!preserveLocalConfig) {
+            this.updateSessionConfig(event.sessionRef, event.snapshot.config);
+          }
           this.updateQueuedComposerMessages(event.sessionRef, event.snapshot.queuedMessages);
           if (event.snapshot.status !== "running") {
             this.refreshSessionCommandsCoalesced(event.sessionRef);
@@ -2899,7 +2916,9 @@ export class DesktopAppStore {
       });
       this.state = applySessionEventState(
         this.state,
-        event,
+        preserveLocalConfig
+          ? eventWithSessionConfig(event, this.sessionState.sessionConfigBySession.get(key))
+          : event,
         this.sessionState.transcriptCache,
         this.sessionState.runningSinceBySession,
         this.sessionState.lastViewedAtBySession,
