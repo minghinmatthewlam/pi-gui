@@ -26,6 +26,8 @@ import type {
 import {
   SessionSupervisor,
   type PiSdkDriverOptions,
+  type SessionRunFixture,
+  type SessionRunStats,
   type SyncWorkspaceResult,
 } from "./session-supervisor.js";
 import { RuntimeSupervisor, type RuntimeSupervisorOptions } from "./runtime-supervisor.js";
@@ -89,8 +91,20 @@ export class PiSdkDriver implements SessionDriver {
     return this.supervisor.replaceQueuedMessages(sessionRef, messages);
   }
 
-  cancelCurrentRun(sessionRef: SessionRef): Promise<void> {
+  cancelCurrentRun(sessionRef: SessionRef): Promise<"stopped" | "quarantined"> {
     return this.supervisor.cancelCurrentRun(sessionRef);
+  }
+
+  setSessionRunFixture(fixture: SessionRunFixture | undefined): void {
+    this.supervisor.setSessionRunFixture(fixture);
+  }
+
+  getSessionRunStats(): SessionRunStats {
+    return this.supervisor.getSessionRunStats();
+  }
+
+  setAbortTimeoutMs(timeoutMs: number): void {
+    this.supervisor.setAbortTimeoutMs(timeoutMs);
   }
 
   setSessionModel(sessionRef: SessionRef, selection: SessionModelSelection): Promise<void> {

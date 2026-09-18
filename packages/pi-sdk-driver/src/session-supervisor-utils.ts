@@ -141,6 +141,40 @@ export function nowIso(): string {
   return new Date().toISOString();
 }
 
+export const DEFAULT_SESSION_ABORT_TIMEOUT_MS = 2_500;
+
+export class DeadlineExceededError extends Error {
+  readonly timeoutMs: number;
+
+  constructor(label: string, timeoutMs: number) {
+    super(`${label} timed out after ${timeoutMs}ms`);
+    this.name = "DeadlineExceededError";
+    this.timeoutMs = timeoutMs;
+  }
+}
+
+export async function withDeadline<T>(
+  work: Promise<T>,
+  timeoutMs: number,
+  label: string,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      work,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          reject(new DeadlineExceededError(label, timeoutMs));
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) {
+      clearTimeout(timer);
+    }
+  }
+}
+
 export function extractPreview(message: unknown): string | undefined {
   if (!isRecord(message)) {
     return undefined;
@@ -499,19 +533,31 @@ function parseSerializedFileAttachments(payload: string): SessionTranscriptAttac
   }
 }
 
+export function yieldMacrotask(): Promise<void> {
+  return new Promise((resolve) => {
+    setImmediate(resolve);
+  });
+}
+
 /**
  * Chain `work` after the current tail of a per-session serial event queue,
  * returning the new tail. Crucially the returned promise is *error-recovering*:
  * if `work` rejects it is reported via `onError` and swallowed, so the tail
  * resolves and later events still run. Chaining onto a rejected promise would
  * otherwise skip every future `.then`, freezing the session's event stream.
+ *
+ * Each item yields a macrotask first so abort deadlines and other timers can
+ * fire during a flood of immediately-resolving session events.
  */
 export function chainRecoveringEventQueue(
   queue: Promise<void>,
   work: () => Promise<void>,
   onError: (error: unknown) => void,
 ): Promise<void> {
-  return queue.then(work).catch(onError);
+  return queue
+    .then(() => yieldMacrotask())
+    .then(work)
+    .catch(onError);
 }
 
 /**

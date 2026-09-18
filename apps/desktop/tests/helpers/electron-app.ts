@@ -138,6 +138,21 @@ function electronCliArgs(entry?: string): string[] {
   return args;
 }
 
+function playwrightRecordVideoOptions(
+  dir: string | undefined,
+  size?: { readonly width: number; readonly height: number },
+): { recordVideo?: { dir: string; size?: { width: number; height: number } } } {
+  if (!dir || process.platform === "linux") {
+    return {};
+  }
+  return {
+    recordVideo: {
+      dir,
+      ...(size ? { size } : {}),
+    },
+  };
+}
+
 export async function launchDesktop(
   userDataDir: string,
   options: readonly string[] | LaunchDesktopOptions = [],
@@ -149,14 +164,7 @@ export async function launchDesktop(
     args: electronCliArgs(desktopDir),
     cwd: desktopDir,
     env,
-    ...(normalized.recordVideoDir
-      ? {
-          recordVideo: {
-            dir: normalized.recordVideoDir,
-            ...(normalized.recordVideoSize ? { size: normalized.recordVideoSize } : {}),
-          },
-        }
-      : {}),
+    ...playwrightRecordVideoOptions(normalized.recordVideoDir, normalized.recordVideoSize),
   });
 
   return createDesktopHarness(electronApp);
@@ -1117,6 +1125,66 @@ export async function emitTestSessionEvent(
     }
     await hooks.emitSessionEvent(payload);
   }, event);
+}
+
+export interface SessionRunFixture {
+  readonly prompt?: "hang" | "reject";
+  readonly abort?: "hang" | "reject";
+}
+
+export interface SessionRunStats {
+  readonly promptCalls: number;
+  readonly abortCalls: number;
+}
+
+export async function setSessionRunFixture(
+  harness: DesktopHarness,
+  fixture: SessionRunFixture | undefined,
+): Promise<void> {
+  await harness.firstWindow();
+  await harness.electronApp.evaluate(async (_, payload) => {
+    const hooks = (
+      globalThis as {
+        __PI_APP_TEST_HOOKS?: {
+          setSessionRunFixture?: (fixture: SessionRunFixture | undefined) => void;
+        };
+      }
+    ).__PI_APP_TEST_HOOKS;
+    if (!hooks?.setSessionRunFixture) {
+      throw new Error("Session-run fixture hook is unavailable");
+    }
+    hooks.setSessionRunFixture(payload);
+  }, fixture);
+}
+
+export async function getSessionRunStats(harness: DesktopHarness): Promise<SessionRunStats> {
+  await harness.firstWindow();
+  return harness.electronApp.evaluate(async () => {
+    const hooks = (
+      globalThis as {
+        __PI_APP_TEST_HOOKS?: { getSessionRunStats?: () => SessionRunStats };
+      }
+    ).__PI_APP_TEST_HOOKS;
+    if (!hooks?.getSessionRunStats) {
+      throw new Error("Session-run stats hook is unavailable");
+    }
+    return hooks.getSessionRunStats();
+  });
+}
+
+export async function setAbortTimeoutMs(harness: DesktopHarness, timeoutMs: number): Promise<void> {
+  await harness.firstWindow();
+  await harness.electronApp.evaluate(async (_, payload) => {
+    const hooks = (
+      globalThis as {
+        __PI_APP_TEST_HOOKS?: { setAbortTimeoutMs?: (timeoutMs: number) => void };
+      }
+    ).__PI_APP_TEST_HOOKS;
+    if (!hooks?.setAbortTimeoutMs) {
+      throw new Error("Abort-timeout hook is unavailable");
+    }
+    hooks.setAbortTimeoutMs(payload);
+  }, timeoutMs);
 }
 
 /**

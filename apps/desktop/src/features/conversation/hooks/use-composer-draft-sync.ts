@@ -72,6 +72,9 @@ export function useComposerDraftSync(params: UseComposerDraftSyncParams) {
     ) {
       return;
     }
+    if (snapshot.composerDraftSyncSource === "send-failed" && composerDraftRef.current !== "") {
+      return;
+    }
 
     acknowledgedLocalEditGenerationRef.current = localEditGenerationRef.current;
     pendingComposerDraftRef.current = null;

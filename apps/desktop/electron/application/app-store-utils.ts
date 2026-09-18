@@ -10,6 +10,7 @@ import type {
   SessionConfig,
   SessionQueuedMessage,
   SessionRef,
+  SessionStatus,
 } from "@pi-gui/session-driver";
 import type {
   ComposerAttachment,
@@ -255,12 +256,12 @@ function buildSessionRecord(
 }
 
 export function hasUnseenSessionUpdate(
-  status: "idle" | "running" | "failed",
+  status: SessionStatus,
   updatedAt: string,
   lastViewedAt: string | undefined,
   transcript: readonly TranscriptMessage[],
 ): boolean {
-  if (status === "running" || !lastViewedAt) {
+  if (status === "running" || status === "stopping" || !lastViewedAt) {
     return false;
   }
 

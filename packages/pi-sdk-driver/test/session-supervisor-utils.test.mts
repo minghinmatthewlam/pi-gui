@@ -4,6 +4,8 @@ import {
   determineRunOutcome,
   messageText,
   shouldPersistSnapshotForAgentEvent,
+  withDeadline,
+  DeadlineExceededError,
 } from "../dist/session-supervisor-utils.js";
 
 const markdownParts = [
@@ -85,4 +87,11 @@ await test("the persist policy exempts streaming partials and keeps every discre
   ]) {
     assert.equal(shouldPersistSnapshotForAgentEvent(eventType), true, eventType);
   }
+});
+
+await test("withDeadline rejects hung work without treating it as success", async () => {
+  await assert.rejects(
+    withDeadline(new Promise(() => {}), 30, "session.abort"),
+    (error: unknown) => error instanceof DeadlineExceededError,
+  );
 });

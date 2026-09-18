@@ -33,6 +33,7 @@ interface ThreadSearchModel {
 }
 
 interface ConversationTimelineProps {
+  readonly sessionKey: string;
   readonly transcript: readonly TranscriptMessage[];
   readonly isTranscriptLoading: boolean;
   readonly timelinePaneRef: MutableRefObject<HTMLDivElement | null>;
@@ -52,6 +53,7 @@ interface ConversationTimelineProps {
 }
 
 export function ConversationTimeline({
+  sessionKey,
   transcript,
   isTranscriptLoading,
   timelinePaneRef,
@@ -96,8 +98,22 @@ export function ConversationTimeline({
     !disableVirtualization &&
     !hasUnreliableVirtualizedHeights;
   const [expandedToolCallIds, setExpandedToolCallIds] = useState<Set<string>>(() => new Set());
+  const measuredHeightsBySessionRef = useRef(new Map<string, Map<string, number>>());
   const measuredHeightsRef = useRef(new Map<string, number>());
+  const measuredHeightsSessionKeyRef = useRef<string | null>(null);
   const [measurementVersion, setMeasurementVersion] = useState(0);
+
+  if (measuredHeightsSessionKeyRef.current !== sessionKey) {
+    measuredHeightsSessionKeyRef.current = sessionKey;
+    let cached = measuredHeightsBySessionRef.current.get(sessionKey);
+    if (!cached) {
+      cached = new Map<string, number>();
+      if (sessionKey) {
+        measuredHeightsBySessionRef.current.set(sessionKey, cached);
+      }
+    }
+    measuredHeightsRef.current = cached;
+  }
 
   useLayoutEffect(() => {
     const availableToolCallIds = new Set(
@@ -125,6 +141,11 @@ export function ConversationTimeline({
   }, [transcript]);
 
   useLayoutEffect(() => {
+    // Session switches briefly present an empty/loading transcript. Pruning then
+    // would throw away measured row heights for the thread we are about to restore.
+    if (isTranscriptLoading || transcript.length === 0) {
+      return;
+    }
     const knownIds = new Set(transcript.map((item) => item.id));
     let removedAny = false;
     for (const id of measuredHeightsRef.current.keys()) {
@@ -137,7 +158,7 @@ export function ConversationTimeline({
     if (removedAny) {
       setMeasurementVersion((current) => current + 1);
     }
-  }, [transcript]);
+  }, [isTranscriptLoading, transcript]);
 
   useLayoutEffect(() => {
     if (!disableVirtualization || isTranscriptLoading || transcript.length === 0) {
@@ -154,6 +175,19 @@ export function ConversationTimeline({
     measurementVersion,
     onDisableVirtualizationReady,
     transcript,
+  ]);
+
+  useLayoutEffect(() => {
+    if (shouldVirtualize || isTranscriptLoading || transcript.length === 0) {
+      return;
+    }
+    onContentHeightChange();
+  }, [
+    isTranscriptLoading,
+    measurementVersion,
+    onContentHeightChange,
+    shouldVirtualize,
+    transcript.length,
   ]);
 
   const toggleToolCall = useCallback((callId: string) => {

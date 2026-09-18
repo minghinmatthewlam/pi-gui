@@ -14,7 +14,11 @@ export interface SessionRef {
   readonly sessionId: SessionId;
 }
 
-export type SessionStatus = "idle" | "running" | "failed";
+export type SessionStatus = "idle" | "running" | "stopping" | "failed";
+
+export function isActiveSessionStatus(status: SessionStatus): boolean {
+  return status === "running" || status === "stopping";
+}
 
 export type SessionMessageDeliveryMode = "steer" | "followUp";
 
@@ -342,7 +346,7 @@ export interface SessionDriver {
     sessionRef: SessionRef,
     messages: readonly SessionQueuedMessage[],
   ): Promise<void>;
-  cancelCurrentRun(sessionRef: SessionRef): Promise<void>;
+  cancelCurrentRun(sessionRef: SessionRef): Promise<"stopped" | "quarantined">;
   setSessionModel(sessionRef: SessionRef, selection: SessionModelSelection): Promise<void>;
   setSessionThinkingLevel(sessionRef: SessionRef, thinkingLevel: string): Promise<void>;
   renameSession(sessionRef: SessionRef, title: string): Promise<void>;

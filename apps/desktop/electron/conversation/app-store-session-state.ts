@@ -8,6 +8,76 @@ import type {
 import { hasUnseenSessionUpdate, previewFromTranscript } from "../application/app-store-utils";
 import { NEW_THREAD_PLACEHOLDER_TITLE } from "./thread-title-constants";
 
+/**
+ * Patch only run status for Stop. A full snapshot apply here would replace
+ * composer-owned config (e.g. `/thinking max`) with the driver's clamped value.
+ */
+export function applyUrgentRunStatusState(
+  state: DesktopAppState,
+  event: SessionDriverEvent,
+): DesktopAppState | undefined {
+  const status =
+    event.type === "runFailed"
+      ? "failed"
+      : event.type === "sessionUpdated" || event.type === "runCompleted"
+        ? event.snapshot.status
+        : undefined;
+  if (status !== "stopping" && status !== "idle" && status !== "failed") {
+    return undefined;
+  }
+  const current = state.workspaces
+    .find((workspace) => workspace.id === event.sessionRef.workspaceId)
+    ?.sessions.find((session) => session.id === event.sessionRef.sessionId)?.status;
+  if (status === "idle" && current !== "running" && current !== "stopping") {
+    return undefined;
+  }
+  return {
+    ...state,
+    workspaces: state.workspaces.map((workspace) =>
+      workspace.id === event.sessionRef.workspaceId
+        ? {
+            ...workspace,
+            sessions: workspace.sessions.map((session) =>
+              session.id === event.sessionRef.sessionId
+                ? {
+                    ...session,
+                    status,
+                    runningSince: status === "stopping" ? session.runningSince : undefined,
+                  }
+                : session,
+            ),
+          }
+        : workspace,
+    ),
+    revision: state.revision + 1,
+  };
+}
+
+/**
+ * Slash commands stamp a seq after the driver emit is queued. A deferred
+ * sessionUpdated with the same or older seq must not replace that local config.
+ */
+export function shouldPreserveLocalSessionConfig(
+  localWriteSeq: number | undefined,
+  eventSeq: number,
+): boolean {
+  return eventSeq > 0 && (localWriteSeq ?? 0) >= eventSeq;
+}
+
+export function eventWithSessionConfig(
+  event: SessionDriverEvent,
+  config: SessionSnapshot["config"],
+): SessionDriverEvent {
+  if (
+    event.type !== "sessionOpened" &&
+    event.type !== "sessionUpdated" &&
+    event.type !== "runCompleted"
+  ) {
+    return event;
+  }
+  return { ...event, snapshot: { ...event.snapshot, config } };
+}
+
 export function applySessionEventState(
   state: DesktopAppState,
   event: SessionDriverEvent,

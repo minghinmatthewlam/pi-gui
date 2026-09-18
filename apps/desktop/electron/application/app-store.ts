@@ -12,6 +12,8 @@ import {
   PiSdkDriver,
   type PiSdkDriverConfig,
   SessionLeasedError,
+  type SessionRunFixture,
+  type SessionRunStats,
 } from "@pi-gui/pi-sdk-driver";
 import type { SessionCatalogEntry } from "@pi-gui/catalogs";
 import type {
@@ -71,6 +73,9 @@ import {
 } from "../conversation/app-store-timeline";
 import {
   applySessionEventState,
+  applyUrgentRunStatusState,
+  eventWithSessionConfig,
+  shouldPreserveLocalSessionConfig,
   updateSessionRecord,
 } from "../conversation/app-store-session-state";
 import type { RefreshStateOptions } from "./refresh-state-options";
@@ -162,6 +167,8 @@ export class DesktopAppStore {
   private readonly selectedTranscriptListeners = new Set<SelectedTranscriptListener>();
   private readonly sessionEventListeners = new Set<SessionEventListener>();
   private readonly sessionEventQueues = new Map<string, Promise<void>>();
+  private sessionEventSeq = 0;
+  private readonly sessionConfigWrittenAt = new Map<string, number>();
   /**
    * Trailing-edge coalescers for per-session command refreshes, keyed by session
    * key. A refresh request that arrives while one is already in flight marks it
@@ -252,6 +259,7 @@ export class DesktopAppStore {
         composerAttachmentsBySession: this.sessionState.composerAttachmentsBySession,
         composerDraftsBySession: this.sessionState.composerDraftsBySession,
         loadedTranscriptKeys: this.sessionState.loadedTranscriptKeys,
+        pendingComposerRestoreBySession: this.sessionState.pendingComposerRestoreBySession,
         sessionCommandsBySession: this.sessionState.sessionCommandsBySession,
         sessionConfigBySession: this.sessionState.sessionConfigBySession,
         sessionErrorsBySession: this.sessionState.sessionErrorsBySession,
@@ -291,6 +299,7 @@ export class DesktopAppStore {
           revision: this.state.revision + 1,
         };
       },
+      markLocalSessionConfigWrite: (sessionRef) => this.markLocalSessionConfigWrite(sessionRef),
       finishLocalComposerCommand: (sessionRef, update) => {
         this.state = {
           ...this.state,
@@ -632,6 +641,18 @@ export class DesktopAppStore {
   async emitTestSessionEvent(event: SessionDriverEvent): Promise<void> {
     await this.initialize();
     await this.handleSessionEvent(event);
+  }
+
+  setSessionRunFixture(fixture: SessionRunFixture | undefined): void {
+    this.driver.setSessionRunFixture(fixture);
+  }
+
+  getSessionRunStats(): SessionRunStats {
+    return this.driver.getSessionRunStats();
+  }
+
+  setAbortTimeoutMs(timeoutMs: number): void {
+    this.driver.setAbortTimeoutMs(timeoutMs);
   }
 
   subscribe(listener: StateListener): () => void {
@@ -2033,7 +2054,7 @@ export class DesktopAppStore {
     sessions: readonly SessionCatalogEntry[],
   ): Promise<void> {
     for (const session of sessions) {
-      if (session.status !== "running") {
+      if (session.status !== "running" && session.status !== "stopping") {
         continue;
       }
       await this.ensureSessionSubscription(session.sessionRef);
@@ -2311,9 +2332,23 @@ export class DesktopAppStore {
     }
 
     const unsubscribe = this.driver.subscribe(sessionRef, (event) => {
+      this.applyUrgentRunStatus(event);
       this.enqueueSessionEvent(event, key);
     });
     this.sessionState.sessionSubscriptions.set(key, unsubscribe);
+  }
+
+  private applyUrgentRunStatus(event: SessionDriverEvent): void {
+    const next = applyUrgentRunStatusState(this.state, event);
+    if (!next) {
+      return;
+    }
+    this.state = next;
+    this.emit();
+  }
+
+  markLocalSessionConfigWrite(sessionRef: SessionRef): void {
+    this.sessionConfigWrittenAt.set(sessionKey(sessionRef), this.sessionEventSeq);
   }
 
   /**
@@ -2324,11 +2359,22 @@ export class DesktopAppStore {
    * The chained promise is error-recovering — mirroring the driver's
    * `chainRecoveringEventQueue` shape — so a rejection is logged and swallowed
    * rather than leaving the tail rejected and freezing the queue for that session.
+   * Each item yields a macrotask so abort timers and scroll restore can run
+   * between events. Slash-command config is preserved via sessionEventSeq, not
+   * by skipping that yield.
    */
   private enqueueSessionEvent(event: SessionDriverEvent, subscriptionKey: string): void {
+    const eventSeq = ++this.sessionEventSeq;
     const previous = this.sessionEventQueues.get(subscriptionKey) ?? Promise.resolve();
     const next = previous
-      .then(() => this.handleSessionEvent(event, subscriptionKey))
+      .then(
+        () =>
+          new Promise<void>((resolve, reject) => {
+            setImmediate(() => {
+              this.handleSessionEvent(event, subscriptionKey, eventSeq).then(resolve, reject);
+            });
+          }),
+      )
       .catch((error) => {
         console.error(`[app-store] session event queue error for ${subscriptionKey}`, error);
       });
@@ -2742,8 +2788,13 @@ export class DesktopAppStore {
   private async handleSessionEvent(
     event: SessionDriverEvent,
     subscriptionKey = sessionKey(event.sessionRef),
+    eventSeq = this.sessionEventSeq,
   ): Promise<void> {
     const key = sessionKey(event.sessionRef);
+    const preserveLocalConfig = shouldPreserveLocalSessionConfig(
+      this.sessionConfigWrittenAt.get(key),
+      eventSeq,
+    );
     if (subscriptionKey !== key) {
       this.migrateSessionSubscriptionKey(subscriptionKey, key);
     }
@@ -2798,12 +2849,16 @@ export class DesktopAppStore {
           break;
         case "sessionOpened":
         case "runCompleted":
-          this.updateSessionConfig(event.sessionRef, event.snapshot.config);
+          if (!preserveLocalConfig) {
+            this.updateSessionConfig(event.sessionRef, event.snapshot.config);
+          }
           this.updateQueuedComposerMessages(event.sessionRef, event.snapshot.queuedMessages);
           await this.refreshSessionCommands(event.sessionRef);
           break;
         case "sessionUpdated":
-          this.updateSessionConfig(event.sessionRef, event.snapshot.config);
+          if (!preserveLocalConfig) {
+            this.updateSessionConfig(event.sessionRef, event.snapshot.config);
+          }
           this.updateQueuedComposerMessages(event.sessionRef, event.snapshot.queuedMessages);
           if (event.snapshot.status !== "running") {
             this.refreshSessionCommandsCoalesced(event.sessionRef);
@@ -2847,8 +2902,10 @@ export class DesktopAppStore {
 
       if (event.type === "runFailed") {
         this.sessionState.sessionErrorsBySession.set(key, event.error.message);
+        await this.restoreComposerDraftAfterSendFailure(event.sessionRef, event.error.code);
       } else if (event.type === "runCompleted" || event.type === "sessionClosed") {
         this.sessionState.sessionErrorsBySession.delete(key);
+        this.sessionState.pendingComposerRestoreBySession.delete(key);
       }
 
       applyTimelineEvent(this.sessionState.transcriptCache, event, {
@@ -2859,7 +2916,9 @@ export class DesktopAppStore {
       });
       this.state = applySessionEventState(
         this.state,
-        event,
+        preserveLocalConfig
+          ? eventWithSessionConfig(event, this.sessionState.sessionConfigBySession.get(key))
+          : event,
         this.sessionState.transcriptCache,
         this.sessionState.runningSinceBySession,
         this.sessionState.lastViewedAtBySession,
@@ -3696,6 +3755,46 @@ export class DesktopAppStore {
 
   private clearSessionError(sessionRef: SessionRef): void {
     this.sessionState.sessionErrorsBySession.delete(sessionKey(sessionRef));
+  }
+
+  private async restoreComposerDraftAfterSendFailure(
+    sessionRef: SessionRef,
+    errorCode: string | undefined,
+  ): Promise<void> {
+    const key = sessionKey(sessionRef);
+    const pending = this.sessionState.pendingComposerRestoreBySession.get(key);
+    this.sessionState.pendingComposerRestoreBySession.delete(key);
+    if (!pending || errorCode !== "SEND_FAILED") {
+      return;
+    }
+    if (pending.optimisticMessageId) {
+      const transcript = this.sessionState.transcriptCache.get(key) ?? [];
+      this.sessionState.transcriptCache.set(
+        key,
+        transcript.filter((message) => message.id !== pending.optimisticMessageId),
+      );
+      this.publishSelectedTranscriptFor(sessionRef);
+    }
+    if (pending.text) {
+      this.sessionState.composerDraftsBySession.set(key, pending.text);
+    }
+    if (pending.attachments.length > 0) {
+      this.sessionState.composerAttachmentsBySession.set(
+        key,
+        cloneComposerAttachments(pending.attachments),
+      );
+      await this.persistComposerAttachments(key, pending.attachments);
+    }
+    if (!this.isSelectedSession(sessionRef)) {
+      return;
+    }
+    this.state = {
+      ...this.state,
+      composerDraft: pending.text,
+      composerDraftSyncSource: "send-failed",
+      composerDraftSyncNonce: this.allocateComposerDraftSyncNonce(),
+      composerAttachments: cloneComposerAttachments(pending.attachments),
+    };
   }
 
   private resolveComposerDraft(

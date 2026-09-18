@@ -78,12 +78,15 @@ import {
   chainRecoveringEventQueue,
   createWorkspaceRef,
   deriveSessionConfig,
+  DEFAULT_SESSION_ABORT_TIMEOUT_MS,
+  DeadlineExceededError,
   deriveWorkspaceTitle,
   determineRunOutcome,
   extractPreview,
   injectFileAttachmentPreamble,
   messageText,
   nowIso,
+  withDeadline,
   previewFromSessionInfo,
   shouldPersistSnapshotForAgentEvent,
   shouldTailFromDisk,
@@ -146,7 +149,20 @@ export interface PiSdkDriverOptions {
     workspace: WorkspaceRef,
     options: import("./thread-title-generator.js").GenerateThreadTitleOptions,
   ) => Promise<string | null | undefined>;
+  readonly abortTimeoutMs?: number;
 }
+
+export interface SessionRunFixture {
+  readonly prompt?: "hang" | "reject";
+  readonly abort?: "hang" | "reject";
+}
+
+export interface SessionRunStats {
+  promptCalls: number;
+  abortCalls: number;
+}
+
+type SessionTermination = "aborting" | "stopped" | "quarantined";
 
 export interface SyncWorkspaceResult {
   readonly workspace: WorkspaceRef;
@@ -186,6 +202,8 @@ interface ManagedSessionRecord {
   leasePath: string | undefined;
   /** mtime (epoch ms) of the JSONL last reconciled into the served transcript. */
   transcriptDiskMtimeMs: number | undefined;
+  termination: SessionTermination | undefined;
+  abortConfirm: (() => void) | undefined;
 }
 
 interface RegisteredCommandAdapter {
@@ -226,6 +244,9 @@ export class SessionSupervisor {
   private readonly leaseIdentity: LeaseIdentity = currentLeaseIdentity();
   private readonly leaseTtlMs = DEFAULT_LEASE_TTL_MS;
   private readonly isPidAlive = defaultIsPidAlive;
+  private abortTimeoutMs: number;
+  private sessionRunFixture: SessionRunFixture | undefined;
+  private readonly sessionRunStats: SessionRunStats = { promptCalls: 0, abortCalls: 0 };
 
   constructor(options: PiSdkDriverOptions = {}) {
     this.catalogs =
@@ -246,6 +267,7 @@ export class SessionSupervisor {
           },
         }));
     this.agentDir = options.agentDir;
+    this.abortTimeoutMs = options.abortTimeoutMs ?? DEFAULT_SESSION_ABORT_TIMEOUT_MS;
   }
 
   /**
@@ -265,6 +287,20 @@ export class SessionSupervisor {
       sessionManager,
       ...(this.agentDir ? { agentDir: this.agentDir } : {}),
     };
+  }
+
+  setSessionRunFixture(fixture: SessionRunFixture | undefined): void {
+    this.sessionRunFixture = fixture;
+    this.sessionRunStats.promptCalls = 0;
+    this.sessionRunStats.abortCalls = 0;
+  }
+
+  getSessionRunStats(): SessionRunStats {
+    return { ...this.sessionRunStats };
+  }
+
+  setAbortTimeoutMs(timeoutMs: number): void {
+    this.abortTimeoutMs = timeoutMs;
   }
 
   listWorkspaces(): Promise<WorkspaceCatalogSnapshot> {
@@ -802,6 +838,7 @@ export class SessionSupervisor {
     record.runningRunId = runId ?? record.runningRunId;
     record.status = isQueuedMessage || isExtensionCommand ? record.status : "running";
     record.updatedAt = nowIso();
+    record.termination = isQueuedMessage ? record.termination : undefined;
     record.config = deriveSessionConfig(session.sessionManager);
     record.preview = truncate(input.text);
     if (isQueuedMessage) {
@@ -813,63 +850,44 @@ export class SessionSupervisor {
     await this.persistSnapshot(record);
     await this.emit(record, sessionUpdatedEvent(record));
 
-    try {
-      const images = input.attachments?.flatMap(
-        (attachment: NonNullable<SessionMessageInput["attachments"]>[number]) =>
-          attachment.kind === "image"
-            ? [
-                {
-                  type: "image" as const,
-                  data: attachment.data,
-                  mimeType: attachment.mimeType,
-                },
-              ]
-            : [],
-      );
-      const promptText = injectFileAttachmentPreamble(input.text, input.attachments);
-      if (isQueuedMessage) {
-        // The queued-vs-prompt decision was made before the persistSnapshot/emit
-        // awaits above; the agent may have finished its turn in that window. A
-        // steer/follow-up now would attach to nothing and be silently dropped,
-        // so re-check the live streaming state and surface a retryable error
-        // instead. The catch below rolls back the optimistic queued entry.
-        if (!session.isStreaming) {
-          throw new Error(
-            "Session finished streaming before the queued message could be delivered. Retry to send it as a new turn.",
-          );
-        }
-        await this.queuePrompt(session, promptText, input.deliverAs!, images);
-      } else {
-        await session.prompt(promptText, {
-          ...(images && images.length > 0 ? { images } : {}),
-          source: "interactive",
-        });
-      }
+    const images = input.attachments?.flatMap(
+      (attachment: NonNullable<SessionMessageInput["attachments"]>[number]) =>
+        attachment.kind === "image"
+          ? [
+              {
+                type: "image" as const,
+                data: attachment.data,
+                mimeType: attachment.mimeType,
+              },
+            ]
+          : [],
+    );
+    const promptText = injectFileAttachmentPreamble(input.text, input.attachments);
 
-      if (isExtensionCommand) {
-        await this.syncRecordAfterSessionMutation(record, { emitUpdate: true });
-      }
-    } catch (error) {
-      if (isQueuedMessage) {
-        record.queuedMessages = record.queuedMessages.slice(0, -1);
-      }
-      if (!isQueuedMessage) {
-        record.runningRunId = undefined;
-      }
-      record.status = isQueuedMessage ? "running" : isExtensionCommand ? "idle" : "failed";
-      record.updatedAt = nowIso();
-      record.preview = error instanceof Error ? error.message : String(error);
-      await this.persistSnapshot(record);
-      await this.emit(record, {
-        type: "runFailed",
-        sessionRef: record.ref,
-        timestamp: nowIso(),
-        error: toSessionErrorInfo(error, "SEND_FAILED"),
-        ...(runId ? { runId } : {}),
+    if (isQueuedMessage || isExtensionCommand) {
+      await this.completePromptTurn(record, session, {
+        isQueuedMessage,
+        isExtensionCommand,
+        runId,
+        promptText,
+        images,
+        deliverAs: input.deliverAs,
       });
-      await this.emit(record, sessionUpdatedEvent(record));
-      throw error;
+      return;
     }
+
+    void this.completePromptTurn(record, session, {
+      isQueuedMessage: false,
+      isExtensionCommand: false,
+      runId,
+      promptText,
+      images,
+    }).catch((error: unknown) => {
+      console.warn(
+        `[pi-sdk-driver] background prompt failed for ${sessionKey(record.ref)}:`,
+        error,
+      );
+    });
   }
 
   async replaceQueuedMessages(
@@ -903,31 +921,25 @@ export class SessionSupervisor {
     await this.emit(record, sessionUpdatedEvent(record));
   }
 
-  async cancelCurrentRun(sessionRef: SessionRef): Promise<void> {
+  async cancelCurrentRun(sessionRef: SessionRef): Promise<"stopped" | "quarantined"> {
     const record = this.records.get(sessionKey(sessionRef));
     if (!record?.session) {
-      return;
+      return "stopped";
+    }
+    if (record.termination === "quarantined") {
+      return "quarantined";
+    }
+    if (record.termination === "aborting" || record.termination === "stopped") {
+      return "stopped";
     }
 
     record.cancellationRequested = true;
-    try {
-      await record.session.abort();
-    } catch (error) {
-      // Abort is best-effort. Even if the runtime reports a failure we still
-      // reset local run state below so the UI does not stay stuck on "running".
-      console.warn(`[pi-sdk-driver] abort failed for ${sessionKey(record.ref)}:`, error);
-    }
-
-    // Aborting ends the current turn, so any steer/follow-up messages queued
-    // against it can never be delivered. Clear both the SDK queue and our
-    // mirror so the composer stops showing orphaned pending messages — matching
-    // the SDK's own "clear the queue when the user aborts" convention.
-    record.session?.clearQueue();
-    record.queuedMessages = [];
-    record.runningRunId = undefined;
-    record.status = "idle";
+    record.termination = "aborting";
+    record.status = "stopping";
+    record.updatedAt = nowIso();
     await this.persistSnapshot(record);
     await this.emit(record, sessionUpdatedEvent(record));
+    return this.awaitAbortWithDeadline(record);
   }
 
   async setSessionModel(sessionRef: SessionRef, selection: SessionModelSelection): Promise<void> {
@@ -1208,6 +1220,8 @@ export class SessionSupervisor {
       sessionCommands: [],
       leasePath: undefined,
       transcriptDiskMtimeMs: undefined,
+      termination: undefined,
+      abortConfirm: undefined,
     };
     return record;
   }
@@ -1232,6 +1246,227 @@ export class SessionSupervisor {
       throw new Error(`Session ${sessionKey(record.ref)} runtime is not active.`);
     }
     return record.runtime;
+  }
+
+  private isTerminating(record: ManagedSessionRecord): boolean {
+    return record.termination !== undefined;
+  }
+
+  /**
+   * Queue the abort deadline before invoking abort. `session.abort()` waits for
+   * idle, and dropping `agent_end` while aborting can deadlock that wait. Signal
+   * the agent abort controller instead, then confirm via `agent_end` or the
+   * deadline.
+   */
+  private awaitAbortWithDeadline(record: ManagedSessionRecord): Promise<"stopped" | "quarantined"> {
+    const session = record.session;
+    if (!session) {
+      return Promise.resolve("stopped");
+    }
+
+    const timeoutMs = this.abortTimeoutMs;
+    return new Promise((resolve) => {
+      let settled = false;
+
+      const timer = setTimeout(() => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        record.abortConfirm = undefined;
+        void this.quarantineRecord(
+          record,
+          new DeadlineExceededError("session.abort", timeoutMs),
+        ).then(
+          () => resolve("quarantined"),
+          () => resolve("quarantined"),
+        );
+      }, timeoutMs);
+
+      setTimeout(() => {
+        this.invokeSessionAbort(record, session).then(
+          async () => {
+            if (settled) {
+              return;
+            }
+            settled = true;
+            clearTimeout(timer);
+            record.abortConfirm = undefined;
+            this.clearRunStateAfterConfirmedStop(record);
+            record.termination = "stopped";
+            record.status = "idle";
+            record.updatedAt = nowIso();
+            await this.persistSnapshot(record);
+            await this.emit(record, sessionUpdatedEvent(record));
+            resolve("stopped");
+          },
+          async (error: unknown) => {
+            if (settled) {
+              return;
+            }
+            settled = true;
+            clearTimeout(timer);
+            record.abortConfirm = undefined;
+            await this.quarantineRecord(record, error);
+            resolve("quarantined");
+          },
+        );
+      }, 0);
+    });
+  }
+
+  private invokeSessionPrompt(
+    session: AgentSession,
+    promptText: string,
+    images:
+      | readonly { readonly type: "image"; readonly data: string; readonly mimeType: string }[]
+      | undefined,
+  ): Promise<void> {
+    this.sessionRunStats.promptCalls += 1;
+    if (this.sessionRunFixture?.prompt === "hang") {
+      return new Promise(() => {});
+    }
+    if (this.sessionRunFixture?.prompt === "reject") {
+      return Promise.reject(new Error("injected prompt failure"));
+    }
+    return session.prompt(promptText, {
+      ...(images && images.length > 0 ? { images: [...images] } : {}),
+      source: "interactive",
+    });
+  }
+
+  private invokeSessionAbort(record: ManagedSessionRecord, session: AgentSession): Promise<void> {
+    this.sessionRunStats.abortCalls += 1;
+    if (this.sessionRunFixture?.abort === "hang") {
+      return new Promise(() => {});
+    }
+    if (this.sessionRunFixture?.abort === "reject") {
+      return Promise.reject(new Error("injected abort failure"));
+    }
+    const abortRetry = (session as AgentSession & { abortRetry?: () => void }).abortRetry;
+    const agentAbort = session.agent.abort;
+    if (typeof abortRetry === "function" && typeof agentAbort === "function") {
+      return new Promise((resolve, reject) => {
+        record.abortConfirm = resolve;
+        try {
+          abortRetry.call(session);
+          agentAbort.call(session.agent);
+        } catch (error) {
+          record.abortConfirm = undefined;
+          reject(error);
+          return;
+        }
+        if (!session.isStreaming) {
+          record.abortConfirm = undefined;
+          resolve();
+        }
+      });
+    }
+    return session.abort();
+  }
+
+  private async completePromptTurn(
+    record: ManagedSessionRecord,
+    session: AgentSession,
+    input: {
+      readonly isQueuedMessage: boolean;
+      readonly isExtensionCommand: boolean;
+      readonly runId: string | undefined;
+      readonly promptText: string;
+      readonly images:
+        | readonly { readonly type: "image"; readonly data: string; readonly mimeType: string }[]
+        | undefined;
+      readonly deliverAs?: SessionMessageInput["deliverAs"];
+    },
+  ): Promise<void> {
+    try {
+      if (input.isQueuedMessage) {
+        // The queued-vs-prompt decision was made before the persistSnapshot/emit
+        // awaits above; the agent may have finished its turn in that window. A
+        // steer/follow-up now would attach to nothing and be silently dropped,
+        // so re-check the live streaming state and surface a retryable error
+        // instead. The catch below rolls back the optimistic queued entry.
+        if (!session.isStreaming) {
+          throw new Error(
+            "Session finished streaming before the queued message could be delivered. Retry to send it as a new turn.",
+          );
+        }
+        await this.queuePrompt(session, input.promptText, input.deliverAs!, input.images);
+      } else {
+        if (this.isTerminating(record)) {
+          return;
+        }
+        await this.invokeSessionPrompt(session, input.promptText, input.images);
+      }
+
+      if (input.isExtensionCommand) {
+        await this.syncRecordAfterSessionMutation(record, { emitUpdate: true });
+      }
+    } catch (error) {
+      if (this.isTerminating(record)) {
+        return;
+      }
+      if (input.isQueuedMessage) {
+        record.queuedMessages = record.queuedMessages.slice(0, -1);
+      }
+      if (!input.isQueuedMessage) {
+        record.runningRunId = undefined;
+      }
+      record.status = input.isQueuedMessage
+        ? "running"
+        : input.isExtensionCommand
+          ? "idle"
+          : "failed";
+      record.updatedAt = nowIso();
+      record.preview = error instanceof Error ? error.message : String(error);
+      await this.persistSnapshot(record);
+      await this.emit(record, {
+        type: "runFailed",
+        sessionRef: record.ref,
+        timestamp: nowIso(),
+        error: toSessionErrorInfo(error, "SEND_FAILED"),
+        ...(input.runId ? { runId: input.runId } : {}),
+      });
+      await this.emit(record, sessionUpdatedEvent(record));
+      throw error;
+    }
+  }
+
+  private clearRunStateAfterConfirmedStop(record: ManagedSessionRecord): void {
+    // Aborting ends the current turn, so any steer/follow-up messages queued
+    // against it can never be delivered. Clear both the SDK queue and our
+    // mirror so the composer stops showing orphaned pending messages — matching
+    // the SDK's own "clear the queue when the user aborts" convention.
+    record.session?.clearQueue();
+    record.queuedMessages = [];
+    record.runningRunId = undefined;
+  }
+
+  private async quarantineRecord(record: ManagedSessionRecord, error: unknown): Promise<void> {
+    record.termination = "quarantined";
+    this.clearRunStateAfterConfirmedStop(record);
+    await withDeadline(
+      this.disposeRecordRuntimeSafely(record),
+      this.abortTimeoutMs,
+      "session.dispose",
+    ).catch((disposeError: unknown) => {
+      console.warn(
+        `[pi-sdk-driver] dispose timed out while quarantining ${sessionKey(record.ref)}:`,
+        disposeError,
+      );
+    });
+    record.status = "failed";
+    record.updatedAt = nowIso();
+    record.preview = error instanceof Error ? error.message : String(error);
+    const code = error instanceof DeadlineExceededError ? "ABORT_TIMEOUT" : "ABORT_FAILED";
+    await this.persistSnapshot(record);
+    await this.emit(record, {
+      type: "runFailed",
+      sessionRef: record.ref,
+      timestamp: nowIso(),
+      error: toSessionErrorInfo(error, code),
+    });
+    await this.emit(record, sessionUpdatedEvent(record));
   }
 
   private async disposeRecordRuntime(record: ManagedSessionRecord): Promise<void> {
@@ -1936,7 +2171,12 @@ export class SessionSupervisor {
         if (options?.persistSnapshot !== false) {
           await this.persistSnapshot(record);
         }
+        // Snapshots are captured when the agent event is queued. Stop emits
+        // stopping/idle off this queue, so a later drain must not revive running.
         for (const event of events) {
+          if (isStaleQueuedRunSnapshot(record, event)) {
+            continue;
+          }
           await this.emit(record, event);
         }
       },
@@ -1952,6 +2192,17 @@ export class SessionSupervisor {
   }
 
   private handleAgentEvent(record: ManagedSessionRecord, event: AgentSessionEvent): void {
+    if (record.termination === "aborting") {
+      if (event.type === "agent_end" || event.type === "agent_settled") {
+        record.abortConfirm?.();
+        record.abortConfirm = undefined;
+      }
+      return;
+    }
+    if (record.termination === "stopped" || record.termination === "quarantined") {
+      return;
+    }
+
     const mapped = this.mapAgentEvent(record, event);
     if (mapped.length === 0) {
       return;
@@ -1971,6 +2222,9 @@ export class SessionSupervisor {
     switch (event.type) {
       case "agent_start":
       case "turn_start":
+        if (record.termination) {
+          return [];
+        }
         record.status = "running";
         return [sessionUpdatedEvent(record)];
       case "message_start":
@@ -2014,6 +2268,9 @@ export class SessionSupervisor {
         }
         return [sessionUpdatedEvent(record)];
       case "tool_execution_start":
+        if (record.termination) {
+          return [];
+        }
         record.status = "running";
         return toDriverEvents(
           {
@@ -2053,6 +2310,14 @@ export class SessionSupervisor {
       case "turn_end":
         return [sessionUpdatedEvent(record)];
       case "agent_end": {
+        if (record.termination === "aborting") {
+          record.abortConfirm?.();
+          record.abortConfirm = undefined;
+          return [];
+        }
+        if (record.termination) {
+          return [];
+        }
         const outcome = determineRunOutcome(event.messages, record.cancellationRequested);
         record.cancellationRequested = false;
         const runId = record.runningRunId;
@@ -2875,6 +3140,28 @@ function sessionUpdatedEvent(record: ManagedSessionRecord): SessionDriverEvent {
     timestamp: record.updatedAt,
     snapshot: buildSnapshot(record),
   };
+}
+
+function isStaleQueuedRunSnapshot(
+  record: ManagedSessionRecord,
+  event: SessionDriverEvent,
+): boolean {
+  if (!record.termination) {
+    return false;
+  }
+  if (event.type !== "sessionUpdated" && event.type !== "runCompleted") {
+    return false;
+  }
+  if (event.snapshot.status === "running") {
+    return true;
+  }
+  return (
+    event.snapshot.status === "stopping" &&
+    (record.termination === "stopped" ||
+      record.termination === "quarantined" ||
+      record.status === "idle" ||
+      record.status === "failed")
+  );
 }
 
 function toDriverEvents(
