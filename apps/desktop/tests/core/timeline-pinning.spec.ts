@@ -555,13 +555,7 @@ test("restores a thread's saved off-bottom scroll position after switching sessi
       .toBeLessThanOrEqual(16);
     await window.waitForTimeout(800);
 
-    await window.getByTestId("timeline-pane").hover();
-    await expect
-      .poll(async () => {
-        await window.mouse.wheel(0, -520);
-        return (await getTimelineScrollMetrics(window)).remainingFromBottom;
-      })
-      .toBeGreaterThan(700);
+    await scrollTimelineAwayFromBottom(window, 1_600);
     const savedMetrics = await getTimelineScrollMetrics(window);
     expect(savedMetrics.remainingFromBottom).toBeGreaterThan(700);
     await window.waitForTimeout(250);
@@ -580,10 +574,22 @@ test("restores a thread's saved off-bottom scroll position after switching sessi
     await expect(window.getByTestId("timeline-jump")).toHaveCount(0);
 
     const restoredRemaining = (await getTimelineScrollMetrics(window)).remainingFromBottom;
-    await window.getByTestId("timeline-pane").hover();
     await expect
       .poll(async () => {
-        await window.mouse.wheel(0, 520);
+        await window.evaluate((distance) => {
+          const pane = document.querySelector<HTMLDivElement>("[data-testid='timeline-pane']");
+          if (!pane) {
+            throw new Error("Timeline pane was unavailable");
+          }
+          pane.dispatchEvent(
+            new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaY: distance }),
+          );
+          pane.scrollTop = Math.min(
+            pane.scrollHeight - pane.clientHeight,
+            pane.scrollTop + distance,
+          );
+          pane.dispatchEvent(new Event("scroll", { bubbles: true }));
+        }, 520);
         return restoredRemaining - (await getTimelineScrollMetrics(window)).remainingFromBottom;
       })
       .toBeGreaterThan(120);

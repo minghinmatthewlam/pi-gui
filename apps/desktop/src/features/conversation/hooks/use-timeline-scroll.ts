@@ -172,10 +172,20 @@ export function useTimelineScroll({
         if (alignmentGeneration !== bottomAlignmentGenerationRef.current) {
           return;
         }
+        if (
+          selectedSessionKey &&
+          hasTimelineOffBottomState(selectedSessionKey) &&
+          !pinnedToBottomRef.current
+        ) {
+          return;
+        }
         if (behavior === "auto") {
           pane.scrollTop = pane.scrollHeight;
         } else {
           pane.scrollTo({ top: pane.scrollHeight, behavior });
+        }
+        if (alignmentGeneration !== bottomAlignmentGenerationRef.current) {
+          return;
         }
         pinnedToBottomRef.current = true;
         lastTimelineScrollTopBySessionRef.current.set(selectedSessionKey, pane.scrollTop);
@@ -697,6 +707,7 @@ export function useTimelineScroll({
     } else {
       pendingTimelineOffBottomRestoreSessionKeyRef.current = null;
       preserveBottomOnNextPaneResizeRef.current = false;
+      pinnedToBottomRef.current = false;
       resetExactBottomRestoreState();
       bottomAlignmentGenerationRef.current += 1;
       saveTimelineOffBottomState(selectedSessionKey, pane);
