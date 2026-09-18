@@ -718,11 +718,11 @@ app
           setSessionRunFixture: (
             fixture: { prompt?: "hang" | "reject"; abort?: "hang" | "reject" } | undefined,
           ) => {
-            store.driver.setSessionRunFixture(fixture);
+            store.setSessionRunFixture(fixture);
           },
-          getSessionRunStats: () => store.driver.getSessionRunStats(),
+          getSessionRunStats: () => store.getSessionRunStats(),
           setAbortTimeoutMs: (timeoutMs: number) => {
-            store.driver.setAbortTimeoutMs(timeoutMs);
+            store.setAbortTimeoutMs(timeoutMs);
           },
         },
       });

@@ -12,6 +12,8 @@ import {
   PiSdkDriver,
   type PiSdkDriverConfig,
   SessionLeasedError,
+  type SessionRunFixture,
+  type SessionRunStats,
 } from "@pi-gui/pi-sdk-driver";
 import type { SessionCatalogEntry } from "@pi-gui/catalogs";
 import type {
@@ -633,6 +635,18 @@ export class DesktopAppStore {
   async emitTestSessionEvent(event: SessionDriverEvent): Promise<void> {
     await this.initialize();
     await this.handleSessionEvent(event);
+  }
+
+  setSessionRunFixture(fixture: SessionRunFixture | undefined): void {
+    this.driver.setSessionRunFixture(fixture);
+  }
+
+  getSessionRunStats(): SessionRunStats {
+    return this.driver.getSessionRunStats();
+  }
+
+  setAbortTimeoutMs(timeoutMs: number): void {
+    this.driver.setAbortTimeoutMs(timeoutMs);
   }
 
   subscribe(listener: StateListener): () => void {
