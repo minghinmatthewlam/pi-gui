@@ -9,6 +9,7 @@ import {
 } from "react";
 import type { AppView, SelectedTranscriptRecord } from "../../../../contracts/desktop-state";
 import { VIRTUALIZATION_THRESHOLD } from "../conversation-timeline";
+import { buildTranscriptChangeMarker } from "./transcript-change-marker";
 
 export type SidePanelMode = "changes" | "files";
 
@@ -46,6 +47,7 @@ export function useTimelineScroll({
   const hasSelectedSession = Boolean(selectedSession);
   const isTranscriptLoading = Boolean(selectedSession) && !selectedTranscriptForSession;
   const lastTranscriptMarkerRef = useRef("");
+  const lastTranscriptLengthRef = useRef(0);
   const pinnedToBottomRef = useRef(true);
   const previousTimelinePaneSizeRef = useRef<{ width: number; height: number } | null>(null);
   const lastTimelineScrollTopBySessionRef = useRef(new Map<string, number>());
@@ -428,6 +430,7 @@ export function useTimelineScroll({
     const shouldRestorePinned = !savedOffBottomState ? (savedPinned ?? true) : false;
     setShowJumpToLatest(false);
     lastTranscriptMarkerRef.current = "";
+    lastTranscriptLengthRef.current = 0;
     pinnedToBottomRef.current = shouldRestorePinned;
     timelineScrollIntentUntilRef.current = 0;
     previousTimelinePaneSizeRef.current = null;
@@ -639,10 +642,16 @@ export function useTimelineScroll({
     if (marker === lastTranscriptMarkerRef.current) {
       return;
     }
+    const previousLength = lastTranscriptLengthRef.current;
     lastTranscriptMarkerRef.current = marker;
+    lastTranscriptLengthRef.current = activeTranscript.length;
 
     if (pinnedToBottomRef.current) {
-      requestPinnedBottomAlignment("auto", { preferExactRestore: true });
+      // Growing the last assistant message must restick without disabling
+      // virtualization. preferExactRestore is for new rows (tools, turns).
+      requestPinnedBottomAlignment("auto", {
+        preferExactRestore: previousLength > 0 && activeTranscript.length !== previousLength,
+      });
       return;
     }
 
@@ -813,14 +822,6 @@ export function useTimelineScroll({
     beginPreserveTimelineBottom,
     schedulePinnedBottomRealignment,
   };
-}
-
-function buildTranscriptChangeMarker(
-  sessionKey: string,
-  transcript: SelectedTranscriptRecord["transcript"],
-): string {
-  const lastItem = transcript.at(-1);
-  return `${sessionKey}:${transcript.length}:${lastItem ? JSON.stringify(lastItem) : ""}`;
 }
 
 function isNearBottom(element: HTMLDivElement): boolean {

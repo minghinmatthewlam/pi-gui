@@ -73,6 +73,10 @@ import {
   applySessionEventState,
   updateSessionRecord,
 } from "../conversation/app-store-session-state";
+import {
+  StreamingUiPublisher,
+  shouldDeferStreamingUiPublish,
+} from "../conversation/streaming-ui-publisher";
 import type { RefreshStateOptions } from "./refresh-state-options";
 import {
   readPersistedUiState,
@@ -169,6 +173,14 @@ export class DesktopAppStore {
    * trailing refresh so the final state is never dropped.
    */
   private readonly sessionCommandRefreshers = new Map<string, { dirty: boolean }>();
+  /**
+   * Coalesce token-level assistantDelta / redundant sessionUpdated publishes so
+   * the renderer does not apply a full DesktopAppState snapshot per token.
+   */
+  private readonly streamingUiPublisher = new StreamingUiPublisher((sessionRef) => {
+    this.emit();
+    this.publishSelectedTranscriptFor(sessionRef);
+  });
   /** Per-workspace serial queue so focus reconciles never overlap or race. */
   private readonly externalChangeQueues = new Map<string, Promise<void>>();
   /**
@@ -2747,10 +2759,12 @@ export class DesktopAppStore {
     if (subscriptionKey !== key) {
       this.migrateSessionSubscriptionKey(subscriptionKey, key);
     }
-    // Any transient failure while applying the event (a rejected refresh,
-    // persistUiState, or listener) must never skip the final emit — otherwise the
-    // UI is left stuck showing "running" forever. Apply-then-emit is wrapped so
-    // the finally always publishes the latest state we managed to compute.
+    // Capture before applyTimelineEvent so the first running sessionUpdated still
+    // publishes immediately (sidebar indicator) while later token ticks coalesce.
+    const alreadyTrackingRun = this.sessionState.runningSinceBySession.has(key);
+    // Apply-then-publish is wrapped so the finally always either emits or
+    // schedules a coalesced emit. Token-level assistantDelta / redundant
+    // sessionUpdated ticks must not publish a full app snapshot per token.
     try {
       const knownSession = this.sessionFromState(event.sessionRef);
       const shouldFollowSessionMutation =
@@ -2899,9 +2913,15 @@ export class DesktopAppStore {
     } catch (error) {
       console.error(`[app-store] failed to apply session event ${event.type} for ${key}`, error);
     } finally {
-      const snapshot = this.emit();
-      this.publishSelectedTranscriptFor(event.sessionRef);
-      await this.emitSessionEvent(event, snapshot);
+      if (shouldDeferStreamingUiPublish(event, alreadyTrackingRun)) {
+        this.streamingUiPublisher.schedule(event.sessionRef);
+        await this.emitSessionEvent(event, this.state);
+      } else {
+        this.streamingUiPublisher.cancel(event.sessionRef);
+        const snapshot = this.emit();
+        this.publishSelectedTranscriptFor(event.sessionRef);
+        await this.emitSessionEvent(event, snapshot);
+      }
     }
   }
 
