@@ -7,7 +7,7 @@ import { NEW_THREAD_PLACEHOLDER_TITLE } from "./thread-title-constants";
 export function applySessionEventState(
   state: DesktopAppState,
   event: SessionDriverEvent,
-  transcriptCache: Map<string, TranscriptMessage[]>,
+  transcriptCache: Map<string, readonly TranscriptMessage[]>,
   runningSinceBySession: Map<string, string>,
   lastViewedAtBySession: Map<string, string>,
 ): DesktopAppState {

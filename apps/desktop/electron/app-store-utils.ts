@@ -31,7 +31,7 @@ export function buildWorkspaceRecords(
   workspaces: readonly WorkspaceCatalogEntry[],
   worktrees: readonly WorktreeCatalogEntry[],
   sessions: readonly SessionCatalogEntry[],
-  transcriptCache: Map<string, TranscriptMessage[]>,
+  transcriptCache: Map<string, readonly TranscriptMessage[]>,
   runningSinceBySession: Map<string, string>,
   sessionConfigBySession: Map<string, SessionConfig>,
   lastViewedAtBySession: Map<string, string>,
@@ -223,7 +223,7 @@ function linkedWorktreeBranchName(
 
 function buildSessionRecord(
   session: SessionCatalogEntry,
-  transcriptCache: Map<string, TranscriptMessage[]>,
+  transcriptCache: Map<string, readonly TranscriptMessage[]>,
   runningSinceBySession: Map<string, string>,
   sessionConfigBySession: Map<string, SessionConfig>,
   lastViewedAtBySession: Map<string, string>,

@@ -57,7 +57,7 @@ export function timelineFromDriverTranscript(
 }
 
 export function appendUserMessage(
-  transcriptCache: Map<string, TranscriptMessage[]>,
+  transcriptCache: Map<string, readonly TranscriptMessage[]>,
   sessionRef: SessionRef,
   text: string,
   attachments: NonNullable<Extract<TranscriptMessage, { kind: "message" }>["attachments"]> = [],
@@ -74,7 +74,7 @@ export function appendUserMessage(
 }
 
 export function appendQueuedUserMessage(
-  transcriptCache: Map<string, TranscriptMessage[]>,
+  transcriptCache: Map<string, readonly TranscriptMessage[]>,
   sessionRef: SessionRef,
   message: SessionQueuedMessage,
 ): void {
@@ -105,7 +105,7 @@ export function appendQueuedUserMessage(
 }
 
 export function appendAssistantDelta(
-  transcriptCache: Map<string, TranscriptMessage[]>,
+  transcriptCache: Map<string, readonly TranscriptMessage[]>,
   activeAssistantMessageBySession: Map<string, string>,
   sessionRef: SessionRef,
   text: string,
@@ -144,7 +144,7 @@ export function clearActiveAssistantMessage(
 }
 
 export function applyTimelineEvent(
-  transcriptCache: Map<string, TranscriptMessage[]>,
+  transcriptCache: Map<string, readonly TranscriptMessage[]>,
   event: SessionDriverEvent,
   state: TimelineRuntimeState,
 ): void {
