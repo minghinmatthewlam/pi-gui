@@ -40,10 +40,12 @@ await test("messageText preserves Markdown newlines in array-shaped assistant co
   assert.equal(messageText(message), markdownReport);
 });
 
-await test("streaming partials are not persisted to the catalog, discrete events are", () => {
+await test("the persist policy exempts streaming partials and keeps every discrete event", () => {
   // Persisting per message_update cost an atomic catalog write (fsync + rename +
   // directory fsync) per streamed token, serialized on the catalog's single
   // mutation queue, which is what made createSession hang during a stream.
+  // This covers the policy across event types; session-supervisor-persist.test.mts
+  // covers handleAgentEvent actually applying it.
   assert.equal(shouldPersistSnapshotForAgentEvent("message_update"), false);
 
   // Crash-recovery state must stay current to the last message boundary.
