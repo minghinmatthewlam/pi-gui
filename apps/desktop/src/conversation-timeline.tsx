@@ -41,6 +41,7 @@ interface ConversationTimelineProps {
   readonly onDisableVirtualizationReady?: () => void;
   readonly onTimelineScroll: () => void;
   readonly onTimelineScrollIntent?: () => void;
+  readonly onTimelineNavigateAway?: () => void;
   readonly threadSearch: ThreadSearchModel;
   readonly showJumpToLatest: boolean;
   readonly onJumpToLatest: () => void;
@@ -59,6 +60,7 @@ export function ConversationTimeline({
   onDisableVirtualizationReady,
   onTimelineScroll,
   onTimelineScrollIntent,
+  onTimelineNavigateAway,
   threadSearch,
   showJumpToLatest,
   onJumpToLatest,
@@ -204,9 +206,9 @@ export function ConversationTimeline({
         return;
       }
 
-      // Mark this as a deliberate scroll so the bottom-pinning engine treats it as
-      // intent and does not snap the view back to the latest activity.
-      onTimelineScrollIntent?.();
+      // Drop the bottom pin before jumping. Smooth scrolling stays near the
+      // bottom for long enough that #114's resize/composer pinning snaps back.
+      (onTimelineNavigateAway ?? onTimelineScrollIntent)?.();
 
       const scrollToExisting = (): boolean => {
         const target = pane.querySelector<HTMLElement>(
@@ -221,7 +223,7 @@ export function ConversationTimeline({
           0,
           pane.scrollTop + (targetRect.top - paneRect.top) - SCROLL_TO_PADDING_PX,
         );
-        pane.scrollTo({ top: nextTop, behavior: "smooth" });
+        pane.scrollTop = nextTop;
         return true;
       };
 
@@ -244,7 +246,7 @@ export function ConversationTimeline({
         scrollToExisting();
       });
     },
-    [displayItems, onTimelineScrollIntent, timelinePaneRef],
+    [displayItems, onTimelineNavigateAway, onTimelineScrollIntent, timelinePaneRef],
   );
 
   useLayoutEffect(() => {

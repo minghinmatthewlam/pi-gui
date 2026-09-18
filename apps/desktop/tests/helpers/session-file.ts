@@ -67,9 +67,9 @@ export async function appendMessagesToSessionFile(
           ? {
               role: "assistant",
               content: [{ type: "text", text: message.text }],
-              api: "test",
-              provider: "test",
-              model: "test",
+              api: "openai-responses",
+              provider: "openai",
+              model: "gpt-5",
               usage: {
                 input: 0,
                 output: 0,

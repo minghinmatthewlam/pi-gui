@@ -206,6 +206,12 @@ export function useTimelineScroll({
   const requestPinnedBottomAlignment = useCallback(
     (behavior: ScrollBehavior = "auto", options?: { readonly preferExactRestore?: boolean }) => {
       if (
+        window.performance.now() <= timelineScrollIntentUntilRef.current &&
+        !pinnedToBottomRef.current
+      ) {
+        return;
+      }
+      if (
         selectedSessionKey &&
         hasTimelineOffBottomState(selectedSessionKey) &&
         !pinnedToBottomRef.current
@@ -516,9 +522,16 @@ export function useTimelineScroll({
 
     const pane = timelinePaneRef.current;
     const previousHeight = composer.getBoundingClientRect().height;
-    const shouldPreserveBottom = pane
-      ? isNearBottom(pane) || pinnedToBottomRef.current || preserveBottomOnNextPaneResizeRef.current
-      : pinnedToBottomRef.current || preserveBottomOnNextPaneResizeRef.current;
+    const leavingBottomForUserIntent =
+      window.performance.now() <= timelineScrollIntentUntilRef.current &&
+      !pinnedToBottomRef.current;
+    const shouldPreserveBottom = leavingBottomForUserIntent
+      ? false
+      : pane
+        ? isNearBottom(pane) ||
+          pinnedToBottomRef.current ||
+          preserveBottomOnNextPaneResizeRef.current
+        : pinnedToBottomRef.current || preserveBottomOnNextPaneResizeRef.current;
 
     composer.style.height = "0px";
     composer.style.height = `${Math.min(composer.scrollHeight, 220)}px`;
@@ -556,6 +569,12 @@ export function useTimelineScroll({
     }
 
     const stickToBottomAfterLayoutChange = () => {
+      if (
+        window.performance.now() <= timelineScrollIntentUntilRef.current &&
+        !pinnedToBottomRef.current
+      ) {
+        return;
+      }
       preserveBottomOnNextPaneResizeRef.current = false;
       pinnedToBottomRef.current = true;
       window.requestAnimationFrame(() => {
@@ -640,7 +659,10 @@ export function useTimelineScroll({
       ) {
         return;
       }
-      if (state?.wasAtBottom) {
+      if (
+        state?.wasAtBottom &&
+        !(window.performance.now() <= timelineScrollIntentUntilRef.current)
+      ) {
         pinnedToBottomRef.current = true;
       }
       if (!pinnedToBottomRef.current && !preserveBottomOnNextPaneResizeRef.current) {
@@ -737,6 +759,24 @@ export function useTimelineScroll({
     cancelPendingTimelineOffBottomRestore(selectedSessionKey);
   };
 
+  // Rail / search jumps must drop the pin immediately. The 750ms intent window
+  // alone is not enough: a composer-height or pane-resize pass can still treat
+  // the view as pinned (especially during a smooth scroll that has not yet left
+  // the near-bottom threshold) and snap back to latest.
+  const handleTimelineNavigateAway = () => {
+    handleTimelineScrollIntent();
+    const pane = timelinePaneRef.current;
+    preserveBottomOnNextPaneResizeRef.current = false;
+    resetExactBottomRestoreState();
+    bottomAlignmentGenerationRef.current += 1;
+    pinnedToBottomRef.current = false;
+    if (pane && selectedSessionKey) {
+      lastTimelineScrollTopBySessionRef.current.set(selectedSessionKey, pane.scrollTop);
+      lastTimelinePinnedBySessionRef.current.set(selectedSessionKey, false);
+      saveTimelineOffBottomState(selectedSessionKey, pane);
+    }
+  };
+
   const jumpToLatest = () => {
     cancelPendingTimelineOffBottomRestore(selectedSessionKey);
     if (selectedSessionKey) {
@@ -765,6 +805,7 @@ export function useTimelineScroll({
     finalizeTimelineVirtualizationDisable,
     handleTimelineScroll,
     handleTimelineScrollIntent,
+    handleTimelineNavigateAway,
     handleTimelineContentHeightChange,
     showJumpToLatest,
     jumpToLatest,
