@@ -638,7 +638,9 @@ function isSameDisplayItem(a: DisplayTimelineItem, b: DisplayTimelineItem): bool
     );
   }
   if (a.kind === "activity" && b.kind === "activity") {
-    return a.label === b.label && a.detail === b.detail && a.metadata === b.metadata && a.tone === b.tone;
+    return (
+      a.label === b.label && a.detail === b.detail && a.metadata === b.metadata && a.tone === b.tone
+    );
   }
   if (a.kind === "summary" && b.kind === "summary") {
     return a.label === b.label && a.metadata === b.metadata && a.presentation === b.presentation;

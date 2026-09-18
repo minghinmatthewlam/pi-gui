@@ -480,7 +480,10 @@ interface PublishedTranscriptFingerprint {
   readonly transcript: unknown;
   readonly schemaInfo: unknown;
 }
-const lastPublishedTranscriptByWebContentsId = new Map<number, PublishedTranscriptFingerprint | null>();
+const lastPublishedTranscriptByWebContentsId = new Map<
+  number,
+  PublishedTranscriptFingerprint | null
+>();
 
 async function publishSelectedTranscriptToWindow(window: BrowserWindow): Promise<void> {
   if (!canPublishToWindow(window)) {
