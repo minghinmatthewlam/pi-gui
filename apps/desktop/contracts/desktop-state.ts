@@ -6,7 +6,11 @@ import type {
 } from "@pi-gui/session-driver/runtime-types";
 import type { SessionSchemaInfo } from "@pi-gui/session-driver";
 export type { SessionSchemaInfo } from "@pi-gui/session-driver";
-export type SessionStatus = "idle" | "running" | "failed";
+export type SessionStatus = "idle" | "running" | "stopping" | "failed";
+
+export function isSessionBusy(status: SessionStatus): boolean {
+  return status === "running" || status === "stopping";
+}
 export type { SessionRole, TimelineToolCall, TranscriptMessage } from "./timeline-types";
 import type { TranscriptMessage } from "./timeline-types";
 
@@ -42,7 +46,8 @@ export type ComposerDraftSyncSource =
   | "remote-persist"
   | "command"
   | "extension-editor-text"
-  | "queued-message-edit";
+  | "queued-message-edit"
+  | "send-failed";
 
 export interface NotificationPreferences {
   readonly backgroundCompletion: boolean;

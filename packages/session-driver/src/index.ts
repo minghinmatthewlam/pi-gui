@@ -1,3 +1,4 @@
+export { isActiveSessionStatus } from "./types.js";
 export type {
   AssistantDeltaEvent,
   CreateSessionOptions,

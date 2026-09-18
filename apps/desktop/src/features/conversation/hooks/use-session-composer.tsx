@@ -68,6 +68,9 @@ export function useSessionComposer(params: UseSessionComposerParams) {
     }
 
     const hasComposerInput = composerDraft.trim().length > 0 || composerAttachments.length > 0;
+    if (selectedSession.status === "stopping") {
+      return;
+    }
     if (selectedSession.status === "running" && !hasComposerInput) {
       void updateSnapshot(setSnapshot, () => api.cancelCurrentRun()).catch((error: unknown) => {
         console.error("[renderer] cancelCurrentRun failed", error);

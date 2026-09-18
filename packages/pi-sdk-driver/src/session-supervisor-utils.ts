@@ -141,6 +141,40 @@ export function nowIso(): string {
   return new Date().toISOString();
 }
 
+export const DEFAULT_SESSION_ABORT_TIMEOUT_MS = 2_500;
+
+export class DeadlineExceededError extends Error {
+  readonly timeoutMs: number;
+
+  constructor(label: string, timeoutMs: number) {
+    super(`${label} timed out after ${timeoutMs}ms`);
+    this.name = "DeadlineExceededError";
+    this.timeoutMs = timeoutMs;
+  }
+}
+
+export async function withDeadline<T>(
+  work: Promise<T>,
+  timeoutMs: number,
+  label: string,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      work,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          reject(new DeadlineExceededError(label, timeoutMs));
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) {
+      clearTimeout(timer);
+    }
+  }
+}
+
 export function extractPreview(message: unknown): string | undefined {
   if (!isRecord(message)) {
     return undefined;

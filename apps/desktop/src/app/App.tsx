@@ -171,7 +171,9 @@ export default function App() {
   const queuedComposerMessages = snapshot?.queuedComposerMessages ?? [];
   const editingQueuedMessageId = snapshot?.editingQueuedMessageId;
   const runningLabel = useRunningLabel(
-    selectedSession?.status === "running" ? selectedSession.runningSince : undefined,
+    selectedSession?.status === "running" || selectedSession?.status === "stopping"
+      ? selectedSession.runningSince
+      : undefined,
   );
   const selectedSessionKey =
     selectedWorkspace && selectedSession ? `${selectedWorkspace.id}:${selectedSession.id}` : "";
@@ -391,7 +393,7 @@ export default function App() {
     selectedSessionKey,
     selectedSession,
     selectedWorkspace,
-    isRunning: selectedSession?.status === "running",
+    isRunning: selectedSession?.status === "running" || selectedSession?.status === "stopping",
     api,
     setSnapshot,
     focusComposer,
@@ -1020,9 +1022,11 @@ export default function App() {
                       <div className="chat-header__row">
                         <h1 className="chat-header__title">{displayedSessionTitle}</h1>
                         <div className="chat-header__status">
-                          {selectedSession.status === "running"
-                            ? runningLabel
-                            : formatRelativeTime(selectedSession.updatedAt)}
+                          {selectedSession.status === "stopping"
+                            ? "Stopping…"
+                            : selectedSession.status === "running"
+                              ? runningLabel
+                              : formatRelativeTime(selectedSession.updatedAt)}
                         </div>
                       </div>
                     </div>
@@ -1064,7 +1068,10 @@ export default function App() {
                       onContentHeightChange={handleTimelineContentHeightChange}
                       onViewFileInDiff={handleViewFileInDiff}
                       onForkFromMessage={
-                        selectedSession.status === "running" ? undefined : openForkModal
+                        selectedSession.status === "running" ||
+                        selectedSession.status === "stopping"
+                          ? undefined
+                          : openForkModal
                       }
                       promptRailVisible={promptRailVisible}
                     />

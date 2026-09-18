@@ -382,7 +382,7 @@ function areWorktreeEntriesEqual(
 }
 
 function rankSessionStatus(status: SessionCatalogEntry["status"]): number {
-  if (status === "running") return 0;
+  if (status === "running" || status === "stopping") return 0;
   if (status === "idle") return 1;
   return 2;
 }

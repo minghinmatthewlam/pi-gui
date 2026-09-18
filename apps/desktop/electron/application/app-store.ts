@@ -252,6 +252,7 @@ export class DesktopAppStore {
         composerAttachmentsBySession: this.sessionState.composerAttachmentsBySession,
         composerDraftsBySession: this.sessionState.composerDraftsBySession,
         loadedTranscriptKeys: this.sessionState.loadedTranscriptKeys,
+        pendingComposerRestoreBySession: this.sessionState.pendingComposerRestoreBySession,
         sessionCommandsBySession: this.sessionState.sessionCommandsBySession,
         sessionConfigBySession: this.sessionState.sessionConfigBySession,
         sessionErrorsBySession: this.sessionState.sessionErrorsBySession,
@@ -2033,7 +2034,7 @@ export class DesktopAppStore {
     sessions: readonly SessionCatalogEntry[],
   ): Promise<void> {
     for (const session of sessions) {
-      if (session.status !== "running") {
+      if (session.status !== "running" && session.status !== "stopping") {
         continue;
       }
       await this.ensureSessionSubscription(session.sessionRef);
@@ -2847,8 +2848,10 @@ export class DesktopAppStore {
 
       if (event.type === "runFailed") {
         this.sessionState.sessionErrorsBySession.set(key, event.error.message);
+        await this.restoreComposerDraftAfterSendFailure(event.sessionRef, event.error.code);
       } else if (event.type === "runCompleted" || event.type === "sessionClosed") {
         this.sessionState.sessionErrorsBySession.delete(key);
+        this.sessionState.pendingComposerRestoreBySession.delete(key);
       }
 
       applyTimelineEvent(this.sessionState.transcriptCache, event, {
@@ -3696,6 +3699,46 @@ export class DesktopAppStore {
 
   private clearSessionError(sessionRef: SessionRef): void {
     this.sessionState.sessionErrorsBySession.delete(sessionKey(sessionRef));
+  }
+
+  private async restoreComposerDraftAfterSendFailure(
+    sessionRef: SessionRef,
+    errorCode: string | undefined,
+  ): Promise<void> {
+    const key = sessionKey(sessionRef);
+    const pending = this.sessionState.pendingComposerRestoreBySession.get(key);
+    this.sessionState.pendingComposerRestoreBySession.delete(key);
+    if (!pending || errorCode !== "SEND_FAILED") {
+      return;
+    }
+    if (pending.optimisticMessageId) {
+      const transcript = this.sessionState.transcriptCache.get(key) ?? [];
+      this.sessionState.transcriptCache.set(
+        key,
+        transcript.filter((message) => message.id !== pending.optimisticMessageId),
+      );
+      this.publishSelectedTranscriptFor(sessionRef);
+    }
+    if (pending.text) {
+      this.sessionState.composerDraftsBySession.set(key, pending.text);
+    }
+    if (pending.attachments.length > 0) {
+      this.sessionState.composerAttachmentsBySession.set(
+        key,
+        cloneComposerAttachments(pending.attachments),
+      );
+      await this.persistComposerAttachments(key, pending.attachments);
+    }
+    if (!this.isSelectedSession(sessionRef)) {
+      return;
+    }
+    this.state = {
+      ...this.state,
+      composerDraft: pending.text,
+      composerDraftSyncSource: "send-failed",
+      composerDraftSyncNonce: this.allocateComposerDraftSyncNonce(),
+      composerAttachments: cloneComposerAttachments(pending.attachments),
+    };
   }
 
   private resolveComposerDraft(

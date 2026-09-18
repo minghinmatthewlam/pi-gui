@@ -12,6 +12,7 @@ import type {
   QueuedComposerMessage,
   SessionRecord,
 } from "../../../contracts/desktop-state";
+import { isSessionBusy } from "../../../contracts/desktop-state";
 import type { MentionOption } from "./hooks/use-mention-menu";
 import { ArrowUpIcon, PlusIcon, StopSquareIcon } from "../../ui/icons";
 import type {
@@ -131,7 +132,10 @@ export function ComposerPanel({
   onToggleExtensionDock,
 }: ComposerPanelProps) {
   const hasComposerInput = composerDraft.trim().length > 0 || attachments.length > 0;
-  const primaryActionIsStop = selectedSession.status === "running" && !hasComposerInput;
+  const isStopping = selectedSession.status === "stopping";
+  const primaryActionIsStop =
+    (selectedSession.status === "running" || isStopping) && !hasComposerInput;
+  const sendLabel = isStopping ? "Stopping" : primaryActionIsStop ? "Stop run" : "Send message";
 
   return (
     <footer className="composer">
@@ -185,16 +189,18 @@ export function ComposerPanel({
             <div className="composer__footer">
               <div className="composer__footer-row">
                 <div className="composer__hint">
-                  {selectedSession.status === "running"
-                    ? `${runningLabel} · Enter to queue · Cmd+Enter to steer`
-                    : "Enter to send · Shift+Enter for newline"}
+                  {isStopping
+                    ? "Stopping…"
+                    : selectedSession.status === "running"
+                      ? `${runningLabel} · Enter to queue · Cmd+Enter to steer`
+                      : "Enter to send · Shift+Enter for newline"}
                   {" · "}
                   <ModelSelector
                     runtime={runtime}
                     provider={provider}
                     modelId={modelId}
                     thinkingLevel={thinkingLevel}
-                    disabled={selectedSession.status === "running"}
+                    disabled={isSessionBusy(selectedSession.status)}
                     unselectedModelLabel={modelOnboarding.unselectedModelLabel}
                     emptyModelTitle={modelOnboarding.emptyModelTitle}
                     onSetModel={onSetModel}
@@ -211,14 +217,15 @@ export function ComposerPanel({
                     <PlusIcon />
                   </button>
                   <button
-                    aria-label={primaryActionIsStop ? "Stop run" : "Send message"}
+                    aria-label={sendLabel}
                     className="button button--primary button--cta-icon"
                     data-testid="send"
                     type="button"
                     disabled={
-                      !primaryActionIsStop &&
-                      ((!composerDraft.trim() && attachments.length === 0) ||
-                        modelOnboarding.requiresModelSelection)
+                      isStopping ||
+                      (!primaryActionIsStop &&
+                        ((!composerDraft.trim() && attachments.length === 0) ||
+                          modelOnboarding.requiresModelSelection))
                     }
                     onClick={onSubmit}
                   >

@@ -2038,7 +2038,7 @@ function toOrchestrationStatus(
   if (status === "failed") {
     return "failed";
   }
-  if (status === "running") {
+  if (status === "running" || status === "stopping") {
     return "running";
   }
   // An idle session that has never produced a run is queued, not complete. The

@@ -41,6 +41,7 @@ type ConversationMutableState = Pick<
   | "composerAttachmentsBySession"
   | "composerDraftsBySession"
   | "loadedTranscriptKeys"
+  | "pendingComposerRestoreBySession"
   | "sessionCommandsBySession"
   | "sessionConfigBySession"
   | "sessionErrorsBySession"
@@ -548,6 +549,14 @@ async function submitComposerToSession(
       });
     }
 
+    if (selectedSession?.status === "stopping") {
+      return store.emit();
+    }
+
+    store.conversationState.pendingComposerRestoreBySession.set(key, {
+      text: textInput,
+      attachments: cloneComposerAttachments(attachments),
+    });
     await sendMessageToSession(store, sessionRef, text, attachments);
     const runtimeCommandOutcome = resolvedRuntimeSlashCommand
       ? store.finishRuntimeCommandExecution(sessionRef)
@@ -560,6 +569,7 @@ async function submitComposerToSession(
       markSelectedSessionViewed: false,
     });
   } catch (error) {
+    store.conversationState.pendingComposerRestoreBySession.delete(key);
     if (resolvedRuntimeSlashCommand) {
       store.finishRuntimeCommandExecution(sessionRef);
     }
@@ -623,13 +633,18 @@ async function cancelCurrentRun(
     return store.emit();
   }
 
+  const key = sessionKey(sessionRef);
+  store.conversationState.pendingComposerRestoreBySession.delete(key);
   try {
-    await store.driver.cancelCurrentRun(sessionRef);
+    const outcome = await store.driver.cancelCurrentRun(sessionRef);
+    if (outcome === "quarantined") {
+      return store.emit();
+    }
     clearActiveAssistantMessage(
       store.conversationState.activeAssistantMessageBySession,
       sessionRef,
     );
-    store.conversationState.sessionErrorsBySession.delete(sessionKey(sessionRef));
+    store.conversationState.sessionErrorsBySession.delete(key);
     store.clearConversationError();
     store.schedulePersistUiState();
     return store.emit();
@@ -663,6 +678,13 @@ async function sendMessageToSession(
     text,
     toTranscriptAttachments(attachments),
   );
+  const pendingRestore = store.conversationState.pendingComposerRestoreBySession.get(key);
+  if (pendingRestore) {
+    store.conversationState.pendingComposerRestoreBySession.set(key, {
+      ...pendingRestore,
+      optimisticMessageId,
+    });
+  }
   store.publishSelectedTranscriptFor(sessionRef);
   clearActiveAssistantMessage(store.conversationState.activeAssistantMessageBySession, sessionRef);
   store.conversationState.sessionErrorsBySession.delete(key);

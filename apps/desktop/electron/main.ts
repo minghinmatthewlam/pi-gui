@@ -715,6 +715,15 @@ app
             deferredThreadTitle = undefined;
             pending.reject(new Error("Deferred thread-title rejected by test"));
           },
+          setSessionRunFixture: (
+            fixture: { prompt?: "hang" | "reject"; abort?: "hang" | "reject" } | undefined,
+          ) => {
+            store.driver.setSessionRunFixture(fixture);
+          },
+          getSessionRunStats: () => store.driver.getSessionRunStats(),
+          setAbortTimeoutMs: (timeoutMs: number) => {
+            store.driver.setAbortTimeoutMs(timeoutMs);
+          },
         },
       });
     }

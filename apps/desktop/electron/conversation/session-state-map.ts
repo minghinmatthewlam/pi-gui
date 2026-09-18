@@ -54,6 +54,14 @@ export class SessionStateMap {
   readonly extensionUiBySession = new Map<string, MutableSessionExtensionUiState>();
   readonly pendingAutoTitleBySession = new Map<string, PendingAutoTitle>();
   readonly loadedTranscriptKeys = new Set<string>();
+  readonly pendingComposerRestoreBySession = new Map<
+    string,
+    {
+      readonly text: string;
+      readonly attachments: readonly ComposerAttachment[];
+      readonly optimisticMessageId?: string;
+    }
+  >();
 
   /**
    * Remove all per-session state for keys that are no longer active. Pruning is
@@ -95,6 +103,7 @@ export class SessionStateMap {
       this.sessionCommandsBySession,
       this.extensionUiBySession,
       this.pendingAutoTitleBySession,
+      this.pendingComposerRestoreBySession,
     ];
     for (const map of maps) {
       for (const key of map.keys()) {
@@ -153,6 +162,7 @@ export class SessionStateMap {
     this.sessionCommandsBySession.delete(key);
     this.extensionUiBySession.delete(key);
     this.pendingAutoTitleBySession.delete(key);
+    this.pendingComposerRestoreBySession.delete(key);
     pendingAutoTitle?.cancel();
     this.loadedTranscriptKeys.delete(key);
     this.transcriptCache.delete(key);
