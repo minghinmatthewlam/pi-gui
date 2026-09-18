@@ -78,3 +78,41 @@ test("workflow aggregate covers every job and cannot ignore unsuccessful checks"
     }
   }
 });
+
+function assertBaselineRuns(workflow) {
+  const baseline = workflow.jobs.typecheck;
+  assert.equal(baseline.if, undefined, "The baseline job must run on every CI invocation");
+  const checks = baseline.steps.filter((step) => step.run === "pnpm check");
+  assert.equal(checks.length, 1, "CI must run the canonical pnpm check command exactly once");
+  assert.equal(checks[0].if, undefined, "The pnpm check step must not be conditional");
+  assert.ok(
+    checks[0]["continue-on-error"] === undefined || checks[0]["continue-on-error"] === false,
+    "A failed baseline must fail CI",
+  );
+}
+
+test("CI runs the canonical baseline unconditionally", () => {
+  const workflow = parse(
+    readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8"),
+  );
+  assertBaselineRuns(workflow);
+  for (const mutate of [
+    (copy) => {
+      copy.jobs.typecheck.if = "false";
+    },
+    (copy) => {
+      copy.jobs.typecheck.steps.find((step) => step.run === "pnpm check").if = "false";
+    },
+    (copy) => {
+      copy.jobs.typecheck.steps.find((step) => step.run === "pnpm check").run = "echo skipped";
+    },
+    (copy) => {
+      copy.jobs.typecheck.steps.find((step) => step.run === "pnpm check")["continue-on-error"] =
+        true;
+    },
+  ]) {
+    const invalid = structuredClone(workflow);
+    mutate(invalid);
+    assert.throws(() => assertBaselineRuns(invalid), /baseline|pnpm check/);
+  }
+});

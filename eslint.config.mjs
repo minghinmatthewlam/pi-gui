@@ -24,18 +24,29 @@ export default [
   {
     ignores: [
       "**/node_modules/**",
-      "**/dist/**",
-      "**/out/**",
-      "**/build/**",
-      "**/release*/**",
-      "**/.next/**",
-      "**/.cache/**",
-      "**/.artifacts/**",
-      "**/test-results/**",
-      "**/playwright-report/**",
+      // Generated output lives at repository/workspace roots, never anywhere
+      // named "release" or "build" inside product source.
+      ...["", "apps/*/", "packages/*/", "video/"].flatMap((root) =>
+        [
+          "dist",
+          "dist-electron",
+          "out",
+          "build",
+          "release",
+          "release-*",
+          ".next",
+          ".cache",
+          ".artifacts",
+          "test-results",
+          "playwright-report",
+        ].map((directory) => `${root}${directory}/**`),
+      ),
       "**/*.d.{ts,mts,cts}",
       ".pnpm-store/**",
       ".cursor/**",
+      ".worktrees/**",
+      ".claude/worktrees/**",
+      ".codex/worktrees/**",
     ],
   },
   {
@@ -47,9 +58,19 @@ export default [
       ".github/scripts/**/*.{js,mjs,cjs,ts,tsx,mts,cts}",
       "*.{js,mjs,cjs,ts,mts,cts}",
     ],
+    plugins: { "@typescript-eslint": tseslint.plugin },
     languageOptions: { parser: tsParser },
     linterOptions: { noInlineConfig: true },
     rules: {
+      "@typescript-eslint/ban-ts-comment": [
+        "error",
+        {
+          "ts-nocheck": true,
+          "ts-ignore": true,
+          "ts-expect-error": "allow-with-description",
+          minimumDescriptionLength: 10,
+        },
+      ],
       "constructor-super": "error",
       "getter-return": "error",
       "no-async-promise-executor": "error",

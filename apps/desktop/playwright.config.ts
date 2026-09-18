@@ -1,8 +1,9 @@
+import { resolve } from "node:path";
 import { defineConfig } from "@playwright/test";
 
 export default defineConfig({
   forbidOnly: Boolean(process.env.CI),
-  testDir: "./tests",
+  testDir: resolve(__dirname, "tests"),
   // Demo specs record marketing videos on demand; keep them out of default/CI discovery.
   testIgnore: "**/demo/**",
   timeout: 60_000,

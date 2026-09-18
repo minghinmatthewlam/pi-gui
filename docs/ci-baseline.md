@@ -20,6 +20,11 @@ Run `pnpm check` locally and in the existing CI typecheck job. It runs:
    files or ban explicit `any`. Type-aware rules also reject unhandled/misused
    promises and unsafe assignment, argument, call, member access, and return
    operations on `any`. A bare `void` does not silence the promise rule.
+   Compiler escape comments `@ts-nocheck` and `@ts-ignore` fail lint;
+   `@ts-expect-error` requires a description. Guard tests compare pnpm's discovered
+   workspaces with the real typed-lint configuration, so adding a workspace
+   without typed-lint coverage fails the baseline. Generated-output exclusions
+   are scoped to output locations, not similarly named folders inside source.
 3. `pnpm check:architecture`: checks renderer runtime imports and reachable local
    helpers. It rejects Node, Electron, Pi runtime, and main/preload implementation
    dependencies. Explicit type-only imports and pure shared helpers remain valid.
@@ -35,6 +40,9 @@ Run `pnpm check` locally and in the existing CI typecheck job. It runs:
 Guard tests exercise the actual lint configuration with invalid and valid input.
 They also run Playwright discovery with CI enabled and prove a focused `.only`
 test fails while an ordinary test is discovered. Discovery launches no browser.
+Root `pnpm e2e` delegates to the desktop core command, which builds first and
+uses the canonical desktop Playwright configuration. The root Playwright config
+shares that configuration instead of maintaining weaker independent defaults.
 
 The existing macOS Electron core, website build, Linux installation/package and
 Windows package jobs remain separate. `pnpm check` alone does not prove these
@@ -49,10 +57,10 @@ blocks merges; local tests alone do not establish remote enforcement.
 1. Strengthen IPC contracts: main and preload currently rely on annotations and
    casts. Keep one authoritative contract and validate meaningful external data
    boundaries. Avoid introducing a generic framework without a concrete need.
-2. Replace feature-absence skips in mandatory product tests with failures once
-   the feature is confirmed as required. In particular, the schema-skew test can
-   currently skip when its projection is absent. Platform capability skips and
-   credential-dependent integration lanes are separate decisions.
+2. Validate saved JSON at its owning storage boundary, with regression tests
+   proving invalid shapes fail clearly without overwriting existing data.
+   The mandatory schema-skew test now fails if its required projection is absent;
+   platform capability skips and credential-dependent lanes remain separate.
 
 For every new rule, show a representative violation fail, restore a valid case,
 and run the affected product lane. Retain clear evidence of passed, failed and
@@ -74,6 +82,10 @@ fails because its destination cannot be established. Vite `import.meta.glob`
 also fails; use literal imports so every dependency can be checked. Unresolved runtime imports
 and runtime imports backed only by local declaration files also fail. Tests
 prove representative forbidden imports fail and valid browser code passes.
+Worker and SharedWorker module URLs are checked too. Use whole-statement
+`import type` or `export type` for erased dependencies: inline type specifiers
+can preserve module side effects under `verbatimModuleSyntax`, so the guard
+treats those statements as runtime dependencies.
 
 Scope: this checks first-party static module dependencies. It does not audit
 third-party package internals, arbitrary runtime code evaluation, IPC payload

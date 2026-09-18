@@ -53,11 +53,24 @@ export function checkRendererBoundary(root) {
       ts.ScriptTarget.Latest,
       true,
     );
+    // Vite ?worker imports already expose a constructor whose entry is checked
+    // through the import declaration; calling it takes no module URL.
+    const importedWorkerConstructors = new Set(
+      source.statements
+        .filter(
+          (node) =>
+            ts.isImportDeclaration(node) &&
+            ts.isStringLiteral(node.moduleSpecifier) &&
+            /[?&](?:worker|sharedworker)(?:&|$)/.test(node.moduleSpecifier.text),
+        )
+        .map((node) => node.importClause?.name?.text)
+        .filter(Boolean),
+    );
     const fail = (node, reason) => {
       const { line } = source.getLineAndCharacterOfPosition(node.getStart(source));
       failures.push(`${path.relative(root, file)}:${line + 1}: ${reason}`);
     };
-    const inspect = (expression) => {
+    const inspect = (expression, repair = "Use the preload API instead.") => {
       if (!expression || !ts.isStringLiteralLike(expression)) {
         fail(
           expression ?? source,
@@ -71,10 +84,7 @@ export function checkRendererBoundary(root) {
         specifier.startsWith("node:") ||
         runtimePackages.has(packageName(specifier))
       ) {
-        fail(
-          expression,
-          `Forbidden renderer runtime dependency '${specifier}'. Use the preload API instead.`,
-        );
+        fail(expression, `Forbidden renderer runtime dependency '${specifier}'. ${repair}`);
         return;
       }
       // Vite asset imports contain no JavaScript runtime dependency.
@@ -96,7 +106,7 @@ export function checkRendererBoundary(root) {
       if (runtimePackages.has(resolved.packageId?.name)) {
         fail(
           expression,
-          `Forbidden runtime package '${resolved.packageId.name}' through '${specifier}'. Use the preload API instead.`,
+          `Forbidden runtime package '${resolved.packageId.name}' through '${specifier}'. ${repair}`,
         );
         return;
       }
@@ -104,7 +114,7 @@ export function checkRendererBoundary(root) {
       if (isInside(main, target)) {
         fail(
           expression,
-          `Renderer reaches main/preload implementation '${path.relative(root, target)}'. Use the preload API instead.`,
+          `Renderer reaches main/preload implementation '${path.relative(root, target)}'. ${repair}`,
         );
       } else if (isInside(root, target) && !target.includes(`${path.sep}node_modules${path.sep}`)) {
         if (/\.d\.[cm]?ts$/.test(target)) {
@@ -119,24 +129,64 @@ export function checkRendererBoundary(root) {
     };
     const walk = (node) => {
       if (ts.isImportDeclaration(node)) {
-        const clause = node.importClause;
-        const bindings = clause?.namedBindings;
-        const onlyTypes =
-          clause?.isTypeOnly ||
-          (!clause?.name &&
+        // Inline type specifiers can retain an empty runtime import under
+        // verbatimModuleSyntax. Only whole-statement type imports are erased.
+        if (!node.importClause?.isTypeOnly) {
+          const bindings = node.importClause?.namedBindings;
+          const inlineTypes =
+            !node.importClause?.name &&
             bindings &&
             ts.isNamedImports(bindings) &&
             bindings.elements.length > 0 &&
-            bindings.elements.every((element) => element.isTypeOnly));
-        if (!onlyTypes) inspect(node.moduleSpecifier);
+            bindings.elements.every((element) => element.isTypeOnly);
+          inspect(
+            node.moduleSpecifier,
+            inlineTypes
+              ? "Use a whole-statement import type to erase this runtime edge."
+              : undefined,
+          );
+        }
       } else if (ts.isExportDeclaration(node) && node.moduleSpecifier) {
-        const onlyTypes =
-          node.isTypeOnly ||
-          (node.exportClause &&
+        if (!node.isTypeOnly) {
+          const inlineTypes =
+            node.exportClause &&
             ts.isNamedExports(node.exportClause) &&
             node.exportClause.elements.length > 0 &&
-            node.exportClause.elements.every((element) => element.isTypeOnly));
-        if (!onlyTypes) inspect(node.moduleSpecifier);
+            node.exportClause.elements.every((element) => element.isTypeOnly);
+          inspect(
+            node.moduleSpecifier,
+            inlineTypes
+              ? "Use a whole-statement export type to erase this runtime edge."
+              : undefined,
+          );
+        }
+      } else if (
+        ts.isNewExpression(node) &&
+        ((ts.isIdentifier(node.expression) &&
+          !importedWorkerConstructors.has(node.expression.text) &&
+          ["Worker", "SharedWorker"].includes(node.expression.text)) ||
+          (ts.isPropertyAccessExpression(node.expression) &&
+            ts.isIdentifier(node.expression.expression) &&
+            ["globalThis", "window", "self"].includes(node.expression.expression.text) &&
+            ["Worker", "SharedWorker"].includes(node.expression.name.text)))
+      ) {
+        const url = node.arguments?.[0];
+        const base = url && ts.isNewExpression(url) ? url.arguments?.[1] : undefined;
+        if (
+          url &&
+          ts.isNewExpression(url) &&
+          ts.isIdentifier(url.expression) &&
+          url.expression.text === "URL" &&
+          base &&
+          ts.isPropertyAccessExpression(base) &&
+          base.name.text === "url" &&
+          ts.isMetaProperty(base.expression) &&
+          base.expression.keywordToken === ts.SyntaxKind.ImportKeyword
+        ) {
+          inspect(url.arguments?.[0]);
+        } else {
+          fail(node, "Worker entry cannot be checked; use new URL(literal, import.meta.url).");
+        }
       } else if (
         ts.isImportEqualsDeclaration(node) &&
         !node.isTypeOnly &&
