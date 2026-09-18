@@ -1106,7 +1106,14 @@ export async function emitTestSessionEvent(
   harness: DesktopHarness,
   event: SessionDriverEvent,
 ): Promise<void> {
-  await harness.electronApp.evaluate(async (_, payload) => {
+  await emitTestSessionEvents(harness, [event]);
+}
+
+export async function emitTestSessionEvents(
+  harness: DesktopHarness,
+  events: readonly SessionDriverEvent[],
+): Promise<void> {
+  await harness.electronApp.evaluate(async (_, payloads) => {
     const hooks = (
       globalThis as {
         __PI_APP_TEST_HOOKS?: { emitSessionEvent?: (event: SessionDriverEvent) => Promise<void> };
@@ -1115,8 +1122,10 @@ export async function emitTestSessionEvent(
     if (!hooks?.emitSessionEvent) {
       throw new Error("Test session-event hook is unavailable");
     }
-    await hooks.emitSessionEvent(payload);
-  }, event);
+    for (const payload of payloads) {
+      await hooks.emitSessionEvent(payload);
+    }
+  }, events);
 }
 
 /**
