@@ -73,6 +73,8 @@ import {
 } from "../conversation/app-store-timeline";
 import {
   applySessionEventState,
+  applyUrgentRunStatusState,
+  shouldYieldBeforeSessionEvent,
   updateSessionRecord,
 } from "../conversation/app-store-session-state";
 import type { RefreshStateOptions } from "./refresh-state-options";
@@ -2333,22 +2335,11 @@ export class DesktopAppStore {
   }
 
   private applyUrgentRunStatus(event: SessionDriverEvent): void {
-    const status =
-      event.type === "runFailed"
-        ? "failed"
-        : event.type === "sessionUpdated" || event.type === "runCompleted"
-          ? event.snapshot.status
-          : undefined;
-    if (status !== "stopping" && status !== "idle" && status !== "failed") {
+    const next = applyUrgentRunStatusState(this.state, event);
+    if (!next) {
       return;
     }
-    this.state = applySessionEventState(
-      this.state,
-      event,
-      this.sessionState.transcriptCache,
-      this.sessionState.runningSinceBySession,
-      this.sessionState.lastViewedAtBySession,
-    );
+    this.state = next;
     this.emit();
   }
 
@@ -2360,17 +2351,21 @@ export class DesktopAppStore {
    * The chained promise is error-recovering — mirroring the driver's
    * `chainRecoveringEventQueue` shape — so a rejection is logged and swallowed
    * rather than leaving the tail rejected and freezing the queue for that session.
+   * Stream deltas yield a macrotask so abort timers can fire; other events stay
+   * on the microtask queue so slash-command config is not clobbered after emit.
    */
   private enqueueSessionEvent(event: SessionDriverEvent, subscriptionKey: string): void {
     const previous = this.sessionEventQueues.get(subscriptionKey) ?? Promise.resolve();
+    const run = () => this.handleSessionEvent(event, subscriptionKey);
     const next = previous
-      .then(
-        () =>
-          new Promise<void>((resolve, reject) => {
-            setImmediate(() => {
-              this.handleSessionEvent(event, subscriptionKey).then(resolve, reject);
-            });
-          }),
+      .then(() =>
+        shouldYieldBeforeSessionEvent(event)
+          ? new Promise<void>((resolve, reject) => {
+              setImmediate(() => {
+                run().then(resolve, reject);
+              });
+            })
+          : run(),
       )
       .catch((error) => {
         console.error(`[app-store] session event queue error for ${subscriptionKey}`, error);

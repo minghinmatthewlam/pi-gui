@@ -8,6 +8,60 @@ import type {
 import { hasUnseenSessionUpdate, previewFromTranscript } from "../application/app-store-utils";
 import { NEW_THREAD_PLACEHOLDER_TITLE } from "./thread-title-constants";
 
+/**
+ * Stream deltas can arrive in a tight loop. Yield a macrotask before handling
+ * those so abort timers can fire. Do not yield sessionUpdated: slash commands
+ * write local config after the driver emit, and a deferred apply would clobber it.
+ */
+export function shouldYieldBeforeSessionEvent(event: SessionDriverEvent): boolean {
+  return event.type === "assistantDelta" || event.type === "toolUpdated";
+}
+
+/**
+ * Patch only run status for Stop. A full snapshot apply here would replace
+ * composer-owned config (e.g. `/thinking max`) with the driver's clamped value.
+ */
+export function applyUrgentRunStatusState(
+  state: DesktopAppState,
+  event: SessionDriverEvent,
+): DesktopAppState | undefined {
+  const status =
+    event.type === "runFailed"
+      ? "failed"
+      : event.type === "sessionUpdated" || event.type === "runCompleted"
+        ? event.snapshot.status
+        : undefined;
+  if (status !== "stopping" && status !== "idle" && status !== "failed") {
+    return undefined;
+  }
+  const current = state.workspaces
+    .find((workspace) => workspace.id === event.sessionRef.workspaceId)
+    ?.sessions.find((session) => session.id === event.sessionRef.sessionId)?.status;
+  if (status === "idle" && current !== "running" && current !== "stopping") {
+    return undefined;
+  }
+  return {
+    ...state,
+    workspaces: state.workspaces.map((workspace) =>
+      workspace.id === event.sessionRef.workspaceId
+        ? {
+            ...workspace,
+            sessions: workspace.sessions.map((session) =>
+              session.id === event.sessionRef.sessionId
+                ? {
+                    ...session,
+                    status,
+                    runningSince: status === "stopping" ? session.runningSince : undefined,
+                  }
+                : session,
+            ),
+          }
+        : workspace,
+    ),
+    revision: state.revision + 1,
+  };
+}
+
 export function applySessionEventState(
   state: DesktopAppState,
   event: SessionDriverEvent,
