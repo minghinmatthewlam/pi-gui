@@ -89,6 +89,7 @@ import {
   nowIso,
   previewFromSessionInfo,
   sessionKey,
+  shouldPersistSnapshotForAgentEvent,
   shouldTailFromDisk,
   singleFlight,
   titleFromSessionInfo,
@@ -1890,7 +1891,9 @@ export class SessionSupervisor {
       return;
     }
 
-    this.queueDriverEvents(record, mapped);
+    this.queueDriverEvents(record, mapped, {
+      persistSnapshot: shouldPersistSnapshotForAgentEvent(event.type),
+    });
   }
 
   private mapAgentEvent(

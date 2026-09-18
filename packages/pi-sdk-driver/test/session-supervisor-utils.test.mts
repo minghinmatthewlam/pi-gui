@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { messageText } from "../dist/session-supervisor-utils.js";
+import {
+  messageText,
+  shouldPersistSnapshotForAgentEvent,
+} from "../dist/session-supervisor-utils.js";
 
 const markdownParts = [
   "## Verification report",
@@ -35,4 +38,24 @@ await test("messageText preserves Markdown newlines in array-shaped assistant co
   };
 
   assert.equal(messageText(message), markdownReport);
+});
+
+await test("streaming partials are not persisted to the catalog, discrete events are", () => {
+  // Persisting per message_update cost an atomic catalog write (fsync + rename +
+  // directory fsync) per streamed token, serialized on the catalog's single
+  // mutation queue, which is what made createSession hang during a stream.
+  assert.equal(shouldPersistSnapshotForAgentEvent("message_update"), false);
+
+  // Crash-recovery state must stay current to the last message boundary.
+  for (const eventType of [
+    "message_start",
+    "message_end",
+    "tool_execution_start",
+    "tool_execution_update",
+    "tool_execution_end",
+    "agent_end",
+    "turn_start",
+  ]) {
+    assert.equal(shouldPersistSnapshotForAgentEvent(eventType), true, eventType);
+  }
 });

@@ -86,6 +86,27 @@ export function forcePersistSession(sessionManager: object): void {
   }
 }
 
+/**
+ * Whether an agent event's driver events should be persisted to the catalog
+ * before they are emitted.
+ *
+ * Streaming partials (`message_update`) only mutate in-memory preview state, so
+ * persisting on each one bought nothing and cost an atomic catalog write -- full
+ * re-read, re-serialize, fsync, rename, directory fsync -- per token, all
+ * serialized on the catalog's single mutation queue. Any other session
+ * operation that writes the catalog (most visibly createSession) then waited out
+ * the whole delta backlog.
+ *
+ * Crash-recovery state stays current to the last message boundary:
+ * `message_start`/`message_end`, `tool_execution_*`, `agent_end` and every other
+ * snapshot-producing event still persist. The one observable trade-off is that
+ * the catalog's `previewSnippet` no longer refreshes per token; it catches up at
+ * the next discrete event.
+ */
+export function shouldPersistSnapshotForAgentEvent(eventType: string): boolean {
+  return eventType !== "message_update";
+}
+
 export function sessionKey(sessionRef: SessionRef): string {
   return `${sessionRef.workspaceId}:${sessionRef.sessionId}`;
 }
