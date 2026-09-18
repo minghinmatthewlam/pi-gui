@@ -37,7 +37,7 @@ function createFakeRuntime(control: FakeControl) {
       promptTemplates: [],
       resourceLoader: { getSkills: () => ({ skills: [] }) },
       agent: { waitForIdle: async () => undefined, state: {} },
-      subscribe: (listener) => {
+      subscribe: (listener: (event: unknown) => void) => {
         control.agentListeners.push(listener);
         return () => {
           const index = control.agentListeners.indexOf(listener);
