@@ -303,8 +303,13 @@ export class DesktopAppStore implements AppStoreInternals {
     const activeView = view.activeView ?? state.activeView;
     const sidebarCollapsed = view.sidebarCollapsed ?? state.sidebarCollapsed;
 
+    // No structuredClone: state is written immutably everywhere (every mutation
+    // path rebuilds the objects it touches), so a shallow spread is already a
+    // stable snapshot, and every consumer either only reads it or ships it over
+    // IPC, which structured-clones the payload itself. Deep-cloning here ran
+    // twice per publish and dominated main-process CPU while a thread streamed.
     return {
-      ...structuredClone(state),
+      ...state,
       selectedWorkspaceId,
       selectedSessionId,
       activeView,
@@ -3069,7 +3074,9 @@ export class DesktopAppStore implements AppStoreInternals {
     // revision at the publish point instead of trusting the mutation sites.
     this.publishRevision = Math.max(this.publishRevision, this.state.revision) + 1;
     this.state = { ...this.state, revision: this.publishRevision };
-    const snapshot = structuredClone(this.state);
+    // Same reasoning as projectStateForView: listeners only read the snapshot or
+    // send it over IPC, so it does not need a defensive deep copy.
+    const snapshot = this.state;
     for (const listener of this.listeners) {
       listener(snapshot);
     }
