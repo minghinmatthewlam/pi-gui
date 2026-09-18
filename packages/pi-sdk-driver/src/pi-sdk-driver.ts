@@ -1,4 +1,3 @@
-import type { AuthStorage, ModelRegistry } from "@earendil-works/pi-coding-agent";
 import type {
   SessionCatalogSnapshot,
   WorkspaceCatalogSnapshot,
@@ -38,8 +37,6 @@ export interface PiSdkDriverConfig extends PiSdkDriverOptions, RuntimeSupervisor
 export class PiSdkDriver implements SessionDriver {
   private readonly supervisor: SessionSupervisor;
   private readonly agentDir: string;
-  private readonly authStorage: AuthStorage;
-  private readonly modelRegistry: ModelRegistry;
   private readonly generateThreadTitleOverride:
     | ((
         workspace: WorkspaceRef,
@@ -51,11 +48,9 @@ export class PiSdkDriver implements SessionDriver {
   constructor(options: PiSdkDriverConfig = {}) {
     const deps = createRuntimeDependencies(options);
     this.agentDir = deps.agentDir;
-    this.authStorage = deps.authStorage;
-    this.modelRegistry = deps.modelRegistry;
     this.generateThreadTitleOverride = options.generateThreadTitleOverride;
 
-    this.supervisor = new SessionSupervisor({ ...options, modelRegistry: deps.modelRegistry });
+    this.supervisor = new SessionSupervisor({ ...options, agentDir: deps.agentDir });
     this.runtimeSupervisor = new RuntimeSupervisor({ ...options, ...deps });
   }
 
@@ -170,8 +165,9 @@ export class PiSdkDriver implements SessionDriver {
     return this.supervisor.renameWorkspace(workspaceId, displayName);
   }
 
-  removeWorkspace(workspaceId: WorkspaceId): Promise<void> {
-    return this.supervisor.removeWorkspace(workspaceId);
+  async removeWorkspace(workspaceId: WorkspaceId): Promise<void> {
+    await this.supervisor.removeWorkspace(workspaceId);
+    this.runtimeSupervisor.removeWorkspace(workspaceId);
   }
 
   getTranscript(sessionRef: SessionRef) {
@@ -193,15 +189,11 @@ export class PiSdkDriver implements SessionDriver {
             ? override
             : generateThreadTitle(workspace, options, {
                 agentDir: this.agentDir,
-                authStorage: this.authStorage,
-                modelRegistry: this.modelRegistry,
               }),
       );
     }
     return generateThreadTitle(workspace, options, {
       agentDir: this.agentDir,
-      authStorage: this.authStorage,
-      modelRegistry: this.modelRegistry,
     });
   }
 }

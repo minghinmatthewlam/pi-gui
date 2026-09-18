@@ -101,7 +101,7 @@ const notificationHelperPath =
     : undefined;
 const pnpmBinary = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 const piCodingAgentPackageName = "@earendil-works/pi-coding-agent";
-const requiredPiCodingAgentVersion = "0.80.6";
+const requiredPiCodingAgentVersion = "0.85.1";
 const modelChecks = [
   ...["luna", "sol", "terra"].map((variant) => ({
     provider: "openai-codex",
@@ -120,8 +120,8 @@ const modelChecks = [
   },
   {
     provider: "zai",
-    id: "glm-5.1",
-    reason: "issue #12 GLM 5.1 visibility",
+    id: "glm-5.3",
+    reason: "issue #12 GLM visibility",
     requireReasoning: true,
     requireImageInput: false,
   },
@@ -250,9 +250,14 @@ async function verifyPackagedPiRuntime(extractedDir) {
     "dist",
     "index.js",
   );
-  const { AuthStorage, ModelRegistry } = await import(pathToFileURL(runtimeEntry).href);
-  const registry = ModelRegistry.inMemory(AuthStorage.inMemory());
-  const models = registry.getAll();
+  const { ModelRuntime } = await import(pathToFileURL(runtimeEntry).href);
+  const authDir = mkdtempSync(path.join(tmpdir(), "pi-gui-packaged-runtime-models-"));
+  const runtime = await ModelRuntime.create({
+    authPath: path.join(authDir, "auth.json"),
+    modelsPath: null,
+    refreshOnCreate: false,
+  });
+  const models = runtime.getModels();
   for (const check of modelChecks) {
     const model = models.find(
       (entry) => entry.provider === check.provider && entry.id === check.id,

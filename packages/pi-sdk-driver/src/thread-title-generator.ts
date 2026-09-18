@@ -1,12 +1,13 @@
+import { join } from "node:path";
 import {
   SessionManager,
   SettingsManager,
   createExtensionRuntime,
   createAgentSession,
+  ModelRuntime,
   type CreateAgentSessionOptions,
   type ResourceLoader,
 } from "@earendil-works/pi-coding-agent";
-import type { AuthStorage, ModelRegistry } from "@earendil-works/pi-coding-agent";
 import type { SessionModelSelection, WorkspaceRef } from "@pi-gui/session-driver";
 import { messageText as sessionMessageText } from "./session-supervisor-utils.js";
 
@@ -19,8 +20,6 @@ export interface GenerateThreadTitleOptions {
 
 interface ThreadTitleGeneratorDeps {
   readonly agentDir: string;
-  readonly authStorage: AuthStorage;
-  readonly modelRegistry: ModelRegistry;
 }
 
 const MAX_THREAD_TITLE_LENGTH = 36;
@@ -48,19 +47,24 @@ export async function generateThreadTitle(
     retry: { enabled: false },
   });
   const resourceLoader = createThreadTitleResourceLoader();
+  const modelRuntime = await ModelRuntime.create({
+    authPath: join(deps.agentDir, "auth.json"),
+    modelsPath: join(deps.agentDir, "models.json"),
+    refreshOnCreate: false,
+  });
+  await modelRuntime.refresh({ allowNetwork: false });
 
   const createOptions: CreateAgentSessionOptions = {
     cwd: workspace.path,
     agentDir: deps.agentDir,
-    authStorage: deps.authStorage,
-    modelRegistry: deps.modelRegistry,
+    modelRuntime,
     resourceLoader,
     settingsManager,
     sessionManager: SessionManager.inMemory(),
     tools: [],
   };
   if (options.model) {
-    const selectedModel = deps.modelRegistry.find(options.model.provider, options.model.modelId);
+    const selectedModel = modelRuntime.getModel(options.model.provider, options.model.modelId);
     if (!selectedModel) {
       return null;
     }
@@ -84,14 +88,8 @@ export async function generateThreadTitle(
     if (!session.model) {
       return null;
     }
-    // The upstream session exposes Model<any>; validate its API discriminator
-    // before passing the model into the typed authentication boundary.
-    const api: unknown = session.model.api;
-    if (typeof api !== "string") {
-      return null;
-    }
-    const auth = await session.modelRegistry.getApiKeyAndHeaders({ ...session.model, api });
-    if (!auth.ok || !auth.apiKey) {
+    const auth = await session.modelRuntime.getAuth(session.model);
+    if (!auth?.auth.apiKey) {
       return null;
     }
 
@@ -111,7 +109,9 @@ function createThreadTitleResourceLoader(): ResourceLoader {
     getThemes: () => ({ themes: [], diagnostics: [] }),
     getAgentsFiles: () => ({ agentsFiles: [] }),
     getSystemPrompt: () => THREAD_TITLE_SYSTEM_PROMPT,
+    getSystemPromptSource: () => undefined,
     getAppendSystemPrompt: () => [],
+    getAppendSystemPromptSources: () => [],
     extendResources: () => {},
     reload: async () => {},
   };

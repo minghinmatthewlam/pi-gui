@@ -141,6 +141,14 @@ function normalizeLaunchOptions(
   return isWorkspacePaths(options) ? { initialWorkspaces: options } : options;
 }
 
+function electronCliArgs(entry?: string): string[] {
+  const args = entry ? [entry] : [];
+  if (process.platform === "linux") {
+    args.push("--disable-gpu", "--no-sandbox");
+  }
+  return args;
+}
+
 export async function launchDesktop(
   userDataDir: string,
   options: readonly string[] | LaunchDesktopOptions = [],
@@ -149,7 +157,7 @@ export async function launchDesktop(
   const agentDir = await prepareAgentDir(userDataDir, normalized);
   const env = buildDesktopLaunchEnv(userDataDir, agentDir, normalized);
   const electronApp = await electron.launch({
-    args: [desktopDir],
+    args: electronCliArgs(desktopDir),
     cwd: desktopDir,
     env,
     ...(normalized.recordVideoDir
@@ -172,7 +180,7 @@ export async function spawnDesktopProcess(
   const normalized = normalizeLaunchOptions(options);
   const agentDir = await prepareAgentDir(userDataDir, normalized);
   const env = buildDesktopLaunchEnv(userDataDir, agentDir, normalized);
-  return spawn(electronExecutablePath, [desktopDir], {
+  return spawn(electronExecutablePath, electronCliArgs(desktopDir), {
     cwd: desktopDir,
     env,
     stdio: "ignore",
@@ -208,7 +216,7 @@ async function launchDesktopExecutable(
 ): Promise<DesktopHarness> {
   const electronApp = await electron.launch({
     executablePath,
-    args: [],
+    args: electronCliArgs(),
     cwd: dirname(executablePath),
     env,
   });
