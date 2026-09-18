@@ -148,13 +148,18 @@ export async function launchDesktop(
   const normalized = normalizeLaunchOptions(options);
   const agentDir = await prepareAgentDir(userDataDir, normalized);
   const env = buildDesktopLaunchEnv(userDataDir, agentDir, normalized);
-  // Playwright's Electron recordVideo option leaves the first BrowserWindow
-  // stuck on an empty URL with isLoadingMainFrame, so the renderer never
-  // reaches ready-to-show. Keep traces/screenshots instead of launch-time video.
   const electronApp = await electron.launch({
     args: [desktopDir],
     cwd: desktopDir,
     env,
+    ...(normalized.recordVideoDir
+      ? {
+          recordVideo: {
+            dir: normalized.recordVideoDir,
+            ...(normalized.recordVideoSize ? { size: normalized.recordVideoSize } : {}),
+          },
+        }
+      : {}),
   });
 
   return createDesktopHarness(electronApp);
