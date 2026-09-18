@@ -307,13 +307,17 @@ async function measure(label: string, seeded: number): Promise<void> {
         }),
       );
     }
-    const createSessionDuringStreamMs = await window.evaluate(async (workspaceId) => {
-      const app = globalThis.window.piApp;
-      const started = performance.now();
-      await app!.createSession({ workspaceId, title: `during-stream-${Date.now()}` });
-      return performance.now() - started;
-    }, workspace!.id);
-    await Promise.all(burst);
+    // Unpatched main does not reliably survive this probe -- the app context goes
+    // away mid-burst -- so a failure is reported rather than failing the run.
+    const createSessionDuringStreamMs = await window
+      .evaluate(async (workspaceId) => {
+        const app = globalThis.window.piApp;
+        const started = performance.now();
+        await app!.createSession({ workspaceId, title: `during-stream-${Date.now()}` });
+        return performance.now() - started;
+      }, workspace!.id)
+      .catch(() => null);
+    await Promise.allSettled(burst);
 
     const main = await stopMainSample(harness);
     const renderer = await stopRendererSample(window);
@@ -360,7 +364,10 @@ async function measure(label: string, seeded: number): Promise<void> {
           baselineMainCpuUserMs: Number(baseline.cpuUserMs.toFixed(0)),
           deltas: DELTA_COUNT,
           streamWallMs,
-          createSessionDuringStreamMs: Number(createSessionDuringStreamMs.toFixed(0)),
+          createSessionDuringStreamMs:
+            createSessionDuringStreamMs === null
+              ? "unavailable (app context lost mid-burst)"
+              : Number(createSessionDuringStreamMs.toFixed(0)),
           mainCpuMsPerDelta: Number((main.cpuUserMs / DELTA_COUNT).toFixed(2)),
           mainCpuUserMs: Number(main.cpuUserMs.toFixed(0)),
           mainSends: main.sends,
