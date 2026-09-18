@@ -1053,6 +1053,7 @@ export default function App() {
                     ) : null}
 
                     <ConversationTimeline
+                      sessionKey={selectedSessionKey}
                       transcript={activeTranscript}
                       isTranscriptLoading={isTranscriptLoading}
                       timelinePaneRef={timelinePaneRef}
