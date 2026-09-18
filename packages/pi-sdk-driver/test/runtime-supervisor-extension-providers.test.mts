@@ -276,6 +276,28 @@ await test("disabling an extension only drops the registrations of that workspac
   );
 });
 
+await test("setProviderApiKey persists into a later snapshot as a connected API key", async () => {
+  const previousOpenAiKey = process.env.OPENAI_API_KEY;
+  delete process.env.OPENAI_API_KEY;
+  try {
+    const { agentDir, workspacePath } = await createAgentDir();
+    const supervisor = new RuntimeSupervisor({ agentDir });
+    const workspace = { workspaceId: "workspace-1", path: workspacePath };
+
+    const after = await supervisor.setProviderApiKey(workspace, "openai", "test-openai-key");
+    const openai = after.providers.find((provider) => provider.id === "openai");
+    assert.equal(openai?.hasAuth, true, "OpenAI should be connected after saving an API key");
+    assert.equal(openai?.authSource, "auth_file");
+    assert.equal(openai?.name, "OpenAI");
+  } finally {
+    if (previousOpenAiKey === undefined) {
+      delete process.env.OPENAI_API_KEY;
+    } else {
+      process.env.OPENAI_API_KEY = previousOpenAiKey;
+    }
+  }
+});
+
 await test("extension providers survive a runtime refresh", async () => {
   const { agentDir, workspacePath } = await createAgentDir();
   const supervisor = createSupervisor(agentDir);

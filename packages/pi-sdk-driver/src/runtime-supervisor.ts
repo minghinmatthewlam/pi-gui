@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import {
+  CredentialSynchronizationError,
   DefaultPackageManager,
   DefaultResourceLoader,
   ModelRuntime,
@@ -173,7 +174,18 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
     if (!providerSupportsDesktopApiKeySetup(providerId)) {
       throw new Error(`API key setup is not supported for ${providerId}.`);
     }
-    await context.modelRuntime.setRuntimeApiKey(providerId, normalized);
+    // Persist through login, not setRuntimeApiKey: the latter is an in-memory
+    // overlay, and reloadResources builds a fresh ModelRuntime from auth.json.
+    try {
+      await context.modelRuntime.login(providerId, "api_key", {
+        prompt: async () => normalized,
+        notify: () => undefined,
+      });
+    } catch (error) {
+      if (!(error instanceof CredentialSynchronizationError)) {
+        throw error;
+      }
+    }
     await this.reloadResources(context);
     await this.autoEnableModelsForAuthenticatedProviders(context, [providerId]);
     return this.buildSnapshot(context);
