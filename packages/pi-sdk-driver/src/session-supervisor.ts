@@ -2199,6 +2199,9 @@ export class SessionSupervisor {
       }
       return;
     }
+    if (record.termination === "stopped" || record.termination === "quarantined") {
+      return;
+    }
 
     const mapped = this.mapAgentEvent(record, event);
     if (mapped.length === 0) {
@@ -3149,7 +3152,16 @@ function isStaleQueuedRunSnapshot(
   if (event.type !== "sessionUpdated" && event.type !== "runCompleted") {
     return false;
   }
-  return event.snapshot.status === "running";
+  if (event.snapshot.status === "running") {
+    return true;
+  }
+  return (
+    event.snapshot.status === "stopping" &&
+    (record.termination === "stopped" ||
+      record.termination === "quarantined" ||
+      record.status === "idle" ||
+      record.status === "failed")
+  );
 }
 
 function toDriverEvents(

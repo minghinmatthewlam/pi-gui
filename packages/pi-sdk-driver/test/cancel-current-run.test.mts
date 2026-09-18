@@ -260,3 +260,33 @@ await test("queued running snapshots do not revive a session after Stop", async 
     assert.equal(latestStatus(events), "idle");
   });
 });
+
+await test("late tokens after abort timeout cannot republish stopping over failed", async () => {
+  const control: FakeControl = {
+    promptCalls: 0,
+    abortCalls: 0,
+    disposeCalls: 0,
+    prompt: "hang",
+    abort: "hang",
+    agentListeners: [],
+  };
+  await withSupervisor(control, async (supervisor, sessionRef) => {
+    const events: SessionDriverEvent[] = [];
+    supervisor.subscribe(sessionRef, (event) => {
+      events.push(event);
+    });
+    await supervisor.sendUserMessage(sessionRef, { text: "abort will hang" });
+    const outcome = await supervisor.cancelCurrentRun(sessionRef);
+    assert.equal(outcome, "quarantined");
+    assert.equal(latestStatus(events), "failed");
+    emitQueuedRunningSnapshots(control, 2);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const failedIndex = events.findIndex((event) => event.type === "runFailed");
+    assert.ok(failedIndex >= 0, "expected a runFailed event");
+    const stoppingAfterFailed = events
+      .slice(failedIndex + 1)
+      .some((event) => event.type === "sessionUpdated" && event.snapshot.status === "stopping");
+    assert.equal(stoppingAfterFailed, false);
+    assert.equal(latestStatus(events), "failed");
+  });
+});
