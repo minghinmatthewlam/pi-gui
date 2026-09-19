@@ -92,7 +92,7 @@ const notificationHelperPath =
     ? path.join(
         desktopDir,
         "release",
-        "mac-arm64",
+        "mac-universal",
         "pi-gui.app",
         "Contents",
         "MacOS",
@@ -180,7 +180,7 @@ function resolveAsarPath(desktopDir, packagePlatform) {
     return path.join(
       desktopDir,
       "release",
-      "mac-arm64",
+      "mac-universal",
       "pi-gui.app",
       "Contents",
       "Resources",
