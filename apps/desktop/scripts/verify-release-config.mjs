@@ -556,10 +556,7 @@ function validateWorkflow(workflow, finalizerSource, linuxVerifierSource, window
   assert(
     runText(stepNamed(jobs["sync-homebrew"], "Download published DMG")).includes(
       "-universal.dmg",
-    ) &&
-      runText(stepNamed(jobs["sync-homebrew"], "Sync Homebrew tap")).includes(
-        "-universal.dmg",
-      ),
+    ) && runText(stepNamed(jobs["sync-homebrew"], "Sync Homebrew tap")).includes("-universal.dmg"),
     "Homebrew sync must consume the universal macOS DMG",
   );
 }

@@ -44,7 +44,10 @@ async function main() {
     updatedContent,
     /sha256 "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"/,
   );
-  assert.match(updatedContent, /url "https:\/\/example\.com\/pi-gui-0\.1\.0-beta\.2-universal\.dmg"/);
+  assert.match(
+    updatedContent,
+    /url "https:\/\/example\.com\/pi-gui-0\.1\.0-beta\.2-universal\.dmg"/,
+  );
 
   process.stdout.write("Homebrew tap rewrite fixture passed.\n");
 }
