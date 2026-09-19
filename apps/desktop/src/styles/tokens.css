@@ -137,7 +137,11 @@
   --find-active-bg: #fbbf5a;
   --find-active-ink: #6a3608;
 
-  --summary-card-bg: linear-gradient(180deg, rgba(255, 247, 226, 0.92) 0%, rgba(255, 252, 244, 0.98) 100%);
+  --summary-card-bg: linear-gradient(
+    180deg,
+    rgba(255, 247, 226, 0.92) 0%,
+    rgba(255, 252, 244, 0.98) 100%
+  );
   --summary-card-border: rgba(210, 177, 98, 0.36);
   --summary-eyebrow: #a45a18;
 }
@@ -159,7 +163,11 @@
   --find-active-bg: #9a3412;
   --find-active-ink: #fed7aa;
 
-  --summary-card-bg: linear-gradient(180deg, rgba(71, 55, 28, 0.58) 0%, rgba(46, 38, 24, 0.78) 100%);
+  --summary-card-bg: linear-gradient(
+    180deg,
+    rgba(71, 55, 28, 0.58) 0%,
+    rgba(46, 38, 24, 0.78) 100%
+  );
   --summary-card-border: rgba(210, 177, 98, 0.22);
   --summary-eyebrow: #f2cd79;
 }

@@ -39,16 +39,19 @@ test("persists workspace, selected session, and draft across app restart", async
     const window = await secondRun.firstWindow();
     const persistedWorkspace = await waitForWorkspaceByPath(window, workspacePath);
     await expect
-      .poll(async () => {
-        const state = await getDesktopState(window);
-        return {
-          selectedWorkspaceId: state.selectedWorkspaceId,
-          selectedSessionId: state.selectedSessionId,
-          hasPersistenceSession: state.workspaces.some((workspace) =>
-            workspace.sessions.some((session) => session.title === "Persistence session"),
-          ),
-        };
-      }, { timeout: 15_000 })
+      .poll(
+        async () => {
+          const state = await getDesktopState(window);
+          return {
+            selectedWorkspaceId: state.selectedWorkspaceId,
+            selectedSessionId: state.selectedSessionId,
+            hasPersistenceSession: state.workspaces.some((workspace) =>
+              workspace.sessions.some((session) => session.title === "Persistence session"),
+            ),
+          };
+        },
+        { timeout: 15_000 },
+      )
       .toMatchObject({
         selectedWorkspaceId: persistedWorkspace.id,
         hasPersistenceSession: true,
@@ -58,13 +61,19 @@ test("persists workspace, selected session, and draft across app restart", async
     await expect(window.getByTestId("composer")).toHaveValue(draft);
 
     const state = await getDesktopState(window);
-    const selectedWorkspace = state.workspaces.find((workspace) => workspace.id === state.selectedWorkspaceId);
+    const selectedWorkspace = state.workspaces.find(
+      (workspace) => workspace.id === state.selectedWorkspaceId,
+    );
     expect(selectedWorkspace?.path).toBeTruthy();
     expect(state.selectedSessionId).not.toBe("");
-    expect(state.workspaces.some((workspace) => workspace.path === selectedWorkspace?.path)).toBe(true);
-    expect(state.workspaces.some((workspace) => workspace.sessions.some((session) => session.title === "Persistence session"))).toBe(
+    expect(state.workspaces.some((workspace) => workspace.path === selectedWorkspace?.path)).toBe(
       true,
     );
+    expect(
+      state.workspaces.some((workspace) =>
+        workspace.sessions.some((session) => session.title === "Persistence session"),
+      ),
+    ).toBe(true);
   } finally {
     await secondRun.close();
   }
@@ -109,8 +118,11 @@ test("navigates across folders and sessions through the sidebar", async () => {
       .poll(async () => {
         const state = await getDesktopState(window);
         return {
-          alphaSessions: state.workspaces.find((workspace) => workspace.path === alphaPath)?.sessions.length ?? 0,
-          betaSessions: state.workspaces.find((workspace) => workspace.path === betaPath)?.sessions.length ?? 0,
+          alphaSessions:
+            state.workspaces.find((workspace) => workspace.path === alphaPath)?.sessions.length ??
+            0,
+          betaSessions:
+            state.workspaces.find((workspace) => workspace.path === betaPath)?.sessions.length ?? 0,
         };
       })
       .toEqual({
@@ -119,7 +131,9 @@ test("navigates across folders and sessions through the sidebar", async () => {
       });
 
     const state = await getDesktopState(window);
-    const selectedWorkspace = state.workspaces.find((workspace) => workspace.id === state.selectedWorkspaceId);
+    const selectedWorkspace = state.workspaces.find(
+      (workspace) => workspace.id === state.selectedWorkspaceId,
+    );
     expect(selectedWorkspace?.path).toBeTruthy();
     expect(state.selectedSessionId).not.toBe("");
   } finally {

@@ -134,9 +134,17 @@ export interface RuntimeLoginCallbacks {
 export interface RuntimeResourceDriver {
   getRuntimeSnapshot(workspace: WorkspaceRef): Promise<RuntimeSnapshot>;
   refreshRuntime(workspace: WorkspaceRef): Promise<RuntimeSnapshot>;
-  login(workspace: WorkspaceRef, providerId: string, callbacks: RuntimeLoginCallbacks): Promise<RuntimeSnapshot>;
+  login(
+    workspace: WorkspaceRef,
+    providerId: string,
+    callbacks: RuntimeLoginCallbacks,
+  ): Promise<RuntimeSnapshot>;
   logout(workspace: WorkspaceRef, providerId: string): Promise<RuntimeSnapshot>;
-  setProviderApiKey(workspace: WorkspaceRef, providerId: string, apiKey: string): Promise<RuntimeSnapshot>;
+  setProviderApiKey(
+    workspace: WorkspaceRef,
+    providerId: string,
+    apiKey: string,
+  ): Promise<RuntimeSnapshot>;
   setDefaultModel(
     workspace: WorkspaceRef,
     selection: {
@@ -149,7 +157,18 @@ export interface RuntimeResourceDriver {
     thinkingLevel: RuntimeSettingsSnapshot["defaultThinkingLevel"],
   ): Promise<RuntimeSnapshot>;
   setEnableSkillCommands(workspace: WorkspaceRef, enabled: boolean): Promise<RuntimeSnapshot>;
-  setScopedModelPatterns(workspace: WorkspaceRef, patterns: readonly string[]): Promise<RuntimeSnapshot>;
-  setSkillEnabled(workspace: WorkspaceRef, filePath: string, enabled: boolean): Promise<RuntimeSnapshot>;
-  setExtensionEnabled(workspace: WorkspaceRef, filePath: string, enabled: boolean): Promise<RuntimeSnapshot>;
+  setScopedModelPatterns(
+    workspace: WorkspaceRef,
+    patterns: readonly string[],
+  ): Promise<RuntimeSnapshot>;
+  setSkillEnabled(
+    workspace: WorkspaceRef,
+    filePath: string,
+    enabled: boolean,
+  ): Promise<RuntimeSnapshot>;
+  setExtensionEnabled(
+    workspace: WorkspaceRef,
+    filePath: string,
+    enabled: boolean,
+  ): Promise<RuntimeSnapshot>;
 }

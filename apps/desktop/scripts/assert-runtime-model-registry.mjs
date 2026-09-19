@@ -1,7 +1,16 @@
-import { AuthStorage, ModelRegistry } from "@earendil-works/pi-coding-agent";
+import { mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 
-const registry = ModelRegistry.inMemory(AuthStorage.inMemory());
-const models = registry.getAll();
+const dir = await mkdtemp(join(tmpdir(), "pi-gui-runtime-models-"));
+await writeFile(join(dir, "auth.json"), "{}\n");
+const runtime = await ModelRuntime.create({
+  authPath: join(dir, "auth.json"),
+  modelsPath: null,
+  refreshOnCreate: false,
+});
+const models = runtime.getModels();
 const modelChecks = [
   ...["luna", "sol", "terra"].map((variant) => ({
     provider: "openai-codex",
@@ -20,8 +29,8 @@ const modelChecks = [
   },
   {
     provider: "zai",
-    id: "glm-5.1",
-    reason: "issue #12 GLM 5.1 visibility",
+    id: "glm-5.3",
+    reason: "issue #12 GLM visibility",
     requireReasoning: true,
     requireImageInput: false,
   },
@@ -44,4 +53,8 @@ for (const check of modelChecks) {
   }
 }
 
-console.log(modelChecks.map((check) => `Verified bundled Pi runtime exposes ${check.provider}/${check.id}.`).join("\n"));
+console.log(
+  modelChecks
+    .map((check) => `Verified bundled Pi runtime exposes ${check.provider}/${check.id}.`)
+    .join("\n"),
+);

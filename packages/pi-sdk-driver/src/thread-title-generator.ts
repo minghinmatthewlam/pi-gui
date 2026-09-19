@@ -1,12 +1,13 @@
+import { join } from "node:path";
 import {
   SessionManager,
   SettingsManager,
   createExtensionRuntime,
   createAgentSession,
+  ModelRuntime,
   type CreateAgentSessionOptions,
   type ResourceLoader,
 } from "@earendil-works/pi-coding-agent";
-import type { AuthStorage, ModelRegistry } from "@earendil-works/pi-coding-agent";
 import type { SessionModelSelection, WorkspaceRef } from "@pi-gui/session-driver";
 import { messageText as sessionMessageText } from "./session-supervisor-utils.js";
 
@@ -19,8 +20,6 @@ export interface GenerateThreadTitleOptions {
 
 interface ThreadTitleGeneratorDeps {
   readonly agentDir: string;
-  readonly authStorage: AuthStorage;
-  readonly modelRegistry: ModelRegistry;
 }
 
 const MAX_THREAD_TITLE_LENGTH = 36;
@@ -48,26 +47,33 @@ export async function generateThreadTitle(
     retry: { enabled: false },
   });
   const resourceLoader = createThreadTitleResourceLoader();
+  const modelRuntime = await ModelRuntime.create({
+    authPath: join(deps.agentDir, "auth.json"),
+    modelsPath: join(deps.agentDir, "models.json"),
+    refreshOnCreate: false,
+  });
+  await modelRuntime.refresh({ allowNetwork: false });
 
   const createOptions: CreateAgentSessionOptions = {
     cwd: workspace.path,
     agentDir: deps.agentDir,
-    authStorage: deps.authStorage,
-    modelRegistry: deps.modelRegistry,
+    modelRuntime,
     resourceLoader,
     settingsManager,
     sessionManager: SessionManager.inMemory(),
     tools: [],
   };
   if (options.model) {
-    const selectedModel = deps.modelRegistry.find(options.model.provider, options.model.modelId);
+    const selectedModel = modelRuntime.getModel(options.model.provider, options.model.modelId);
     if (!selectedModel) {
       return null;
     }
     createOptions.model = selectedModel;
   }
   if (options.thinkingLevel) {
-    createOptions.thinkingLevel = options.thinkingLevel as NonNullable<CreateAgentSessionOptions["thinkingLevel"]>;
+    createOptions.thinkingLevel = options.thinkingLevel as NonNullable<
+      CreateAgentSessionOptions["thinkingLevel"]
+    >;
   }
 
   const { session } = await createAgentSession(createOptions);
@@ -82,8 +88,8 @@ export async function generateThreadTitle(
     if (!session.model) {
       return null;
     }
-    const auth = await session.modelRegistry.getApiKeyAndHeaders(session.model);
-    if (!auth.ok || !auth.apiKey) {
+    const auth = await session.modelRuntime.getAuth(session.model.provider);
+    if (!auth?.auth.apiKey) {
       return null;
     }
 
@@ -103,7 +109,9 @@ function createThreadTitleResourceLoader(): ResourceLoader {
     getThemes: () => ({ themes: [], diagnostics: [] }),
     getAgentsFiles: () => ({ agentsFiles: [] }),
     getSystemPrompt: () => THREAD_TITLE_SYSTEM_PROMPT,
+    getSystemPromptSource: () => undefined,
     getAppendSystemPrompt: () => [],
+    getAppendSystemPromptSources: () => [],
     extendResources: () => {},
     reload: async () => {},
   };
@@ -157,7 +165,7 @@ function stripWrappingQuotes(value: string): string {
     const first = current[0];
     const last = current[current.length - 1];
     if (
-      (first === "\"" && last === "\"") ||
+      (first === '"' && last === '"') ||
       (first === "'" && last === "'") ||
       (first === "`" && last === "`")
     ) {

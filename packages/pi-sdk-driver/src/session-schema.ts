@@ -1,3 +1,4 @@
+import type { SessionSchemaInfo } from "@pi-gui/session-driver";
 import { open } from "node:fs/promises";
 import { CURRENT_SESSION_VERSION } from "@earendil-works/pi-coding-agent";
 
@@ -23,24 +24,12 @@ import { CURRENT_SESSION_VERSION } from "@earendil-works/pi-coding-agent";
 /** The session schema version the bundled pi runtime writes and understands. */
 export const RUNTIME_SCHEMA_VERSION: number = CURRENT_SESSION_VERSION;
 
-export interface SessionSchemaInfo {
-  /**
-   * The session file's header version. `undefined` when the file has no
-   * readable session header (e.g. missing/corrupt), in which case skew cannot
-   * be determined and is assumed absent.
-   */
-  readonly fileSchemaVersion: number | undefined;
-  /** The bundled runtime's schema version ({@link RUNTIME_SCHEMA_VERSION}). */
-  readonly runtimeSchemaVersion: number;
-  /** True when the file was written by a newer pi than the bundled runtime. */
-  readonly writtenByNewerRuntime: boolean;
-}
-
 export function buildSessionSchemaInfo(fileSchemaVersion: number | undefined): SessionSchemaInfo {
   return {
     fileSchemaVersion,
     runtimeSchemaVersion: RUNTIME_SCHEMA_VERSION,
-    writtenByNewerRuntime: fileSchemaVersion !== undefined && fileSchemaVersion > RUNTIME_SCHEMA_VERSION,
+    writtenByNewerRuntime:
+      fileSchemaVersion !== undefined && fileSchemaVersion > RUNTIME_SCHEMA_VERSION,
   };
 }
 

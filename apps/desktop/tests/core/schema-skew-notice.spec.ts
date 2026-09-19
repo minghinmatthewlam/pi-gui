@@ -43,19 +43,13 @@ test("shows a version-skew notice for a session written by a newer pi, dismissib
     await waitForWorkspaceByPath(window, workspacePath);
     await expect(window.locator(".topbar__session")).toHaveText("Skewed session");
 
-    // The banner consumes schemaInfo from the selected-transcript payload. Until the app-store
-    // projection that populates it lands (w-appstore, task #7), schemaInfo is absent and the banner
-    // cannot appear — skip rather than fail. Self-activates once the field is wired.
-    let schemaInfoWired = false;
-    try {
-      await expect
-        .poll(async () => (await getSelectedTranscript(window))?.schemaInfo !== undefined, { timeout: 10_000 })
-        .toBe(true);
-      schemaInfoWired = true;
-    } catch {
-      schemaInfoWired = false;
-    }
-    test.skip(!schemaInfoWired, "Requires the app-store transcript schemaInfo projection (w-appstore task #7).");
+    // The projection is part of the contract: missing schema data must fail this test.
+    await expect
+      .poll(async () => (await getSelectedTranscript(window))?.schemaInfo?.writtenByNewerRuntime, {
+        timeout: 10_000,
+        message: "The selected transcript must expose newer-runtime schema information",
+      })
+      .toBe(true);
 
     const notice = window.getByTestId("schema-skew-notice");
     await expect(notice).toBeVisible({ timeout: 15_000 });

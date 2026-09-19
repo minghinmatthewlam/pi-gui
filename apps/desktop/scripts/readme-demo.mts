@@ -1,6 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readdir, rm, stat } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { copyFile, mkdir, mkdtemp, readdir, stat } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -8,25 +7,36 @@ import type { Page } from "@playwright/test";
 import {
   addWorkspaceViaIpc,
   createSessionViaIpc,
-  getDesktopState,
   launchDesktop,
   makeWorkspace,
+  streamAssistantDeltas,
 } from "../tests/helpers/electron-app.ts";
+import { replaceFileAtomically } from "./atomic-output.mts";
 
 const execFileAsync = promisify(execFile);
 const frameRate = 10;
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptDir, "../../..");
-const outputDir = path.join(repoRoot, "docs", "readme");
+const publishingRoot = process.env.PI_GUI_MARKETING_STAGE_DIR
+  ? path.resolve(process.env.PI_GUI_MARKETING_STAGE_DIR)
+  : repoRoot;
+const outputDir = path.join(publishingRoot, "docs", "assets");
+const websiteDemoPath = path.join(publishingRoot, "apps", "website", "public", "demo.mp4");
+const evidenceRoot = path.join(repoRoot, ".artifacts", "marketing", "readme-demo");
 
 async function main(): Promise<void> {
-  const userDataDir = await mkdtemp(path.join(tmpdir(), "pi-gui-demo-user-data-"));
-  const framesDir = await mkdtemp(path.join(tmpdir(), "pi-gui-demo-frames-"));
+  await mkdir(evidenceRoot, { recursive: true });
+  const runDir = await mkdtemp(path.join(evidenceRoot, "run-"));
+  const userDataDir = path.join(runDir, "user-data");
+  const framesDir = path.join(runDir, "frames");
+  await mkdir(userDataDir, { recursive: true });
+  await mkdir(framesDir, { recursive: true });
   const workspacePath = await makeWorkspace("acme-web");
 
   await mkdir(outputDir, { recursive: true });
+  await mkdir(path.dirname(websiteDemoPath), { recursive: true });
 
-  const harness = await launchDesktop(userDataDir);
+  const harness = await launchDesktop(userDataDir, { scrubProviderEnv: true });
   let stopRecording: (() => Promise<number>) | undefined;
 
   try {
@@ -51,15 +61,14 @@ async function main(): Promise<void> {
     await composer.click();
     await composer.pressSequentially(prompt, { delay: 28 });
     await hold(600);
-    await page.getByTestId("send").click();
-
-    await waitForLiveResponse(page, {
-      timeoutMs: 90_000,
-      minimumAssistantLength: 30,
-    });
+    await composer.fill("");
+    await streamAssistantDeltas(harness, page, [
+      "- project name: pi-gui\n",
+      "- suggested next step: run the focused desktop verification lane",
+    ]);
     await hold(1200);
 
-    await page.screenshot({ path: path.join(outputDir, "demo-poster.png") });
+    await page.screenshot({ path: path.join(runDir, "demo-poster.png") });
 
     const frameCount = await stopRecording();
     stopRecording = undefined;
@@ -69,23 +78,24 @@ async function main(): Promise<void> {
 
     await renderMp4(framesDir, path.join(outputDir, "demo.mp4"));
     await renderGif(framesDir, path.join(outputDir, "demo.gif"));
+    await publishCopy(path.join(outputDir, "demo.mp4"), websiteDemoPath);
 
     const gifStats = await stat(path.join(outputDir, "demo.gif"));
     const mp4Stats = await stat(path.join(outputDir, "demo.mp4"));
-    console.log(`Generated docs/readme/demo.gif (${formatMb(gifStats.size)})`);
-    console.log(`Generated docs/readme/demo.mp4 (${formatMb(mp4Stats.size)})`);
-    console.log("Generated docs/readme/demo-poster.png");
+    console.log(`Generated docs/assets/demo.gif (${formatMb(gifStats.size)})`);
+    console.log(`Generated docs/assets/demo.mp4 (${formatMb(mp4Stats.size)})`);
+    console.log("Updated apps/website/public/demo.mp4 from the new capture");
   } finally {
     try {
       if (stopRecording) {
         await stopRecording();
       }
     } catch {
-      // best effort cleanup
+      // Preserve partial frames even when recording stops with an error.
     }
     await harness.close();
-    await rm(userDataDir, { recursive: true, force: true });
-    await rm(framesDir, { recursive: true, force: true });
+    console.log(`Retained capture profile and frames in ${runDir}`);
+    console.log(`Retained demo workspace at ${workspacePath}`);
   }
 }
 
@@ -110,53 +120,20 @@ function startFrameRecorder(page: Page, framesDir: string): () => Promise<number
   };
 }
 
-async function waitForLiveResponse(
-  page: Page,
-  options: {
-    timeoutMs: number;
-    minimumAssistantLength: number;
-  },
-): Promise<void> {
-  const startedAt = Date.now();
-
-  while (Date.now() - startedAt < options.timeoutMs) {
-    const state = await getDesktopState(page);
-    const workspace = state.workspaces.find((entry) => entry.id === state.selectedWorkspaceId);
-    const session = workspace?.sessions.find((entry) => entry.id === state.selectedSessionId);
-    const transcript = session?.transcript ?? [];
-    const assistantMessages = transcript.filter((item) => item.kind === "message" && item.role === "assistant");
-    const latestAssistant = assistantMessages.at(-1);
-
-    if (state.lastError) {
-      throw new Error(`Live demo failed: ${state.lastError}`);
-    }
-
-    if (
-      session?.status === "idle" &&
-      latestAssistant &&
-      latestAssistant.text.trim().length >= options.minimumAssistantLength
-    ) {
-      return;
-    }
-
-    await hold(250);
-  }
-
-  throw new Error(`Timed out waiting for live response after ${options.timeoutMs}ms`);
-}
-
 async function renderMp4(framesDir: string, outputPath: string): Promise<void> {
-  await execFileAsync("ffmpeg", [
-    "-y",
-    "-framerate",
-    String(frameRate),
-    "-i",
-    path.join(framesDir, "frame-%05d.png"),
-    "-vf",
-    "scale=1280:-1:flags=lanczos,format=yuv420p",
-    "-an",
-    outputPath,
-  ]);
+  await replaceFileAtomically(outputPath, async (temporaryOutputPath) => {
+    await execFileAsync("ffmpeg", [
+      "-y",
+      "-framerate",
+      String(frameRate),
+      "-i",
+      path.join(framesDir, "frame-%05d.png"),
+      "-vf",
+      "scale=1280:-2:flags=lanczos,format=yuv420p",
+      "-an",
+      temporaryOutputPath,
+    ]);
+  });
 }
 
 async function renderGif(framesDir: string, outputPath: string): Promise<void> {
@@ -174,18 +151,26 @@ async function renderGif(framesDir: string, outputPath: string): Promise<void> {
     palettePath,
   ]);
 
-  await execFileAsync("ffmpeg", [
-    "-y",
-    "-framerate",
-    String(frameRate),
-    "-i",
-    path.join(framesDir, "frame-%05d.png"),
-    "-i",
-    palettePath,
-    "-lavfi",
-    "fps=10,scale=960:-1:flags=lanczos[x];[x][1:v]paletteuse=dither=bayer:bayer_scale=5",
-    outputPath,
-  ]);
+  await replaceFileAtomically(outputPath, async (temporaryOutputPath) => {
+    await execFileAsync("ffmpeg", [
+      "-y",
+      "-framerate",
+      String(frameRate),
+      "-i",
+      path.join(framesDir, "frame-%05d.png"),
+      "-i",
+      palettePath,
+      "-lavfi",
+      "fps=10,scale=960:-1:flags=lanczos[x];[x][1:v]paletteuse=dither=bayer:bayer_scale=5",
+      temporaryOutputPath,
+    ]);
+  });
+}
+
+async function publishCopy(sourcePath: string, outputPath: string): Promise<void> {
+  await replaceFileAtomically(outputPath, (temporaryOutputPath) =>
+    copyFile(sourcePath, temporaryOutputPath),
+  );
 }
 
 function formatMb(bytes: number): string {

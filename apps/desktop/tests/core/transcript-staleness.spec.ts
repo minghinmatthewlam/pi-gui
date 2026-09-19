@@ -48,9 +48,12 @@ test("shows messages appended to the pi session file by an external writer after
   try {
     const window = await secondRun.firstWindow();
     await waitForWorkspaceByPath(window, workspacePath);
-    await expect(window.getByTestId("transcript")).toContainText("external writer message survives relaunch", {
-      timeout: 15_000,
-    });
+    await expect(window.getByTestId("transcript")).toContainText(
+      "external writer message survives relaunch",
+      {
+        timeout: 15_000,
+      },
+    );
   } finally {
     await secondRun.close();
   }

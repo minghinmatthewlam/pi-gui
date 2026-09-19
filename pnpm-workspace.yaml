@@ -11,3 +11,10 @@ onlyBuiltDependencies:
   - node-pty
   - protobufjs
   - sharp
+
+# Backport https://github.com/electron-userland/electron-builder/pull/10172.
+# Also repair NSIS per-user path handling (upstream issue #7921 System.dll crash).
+# 26.16.1 regresses hoisted runtime dependency packaging; keep 26.8.1 until
+# a newer release passes packaged-runtime-deps and the packaged Electron smoke.
+patchedDependencies:
+  app-builder-lib@26.8.1: patches/app-builder-lib@26.8.1.patch

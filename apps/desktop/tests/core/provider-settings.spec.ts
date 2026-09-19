@@ -10,6 +10,9 @@ import {
   stubNextOpenDialog,
 } from "../helpers/electron-app";
 
+/** 0.85.1 Settings rows use the catalog display name, not the provider id. */
+const OPENAI_CATALOG_TITLE = /^OpenAI$/;
+
 test("settings lets the user save an API key for a built-in provider", async () => {
   test.setTimeout(60_000);
   const userDataDir = await makeUserDataDir();
@@ -40,21 +43,21 @@ test("settings lets the user save an API key for a built-in provider", async () 
     });
     await allProviders.locator(".settings-disclosure__summary").click();
     const openAiRow = allProviders.locator(".settings-row", {
-      has: window.locator(".settings-row__title", { hasText: /^openai$/ }),
+      has: window.locator(".settings-row__title", { hasText: OPENAI_CATALOG_TITLE }),
     });
     await expect(openAiRow).toContainText("API key");
     await openAiRow.getByRole("button", { name: "Set API key" }).click();
 
     const dialog = window.getByTestId("provider-api-key-dialog");
     await expect(dialog).toBeVisible();
-    await dialog.getByLabel("openai API key").fill("test-openai-key");
+    await dialog.getByLabel("OpenAI API key").fill("test-openai-key");
     await dialog.getByRole("button", { name: "Set API key" }).click();
     await expect(dialog).toHaveCount(0);
 
     const connectedProviders = window.locator(".settings-section", {
       has: window.locator(".settings-section__title", { hasText: "Connected" }),
     });
-    await expect(connectedProviders).toContainText("openai");
+    await expect(connectedProviders).toContainText("OpenAI");
     await expect(connectedProviders).toContainText("API key");
     await expect(connectedProviders.getByRole("button", { name: "Manage" })).toBeVisible();
 
@@ -100,7 +103,7 @@ test("settings shows environment-configured providers as managed externally", as
       has: window.locator(".settings-section__title", { hasText: "Connected" }),
     });
     const openAiRow = connectedProviders.locator(".settings-row", {
-      has: window.locator(".settings-row__title", { hasText: /^openai$/ }),
+      has: window.locator(".settings-row__title", { hasText: OPENAI_CATALOG_TITLE }),
     });
     await expect(openAiRow).toContainText("Environment variable");
     await expect(openAiRow.locator(".settings-row__control")).toHaveCount(0);
@@ -159,7 +162,7 @@ test("settings keeps models.json provider overrides in the external-config state
       has: window.locator(".settings-section__title", { hasText: "Connected" }),
     });
     const openAiRow = connectedProviders.locator(".settings-row", {
-      has: window.locator(".settings-row__title", { hasText: /^openai$/ }),
+      has: window.locator(".settings-row__title", { hasText: OPENAI_CATALOG_TITLE }),
     });
     await expect(openAiRow).toContainText("Configured externally");
     await expect(openAiRow.locator(".settings-row__control")).toHaveCount(0);
@@ -202,13 +205,17 @@ test("opening the first workspace from the empty state hydrates provider and mod
     await emptyState.getByRole("button", { name: "Open first folder" }).click();
 
     await expect(emptyState).toHaveCount(0);
-    await expect(window.getByTestId("workspace-list")).toContainText("provider-settings-first-workspace");
+    await expect(window.getByTestId("workspace-list")).toContainText(
+      "provider-settings-first-workspace",
+    );
     await expect(window.getByTestId("new-thread-composer")).toBeVisible();
 
     await window.keyboard.press(desktopShortcut(","));
     const settingsSurface = window.getByTestId("settings-surface");
     await expect(settingsSurface).toBeVisible();
-    await expect(settingsSurface.getByRole("button", { name: "Refresh", exact: true })).toHaveCount(0);
+    await expect(settingsSurface.getByRole("button", { name: "Refresh", exact: true })).toHaveCount(
+      0,
+    );
 
     await window.getByRole("button", { name: "Providers", exact: true }).click();
     await expect(window.locator(".view-header__title")).toHaveText("Providers");
@@ -216,7 +223,7 @@ test("opening the first workspace from the empty state hydrates provider and mod
     const connectedProviders = window.locator(".settings-section", {
       has: window.locator(".settings-section__title", { hasText: "Connected" }),
     });
-    await expect(connectedProviders).toContainText("openai");
+    await expect(connectedProviders).toContainText("OpenAI");
     await expect(connectedProviders).toContainText("API key");
 
     await window.getByRole("button", { name: "Models", exact: true }).click();

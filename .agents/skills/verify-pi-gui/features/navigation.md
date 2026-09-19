@@ -7,10 +7,13 @@ Users switch folders and conversations in the sidebar and recover the selected t
 - `navigation-sidebar`: select threads across folders.
 - `navigation-restart`: preserve selected folder, thread, and composer draft.
 - `navigation-new-thread`: open the new-thread composer.
+- `navigation-pinning`: pin/unpin, reorder pinned threads, and preserve pin state across restart.
+- `navigation-pinning-running`: pin/unpin immediately while a composer prompt is still running.
 
 ## How to get to it (user POV)
 
 - Select a folder/thread in the sidebar.
+- Hover a thread and click Pin; click its Unpin icon in the Pinned section.
 - Click New thread in the sidebar or use the new-thread keyboard shortcut (Meta+Shift+O on macOS; Control+Shift+O elsewhere).
 - Open a folder through the OS folder picker; this is a separate native entry.
 
@@ -21,9 +24,11 @@ Preconditions: isolated profile and two fixture folders for sidebar switching.
 - **Switch/restart:** run `pnpm --filter @pi-gui/desktop run test:e2e:runner -- apps/desktop/tests/core/navigation.spec.ts`. It selects Alpha/Beta sessions through the sidebar, asserts `.topbar__session`, and checks `composer` draft and `.session-row--active` after restart.
 - **New-thread entry:** run `pnpm --filter @pi-gui/desktop run test:e2e:runner -- apps/desktop/tests/core/composer-controls.spec.ts`; `new-thread-composer` must become visible and focused after the shortcut.
 - **Folder picker:** use `pnpm --filter @pi-gui/desktop run test:prod:open-folder-real` for the actual native dialog; reserve foreground input. Core `initialWorkspaces` is fixture setup, not picker proof.
+- **Pinning:** run `pnpm --filter @pi-gui/desktop run test:e2e:runner -- apps/desktop/tests/core/sidebar-ordering.spec.ts apps/desktop/tests/core/stop-running-prompt.spec.ts`. The first spec covers ordering, pin persistence after relaunch, unpinning and repinning. The second holds the real submit IPC open with a controlled driver, clicks Unpin and Pin, and requires each change while the row still reports running; Stop must still work afterward. This is fixture-backed Electron proof, not real-provider execution.
 - **Proof:** record the selected row, topbar title, draft before shutdown and after relaunch, with action traces. Cover sidebar and keyboard entries separately when claiming both.
 
 ## Gotchas
 
 - `createNamedThread` uses IPC; this existing spec proves selection/draft behavior, not user-driven thread creation or provider execution.
 - Injected transcript deltas establish renderer behavior only; real run proof belongs in live.
+- Testing unpin only while idle or after restart misses action-queue blocking. Require the pin change before the active prompt completes. For live-provider confirmation, exercise the same controls during a real running follow-up and check that the run continues; the default conversation recipe does not currently include this checkpoint.

@@ -61,6 +61,13 @@ export function applyHostUiRequestToExtensionUiState(
   }
 }
 
-export function isExtensionUiDialogRequest(request: HostUiRequest): request is ExtensionUiDialogRequest {
-  return request.kind === "confirm" || request.kind === "select" || request.kind === "input" || request.kind === "editor";
+export function isExtensionUiDialogRequest(
+  request: HostUiRequest,
+): request is ExtensionUiDialogRequest {
+  return (
+    request.kind === "confirm" ||
+    request.kind === "select" ||
+    request.kind === "input" ||
+    request.kind === "editor"
+  );
 }

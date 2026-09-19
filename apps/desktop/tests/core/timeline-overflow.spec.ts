@@ -61,7 +61,12 @@ async function setElectronWindowSize(
   }, size);
   expect(resized).toBe(true);
   await expect
-    .poll(() => window.evaluate(() => ({ width: window.innerWidth, height: window.innerHeight })))
+    .poll(() =>
+      window.evaluate(() => ({
+        width: globalThis.window.innerWidth,
+        height: globalThis.window.innerHeight,
+      })),
+    )
     .toEqual(size);
 }
 
@@ -115,42 +120,49 @@ async function seedLongUserRow(harness: DesktopHarness, sessionRef: SessionRef):
   await emitTestSessionEvent(harness, event);
 }
 
-async function readOverflowMetrics(window: Page, expanded: boolean): Promise<TimelineOverflowMetrics> {
+async function readOverflowMetrics(
+  window: Page,
+  expanded: boolean,
+): Promise<TimelineOverflowMetrics> {
   const selectors = expanded ? EXPANDED_CHILDREN : COLLAPSED_CHILDREN;
-  return window.evaluate(({ childSelectors, expectsExpanded }) => {
-    const tolerance = 1;
-    const transcript = document.querySelector<HTMLElement>('[data-testid="transcript"]');
-    const pane = document.querySelector<HTMLElement>('[data-testid="timeline-pane"]');
-    if (!transcript || !pane) {
-      throw new Error("Expected the timeline transcript and pane");
-    }
+  return window.evaluate(
+    ({ childSelectors, expectsExpanded }) => {
+      const tolerance = 1;
+      const transcript = document.querySelector<HTMLElement>('[data-testid="transcript"]');
+      const pane = document.querySelector<HTMLElement>('[data-testid="timeline-pane"]');
+      if (!transcript || !pane) {
+        throw new Error("Expected the timeline transcript and pane");
+      }
 
-    const transcriptRect = transcript.getBoundingClientRect();
-    const childrenInsideTranscript = Object.fromEntries(
-      Object.entries(childSelectors).map(([name, selector]) => {
-        const child = transcript.querySelector<HTMLElement>(selector);
-        if (!child) {
-          throw new Error(`Expected timeline child: ${selector}`);
-        }
-        const childRect = child.getBoundingClientRect();
-        return [
-          name,
-          childRect.left >= transcriptRect.left - tolerance &&
-            childRect.right <= transcriptRect.right + tolerance,
-        ];
-      }),
-    );
-    const body = transcript.querySelector<HTMLElement>(".timeline-tool__body");
+      const transcriptRect = transcript.getBoundingClientRect();
+      const childrenInsideTranscript = Object.fromEntries(
+        Object.entries(childSelectors).map(([name, selector]) => {
+          const child = transcript.querySelector<HTMLElement>(selector);
+          if (!child) {
+            throw new Error(`Expected timeline child: ${selector}`);
+          }
+          const childRect = child.getBoundingClientRect();
+          return [
+            name,
+            childRect.left >= transcriptRect.left - tolerance &&
+              childRect.right <= transcriptRect.right + tolerance,
+          ];
+        }),
+      );
+      const body = transcript.querySelector<HTMLElement>(".timeline-tool__body");
 
-    return {
-      timelineHasNoHorizontalOverflow: transcript.scrollWidth <= transcript.clientWidth + tolerance,
-      paneHasNoHorizontalOverflow: pane.scrollWidth <= pane.clientWidth + tolerance,
-      expandedBodyCount: body ? 1 : 0,
-      expandedBodyHasNoHorizontalOverflow:
-        expectsExpanded && body ? body.scrollWidth <= body.clientWidth + tolerance : null,
-      childrenInsideTranscript,
-    };
-  }, { childSelectors: selectors, expectsExpanded: expanded });
+      return {
+        timelineHasNoHorizontalOverflow:
+          transcript.scrollWidth <= transcript.clientWidth + tolerance,
+        paneHasNoHorizontalOverflow: pane.scrollWidth <= pane.clientWidth + tolerance,
+        expandedBodyCount: body ? 1 : 0,
+        expandedBodyHasNoHorizontalOverflow:
+          expectsExpanded && body ? body.scrollWidth <= body.clientWidth + tolerance : null,
+        childrenInsideTranscript,
+      };
+    },
+    { childSelectors: selectors, expectsExpanded: expanded },
+  );
 }
 
 async function expectNoHorizontalOverflow(window: Page, expanded: boolean): Promise<void> {
@@ -166,7 +178,11 @@ async function expectNoHorizontalOverflow(window: Page, expanded: boolean): Prom
     });
 }
 
-async function saveProofScreenshot(window: Page, proofDir: string | undefined, name: string): Promise<void> {
+async function saveProofScreenshot(
+  window: Page,
+  proofDir: string | undefined,
+  name: string,
+): Promise<void> {
   if (!proofDir) {
     return;
   }

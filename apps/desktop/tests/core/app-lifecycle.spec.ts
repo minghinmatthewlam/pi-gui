@@ -1,9 +1,5 @@
 import { expect, test } from "@playwright/test";
-import {
-  launchDesktop,
-  makeUserDataDir,
-  type DesktopHarness,
-} from "../helpers/electron-app";
+import { launchDesktop, makeUserDataDir, type DesktopHarness } from "../helpers/electron-app";
 
 const VALID_TEST_MODES = ["background", "foreground"] as const;
 const NORMAL_LIFECYCLE_CASES = [
@@ -48,7 +44,10 @@ async function quitDesktop(harness: DesktopHarness): Promise<void> {
 }
 
 test.describe("macOS last-window lifecycle", () => {
-  test.skip(process.platform !== "darwin", "macOS keeps a normal app alive after its last window closes.");
+  test.skip(
+    process.platform !== "darwin",
+    "macOS keeps a normal app alive after its last window closes.",
+  );
 
   for (const mode of VALID_TEST_MODES) {
     test(`quits after the last window closes in ${mode} test mode`, async () => {

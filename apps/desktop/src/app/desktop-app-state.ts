@@ -1,9 +1,11 @@
 import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
-import type { DesktopAppState, SelectedTranscriptRecord } from "../desktop-state";
+import type { DesktopAppState, SelectedTranscriptRecord } from "../../contracts/desktop-state";
 
 export function useDesktopAppState() {
   const [snapshot, setSnapshot] = useState<DesktopAppState | null>(null);
-  const [selectedTranscript, setSelectedTranscript] = useState<SelectedTranscriptRecord | null>(null);
+  const [selectedTranscript, setSelectedTranscript] = useState<SelectedTranscriptRecord | null>(
+    null,
+  );
 
   useEffect(() => {
     let active = true;
@@ -19,17 +21,21 @@ export function useDesktopAppState() {
       applySnapshotIfNewer(setSnapshot, incoming);
     };
 
-    void Promise.all([api.getState(), api.getSelectedTranscript()]).then(([state, transcript]) => {
-      if (!active) {
-        return;
-      }
-      applyState(state);
-      // SelectedTranscriptRecord carries no revision marker, so the stale initial transcript is
-      // only applied when no pushed transcript has arrived yet.
-      if (!receivedPushedTranscript) {
-        setSelectedTranscript(transcript);
-      }
-    });
+    void Promise.all([api.getState(), api.getSelectedTranscript()])
+      .then(([state, transcript]) => {
+        if (!active) {
+          return;
+        }
+        applyState(state);
+        // SelectedTranscriptRecord carries no revision marker, so the stale initial transcript is
+        // only applied when no pushed transcript has arrived yet.
+        if (!receivedPushedTranscript) {
+          setSelectedTranscript(transcript);
+        }
+      })
+      .catch((error: unknown) => {
+        console.error("[renderer] getState failed", error);
+      });
 
     const unsubscribeState = api.onStateChanged((state) => {
       if (active) {
@@ -69,12 +75,18 @@ export function applySnapshotIfNewer(
 }
 
 export function updateSnapshot(
-  api: NonNullable<typeof window.piApp>,
   setSnapshot: Dispatch<SetStateAction<DesktopAppState | null>>,
   action: () => Promise<DesktopAppState>,
 ) {
-  return action().then((state) => {
-    applySnapshotIfNewer(setSnapshot, state);
-    return state;
-  });
+  return action()
+    .then((state) => {
+      applySnapshotIfNewer(setSnapshot, state);
+      return state;
+    })
+    .catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error);
+      setSnapshot((current) => (current ? { ...current, lastError: message } : current));
+      // Keep the rejection so callers do not run success-only actions such as clearing drafts.
+      throw error;
+    });
 }

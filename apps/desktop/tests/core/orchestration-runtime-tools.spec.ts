@@ -46,12 +46,16 @@ async function startHangingOpenAiServer(): Promise<{
       for (const socket of sockets) {
         socket.destroy();
       }
-      await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+      await new Promise<void>((resolve, reject) =>
+        server.close((error) => (error ? reject(error) : resolve())),
+      );
     },
   };
 }
 
-async function selectedSessionRef(window: Parameters<typeof getDesktopState>[0]): Promise<SessionRef> {
+async function selectedSessionRef(
+  window: Parameters<typeof getDesktopState>[0],
+): Promise<SessionRef> {
   const state = await getDesktopState(window);
   if (!state.selectedWorkspaceId || !state.selectedSessionId) {
     throw new Error("Expected a selected session");
@@ -69,22 +73,40 @@ test("create_child_thread returns after a slow worker starts, before its turn co
   const userDataDir = await makeUserDataDir();
   const agentDir = join(userDataDir, "agent");
   const workspacePath = await makeWorkspace("orchestration-runtime-start-ack");
-  await seedAgentDir(agentDir, { withOpenAiAuth: false, withDefaultModel: false, enabledModels: ["slow-test/slow"] });
-  await writeFile(join(agentDir, "settings.json"), `${JSON.stringify({
-    defaultProvider: "slow-test",
-    defaultModel: "slow",
+  await seedAgentDir(agentDir, {
+    withOpenAiAuth: false,
+    withDefaultModel: false,
     enabledModels: ["slow-test/slow"],
-  }, null, 2)}\n`);
-  await writeFile(join(agentDir, "models.json"), `${JSON.stringify({
-    providers: {
-      "slow-test": {
-        baseUrl: server.baseUrl,
-        api: "openai-completions",
-        apiKey: "unused",
-        models: [{ id: "slow" }],
+  });
+  await writeFile(
+    join(agentDir, "settings.json"),
+    `${JSON.stringify(
+      {
+        defaultProvider: "slow-test",
+        defaultModel: "slow",
+        enabledModels: ["slow-test/slow"],
       },
-    },
-  }, null, 2)}\n`);
+      null,
+      2,
+    )}\n`,
+  );
+  await writeFile(
+    join(agentDir, "models.json"),
+    `${JSON.stringify(
+      {
+        providers: {
+          "slow-test": {
+            baseUrl: server.baseUrl,
+            api: "openai-completions",
+            apiKey: "unused",
+            models: [{ id: "slow" }],
+          },
+        },
+      },
+      null,
+      2,
+    )}\n`,
+  );
   const harness = await launchDesktop(userDataDir, {
     agentDir,
     initialWorkspaces: [workspacePath],
@@ -159,12 +181,14 @@ test("create_child_thread surfaces deterministic initial-prompt delivery failure
     const parentRef = await selectedSessionRef(window);
     const prompt = "Child must start this delegated task.";
 
-    await expect(runOrchestrationRuntimeTool(harness, {
-      toolName: "create_child_thread",
-      toolCallId: "create-child-delivery-failure",
-      sessionRef: parentRef,
-      params: { prompt },
-    })).rejects.toThrow(/API key|authentication|credential/i);
+    await expect(
+      runOrchestrationRuntimeTool(harness, {
+        toolName: "create_child_thread",
+        toolCallId: "create-child-delivery-failure",
+        sessionRef: parentRef,
+        params: { prompt },
+      }),
+    ).rejects.toThrow(/API key|authentication|credential/i);
 
     const state = await getDesktopState(window);
     const matchingChildren = state.orchestrationChildren.filter(
@@ -173,21 +197,27 @@ test("create_child_thread surfaces deterministic initial-prompt delivery failure
     expect(matchingChildren).toHaveLength(1);
     expect(matchingChildren[0]?.status).toBe("failed");
     expect(matchingChildren[0]?.latestTranscript).toMatch(/API key|authentication|credential/i);
-    expect(matchingChildren[0]?.evidence).toEqual(expect.arrayContaining([
-      expect.objectContaining({ title: "Initial prompt delivery failed", status: "failed" }),
-    ]));
+    expect(matchingChildren[0]?.evidence).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ title: "Initial prompt delivery failed", status: "failed" }),
+      ]),
+    );
 
     // Replaying the same tool call must re-surface the failed launch, not treat
     // the already-created session record as proof of success or create a duplicate.
-    await expect(runOrchestrationRuntimeTool(harness, {
-      toolName: "create_child_thread",
-      toolCallId: "create-child-delivery-failure",
-      sessionRef: parentRef,
-      params: { prompt },
-    })).rejects.toThrow(/API key|authentication|credential/i);
-    expect((await getDesktopState(window)).orchestrationChildren.filter(
-      (entry) => entry.sourceToolCallId === "create-child-delivery-failure",
-    )).toHaveLength(1);
+    await expect(
+      runOrchestrationRuntimeTool(harness, {
+        toolName: "create_child_thread",
+        toolCallId: "create-child-delivery-failure",
+        sessionRef: parentRef,
+        params: { prompt },
+      }),
+    ).rejects.toThrow(/API key|authentication|credential/i);
+    expect(
+      (await getDesktopState(window)).orchestrationChildren.filter(
+        (entry) => entry.sourceToolCallId === "create-child-delivery-failure",
+      ),
+    ).toHaveLength(1);
   } finally {
     await harness.close();
   }

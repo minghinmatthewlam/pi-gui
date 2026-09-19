@@ -76,6 +76,7 @@ deb:
 
 win:
   executableName: pi-gui
+  # Keep icon/version metadata editing; signing is optional without credentials.
   signAndEditExecutable: true
   target:
     - target: nsis
@@ -95,6 +96,7 @@ toolsets:
   appimage: "1.0.2"
 
 dmg:
+  sign: true
   contents:
     - x: 130
       y: 220

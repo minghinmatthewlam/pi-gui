@@ -30,7 +30,10 @@ end
 `;
 }
 
-export function updateCaskContent(existingContent, { assetUrl, caskToken = "pi-gui", sha256, version }) {
+export function updateCaskContent(
+  existingContent,
+  { assetUrl, caskToken = "pi-gui", sha256, version },
+) {
   const tokenMatch = existingContent.match(CASK_PATTERN);
   if (!tokenMatch) {
     throw new Error("Unable to find cask token declaration in Homebrew cask.");
@@ -102,15 +105,20 @@ export async function computeFileSha256(filePath) {
 }
 
 export async function fetchReleaseAssetUrl({ assetName, repo, tag, token }) {
-  const response = await fetch(`https://api.github.com/repos/${repo}/releases/tags/${encodeURIComponent(tag)}`, {
-    headers: {
-      Accept: "application/vnd.github+json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  const response = await fetch(
+    `https://api.github.com/repos/${repo}/releases/tags/${encodeURIComponent(tag)}`,
+    {
+      headers: {
+        Accept: "application/vnd.github+json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
     },
-  });
+  );
 
   if (!response.ok) {
-    throw new Error(`Unable to load release ${tag} from ${repo}: ${response.status} ${response.statusText}`);
+    throw new Error(
+      `Unable to load release ${tag} from ${repo}: ${response.status} ${response.statusText}`,
+    );
   }
 
   const release = await response.json();

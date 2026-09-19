@@ -23,7 +23,9 @@ async function expectTerminalAndChangesSplit(window: Page): Promise<void> {
   }
 
   expect(terminalBox.x + terminalBox.width).toBeLessThanOrEqual(diffPanelBox.x + 1);
-  expect(diffPanelBox.y + diffPanelBox.height).toBeGreaterThanOrEqual(terminalBox.y + terminalBox.height - 1);
+  expect(diffPanelBox.y + diffPanelBox.height).toBeGreaterThanOrEqual(
+    terminalBox.y + terminalBox.height - 1,
+  );
   expect(diffPanelBox.width).toBeGreaterThanOrEqual(320);
   expect(terminalBox.width).toBeGreaterThan(300);
 }
@@ -60,7 +62,9 @@ test("keeps Changes visible when the integrated terminal is open and maximized",
     expect(takeover?.height ?? 0).toBeGreaterThan(beforeTakeover?.height ?? 0);
 
     await window.getByLabel("Restore terminal").click();
-    await expect(window.getByTestId("integrated-terminal")).not.toHaveClass(/terminal-panel--takeover/);
+    await expect(window.getByTestId("integrated-terminal")).not.toHaveClass(
+      /terminal-panel--takeover/,
+    );
     await expect(window.getByTestId("composer")).toBeVisible();
     await expectTerminalAndChangesSplit(window);
   } finally {

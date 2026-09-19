@@ -1,0 +1,87 @@
+name: Windows release diagnostic
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/windows-release-diagnostic.yml
+
+permissions:
+  contents: read
+
+jobs:
+  build-candidate:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --dir apps/desktop run package:win
+      - run: pnpm --dir apps/desktop run verify:packaged-runtime-deps:windows
+      - uses: actions/upload-artifact@v4
+        with:
+          name: diagnostic-installers
+          path: apps/desktop/release/*.exe
+          if-no-files-found: error
+          retention-days: 7
+
+  diagnose-installer:
+    needs: build-candidate
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: diagnostic-installers
+          path: draft-release
+      - name: Record package hashes
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path diagnostic-proof | Out-Null
+          Get-ChildItem draft-release -Filter '*.exe' | Get-FileHash -Algorithm SHA256 |
+            Format-List | Out-String | Tee-Object -FilePath diagnostic-proof/package-hashes.txt
+      - name: Reproduce native package verification
+        shell: pwsh
+        run: |
+          $version = (Get-Content apps/desktop/package.json | ConvertFrom-Json).version
+          $started = Get-Date
+          try {
+            ./apps/desktop/scripts/verify-windows-release.ps1 `
+              -ReleaseDir "$PWD/draft-release" `
+              -Version $version `
+              -SmokePackages
+          }
+          finally {
+            New-Item -ItemType Directory -Force -Path diagnostic-proof | Out-Null
+            # WER records crash events asynchronously after the process exits.
+            $events = @()
+            for ($attempt = 0; $attempt -le 15; $attempt++) {
+              $events = @(Get-WinEvent -FilterHashtable @{LogName='Application'; StartTime=$started; Id=1000,1001} -ErrorAction SilentlyContinue |
+                Where-Object { $_.Message -match 'pi-gui.*setup' })
+              if ($events.Count -gt 0) { break }
+              if ($attempt -lt 15) { Start-Sleep -Seconds 2 }
+            }
+            if ($events.Count -eq 0) { Write-Warning 'No matching crash events appeared within 30 seconds' }
+            $events | Select-Object TimeCreated, Id, ProviderName, Message |
+              Format-List | Out-String -Width 250 |
+              Tee-Object -FilePath diagnostic-proof/crash-events.txt
+          }
+      - name: Retain crash evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer-diagnostic-${{ github.run_id }}
+          path: diagnostic-proof/
+          if-no-files-found: warn
+          retention-days: 7

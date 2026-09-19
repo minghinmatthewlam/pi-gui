@@ -11,6 +11,28 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  ci-required:
+    name: CI required
+    if: ${{ always() }}
+    needs:
+      - typecheck
+      - website-build
+      - desktop-core
+      - desktop-package-linux
+      - desktop-package-windows
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Require every CI job to succeed
+        env:
+          CI_NEEDS: ${{ toJSON(needs) }}
+        run: node scripts/check-ci-results.mjs
+
   typecheck:
     runs-on: ubuntu-latest
 
@@ -27,23 +49,14 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
-      - name: Typecheck
-        run: pnpm typecheck
-
-      - name: Driver unit tests
-        run: pnpm --filter @pi-gui/pi-sdk-driver test
-
-      - name: Changed-file adapter tests
-        run: pnpm --filter @pi-gui/desktop run test:changed-files
+      - name: Baseline checks (same command as local development)
+        run: pnpm check
 
       - name: Verify install copy
         run: pnpm verify:install-copy
 
       - name: Verify dev launcher argv/PATH contract
         run: pnpm --dir apps/desktop run verify:launcher-contract
-
-      - name: Test release artifact helpers
-        run: pnpm test:release-helpers
 
       - name: Verify release version consistency
         run: pnpm verify:release-version

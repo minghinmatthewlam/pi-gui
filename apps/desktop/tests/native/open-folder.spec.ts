@@ -34,11 +34,16 @@ test("opens the native folder picker from the empty state button and adds the se
     await window.getByRole("button", { name: "Open first folder" }).click();
 
     await expect
-      .poll(async () => {
-        const state = await getDesktopState(window);
-        const selectedWorkspace = state.workspaces.find((workspace) => workspace.id === state.selectedWorkspaceId);
-        return selectedWorkspace?.path ?? null;
-      }, { timeout: 20_000 })
+      .poll(
+        async () => {
+          const state = await getDesktopState(window);
+          const selectedWorkspace = state.workspaces.find(
+            (workspace) => workspace.id === state.selectedWorkspaceId,
+          );
+          return selectedWorkspace?.path ?? null;
+        },
+        { timeout: 20_000 },
+      )
       .toBe(workspacePath);
 
     await expect(window.getByTestId("workspace-list")).toContainText(basename(workspacePath));
@@ -71,14 +76,19 @@ test("opens a folder from Cmd+O even when the composer is focused", async () => 
     await triggerNativeOpenFolderShortcut(harness);
 
     await expect
-      .poll(async () => {
-        const state = await getDesktopState(window);
-        const selectedWorkspace = state.workspaces.find((workspace) => workspace.id === state.selectedWorkspaceId);
-        return {
-          selectedPath: selectedWorkspace?.path ?? null,
-          workspaceCount: state.workspaces.length,
-        };
-      }, { timeout: 20_000 })
+      .poll(
+        async () => {
+          const state = await getDesktopState(window);
+          const selectedWorkspace = state.workspaces.find(
+            (workspace) => workspace.id === state.selectedWorkspaceId,
+          );
+          return {
+            selectedPath: selectedWorkspace?.path ?? null,
+            workspaceCount: state.workspaces.length,
+          };
+        },
+        { timeout: 20_000 },
+      )
       .toEqual({
         selectedPath: openedWorkspacePath,
         workspaceCount: 2,
@@ -116,11 +126,16 @@ test("exposes File > Open Folder… with Command+O and reuses the same open-fold
     expect(triggered).toBe(true);
 
     await expect
-      .poll(async () => {
-        const state = await getDesktopState(window);
-        const selectedWorkspace = state.workspaces.find((workspace) => workspace.id === state.selectedWorkspaceId);
-        return selectedWorkspace?.path ?? null;
-      }, { timeout: 20_000 })
+      .poll(
+        async () => {
+          const state = await getDesktopState(window);
+          const selectedWorkspace = state.workspaces.find(
+            (workspace) => workspace.id === state.selectedWorkspaceId,
+          );
+          return selectedWorkspace?.path ?? null;
+        },
+        { timeout: 20_000 },
+      )
       .toBe(workspacePath);
 
     await expect(window.getByTestId("workspace-list")).toContainText(basename(workspacePath));
@@ -149,22 +164,32 @@ test("canceling the open-folder dialog from Cmd+O leaves workspace state unchang
     await expect(composer).toBeFocused();
 
     const before = await getDesktopState(window);
-    const selectedBefore = before.workspaces.find((workspace) => workspace.id === before.selectedWorkspaceId);
+    const selectedBefore = before.workspaces.find(
+      (workspace) => workspace.id === before.selectedWorkspaceId,
+    );
 
     await stubNextOpenDialogResult(harness, { canceled: true, filePaths: [] });
     await triggerNativeOpenFolderShortcut(harness);
 
     await expect.poll(() => getOpenDialogInvocationCount(harness)).toBe(1);
     await expect
-      .poll(async () => {
-        const state = await getDesktopState(window);
-        const selectedWorkspace = state.workspaces.find((workspace) => workspace.id === state.selectedWorkspaceId);
-        return {
-          workspaceCount: state.workspaces.length,
-          selectedPath: selectedWorkspace?.path ?? null,
-          emptyStateVisible: await window.getByTestId("empty-state").isVisible().catch(() => false),
-        };
-      }, { timeout: 20_000 })
+      .poll(
+        async () => {
+          const state = await getDesktopState(window);
+          const selectedWorkspace = state.workspaces.find(
+            (workspace) => workspace.id === state.selectedWorkspaceId,
+          );
+          return {
+            workspaceCount: state.workspaces.length,
+            selectedPath: selectedWorkspace?.path ?? null,
+            emptyStateVisible: await window
+              .getByTestId("empty-state")
+              .isVisible()
+              .catch(() => false),
+          };
+        },
+        { timeout: 20_000 },
+      )
       .toEqual({
         workspaceCount: before.workspaces.length,
         selectedPath: selectedBefore?.path ?? null,

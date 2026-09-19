@@ -1,5 +1,10 @@
 import { expect, test, type Locator } from "@playwright/test";
-import { launchDesktop, makeUserDataDir, makeWorkspace, waitForWorkspaceByPath } from "../helpers/electron-app";
+import {
+  launchDesktop,
+  makeUserDataDir,
+  makeWorkspace,
+  waitForWorkspaceByPath,
+} from "../helpers/electron-app";
 
 const longUrl = `https://example.com/${"long-url-segment".repeat(24)}`;
 const longInlineToken = `INLINE_${"token".repeat(48)}`;
@@ -34,7 +39,9 @@ async function getWrappingMetrics(row: Locator): Promise<WrappingMetrics> {
     const pre = content?.querySelector<HTMLElement>("pre");
     const fencedCode = pre?.querySelector<HTMLElement>("code");
     if (!transcript || !content || !paragraph || !inlineCode || !pre || !fencedCode) {
-      throw new Error("Expected markdown paragraph, inline code, and fenced code to render in the message row");
+      throw new Error(
+        "Expected markdown paragraph, inline code, and fenced code to render in the message row",
+      );
     }
 
     const tolerance = 1;
@@ -52,7 +59,8 @@ async function getWrappingMetrics(row: Locator): Promise<WrappingMetrics> {
       inlineCodeWithinContent: within(inlineCodeRect, contentRect),
       preWithinContent: within(preRect, contentRect),
       preHasNoHorizontalOverflow: pre.scrollWidth <= pre.clientWidth + tolerance,
-      transcriptHasNoHorizontalOverflow: transcript.scrollWidth <= transcript.clientWidth + tolerance,
+      transcriptHasNoHorizontalOverflow:
+        transcript.scrollWidth <= transcript.clientWidth + tolerance,
       paragraphText: paragraph.innerText,
       inlineCodeText: inlineCode.innerText,
       fencedCodeText: fencedCode.innerText,
@@ -83,17 +91,19 @@ test("wraps long markdown content inside transcript message bubbles", async () =
     await expect(messageRow).toBeVisible({ timeout: 15_000 });
     await expect(messageRow.locator(".message__content pre")).toBeVisible();
 
-    await expect.poll(() => getWrappingMetrics(messageRow)).toMatchObject({
-      contentWithinRow: true,
-      paragraphWithinContent: true,
-      inlineCodeWithinContent: true,
-      preWithinContent: true,
-      preHasNoHorizontalOverflow: true,
-      transcriptHasNoHorizontalOverflow: true,
-      paragraphText: expect.stringContaining(longUrl),
-      inlineCodeText: longInlineToken,
-      fencedCodeText: expect.stringContaining(longFencedLine),
-    });
+    await expect
+      .poll(() => getWrappingMetrics(messageRow))
+      .toMatchObject({
+        contentWithinRow: true,
+        paragraphWithinContent: true,
+        inlineCodeWithinContent: true,
+        preWithinContent: true,
+        preHasNoHorizontalOverflow: true,
+        transcriptHasNoHorizontalOverflow: true,
+        paragraphText: expect.stringContaining(longUrl),
+        inlineCodeText: longInlineToken,
+        fencedCodeText: expect.stringContaining(longFencedLine),
+      });
   } finally {
     await harness.close();
   }

@@ -4,12 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { parse, stringify } from "yaml";
-import {
-  expectedFiles,
-  hashFile,
-  stageArtifacts,
-  verifyArtifacts,
-} from "./release-artifacts.mjs";
+import { expectedFiles, hashFile, stageArtifacts, verifyArtifacts } from "./release-artifacts.mjs";
 import { refreshMacUpdateMetadata } from "./refresh-macos-update-metadata.mjs";
 
 const VERSION = "0.1.0-beta.34";
@@ -37,16 +32,10 @@ function primaryUpdateAsset(platform) {
 
 function updateAssets(platform) {
   if (platform === "macos") {
-    return [
-      `pi-gui-${VERSION}-universal.zip`,
-      `pi-gui-${VERSION}-universal.dmg`,
-    ];
+    return [`pi-gui-${VERSION}-universal.zip`, `pi-gui-${VERSION}-universal.dmg`];
   }
   if (platform === "linux") {
-    return [
-      `pi-gui-${VERSION}-x86_64.AppImage`,
-      `pi-gui_${VERSION}_amd64.deb`,
-    ];
+    return [`pi-gui-${VERSION}-x86_64.AppImage`, `pi-gui_${VERSION}_amd64.deb`];
   }
   return [primaryUpdateAsset(platform)];
 }

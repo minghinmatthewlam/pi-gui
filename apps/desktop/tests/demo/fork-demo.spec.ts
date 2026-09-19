@@ -51,7 +51,9 @@ test("records a fork-from-message walkthrough", async () => {
     const beforeSelectedSessionId = before.selectedSessionId;
 
     // Reveal the fork affordance on the second assistant response.
-    const secondAnswer = transcript.locator(".timeline-item--assistant", { hasText: "Second fork answer" });
+    const secondAnswer = transcript.locator(".timeline-item--assistant", {
+      hasText: "Second fork answer",
+    });
     await secondAnswer.scrollIntoViewIfNeeded();
     await window.waitForTimeout(800);
     await secondAnswer.hover();
@@ -99,7 +101,6 @@ test("records a fork-from-message walkthrough", async () => {
   if (recordedPath) {
     const finalPath = join(videoDir, "fork-from-message-demo.webm");
     await copyFile(recordedPath, finalPath);
-    // eslint-disable-next-line no-console
     console.log(`\nFORK_DEMO_VIDEO=${finalPath}\n`);
   }
 });

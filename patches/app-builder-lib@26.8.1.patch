@@ -1,0 +1,49 @@
+diff --git a/out/codeSign/macCodeSign.js b/out/codeSign/macCodeSign.js
+index 17e0c1e7be271b7bce8a7671bfe9d0760a0c9f9a..9a8176dba866a13da1a2e90af2ac289ce58a40f2 100644
+--- a/out/codeSign/macCodeSign.js
++++ b/out/codeSign/macCodeSign.js
+@@ -157,16 +157,16 @@ async function createKeychain({ tmpDir, cscLink, cscKeyPassword, cscILink, cscIK
+     if (cscIKeyPassword != null) {
+         cscPasswords.push(cscIKeyPassword);
+     }
+-    return await importCerts(keychainFile, certPaths, cscPasswords);
++    return await importCerts(keychainFile, certPaths, cscPasswords, keychainPassword);
+ }
+-async function importCerts(keychainFile, paths, keyPasswords) {
++async function importCerts(keychainFile, paths, keyPasswords, keychainPassword) {
+     var _a;
+     for (let i = 0; i < paths.length; i++) {
+         const password = (_a = keyPasswords[i]) !== null && _a !== void 0 ? _a : "";
+         await (0, builder_util_1.exec)("/usr/bin/security", ["import", paths[i], "-k", keychainFile, "-T", "/usr/bin/codesign", "-T", "/usr/bin/productbuild", "-P", password]);
+         // https://stackoverflow.com/questions/39868578/security-codesign-in-sierra-keychain-ignores-access-control-settings-and-ui-p
+         // https://github.com/electron-userland/electron-packager/issues/701#issuecomment-322315996
+-        await (0, builder_util_1.exec)("/usr/bin/security", ["set-key-partition-list", "-S", "apple-tool:,apple:", "-s", "-k", password, keychainFile]);
++        await (0, builder_util_1.exec)("/usr/bin/security", ["set-key-partition-list", "-S", "apple-tool:,apple:", "-s", "-k", keychainPassword, keychainFile]);
+     }
+     return {
+         keychainFile,
+diff --git a/templates/nsis/multiUser.nsh b/templates/nsis/multiUser.nsh
+index c345dee7a888323198897dbab393bd167aedd9b8..bea7c4dafcbba9771fbdca58d0998ea56997d7fa 100644
+--- a/templates/nsis/multiUser.nsh
++++ b/templates/nsis/multiUser.nsh
+@@ -28,14 +28,16 @@ Var installMode
+       StrCpy $INSTDIR $perUserInstallationFolder
+     ${else}
+       StrCpy $0 "$LocalAppData\Programs"
+-      System::Store S
++      Push $1
++      Push $2
+       # Win7 has a per-user programfiles known folder and this can be a non-default location
+       System::Call 'SHELL32::SHGetKnownFolderPath(g "${FOLDERID_UserProgramFiles}", i ${KF_FLAG_CREATE}, p 0, *p .r2)i.r1'
+       ${If} $1 == 0
+-        System::Call '*$2(&w${NSIS_MAX_STRLEN} .s)'
+-        StrCpy $0 $1
++        # Copy only the terminated path; do not read a fixed-size array from the shell allocation.
++        System::Call 'KERNEL32::lstrcpynW(w .r0, p r2, i ${NSIS_MAX_STRLEN})p'
+         System::Call 'OLE32::CoTaskMemFree(p r2)'
+       ${endif}
+-      System::Store L
++      Pop $2
++      Pop $1
+       StrCpy $INSTDIR "$0\${APP_FILENAME}"
+     ${endif}

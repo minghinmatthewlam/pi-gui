@@ -1,6 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, mkdtemp, readdir, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -12,6 +11,7 @@ import {
   makeWorkspace,
   type PiAppWindow,
 } from "../tests/helpers/electron-app.ts";
+import { replaceFileAtomically } from "./atomic-output.mts";
 
 const execFileAsync = promisify(execFile);
 // Each Retina screenshot takes ~200ms, so effective capture rate is ~5fps.
@@ -19,7 +19,11 @@ const execFileAsync = promisify(execFile);
 const frameRate = 5;
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptDir, "../../..");
-const capturesDir = path.join(repoRoot, "video", "public", "captures");
+const publishingRoot = process.env.PI_GUI_MARKETING_STAGE_DIR
+  ? path.resolve(process.env.PI_GUI_MARKETING_STAGE_DIR)
+  : repoRoot;
+const capturesDir = path.join(publishingRoot, "video", "public", "captures");
+const evidenceRoot = path.join(repoRoot, ".artifacts", "marketing", "showcase-captures");
 
 // ---------------------------------------------------------------------------
 // Frame recording utilities (adapted from readme-demo.mts)
@@ -53,157 +57,137 @@ function startFrameRecorder(page: Page, framesDir: string): () => Promise<number
 }
 
 async function renderClip(framesDir: string, outputPath: string): Promise<void> {
-  await execFileAsync("ffmpeg", [
-    "-y",
-    "-framerate", String(frameRate),
-    "-i", path.join(framesDir, "frame-%05d.png"),
-    "-vf", "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,format=yuv420p",
-    "-c:v", "libx264",
-    "-crf", "18",
-    "-an",
-    outputPath,
-  ]);
+  await replaceFileAtomically(outputPath, async (temporaryOutputPath) => {
+    await execFileAsync("ffmpeg", [
+      "-y",
+      "-framerate",
+      String(frameRate),
+      "-i",
+      path.join(framesDir, "frame-%05d.png"),
+      "-vf",
+      "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,format=yuv420p",
+      "-c:v",
+      "libx264",
+      "-crf",
+      "18",
+      "-an",
+      temporaryOutputPath,
+    ]);
+  });
 }
 
 function hold(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function waitForLiveResponse(
-  page: Page,
-  options: { timeoutMs: number; minimumAssistantLength: number },
-): Promise<void> {
-  const startedAt = Date.now();
-  while (Date.now() - startedAt < options.timeoutMs) {
-    const state = await getDesktopState(page);
-    const workspace = state.workspaces.find((entry) => entry.id === state.selectedWorkspaceId);
-    const session = workspace?.sessions.find((entry) => entry.id === state.selectedSessionId);
-    const transcript = session?.transcript ?? [];
-    const assistantMessages = transcript.filter((item) => item.kind === "message" && item.role === "assistant");
-    const latestAssistant = assistantMessages.at(-1);
-
-    if (state.lastError) {
-      throw new Error(`Capture failed: ${state.lastError}`);
-    }
-
-    if (
-      session?.status === "idle" &&
-      latestAssistant &&
-      latestAssistant.text.trim().length >= options.minimumAssistantLength
-    ) {
-      return;
-    }
-    await hold(250);
-  }
-  throw new Error(`Timed out waiting for response after ${options.timeoutMs}ms`);
-}
-
 // ---------------------------------------------------------------------------
 // Clip capture functions
 // ---------------------------------------------------------------------------
 
-async function captureParallelSessions(page: Page): Promise<void> {
+async function captureParallelSessions(
+  page: Page,
+  evidenceDir: string,
+  model: { readonly provider: string; readonly modelId: string },
+): Promise<void> {
   console.log("  Capturing parallel sessions...");
-  const framesDir = await mkdtemp(path.join(tmpdir(), "pi-capture-parallel-"));
+  const framesDir = path.join(evidenceDir, "frames");
+  await mkdir(framesDir, { recursive: true });
 
-  // Create two sessions via IPC (workspace already added by main)
-  const workspaceId = await page.evaluate(async () => {
-    const app = (window as PiAppWindow).piApp;
-    if (!app) throw new Error("piApp unavailable");
-    const state = await app.getState();
-    const workspace = state.workspaces[0];
-    if (!workspace) throw new Error("Expected workspace");
-    await app.createSession({ workspaceId: workspace.id, title: "Backend refactor" });
-    await app.createSession({ workspaceId: workspace.id, title: "Fix login bug" });
-    return workspace.id;
-  });
+  const started = await page.evaluate(
+    async ({ nextProvider, nextModelId }) => {
+      const app = (window as PiAppWindow).piApp;
+      if (!app) throw new Error("piApp unavailable");
+      const initialState = await app.getState();
+      const workspace = initialState.workspaces[0];
+      if (!workspace) throw new Error("Expected workspace");
+      const rootWorkspaceId = workspace.rootWorkspaceId ?? workspace.id;
+      const firstState = await app.startThread({
+        rootWorkspaceId,
+        environment: "local",
+        prompt:
+          "Analyze the project structure and suggest three architectural improvements. Be concise.",
+        provider: nextProvider,
+        modelId: nextModelId,
+      });
+      const firstSessionId = firstState.selectedSessionId;
+      if (!firstSessionId) throw new Error("First showcase thread did not return a session ID");
+      const secondState = await app.startThread({
+        rootWorkspaceId,
+        environment: "local",
+        prompt: "List the top 5 files in this project by importance. One sentence each.",
+        provider: nextProvider,
+        modelId: nextModelId,
+      });
+      const secondSessionId = secondState.selectedSessionId;
+      if (!secondSessionId) throw new Error("Second showcase thread did not return a session ID");
+      return { workspaceId: workspace.id, firstSessionId, secondSessionId };
+    },
+    { nextProvider: model.provider, nextModelId: model.modelId },
+  );
 
-  await hold(600);
-
-  // Wait for both sessions to appear
-  let sessionAId = "";
-  let sessionBId = "";
-  const deadline = Date.now() + 10_000;
+  let bothRunning = false;
+  const deadline = Date.now() + 30_000;
   while (Date.now() < deadline) {
     const state = await getDesktopState(page);
-    const ws = state.workspaces.find((w) => w.id === workspaceId);
-    const a = ws?.sessions.find((s) => s.title === "Backend refactor");
-    const b = ws?.sessions.find((s) => s.title === "Fix login bug");
-    if (a && b) {
-      sessionAId = a.id;
-      sessionBId = b.id;
+    const workspace = state.workspaces.find((entry) => entry.id === started.workspaceId);
+    const first = workspace?.sessions.find((session) => session.id === started.firstSessionId);
+    const second = workspace?.sessions.find((session) => session.id === started.secondSessionId);
+    if (first?.status === "running" && second?.status === "running") {
+      bothRunning = true;
       break;
     }
     await hold(200);
   }
+  if (!bothRunning) {
+    throw new Error("Both showcase sessions did not reach running state before recording");
+  }
 
-  // Start recording
   const stopRecording = startFrameRecorder(page, framesDir);
+  let captureSucceeded = false;
 
   try {
     await hold(800);
-
-    // Fire prompt in session A
-    const promptA = "Analyze the project structure and suggest three architectural improvements. Be concise.";
-    await page.evaluate(({ workspaceId: wId, sessionId, prompt }) => {
-      const app = (window as PiAppWindow).piApp;
-      if (!app) throw new Error("piApp unavailable");
-      void app.selectSession({ workspaceId: wId, sessionId }).then(() => app.submitComposer(prompt));
-    }, { workspaceId, sessionId: sessionAId, prompt: promptA });
-
-    // Wait until A is running
-    const aRunDeadline = Date.now() + 30_000;
-    while (Date.now() < aRunDeadline) {
-      const state = await getDesktopState(page);
-      const ws = state.workspaces.find((w) => w.id === workspaceId);
-      if (ws?.sessions.find((s) => s.id === sessionAId)?.status === "running") break;
-      await hold(200);
-    }
-
-    // Let session A stream briefly
-    await hold(2000);
-
-    // Fire prompt in session B
-    const promptB = "List the top 5 files in this project by importance. One sentence each.";
-    await page.evaluate(({ workspaceId: wId, sessionId, prompt }) => {
-      const app = (window as PiAppWindow).piApp;
-      if (!app) throw new Error("piApp unavailable");
-      void app.selectSession({ workspaceId: wId, sessionId }).then(() => app.submitComposer(prompt));
-    }, { workspaceId, sessionId: sessionBId, prompt: promptB });
-
-    // Let B stream while visible
+    await page.evaluate(
+      ({ workspaceId: wId, sessionId }) => {
+        const app = (window as PiAppWindow).piApp;
+        if (!app) throw new Error("piApp unavailable");
+        return app.selectSession({ workspaceId: wId, sessionId });
+      },
+      { workspaceId: started.workspaceId, sessionId: started.firstSessionId },
+    );
     await hold(2500);
-
-    // Switch back to session A to show both running
-    await page.evaluate(({ workspaceId: wId, sessionId }) => {
-      const app = (window as PiAppWindow).piApp;
-      if (!app) throw new Error("piApp unavailable");
-      void app.selectSession({ workspaceId: wId, sessionId });
-    }, { workspaceId, sessionId: sessionAId });
-
-    // Show A's progress
-    await hold(2500);
-
-    // Switch to B
-    await page.evaluate(({ workspaceId: wId, sessionId }) => {
-      const app = (window as PiAppWindow).piApp;
-      if (!app) throw new Error("piApp unavailable");
-      void app.selectSession({ workspaceId: wId, sessionId });
-    }, { workspaceId, sessionId: sessionBId });
-
-    // Hold on B
+    await page.evaluate(
+      ({ workspaceId: wId, sessionId }) => {
+        const app = (window as PiAppWindow).piApp;
+        if (!app) throw new Error("piApp unavailable");
+        return app.selectSession({ workspaceId: wId, sessionId });
+      },
+      { workspaceId: started.workspaceId, sessionId: started.secondSessionId },
+    );
     await hold(2000);
+    await page.evaluate(async ({ workspaceId: wId, firstSessionId, secondSessionId }) => {
+      const app = (window as PiAppWindow).piApp;
+      if (!app) throw new Error("piApp unavailable");
+      await app.selectSession({ workspaceId: wId, sessionId: firstSessionId });
+      await app.cancelCurrentRun();
+      await app.selectSession({ workspaceId: wId, sessionId: secondSessionId });
+      await app.cancelCurrentRun();
+    }, started);
+    captureSucceeded = true;
   } finally {
     const frameCount = await stopRecording();
     console.log(`  Captured ${frameCount} frames`);
-    await renderClip(framesDir, path.join(capturesDir, "parallel-sessions.mp4"));
-    await rm(framesDir, { recursive: true, force: true });
+    if (captureSucceeded) {
+      await renderClip(framesDir, path.join(capturesDir, "parallel-sessions.mp4"));
+    }
+    console.log(`  Retained frames in ${framesDir}`);
   }
 }
 
-async function captureSlashCommands(page: Page): Promise<void> {
+async function captureSlashCommands(page: Page, evidenceDir: string): Promise<void> {
   console.log("  Capturing slash commands...");
-  const framesDir = await mkdtemp(path.join(tmpdir(), "pi-capture-slash-"));
+  const framesDir = path.join(evidenceDir, "frames");
+  await mkdir(framesDir, { recursive: true });
 
   // Create a session so the composer is visible
   await page.evaluate(async () => {
@@ -220,6 +204,7 @@ async function captureSlashCommands(page: Page): Promise<void> {
   await page.waitForSelector('[data-testid="composer"]', { state: "visible", timeout: 10_000 });
 
   const stopRecording = startFrameRecorder(page, framesDir);
+  let captureSucceeded = false;
   try {
     await hold(600);
 
@@ -250,19 +235,24 @@ async function captureSlashCommands(page: Page): Promise<void> {
     await hold(400);
     await page.keyboard.press("Escape");
     await hold(500);
+    captureSucceeded = true;
   } finally {
     const frameCount = await stopRecording();
     console.log(`  Captured ${frameCount} frames`);
-    await renderClip(framesDir, path.join(capturesDir, "slash-commands.mp4"));
-    await rm(framesDir, { recursive: true, force: true });
+    if (captureSucceeded) {
+      await renderClip(framesDir, path.join(capturesDir, "slash-commands.mp4"));
+    }
+    console.log(`  Retained frames in ${framesDir}`);
   }
 }
 
-async function captureSkillsSettings(page: Page): Promise<void> {
+async function captureSkillsSettings(page: Page, evidenceDir: string): Promise<void> {
   console.log("  Capturing skills & settings...");
-  const framesDir = await mkdtemp(path.join(tmpdir(), "pi-capture-skills-"));
+  const framesDir = path.join(evidenceDir, "frames");
+  await mkdir(framesDir, { recursive: true });
 
   const stopRecording = startFrameRecorder(page, framesDir);
+  let captureSucceeded = false;
   try {
     await hold(600);
 
@@ -281,11 +271,14 @@ async function captureSkillsSettings(page: Page): Promise<void> {
       return app.setActiveView("settings");
     });
     await hold(3000);
+    captureSucceeded = true;
   } finally {
     const frameCount = await stopRecording();
     console.log(`  Captured ${frameCount} frames`);
-    await renderClip(framesDir, path.join(capturesDir, "skills-settings.mp4"));
-    await rm(framesDir, { recursive: true, force: true });
+    if (captureSucceeded) {
+      await renderClip(framesDir, path.join(capturesDir, "skills-settings.mp4"));
+    }
+    console.log(`  Retained frames in ${framesDir}`);
   }
 }
 
@@ -296,11 +289,35 @@ async function captureSkillsSettings(page: Page): Promise<void> {
 /** Launch a fresh Electron instance, add workspace, run capture, then close. */
 async function withFreshApp(
   workspacePath: string,
-  capture: (page: Page) => Promise<void>,
+  evidenceDir: string,
+  provider: string,
+  modelId: string,
+  capture: (
+    page: Page,
+    evidenceDir: string,
+    model: { readonly provider: string; readonly modelId: string },
+  ) => Promise<void>,
 ): Promise<void> {
-  const userDataDir = await mkdtemp(path.join(tmpdir(), "pi-app-showcase-"));
+  const userDataDir = path.join(evidenceDir, "user-data");
+  const agentDir = path.join(userDataDir, "agent");
+  await mkdir(agentDir, { recursive: true });
+  await writeFile(path.join(agentDir, "auth.json"), "{}\n", "utf8");
+  await writeFile(
+    path.join(agentDir, "settings.json"),
+    `${JSON.stringify(
+      {
+        defaultProvider: provider,
+        defaultModel: modelId,
+        defaultThinkingLevel: "medium",
+        enabledModels: [`${provider}/${modelId}`],
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
   // Launch without initial workspaces — matches readme-demo.mts pattern
-  const harness = await launchDesktop(userDataDir);
+  const harness = await launchDesktop(userDataDir, { agentDir });
   try {
     const page = await harness.firstWindow();
     // Bring window to front
@@ -313,18 +330,33 @@ async function withFreshApp(
     await page.waitForSelector(".shell", { state: "visible", timeout: 15_000 });
     console.log("  App rendered successfully");
 
-    await capture(page);
+    await capture(page, evidenceDir, { provider, modelId });
   } finally {
     await harness.close();
-    await rm(userDataDir, { recursive: true, force: true });
+    console.log(`  Retained synthetic profile and frames in ${evidenceDir}`);
   }
 }
 
 async function main(): Promise<void> {
+  if (process.env.PI_GUI_MARKETING_ALLOW_PROVIDER_ENV !== "1") {
+    throw new Error(
+      "Showcase capture submits real prompts. Set PI_GUI_MARKETING_ALLOW_PROVIDER_ENV=1 plus PI_GUI_MARKETING_PROVIDER and PI_GUI_MARKETING_MODEL to opt in to provider environment variables.",
+    );
+  }
+  const provider = process.env.PI_GUI_MARKETING_PROVIDER?.trim();
+  const modelId = process.env.PI_GUI_MARKETING_MODEL?.trim();
+  if (!provider || !modelId) {
+    throw new Error(
+      "PI_GUI_MARKETING_PROVIDER and PI_GUI_MARKETING_MODEL are required for showcase capture.",
+    );
+  }
+
   console.log("Pi Desktop Showcase Capture");
   console.log("==========================\n");
 
   await mkdir(capturesDir, { recursive: true });
+  await mkdir(evidenceRoot, { recursive: true });
+  const runDir = await mkdtemp(path.join(evidenceRoot, "run-"));
 
   // Create a workspace with demo skills so the Skills view has content
   const workspacePath = await makeWorkspace("demo-project");
@@ -342,18 +374,37 @@ async function main(): Promise<void> {
   );
 
   console.log("Clip 1/3: Parallel Sessions");
-  await withFreshApp(workspacePath, captureParallelSessions);
+  await withFreshApp(
+    workspacePath,
+    await mkdtemp(path.join(runDir, "parallel-")),
+    provider,
+    modelId,
+    captureParallelSessions,
+  );
   console.log("  Done.\n");
 
   console.log("Clip 2/3: Slash Commands");
-  await withFreshApp(workspacePath, captureSlashCommands);
+  await withFreshApp(
+    workspacePath,
+    await mkdtemp(path.join(runDir, "slash-")),
+    provider,
+    modelId,
+    captureSlashCommands,
+  );
   console.log("  Done.\n");
 
   console.log("Clip 3/3: Skills & Settings");
-  await withFreshApp(workspacePath, captureSkillsSettings);
+  await withFreshApp(
+    workspacePath,
+    await mkdtemp(path.join(runDir, "skills-")),
+    provider,
+    modelId,
+    captureSkillsSettings,
+  );
   console.log("  Done.\n");
 
   console.log("All clips captured to video/public/captures/");
+  console.log(`Retained capture profiles and frames in ${runDir}`);
 }
 
 void main().catch((error: unknown) => {

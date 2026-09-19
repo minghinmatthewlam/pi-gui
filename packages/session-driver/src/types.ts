@@ -338,7 +338,10 @@ export interface SessionDriver {
   archiveSession(sessionRef: SessionRef): Promise<void>;
   unarchiveSession(sessionRef: SessionRef): Promise<void>;
   sendUserMessage(sessionRef: SessionRef, input: SessionMessageInput): Promise<void>;
-  replaceQueuedMessages(sessionRef: SessionRef, messages: readonly SessionQueuedMessage[]): Promise<void>;
+  replaceQueuedMessages(
+    sessionRef: SessionRef,
+    messages: readonly SessionQueuedMessage[],
+  ): Promise<void>;
   cancelCurrentRun(sessionRef: SessionRef): Promise<void>;
   setSessionModel(sessionRef: SessionRef, selection: SessionModelSelection): Promise<void>;
   setSessionThinkingLevel(sessionRef: SessionRef, thinkingLevel: string): Promise<void>;
@@ -351,8 +354,23 @@ export interface SessionDriver {
     targetId: string,
     options?: NavigateSessionTreeOptions,
   ): Promise<NavigateSessionTreeResult>;
-  getSessionCommands(sessionRef: SessionRef): Promise<readonly import("./runtime-types.js").RuntimeCommandRecord[]>;
+  getSessionCommands(
+    sessionRef: SessionRef,
+  ): Promise<readonly import("./runtime-types.js").RuntimeCommandRecord[]>;
   respondToHostUiRequest(sessionRef: SessionRef, response: HostUiResponse): Promise<void>;
   subscribe(sessionRef: SessionRef, listener: SessionEventListener): Unsubscribe;
   closeSession(sessionRef: SessionRef): Promise<void>;
+}
+
+export interface SessionSchemaInfo {
+  /**
+   * The session file's header version. `undefined` when the file has no
+   * readable session header (e.g. missing/corrupt), in which case skew cannot
+   * be determined and is assumed absent.
+   */
+  readonly fileSchemaVersion: number | undefined;
+  /** The bundled runtime's schema version. */
+  readonly runtimeSchemaVersion: number;
+  /** True when the file was written by a newer pi than the bundled runtime. */
+  readonly writtenByNewerRuntime: boolean;
 }

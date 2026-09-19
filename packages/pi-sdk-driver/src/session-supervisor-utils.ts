@@ -7,10 +7,11 @@ import type {
   SessionRef,
   SessionSnapshot,
   SessionStatus,
+  SessionTranscriptAttachment,
+  SessionTranscriptItem,
   WorkspaceRef,
 } from "@pi-gui/session-driver";
 import type { SessionQueuedMessage } from "@pi-gui/session-driver/types";
-import type { SessionTranscriptAttachment, SessionTranscriptItem } from "./transcript.js";
 
 const FILE_ATTACHMENT_BLOCK_START = "<pi-gui-file-attachments>";
 const FILE_ATTACHMENT_BLOCK_END = "</pi-gui-file-attachments>";
@@ -45,7 +46,9 @@ export function buildSnapshot(source: SnapshotSource): SessionSnapshot {
             ...message,
             ...(message.attachments
               ? {
-                  attachments: message.attachments.map((attachment: SessionAttachment) => ({ ...attachment })),
+                  attachments: message.attachments.map((attachment: SessionAttachment) => ({
+                    ...attachment,
+                  })),
                 }
               : {}),
           })),
@@ -63,30 +66,39 @@ export function deriveSessionConfig(sessionManager: {
   const context = sessionManager.buildSessionContext();
   const config: SessionConfig = {
     ...(context.model ? { provider: context.model.provider, modelId: context.model.modelId } : {}),
-    ...(context.thinkingLevel && context.thinkingLevel !== "off" ? { thinkingLevel: context.thinkingLevel } : {}),
+    ...(context.thinkingLevel && context.thinkingLevel !== "off"
+      ? { thinkingLevel: context.thinkingLevel }
+      : {}),
   };
   return Object.keys(config).length > 0 ? config : undefined;
 }
 
-export function forcePersistSession(sessionManager: object): void {
-  const writableSessionManager = sessionManager as {
-    _rewriteFile?: () => void;
-    flushed?: boolean;
-  };
-  const maybeRewrite = writableSessionManager._rewriteFile;
-  maybeRewrite?.call(sessionManager);
-  if (maybeRewrite) {
-    // Pi 0.80 defers first writes until the assistant response; keep its
-    // internal append/create mode aligned when the desktop forces an early file.
-    writableSessionManager.flushed = true;
-  }
+/**
+ * Whether an agent event's driver events should be persisted to the catalog
+ * before they are emitted.
+ *
+ * Streaming partials (`message_update`) only mutate in-memory preview state, so
+ * persisting on each one bought nothing and cost an atomic catalog write -- full
+ * re-read, re-serialize, fsync, rename, directory fsync -- per token, all
+ * serialized on the catalog's single mutation queue. Any other session
+ * operation that writes the catalog (most visibly createSession) then waited out
+ * the whole delta backlog.
+ *
+ * Crash-recovery state stays current to the last message boundary:
+ * `message_start`/`message_end`, `tool_execution_*`, `agent_end` and every other
+ * snapshot-producing event still persist. The one observable trade-off is that
+ * the catalog's `previewSnippet` no longer refreshes per token; it catches up at
+ * the next discrete event.
+ */
+export function shouldPersistSnapshotForAgentEvent(eventType: string): boolean {
+  return eventType !== "message_update";
 }
 
-export function sessionKey(sessionRef: SessionRef): string {
-  return `${sessionRef.workspaceId}:${sessionRef.sessionId}`;
-}
-
-export function workspaceToRef(workspace: { workspaceId: string; path: string; displayName: string }): WorkspaceRef {
+export function workspaceToRef(workspace: {
+  workspaceId: string;
+  path: string;
+  displayName: string;
+}): WorkspaceRef {
   return {
     workspaceId: workspace.workspaceId,
     path: workspace.path,
@@ -146,17 +158,22 @@ export function extractPreview(message: unknown): string | undefined {
   return undefined;
 }
 
-export function determineRunOutcome(messages: readonly unknown[]): {
-  success: boolean;
-  error?: SessionErrorInfo;
-} {
+export type RunOutcome =
+  | { readonly status: "completed" }
+  | { readonly status: "cancelled" }
+  | { readonly status: "failed"; readonly error: SessionErrorInfo };
+
+export function determineRunOutcome(
+  messages: readonly unknown[],
+  cancellationRequested = false,
+): RunOutcome {
   for (let i = messages.length - 1; i >= 0; i--) {
     const message = messages[i];
-    if (!isRecord(message) || message.role !== "assistant") {
-      continue;
-    }
-
+    if (!isRecord(message) || message.role !== "assistant") continue;
     const stopReason = typeof message.stopReason === "string" ? message.stopReason : undefined;
+    if (stopReason === "aborted" && cancellationRequested) {
+      return { status: "cancelled" };
+    }
     if (stopReason === "error" || stopReason === "aborted") {
       const messageText =
         typeof message.errorMessage === "string" && message.errorMessage.trim().length > 0
@@ -164,18 +181,11 @@ export function determineRunOutcome(messages: readonly unknown[]): {
           : stopReason === "aborted"
             ? "Run aborted"
             : "Run failed";
-      return {
-        success: false,
-        error: {
-          message: messageText,
-          code: stopReason.toUpperCase(),
-        },
-      };
+      return { status: "failed", error: { message: messageText, code: stopReason.toUpperCase() } };
     }
     break;
   }
-
-  return { success: true };
+  return { status: "completed" };
 }
 
 export function toSessionErrorInfo(error: unknown, code: string): SessionErrorInfo {
@@ -209,7 +219,11 @@ export function injectFileAttachmentPreamble(
   text: string,
   attachments: readonly SessionAttachment[] | undefined,
 ): string {
-  const files = attachments?.filter((attachment): attachment is Extract<SessionAttachment, { readonly kind: "file" }> => attachment.kind === "file") ?? [];
+  const files =
+    attachments?.filter(
+      (attachment): attachment is Extract<SessionAttachment, { readonly kind: "file" }> =>
+        attachment.kind === "file",
+    ) ?? [];
   if (files.length === 0) {
     return text;
   }
@@ -228,7 +242,10 @@ export function injectFileAttachmentPreamble(
   return text ? `${block}\n${text}` : block;
 }
 
-export function transcriptFromMessages(messages: readonly unknown[], fallbackTimestamp = nowIso()): SessionTranscriptItem[] {
+export function transcriptFromMessages(
+  messages: readonly unknown[],
+  fallbackTimestamp = nowIso(),
+): SessionTranscriptItem[] {
   const transcript: SessionTranscriptItem[] = [];
   const toolIndexByCallId = new Map<string, number>();
 
@@ -245,7 +262,12 @@ export function transcriptFromMessages(messages: readonly unknown[], fallbackTim
       continue;
     }
 
-    if (role !== "user" && role !== "assistant" && role !== "branchSummary" && role !== "compactionSummary") {
+    if (
+      role !== "user" &&
+      role !== "assistant" &&
+      role !== "branchSummary" &&
+      role !== "compactionSummary"
+    ) {
       continue;
     }
 
@@ -386,7 +408,12 @@ function messageAttachments(message: Record<string, unknown>) {
       return stripSerializedFileAttachments(part.text, message.role).attachments;
     }
 
-    if (!isRecord(part) || part.type !== "image" || typeof part.data !== "string" || typeof part.mimeType !== "string") {
+    if (
+      !isRecord(part) ||
+      part.type !== "image" ||
+      typeof part.data !== "string" ||
+      typeof part.mimeType !== "string"
+    ) {
       return [];
     }
 
@@ -438,13 +465,22 @@ function stripSerializedFileAttachments(
 
 function parseSerializedFileAttachments(payload: string): SessionTranscriptAttachment[] {
   try {
-    const parsed = JSON.parse(payload) as { readonly version?: unknown; readonly files?: readonly unknown[] };
+    const parsed = JSON.parse(payload) as {
+      readonly version?: unknown;
+      readonly files?: readonly unknown[];
+    };
     if (parsed.version !== 1 || !Array.isArray(parsed.files)) {
       return [];
     }
 
     return parsed.files.flatMap((entry) => {
-      if (!isRecord(entry) || entry.kind !== "file" || typeof entry.name !== "string" || typeof entry.mimeType !== "string" || typeof entry.fsPath !== "string") {
+      if (
+        !isRecord(entry) ||
+        entry.kind !== "file" ||
+        typeof entry.name !== "string" ||
+        typeof entry.mimeType !== "string" ||
+        typeof entry.fsPath !== "string"
+      ) {
         return [];
       }
 

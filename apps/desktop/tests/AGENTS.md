@@ -5,10 +5,10 @@ Apply these rules under `apps/desktop/tests/`.
 - Use the lane scripts in `apps/desktop/package.json` before inventing ad hoc Playwright commands.
 - Pick the smallest lane that matches the changed surface:
 - `core`: background-friendly UI flows inside the Electron window. Default for renderer, sidebar, composer, session, persistence, and worktree UI changes.
-- `live`: real provider/runtime runs. Use for transcript, tool-call, parallel-run, and notification behavior that depends on actual agent execution.
+- `live`: runtime integration, including deterministic local extensions and opt-in real-provider specs. Inspect the selected spec: a green lane with provider specs skipped does not prove real requests. Use real-provider coverage for transcript, tool-call, parallel-run, and notification behavior that depends on actual agent execution.
 - `native`: macOS OS-surface flows such as folder pickers, image pickers, and real clipboard paste. These are foreground-only and focus-sensitive.
 - `production`: opt-in higher-fidelity smokes such as real-auth `live`, packaged-app launch, and real macOS open-panel coverage. Keep these out of the default `core` and `native` globs so fast lanes stay stable.
-- `pnpm --filter @pi-gui/desktop run test:e2e` currently runs only `core`. Use `test:e2e:all` only when you need all lanes.
+- `pnpm --filter @pi-gui/desktop run test:e2e` currently runs only `core`. `test:e2e:all` runs core, live, and native; it does not include production, dev, or demo specs.
 - For `native`, prefer the targeted native spec by default. Expand to `test:e2e:native` only when the change touches shared native helpers, multiple native specs, or lane-wide native behavior.
 - Keep `tests/production` behind dedicated scripts or direct `test:e2e:runner` invocations; do not place those specs under `tests/core` or `tests/native`.
 - Prefer repo lanes over manual Computer Use. If the local Codex skill `$pi-gui-computer-use-smoke` is installed, use it only for release-readiness sweeps on the real installed app or for focus-hostile native surfaces where Playwright is the wrong proof shape.
@@ -18,4 +18,5 @@ Apply these rules under `apps/desktop/tests/`.
 - `pasteTinyPng()` proves the renderer paste handler and is suitable for background/core coverage.
 - `pasteTinyPngViaClipboard()` proves real Electron clipboard paste and belongs in foreground/native coverage.
 - Native failures can be environmental. Before treating a native failure as a product regression, rerun with a clean foreground window and no competing keyboard or mouse input.
+- Report which evidence actually ran: fixture-backed Electron, deterministic runtime integration, real-provider conversation, native OS, or packaged artifact. For visible conversation proof without injected events, use the checked-in [verify-pi-gui skill](../../../.agents/skills/verify-pi-gui/SKILL.md); its settings smoke is not conversation proof.
 - Real-auth `live` specs must opt in explicitly via `PI_APP_REAL_AUTH=1` plus `PI_APP_REAL_AUTH_SOURCE_DIR=/absolute/path/to/agent`; otherwise they should skip cleanly.

@@ -4,7 +4,7 @@ import { promisify } from "node:util";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import type { SessionDriverEvent, SessionRef } from "@pi-gui/session-driver";
-import { reviewedFilesKey } from "../../src/reviewed-files-store";
+import { reviewedFilesKey } from "../../src/features/workbench/reviewed-files-store";
 import {
   commitAllInGitRepo,
   createNamedThread,
@@ -19,7 +19,11 @@ import {
 
 const execFileAsync = promisify(execFile);
 
-async function commitFiles(workspacePath: string, paths: readonly string[], message: string): Promise<void> {
+async function commitFiles(
+  workspacePath: string,
+  paths: readonly string[],
+  message: string,
+): Promise<void> {
   await execFileAsync("git", ["add", "--", ...paths], { cwd: workspacePath });
   await execFileAsync("git", ["commit", "-m", message], { cwd: workspacePath });
 }
@@ -46,11 +50,7 @@ async function seedThreeFileWorkspace(): Promise<string> {
     "export const x = 1; // changed\nexport function add(a: number, b: number) { return a + b; }\n",
     "utf8",
   );
-  await writeFile(
-    join(workspacePath, "script.py"),
-    "def hello():\n    return 'hi'\n",
-    "utf8",
-  );
+  await writeFile(join(workspacePath, "script.py"), "def hello():\n    return 'hi'\n", "utf8");
   await writeFile(join(workspacePath, "notes.md"), "# notes\n\nMore.\n", "utf8");
   return workspacePath;
 }
@@ -104,9 +104,12 @@ test("syntax-highlights known languages and leaves unknown extensions plain", as
 
 test("reviewed checkboxes update counter, prune on changes, and survive relaunch", async () => {
   test.setTimeout(60_000);
-  const { harness, window: firstWindow, userDataDir, workspacePath } = await launchSeeded(
-    "Review UX checkboxes",
-  );
+  const {
+    harness,
+    window: firstWindow,
+    userDataDir,
+    workspacePath,
+  } = await launchSeeded("Review UX checkboxes");
   const sessionRef = await selectedSessionRef(firstWindow);
   const storageKey = reviewedFilesKey(sessionRef.workspaceId, sessionRef.sessionId);
 
@@ -130,9 +133,9 @@ test("reviewed checkboxes update counter, prune on changes, and survive relaunch
 
   await diffPanel.getByTestId("diff-panel-reviewed-src/foo.ts").uncheck();
   await expect(counter).toHaveText("Reviewed 0 of 3");
-  await expect(
-    diffPanel.locator('.diff-panel__file[data-file-path="src/foo.ts"]'),
-  ).not.toHaveClass(/diff-panel__file--reviewed/);
+  await expect(diffPanel.locator('.diff-panel__file[data-file-path="src/foo.ts"]')).not.toHaveClass(
+    /diff-panel__file--reviewed/,
+  );
   expect(
     await firstWindow.evaluate((key) => globalThis.localStorage.getItem(key), storageKey),
   ).toBeNull();
@@ -159,9 +162,9 @@ test("reviewed checkboxes update counter, prune on changes, and survive relaunch
     await expect(reopenedPanel.locator(".diff-panel__file")).toHaveCount(2);
     await expect(reopenedPanel.getByTestId("diff-panel-counter")).toHaveText("Reviewed 1 of 2");
 
-    expect(
-      await window.evaluate((key) => globalThis.localStorage.getItem(key), storageKey),
-    ).toBe(JSON.stringify([JSON.stringify([sessionRef.workspaceId, "script.py"])]));
+    expect(await window.evaluate((key) => globalThis.localStorage.getItem(key), storageKey)).toBe(
+      JSON.stringify([JSON.stringify([sessionRef.workspaceId, "script.py"])]),
+    );
   } finally {
     await reopened.close();
   }
@@ -177,7 +180,9 @@ test("Files mode shows a file browser and reader instead of the changes reviewer
     await expect(diffPanel.locator(".diff-panel__title")).toHaveText("Changes");
     await expect(diffPanel.getByTestId("diff-panel-counter")).toHaveText("Reviewed 0 of 3");
 
-    await diffPanel.locator('.diff-panel__file[data-file-path="src/foo.ts"] .diff-panel__file-name').click();
+    await diffPanel
+      .locator('.diff-panel__file[data-file-path="src/foo.ts"] .diff-panel__file-name')
+      .click();
     await expect(diffPanel.locator(".diff-inline")).toBeVisible();
 
     await window.locator(".topbar__actions").getByLabel("Toggle files").click();

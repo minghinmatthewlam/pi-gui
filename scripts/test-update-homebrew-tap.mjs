@@ -40,13 +40,16 @@ async function main() {
 
   const updatedContent = await readFile(caskPath, "utf8");
   assert.match(updatedContent, /version "0\.1\.0-beta\.2"/);
-  assert.match(updatedContent, /sha256 "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"/);
+  assert.match(
+    updatedContent,
+    /sha256 "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"/,
+  );
   assert.match(updatedContent, /url "https:\/\/example\.com\/pi-gui-0\.1\.0-beta\.2-universal\.dmg"/);
 
   process.stdout.write("Homebrew tap rewrite fixture passed.\n");
 }
 
 main().catch((error) => {
-  console.error(error instanceof Error ? error.stack ?? error.message : error);
+  console.error(error instanceof Error ? (error.stack ?? error.message) : error);
   process.exitCode = 1;
 });

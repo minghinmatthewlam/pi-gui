@@ -82,7 +82,10 @@ test("selecting an unread thread persists read state through the latest known ac
   const thirdRun = await launchDesktop(userDataDir, { testMode: "background" });
   try {
     const window = await thirdRun.firstWindow();
-    await expect(window.locator(".session-row", { hasText: title })).toHaveAttribute("data-sidebar-indicator", "none");
+    await expect(window.locator(".session-row", { hasText: title })).toHaveAttribute(
+      "data-sidebar-indicator",
+      "none",
+    );
   } finally {
     await thirdRun.close();
   }

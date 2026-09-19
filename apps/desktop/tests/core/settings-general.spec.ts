@@ -14,7 +14,11 @@ import {
 
 test("ignores persisted multiple app instance opt-in and hides the setting", async () => {
   const userDataDir = await makeUserDataDir();
-  await writeFile(join(userDataDir, "ui-state.json"), `${JSON.stringify({ allowMultiple: true }, null, 2)}\n`, "utf8");
+  await writeFile(
+    join(userDataDir, "ui-state.json"),
+    `${JSON.stringify({ allowMultiple: true }, null, 2)}\n`,
+    "utf8",
+  );
   const workspacePath = await makeWorkspace("allow-multiple-instances-disabled");
   const harness = await launchDesktop(userDataDir, {
     initialWorkspaces: [workspacePath],
@@ -26,18 +30,24 @@ test("ignores persisted multiple app instance opt-in and hides the setting", asy
     const window = await harness.firstWindow();
     await waitForWorkspaceByPath(window, workspacePath);
 
-    await expect.poll(async () => harness.electronApp.evaluate(({ app }) => app.hasSingleInstanceLock())).toBe(true);
+    await expect
+      .poll(async () => harness.electronApp.evaluate(({ app }) => app.hasSingleInstanceLock()))
+      .toBe(true);
     secondProcess = await spawnDesktopProcess(userDataDir, {
       initialWorkspaces: [workspacePath],
       testMode: "background",
     });
     await expect(await waitForProcessExit(secondProcess)).toEqual({ code: 0, signal: null });
     await expect
-      .poll(async () => harness.electronApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length))
+      .poll(async () =>
+        harness.electronApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length),
+      )
       .toBe(1);
     await expect
       .poll(async () => {
-        const persisted = JSON.parse(await readFile(join(userDataDir, "ui-state.json"), "utf8")) as {
+        const persisted = JSON.parse(
+          await readFile(join(userDataDir, "ui-state.json"), "utf8"),
+        ) as {
           readonly allowMultiple?: unknown;
         };
         return persisted.allowMultiple;
@@ -71,7 +81,10 @@ async function waitForProcessExit(
     const result = await Promise.race([
       once(child, "exit"),
       new Promise<never>((_resolve, reject) => {
-        timeout = setTimeout(() => reject(new Error("Timed out waiting for second app process to exit")), timeoutMs);
+        timeout = setTimeout(
+          () => reject(new Error("Timed out waiting for second app process to exit")),
+          timeoutMs,
+        );
       }),
     ]);
     const [code, signal] = result as [number | null, NodeJS.Signals | null];

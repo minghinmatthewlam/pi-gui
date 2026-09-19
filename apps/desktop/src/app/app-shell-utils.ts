@@ -1,4 +1,4 @@
-import type { AppView } from "../desktop-state";
+import type { AppView } from "../../contracts/desktop-state";
 
 export function isEventInsideTerminal(event: globalThis.KeyboardEvent): boolean {
   const target = event.target;

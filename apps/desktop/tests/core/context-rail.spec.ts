@@ -20,7 +20,9 @@ const RAIL_SURFACE_WIDTH_PX = 927;
 async function forceTimelineScrollbarWidth(window: Page, width: number): Promise<void> {
   await window.evaluate((scrollbarWidth) => {
     const attribute = "data-context-rail-scrollbar-proof";
-    const style = document.querySelector<HTMLStyleElement>(`style[${attribute}]`) ?? document.createElement("style");
+    const style =
+      document.querySelector<HTMLStyleElement>(`style[${attribute}]`) ??
+      document.createElement("style");
     style.setAttribute(attribute, "");
     style.textContent = `.timeline-pane--thread::-webkit-scrollbar { width: ${scrollbarWidth}px; }`;
     if (!style.isConnected) {
@@ -69,7 +71,11 @@ test("context rail lists prompts and scrolls to a turn; timing markers render", 
   const messages = [];
   for (let turn = 0; turn < TURN_COUNT; turn += 1) {
     const turnStart = base + turn * 60_000;
-    messages.push({ role: "user" as const, text: `PROMPT ${turn} unique-marker-${turn}`, timestampMs: turnStart });
+    messages.push({
+      role: "user" as const,
+      text: `PROMPT ${turn} unique-marker-${turn}`,
+      timestampMs: turnStart,
+    });
     messages.push({
       role: "assistant" as const,
       text: `Answer for turn ${turn}. ${"padding ".repeat(120)}`,
@@ -89,9 +95,12 @@ test("context rail lists prompts and scrolls to a turn; timing markers render", 
     await expect(window.getByTestId("transcript")).toBeVisible({ timeout: 15_000 });
 
     // Timing markers derived from the 8s prompt->answer spans.
-    await expect(window.getByTestId("timeline-turn-marker").first()).toContainText("Worked for 8s", {
-      timeout: 10_000,
-    });
+    await expect(window.getByTestId("timeline-turn-marker").first()).toContainText(
+      "Worked for 8s",
+      {
+        timeout: 10_000,
+      },
+    );
 
     const rail = window.getByTestId("timeline-context-rail");
     await expect(rail).toBeVisible();
@@ -111,21 +120,35 @@ test("context rail lists prompts and scrolls to a turn; timing markers render", 
       .poll(async () => pane.evaluate((el) => (el as HTMLElement).scrollTop), { timeout: 5_000 })
       .toBeLessThan(bottomScrollTop / 2);
 
-    const firstPromptRow = window.locator('[data-message-id]', { hasText: "PROMPT 0 unique-marker-0" });
+    const firstPromptRow = window.locator("[data-message-id]", {
+      hasText: "PROMPT 0 unique-marker-0",
+    });
     await expect(firstPromptRow).toBeInViewport();
 
     // The rail sits in the outer margin: the transcript keeps its full reading
     // measure with both overlay-style and space-consuming classic scrollbars.
     await forceTimelineScrollbarWidth(window, 0);
-    await expect(window.getByTestId("transcript")).toHaveJSProperty("clientWidth", READING_MEASURE_PX);
+    await expect(window.getByTestId("transcript")).toHaveJSProperty(
+      "clientWidth",
+      READING_MEASURE_PX,
+    );
     if (proofDir) {
-      await window.screenshot({ path: join(proofDir, "context-rail-overlay-scrollbar.png"), fullPage: false });
+      await window.screenshot({
+        path: join(proofDir, "context-rail-overlay-scrollbar.png"),
+        fullPage: false,
+      });
     }
 
     await forceTimelineScrollbarWidth(window, CLASSIC_SCROLLBAR_WIDTH_PX);
-    await expect(window.getByTestId("transcript")).toHaveJSProperty("clientWidth", READING_MEASURE_PX);
+    await expect(window.getByTestId("transcript")).toHaveJSProperty(
+      "clientWidth",
+      READING_MEASURE_PX,
+    );
     if (proofDir) {
-      await window.screenshot({ path: join(proofDir, "context-rail-classic-scrollbar.png"), fullPage: false });
+      await window.screenshot({
+        path: join(proofDir, "context-rail-classic-scrollbar.png"),
+        fullPage: false,
+      });
     }
 
     const surface = window.locator(".timeline-surface");
@@ -136,7 +159,10 @@ test("context rail lists prompts and scrolls to a turn; timing markers render", 
     }, RAIL_SURFACE_WIDTH_PX - 1);
     await expect(surface).toHaveJSProperty("clientWidth", RAIL_SURFACE_WIDTH_PX - 1);
     await expect(rail).toBeHidden();
-    await expect(window.getByTestId("transcript")).toHaveJSProperty("clientWidth", READING_MEASURE_PX);
+    await expect(window.getByTestId("transcript")).toHaveJSProperty(
+      "clientWidth",
+      READING_MEASURE_PX,
+    );
     await conversation.evaluate((el) => {
       (el as HTMLElement).style.removeProperty("width");
     });

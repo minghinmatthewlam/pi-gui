@@ -1,5 +1,5 @@
-import type { FileWorkbenchContext } from "../diff-panel-types";
-import type { WorkspaceRecord, WorktreeRecord } from "../desktop-state";
+import type { FileWorkbenchContext } from "../features/workbench/diff-panel-types";
+import type { WorkspaceRecord, WorktreeRecord } from "../../contracts/desktop-state";
 
 export function buildFileWorkbenchContexts({
   workspaces,
@@ -19,11 +19,13 @@ export function buildFileWorkbenchContexts({
   }
 
   const workspacesById = new Map(workspaces.map((workspace) => [workspace.id, workspace] as const));
-  const contexts: FileWorkbenchContext[] = [{
-    workspace: selectedWorkspace,
-    role: "thread",
-    sessionTitle: selectedSessionTitle,
-  }];
+  const contexts: FileWorkbenchContext[] = [
+    {
+      workspace: selectedWorkspace,
+      role: "thread",
+      sessionTitle: selectedSessionTitle,
+    },
+  ];
   const seenWorkspaceIds = new Set([selectedWorkspace.id]);
 
   const addWorkspace = (

@@ -216,26 +216,11 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
-      - name: Validate Windows signing credentials
-        shell: pwsh
-        env:
-          WINDOWS_CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
-          WINDOWS_CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}
-        run: |
-          foreach ($variable in "WINDOWS_CSC_LINK", "WINDOWS_CSC_KEY_PASSWORD") {
-            if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($variable))) {
-              throw "Missing required Windows release secret: $variable"
-            }
-          }
-
       - name: Typecheck
         run: pnpm typecheck
 
       - name: Package Windows
         shell: bash
-        env:
-          CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}
         run: |
           cd apps/desktop
           pnpm run build
@@ -248,7 +233,7 @@ jobs:
       - name: Verify packaged runtime dependencies
         run: pnpm --dir apps/desktop run verify:packaged-runtime-deps:windows
 
-      - name: Verify Windows signatures and architecture
+      - name: Verify Windows packages and architecture
         shell: pwsh
         run: |
           ./apps/desktop/scripts/verify-windows-release.ps1 `
@@ -330,6 +315,9 @@ jobs:
   verify-draft-macos:
     needs: stage-draft
     runs-on: macos-latest
+    # GitHub requires push access even to read unpublished draft assets.
+    permissions:
+      contents: write
 
     steps:
       - uses: actions/checkout@v4
@@ -367,6 +355,9 @@ jobs:
   verify-draft-linux:
     needs: stage-draft
     runs-on: ubuntu-latest
+    # GitHub requires push access even to read unpublished draft assets.
+    permissions:
+      contents: write
 
     steps:
       - uses: actions/checkout@v4
@@ -405,6 +396,9 @@ jobs:
   verify-draft-windows:
     needs: stage-draft
     runs-on: windows-latest
+    # GitHub requires push access even to read unpublished draft assets.
+    permissions:
+      contents: write
 
     steps:
       - uses: actions/checkout@v4
@@ -434,7 +428,7 @@ jobs:
             --commit "$GITHUB_SHA" \
             --input draft-release
 
-      - name: Verify draft Windows signatures
+      - name: Verify draft Windows packages
         shell: pwsh
         run: |
           ./apps/desktop/scripts/verify-windows-release.ps1 `
@@ -606,7 +600,7 @@ jobs:
             --commit "$GITHUB_SHA" \
             --input published-release
 
-      - name: Verify published Windows signatures
+      - name: Verify published Windows packages
         shell: pwsh
         run: |
           ./apps/desktop/scripts/verify-windows-release.ps1 `

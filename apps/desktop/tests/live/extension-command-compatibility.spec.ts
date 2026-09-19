@@ -48,7 +48,11 @@ test("fails fast for unsupported handoff-like commands and learns terminal-only 
   test.setTimeout(60_000);
   const userDataDir = await makeUserDataDir();
   const workspacePath = await makeWorkspace("extension-command-compatibility-workspace");
-  await writeProjectExtension(workspacePath, "compatibility-extension.ts", compatibilityExtensionSource);
+  await writeProjectExtension(
+    workspacePath,
+    "compatibility-extension.ts",
+    compatibilityExtensionSource,
+  );
 
   const harness = await launchDesktop(userDataDir, {
     initialWorkspaces: [workspacePath],
@@ -60,7 +64,11 @@ test("fails fast for unsupported handoff-like commands and learns terminal-only 
     const workspace = await waitForWorkspaceByPath(window, workspacePath);
     await createSessionViaIpc(window, workspacePath, "Compatibility session");
     await selectSession(window, "Compatibility session");
-    const compatibilitySession = await waitForSessionByTitle(window, workspace.id, "Compatibility session");
+    const compatibilitySession = await waitForSessionByTitle(
+      window,
+      workspace.id,
+      "Compatibility session",
+    );
     const compatibilitySessionKey = `${workspace.id}:${compatibilitySession.id}`;
     await expect
       .poll(
@@ -73,7 +81,8 @@ test("fails fast for unsupported handoff-like commands and learns terminal-only 
       .toBe(true);
 
     const sessionCountBefore =
-      (await getDesktopState(window)).workspaces.find((entry) => entry.id === workspace.id)?.sessions.length ?? 0;
+      (await getDesktopState(window)).workspaces.find((entry) => entry.id === workspace.id)
+        ?.sessions.length ?? 0;
     const composer = window.getByTestId("composer");
     const composerError = window.getByTestId("composer-error-banner");
 
@@ -84,27 +93,29 @@ test("fails fast for unsupported handoff-like commands and learns terminal-only 
       "/handoff-gui-test requires terminal-only custom UI and is not supported in pi-gui yet.",
     );
     await expect(window.getByTestId("extension-dialog")).toHaveCount(0);
-    await expect(window.locator(".timeline")).not.toContainText("Handoff ready. Submit when ready.");
+    await expect(window.locator(".timeline")).not.toContainText(
+      "Handoff ready. Submit when ready.",
+    );
     await expect
       .poll(
-        async () => (await getDesktopState(window)).workspaces.find((entry) => entry.id === workspace.id)?.sessions.length ?? 0,
+        async () =>
+          (await getDesktopState(window)).workspaces.find((entry) => entry.id === workspace.id)
+            ?.sessions.length ?? 0,
       )
       .toBe(sessionCountBefore);
 
     await composer.fill("/handoff-g");
     await expect(window.getByTestId("slash-menu")).toContainText("Terminal-only");
 
-    const transcriptCountBeforeSecondAttempt = (await getSelectedTranscript(window))?.transcript.length ?? 0;
+    const transcriptCountBeforeSecondAttempt =
+      (await getSelectedTranscript(window))?.transcript.length ?? 0;
     await composer.fill("/handoff-gui-test local block");
     await composer.press("Enter");
     await expect(composerError).toContainText(
       "/handoff-gui-test requires terminal-only custom UI and is not supported in pi-gui yet.",
     );
     await expect
-      .poll(
-        async () =>
-          (await getSelectedTranscript(window))?.transcript.length ?? 0,
-      )
+      .poll(async () => (await getSelectedTranscript(window))?.transcript.length ?? 0)
       .toBe(transcriptCountBeforeSecondAttempt);
 
     await composer.fill("/prefill-safe ");
@@ -114,7 +125,10 @@ test("fails fast for unsupported handoff-like commands and learns terminal-only 
 
     await window.getByRole("button", { name: "Extensions", exact: true }).click();
     await expect(window.getByTestId("extensions-surface")).toBeVisible();
-    await window.getByTestId("extensions-list").getByRole("button", { name: /compatibility-extension/i }).click();
+    await window
+      .getByTestId("extensions-list")
+      .getByRole("button", { name: /compatibility-extension/i })
+      .click();
     await expect(window.locator(".skill-detail")).toContainText("handoff-gui-test · Terminal-only");
     await expect(window.locator(".skill-detail")).toContainText("prefill-safe · GUI-compatible");
   } finally {
@@ -126,7 +140,11 @@ test("persists learned terminal-only command compatibility across relaunch", asy
   test.setTimeout(60_000);
   const userDataDir = await makeUserDataDir();
   const workspacePath = await makeWorkspace("extension-command-compatibility-relaunch-workspace");
-  await writeProjectExtension(workspacePath, "compatibility-extension.ts", compatibilityExtensionSource);
+  await writeProjectExtension(
+    workspacePath,
+    "compatibility-extension.ts",
+    compatibilityExtensionSource,
+  );
 
   const firstHarness = await launchDesktop(userDataDir, {
     initialWorkspaces: [workspacePath],
@@ -138,7 +156,11 @@ test("persists learned terminal-only command compatibility across relaunch", asy
     const workspace = await waitForWorkspaceByPath(firstWindow, workspacePath);
     await createSessionViaIpc(firstWindow, workspacePath, "Relaunch compatibility session");
     await selectSession(firstWindow, "Relaunch compatibility session");
-    const session = await waitForSessionByTitle(firstWindow, workspace.id, "Relaunch compatibility session");
+    const session = await waitForSessionByTitle(
+      firstWindow,
+      workspace.id,
+      "Relaunch compatibility session",
+    );
     const sessionKey = `${workspace.id}:${session.id}`;
     await expect
       .poll(
@@ -167,7 +189,11 @@ test("persists learned terminal-only command compatibility across relaunch", asy
   try {
     const secondWindow = await secondHarness.firstWindow();
     const workspace = await waitForWorkspaceByPath(secondWindow, workspacePath);
-    const session = await waitForSessionByTitle(secondWindow, workspace.id, "Relaunch compatibility session");
+    const session = await waitForSessionByTitle(
+      secondWindow,
+      workspace.id,
+      "Relaunch compatibility session",
+    );
     await selectSession(secondWindow, "Relaunch compatibility session");
     const sessionKey = `${workspace.id}:${session.id}`;
     await expect

@@ -1,6 +1,11 @@
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
-import { getDesktopState, launchDesktop, makeUserDataDir, makeWorkspace } from "../helpers/electron-app";
+import {
+  getDesktopState,
+  launchDesktop,
+  makeUserDataDir,
+  makeWorkspace,
+} from "../helpers/electron-app";
 import {
   emitAttentionRequest,
   emitCompletedEvent,
@@ -8,7 +13,11 @@ import {
   emitRunningEvent,
   readOptionalLog,
 } from "../helpers/notification-events";
-import { createThread, selectSessionByTitle, setSessionVisibilityOverride } from "./session-event-test-helpers";
+import {
+  createThread,
+  selectSessionByTitle,
+  setSessionVisibilityOverride,
+} from "./session-event-test-helpers";
 
 test("does not log a notification or blue dot for a focused selected session completion", async () => {
   const userDataDir = await makeUserDataDir();
@@ -33,7 +42,10 @@ test("does not log a notification or blue dot for a focused selected session com
     await expect
       .poll(async () => {
         const state = await getDesktopState(window);
-        return state.workspaces[0]?.sessions.find((entry) => entry.title === "Focused Session")?.status ?? "";
+        return (
+          state.workspaces[0]?.sessions.find((entry) => entry.title === "Focused Session")
+            ?.status ?? ""
+        );
       })
       .toBe("idle");
 
@@ -68,14 +80,18 @@ test("logs a completion notification and blue dot for a focused different sessio
     await expect
       .poll(async () => {
         const state = await getDesktopState(window);
-        return state.workspaces[0]?.sessions.find((entry) => entry.title === "Session A")?.status ?? "";
+        return (
+          state.workspaces[0]?.sessions.find((entry) => entry.title === "Session A")?.status ?? ""
+        );
       })
       .toBe("idle");
 
-    await expect.poll(() => readOptionalLog(notificationLogPath), { timeout: 30_000 }).toContain("Session A");
-    await expect.poll(() => readOptionalLog(notificationLogPath), { timeout: 30_000 }).toContain(
-      '"body":"Agent finished responding"',
-    );
+    await expect
+      .poll(() => readOptionalLog(notificationLogPath), { timeout: 30_000 })
+      .toContain("Session A");
+    await expect
+      .poll(() => readOptionalLog(notificationLogPath), { timeout: 30_000 })
+      .toContain('"body":"Agent finished responding"');
     await expect(window.locator(".session-row", { hasText: "Session A" })).toHaveAttribute(
       "data-sidebar-indicator",
       "unseen",
@@ -113,14 +129,19 @@ test("logs a completion notification and blue dot for a selected session after t
     await expect
       .poll(async () => {
         const state = await getDesktopState(window);
-        return state.workspaces[0]?.sessions.find((entry) => entry.title === "Selected Session")?.status ?? "";
+        return (
+          state.workspaces[0]?.sessions.find((entry) => entry.title === "Selected Session")
+            ?.status ?? ""
+        );
       })
       .toBe("idle");
 
-    await expect.poll(() => readOptionalLog(notificationLogPath), { timeout: 30_000 }).toContain("Selected Session");
-    await expect.poll(() => readOptionalLog(notificationLogPath), { timeout: 30_000 }).toContain(
-      '"body":"Agent finished responding"',
-    );
+    await expect
+      .poll(() => readOptionalLog(notificationLogPath), { timeout: 30_000 })
+      .toContain("Selected Session");
+    await expect
+      .poll(() => readOptionalLog(notificationLogPath), { timeout: 30_000 })
+      .toContain('"body":"Agent finished responding"');
     await expect(row).toHaveAttribute("data-sidebar-indicator", "unseen");
   } finally {
     await harness.close();
@@ -150,12 +171,19 @@ test("logs a failure notification and blue dot for a focused different session",
     await expect
       .poll(async () => {
         const state = await getDesktopState(window);
-        return state.workspaces[0]?.sessions.find((entry) => entry.title === "Failed Session A")?.status ?? "";
+        return (
+          state.workspaces[0]?.sessions.find((entry) => entry.title === "Failed Session A")
+            ?.status ?? ""
+        );
       })
       .toBe("failed");
 
-    await expect.poll(() => readOptionalLog(notificationLogPath), { timeout: 30_000 }).toContain("Failed Session A");
-    await expect.poll(() => readOptionalLog(notificationLogPath), { timeout: 30_000 }).toContain("The run failed");
+    await expect
+      .poll(() => readOptionalLog(notificationLogPath), { timeout: 30_000 })
+      .toContain("Failed Session A");
+    await expect
+      .poll(() => readOptionalLog(notificationLogPath), { timeout: 30_000 })
+      .toContain("The run failed");
     await expect(window.locator(".session-row", { hasText: "Failed Session A" })).toHaveAttribute(
       "data-sidebar-indicator",
       "unseen",
@@ -185,14 +213,15 @@ test("logs an attention-needed notification and blue dot for a focused different
 
     await emitAttentionRequest(harness, sessionA, "Attention", "Needs your approval");
 
-    await expect.poll(() => readOptionalLog(notificationLogPath), { timeout: 30_000 }).toContain("Attention Session A");
-    await expect.poll(() => readOptionalLog(notificationLogPath), { timeout: 30_000 }).toContain(
-      "Needs your approval",
-    );
-    await expect(window.locator(".session-row", { hasText: "Attention Session A" })).toHaveAttribute(
-      "data-sidebar-indicator",
-      "running",
-    );
+    await expect
+      .poll(() => readOptionalLog(notificationLogPath), { timeout: 30_000 })
+      .toContain("Attention Session A");
+    await expect
+      .poll(() => readOptionalLog(notificationLogPath), { timeout: 30_000 })
+      .toContain("Needs your approval");
+    await expect(
+      window.locator(".session-row", { hasText: "Attention Session A" }),
+    ).toHaveAttribute("data-sidebar-indicator", "running");
   } finally {
     await harness.close();
   }

@@ -29,6 +29,7 @@ export type {
   SessionQueuedMessage,
   SessionRef,
   SessionSnapshot,
+  SessionSchemaInfo,
   SessionStatus,
   SessionTreeNodeKind,
   SessionTreeNodeSnapshot,
@@ -62,3 +63,15 @@ export type {
   RuntimeSourceScope,
   RuntimeSnapshot,
 } from "./runtime-types.js";
+
+export type {
+  SessionTranscriptImageAttachment,
+  SessionTranscriptFileAttachment,
+  SessionTranscriptAttachment,
+  SessionTranscriptItem,
+  SessionTranscriptMessage,
+  SessionTranscriptRole,
+  SessionTranscriptToolCall,
+} from "./transcript.js";
+
+export { sessionKey } from "./identity.js";

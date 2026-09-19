@@ -1,10 +1,4 @@
-import {
-  HERO_BETA_NOTE,
-  OG_IMAGE_PATH,
-  SITE_DESCRIPTION,
-  SITE_NAME,
-  SITE_URL,
-} from "./site";
+import { HERO_BETA_NOTE, OG_IMAGE_PATH, SITE_DESCRIPTION, SITE_NAME, SITE_URL } from "./site";
 
 const GITHUB_URL = "https://github.com/minghinmatthewlam/pi-gui";
 const RELEASES_URL = "https://github.com/minghinmatthewlam/pi-gui/releases/latest";
@@ -33,7 +27,16 @@ function GitHubIcon() {
 
 function FolderIcon() {
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
     </svg>
   );
@@ -41,7 +44,16 @@ function FolderIcon() {
 
 function BoltIcon() {
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
     </svg>
   );
@@ -49,7 +61,16 @@ function BoltIcon() {
 
 function ClockIcon() {
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <circle cx="12" cy="12" r="10" />
       <polyline points="12 6 12 12 16 14" />
     </svg>
@@ -58,7 +79,16 @@ function ClockIcon() {
 
 function WrenchIcon() {
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z" />
     </svg>
   );
@@ -139,12 +169,10 @@ export default function Page() {
               >
                 pi coding agent
               </a>
-              . Manage workspaces, run sessions, and review agent work — all
-              from a native interface.
+              . Manage workspaces, run sessions, and review agent work — all from a native
+              interface.
             </p>
-            <p className="hero-note">
-              {HERO_BETA_NOTE}
-            </p>
+            <p className="hero-note">{HERO_BETA_NOTE}</p>
             <div className="hero-ctas">
               <a
                 href={RELEASES_URL}
@@ -186,9 +214,9 @@ export default function Page() {
         <section className="value-prop">
           <div className="container container--narrow">
             <p>
-              From quick fixes to complex refactors, pi-gui gives you a
-              persistent desktop workspace for AI-powered coding sessions —
-              with full visibility into what the agent is doing and why.
+              From quick fixes to complex refactors, pi-gui gives you a persistent desktop workspace
+              for AI-powered coding sessions — with full visibility into what the agent is doing and
+              why.
             </p>
           </div>
         </section>
@@ -197,46 +225,49 @@ export default function Page() {
         <section id="features" className="features">
           <div className="container">
             <p className="section-eyebrow">Features</p>
-            <h2 className="section-heading">
-              Everything you need in one window
-            </h2>
+            <h2 className="section-heading">Everything you need in one window</h2>
             <p className="section-subtitle">
-              A desktop-native experience built for multi-project AI coding
-              workflows.
+              A desktop-native experience built for multi-project AI coding workflows.
             </p>
             <div className="features-grid">
               <div className="feature-card">
-                <div className="feature-icon" aria-hidden="true"><FolderIcon /></div>
+                <div className="feature-icon" aria-hidden="true">
+                  <FolderIcon />
+                </div>
                 <h3>Multi-workspace sessions</h3>
                 <p>
-                  Open project folders as workspaces, each with independent
-                  session histories. Context-switch between projects without
-                  losing state.
+                  Open project folders as workspaces, each with independent session histories.
+                  Context-switch between projects without losing state.
                 </p>
               </div>
               <div className="feature-card">
-                <div className="feature-icon" aria-hidden="true"><BoltIcon /></div>
+                <div className="feature-icon" aria-hidden="true">
+                  <BoltIcon />
+                </div>
                 <h3>Real-time agent timeline</h3>
                 <p>
-                  Watch every tool execution, code change, and reasoning step in
-                  a scrollable timeline with full input and output detail.
+                  Watch every tool execution, code change, and reasoning step in a scrollable
+                  timeline with full input and output detail.
                 </p>
               </div>
               <div className="feature-card">
-                <div className="feature-icon" aria-hidden="true"><ClockIcon /></div>
+                <div className="feature-icon" aria-hidden="true">
+                  <ClockIcon />
+                </div>
                 <h3>Persistent session history</h3>
                 <p>
-                  Sessions survive restarts. Resume any previous conversation,
-                  review transcripts, and continue exactly where you left off.
+                  Sessions survive restarts. Resume any previous conversation, review transcripts,
+                  and continue exactly where you left off.
                 </p>
               </div>
               <div className="feature-card">
-                <div className="feature-icon" aria-hidden="true"><WrenchIcon /></div>
+                <div className="feature-icon" aria-hidden="true">
+                  <WrenchIcon />
+                </div>
                 <h3>Skills &amp; slash commands</h3>
                 <p>
-                  Extend pi-gui with workspace-specific skills and slash
-                  commands for model switching, thinking levels, settings, and
-                  custom workflows.
+                  Extend pi-gui with workspace-specific skills and slash commands for model
+                  switching, thinking levels, settings, and custom workflows.
                 </p>
               </div>
             </div>
@@ -249,10 +280,9 @@ export default function Page() {
             <p className="section-eyebrow">Architecture</p>
             <h2 className="section-heading">Built for durability</h2>
             <p className="architecture-desc">
-              The desktop shell is separated from the agent runtime through a
-              durable SessionDriver interface — making the frontend independent
-              of backend changes and ready for future runtime swaps. Built on
-              top of{" "}
+              The desktop shell is separated from the agent runtime through a durable SessionDriver
+              interface — making the frontend independent of backend changes and ready for future
+              runtime swaps. Built on top of{" "}
               <a
                 href={PI_MONO_URL}
                 target="_blank"
@@ -304,26 +334,21 @@ export default function Page() {
               <code>
                 <span className="code-comment"># Direct install from GitHub Releases</span>
                 {"\n"}
-                <span className="code-command">open</span>{" "}
-                {RELEASES_URL}
+                <span className="code-command">open</span> {RELEASES_URL}
                 {"\n\n"}
                 <span className="code-comment"># Or install with Homebrew</span>
                 {"\n"}
-                <span className="code-command">brew tap</span>{" "}
-                minghinmatthewlam/tap
+                <span className="code-command">brew tap</span> minghinmatthewlam/tap
                 {"\n"}
-                <span className="code-command">brew install --cask</span>{" "}
-                pi-gui
+                <span className="code-command">brew install --cask</span> pi-gui
                 {"\n\n"}
                 <span className="code-comment"># Later, update the Homebrew install</span>
                 {"\n"}
-                <span className="code-command">brew upgrade --cask</span>{" "}
-                pi-gui
+                <span className="code-command">brew upgrade --cask</span> pi-gui
                 {"\n\n"}
                 <span className="code-comment"># Source install is for local development</span>
                 {"\n"}
-                <span className="code-command">git clone</span>{" "}
-                {GITHUB_URL}.git{"\n"}
+                <span className="code-command">git clone</span> {GITHUB_URL}.git{"\n"}
                 <span className="code-command">cd</span> pi-gui{"\n\n"}
                 <span className="code-comment"># Install dependencies and run</span>
                 {"\n"}
@@ -333,10 +358,9 @@ export default function Page() {
               </code>
             </div>
             <p className="section-subtitle">
-              DMG installs update from GitHub Releases. Homebrew installs update
-              with <code>brew upgrade --cask pi-gui</code>. During beta,
-              Homebrew upgrades may require re-confirming some macOS permissions
-              or Dock placement after reinstall-style updates.
+              DMG installs update from GitHub Releases. Homebrew installs update with{" "}
+              <code>brew upgrade --cask pi-gui</code>. During beta, Homebrew upgrades may require
+              re-confirming some macOS permissions or Dock placement after reinstall-style updates.
             </p>
             <div className="hero-ctas">
               <a
@@ -369,21 +393,13 @@ export default function Page() {
           <span className="footer-sep">&middot;</span>
           <span>MIT License</span>
           <span className="footer-sep">&middot;</span>
-          <a
-            href={GITHUB_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
+          <a href={GITHUB_URL} target="_blank" rel="noopener noreferrer">
             GitHub
           </a>
           <span className="footer-sep">&middot;</span>
           <span className="footer-credit">
             Built on{" "}
-            <a
-              href={PI_MONO_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
+            <a href={PI_MONO_URL} target="_blank" rel="noopener noreferrer">
               pi
             </a>
           </span>

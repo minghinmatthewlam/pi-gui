@@ -2,6 +2,7 @@ import { access, realpath, stat, unlink } from "node:fs/promises";
 import { resolve } from "node:path";
 import {
   ModelRegistry,
+  ModelRuntime,
   SessionManager,
   type AgentSessionRuntime,
   type AgentSession,
@@ -36,18 +37,19 @@ import type {
   SessionModelSelection,
   SessionRef,
   SessionSnapshot,
+  SessionSchemaInfo,
   SessionStatus,
+  SessionTranscriptItem,
+  SessionTranscriptMessage,
   Unsubscribe,
   WorkspaceId,
   WorkspaceRef,
 } from "@pi-gui/session-driver";
 import type { RuntimeCommandRecord } from "@pi-gui/session-driver/runtime-types";
-import { isMissingFileError, JsonCatalogStore, type SessionFileCatalogStorage } from "./json-catalog-store.js";
-import {
-  buildSessionSchemaInfo,
-  readSessionFileSchemaVersion,
-  type SessionSchemaInfo,
-} from "./session-schema.js";
+import { isMissingFileError, JsonCatalogStore } from "@pi-gui/catalogs/node";
+import type { SessionFileCatalogStorage } from "@pi-gui/catalogs";
+import { sessionKey } from "@pi-gui/session-driver";
+import { buildSessionSchemaInfo, readSessionFileSchemaVersion } from "./session-schema.js";
 import {
   buildOwnLease,
   currentLeaseIdentity,
@@ -79,12 +81,11 @@ import {
   deriveWorkspaceTitle,
   determineRunOutcome,
   extractPreview,
-  forcePersistSession,
   injectFileAttachmentPreamble,
   messageText,
   nowIso,
   previewFromSessionInfo,
-  sessionKey,
+  shouldPersistSnapshotForAgentEvent,
   shouldTailFromDisk,
   singleFlight,
   titleFromSessionInfo,
@@ -93,18 +94,53 @@ import {
   truncate,
   workspaceToRef,
 } from "./session-supervisor-utils.js";
-import type { SessionTranscriptItem, SessionTranscriptMessage } from "./transcript.js";
+import { forcePersistPiSession } from "./compat/pi-session-persistence.js";
 import {
   createAgentSessionRuntimeWithNpmFallback,
   type PiCreateAgentSessionOptions,
+  type PiModelInfo,
 } from "./npm-package-fallback.js";
+
+type RuntimeModel = NonNullable<ReturnType<ModelRuntime["getModel"]>>;
+
+function requireModel(modelRuntime: ModelRuntime, provider: string, modelId: string): RuntimeModel {
+  const model = modelRuntime.getModel(provider, modelId);
+  if (!model) {
+    throw new Error(`Unknown model ${provider}:${modelId}`);
+  }
+  return model;
+}
+
+/**
+ * Resolve a model against a live session's runtime.
+ *
+ * The runtime was built when the session was created, so a provider added since
+ * then — a custom provider set up in Settings, say — is not in it yet. Refreshing
+ * on a miss reloads `models.json` and reapplies the session's own extension
+ * registrations, which is what makes a freshly added model selectable without
+ * reopening the session.
+ */
+async function requireSessionModel(
+  modelRuntime: ModelRuntime,
+  provider: string,
+  modelId: string,
+): Promise<RuntimeModel> {
+  const model = modelRuntime.getModel(provider, modelId);
+  if (model) {
+    return model;
+  }
+  await modelRuntime.refresh({ allowNetwork: false });
+  return requireModel(modelRuntime, provider, modelId);
+}
 
 export interface PiSdkDriverOptions {
   readonly catalogFilePath?: string;
   /** Existing owner for catalog state. Takes precedence over catalogFilePath when provided. */
   readonly catalogStorage?: SessionFileCatalogStorage;
-  readonly createAgentSessionRuntimeImpl?: (options?: CreateAgentSessionOptions) => Promise<AgentSessionRuntime>;
-  readonly modelRegistry?: ModelRegistry;
+  readonly createAgentSessionRuntimeImpl?: (
+    options?: PiCreateAgentSessionOptions,
+  ) => Promise<AgentSessionRuntime>;
+  readonly agentDir?: string;
   readonly extensionFactories?: readonly ExtensionFactory[];
   readonly generateThreadTitleOverride?: (
     workspace: WorkspaceRef,
@@ -130,6 +166,7 @@ interface ManagedSessionRecord {
   preview: string | undefined;
   config: SessionConfig | undefined;
   runningRunId: string | undefined;
+  cancellationRequested: boolean;
   queuedMessages: SessionQueuedMessage[];
   closed: boolean;
   listeners: Set<SessionEventListener>;
@@ -178,10 +215,14 @@ interface SkillAdapter {
 
 export class SessionSupervisor {
   private readonly catalogs: SessionFileCatalogStorage;
-  private readonly createAgentSessionRuntimeImpl: (options?: CreateAgentSessionOptions) => Promise<AgentSessionRuntime>;
-  private readonly modelRegistry: ModelRegistry | undefined;
+  private readonly createAgentSessionRuntimeImpl: (
+    options?: PiCreateAgentSessionOptions,
+  ) => Promise<AgentSessionRuntime>;
+  private readonly agentDir: string | undefined;
   private readonly records = new Map<string, ManagedSessionRecord>();
   private readonly ensureRecordInFlight = new Map<string, Promise<ManagedSessionRecord>>();
+  /** Preserve invocation order so stale touches cannot undo a later rename or removal. */
+  private readonly workspaceMutationQueues = new Map<WorkspaceId, Promise<void>>();
   private readonly leaseIdentity: LeaseIdentity = currentLeaseIdentity();
   private readonly leaseTtlMs = DEFAULT_LEASE_TTL_MS;
   private readonly isPidAlive = defaultIsPidAlive;
@@ -199,10 +240,31 @@ export class SessionSupervisor {
           ...createOptions,
           resourceLoaderOptions: {
             ...(createOptions as PiCreateAgentSessionOptions | undefined)?.resourceLoaderOptions,
-            ...(options.extensionFactories ? { extensionFactories: [...options.extensionFactories] } : {}),
+            ...(options.extensionFactories
+              ? { extensionFactories: [...options.extensionFactories] }
+              : {}),
           },
         }));
-    this.modelRegistry = options.modelRegistry;
+    this.agentDir = options.agentDir;
+  }
+
+  /**
+   * Options every session creation shares.
+   *
+   * Deliberately no `modelRuntime`: letting `createAgentSessionServices` build
+   * one per session keeps it cwd-bound, so it holds exactly the extension
+   * providers registered for this workspace and cannot pick up another open
+   * workspace's endpoint or credentials for the same provider id.
+   */
+  private baseCreateOptions(
+    cwd: string,
+    sessionManager: SessionManager,
+  ): PiCreateAgentSessionOptions {
+    return {
+      cwd,
+      sessionManager,
+      ...(this.agentDir ? { agentDir: this.agentDir } : {}),
+    };
   }
 
   listWorkspaces(): Promise<WorkspaceCatalogSnapshot> {
@@ -215,15 +277,25 @@ export class SessionSupervisor {
 
   async registerWorkspace(path: string, displayName?: string): Promise<WorkspaceRef> {
     const workspace = await createCanonicalWorkspaceRef(path, displayName);
-    await this.touchWorkspace(workspace);
+    await this.registerWorkspaceRef(workspace);
     return workspace;
   }
 
   async syncWorkspace(path: string, displayName?: string): Promise<SyncWorkspaceResult> {
-    const workspace = await this.registerWorkspace(path, displayName);
-    const infos = await SessionManager.list(path);
-    const existingSessions = (await this.catalogs.sessions.listSessions(workspace.workspaceId)).sessions;
-    const existingByKey = new Map(existingSessions.map((session) => [sessionKey(session.sessionRef), session]));
+    const workspace = await createCanonicalWorkspaceRef(path, displayName);
+    return this.runWorkspaceMutation(workspace.workspaceId, async () => {
+      await this.registerWorkspaceRefNow(workspace);
+      return this.syncWorkspaceNow(workspace);
+    });
+  }
+
+  private async syncWorkspaceNow(workspace: WorkspaceRef): Promise<SyncWorkspaceResult> {
+    const infos = await SessionManager.list(workspace.path);
+    const existingSessions = (await this.catalogs.sessions.listSessions(workspace.workspaceId))
+      .sessions;
+    const existingByKey = new Map(
+      existingSessions.map((session) => [sessionKey(session.sessionRef), session]),
+    );
     const nextEntries = infos.map((info) =>
       this.sessionEntryFromInfo(
         workspace,
@@ -241,7 +313,8 @@ export class SessionSupervisor {
             return undefined;
           }
 
-          const sessionFilePath = session.sessionFilePath ?? (await this.catalogs.getSessionFile(session.sessionRef));
+          const sessionFilePath =
+            session.sessionFilePath ?? (await this.catalogs.getSessionFile(session.sessionRef));
           if (!sessionFilePath) {
             return undefined;
           }
@@ -257,7 +330,8 @@ export class SessionSupervisor {
           }
 
           const record = this.records.get(key);
-          const runtimeSnapshot = record && record.session && !record.closed ? buildSnapshot(record) : undefined;
+          const runtimeSnapshot =
+            record && record.session && !record.closed ? buildSnapshot(record) : undefined;
           return {
             ...session,
             sessionFilePath,
@@ -268,12 +342,22 @@ export class SessionSupervisor {
     ).filter((session): session is NonNullable<typeof session> => Boolean(session));
     const preservedKeys = new Set(preservedEntries.map((entry) => sessionKey(entry.sessionRef)));
     const mergedEntries = [...nextEntries, ...preservedEntries];
-    const nextSessionFiles = Object.fromEntries([
-      ...nextEntries.map((entry, index) => [sessionKey(entry.sessionRef), infos[index]?.path ?? ""]),
-      ...preservedEntries.map((entry) => [sessionKey(entry.sessionRef), entry.sessionFilePath ?? ""]),
+    const nextSessionFiles = Object.fromEntries<string>([
+      ...nextEntries.map((entry, index): [string, string] => [
+        sessionKey(entry.sessionRef),
+        infos[index]?.path ?? "",
+      ]),
+      ...preservedEntries.map((entry): [string, string] => [
+        sessionKey(entry.sessionRef),
+        entry.sessionFilePath ?? "",
+      ]),
     ]);
 
-    await this.catalogs.replaceWorkspaceSessions(workspace.workspaceId, mergedEntries, nextSessionFiles);
+    await this.catalogs.replaceWorkspaceSessions(
+      workspace.workspaceId,
+      mergedEntries,
+      nextSessionFiles,
+    );
     for (const session of existingSessions) {
       const key = sessionKey(session.sessionRef);
       if (discoveredKeys.has(key) || preservedKeys.has(key)) {
@@ -306,11 +390,10 @@ export class SessionSupervisor {
    * workspace is no longer tracked.
    */
   async reconcileWorkspace(workspaceId: WorkspaceId): Promise<SyncWorkspaceResult | undefined> {
-    const workspace = await this.catalogs.workspaces.getWorkspace(workspaceId);
-    if (!workspace) {
-      return undefined;
-    }
-    return this.syncWorkspace(workspace.path);
+    return this.runWorkspaceMutation(workspaceId, async () => {
+      const workspace = await this.touchWorkspaceNow(workspaceId);
+      return workspace ? this.syncWorkspaceNow(workspaceToRef(workspace)) : undefined;
+    });
   }
 
   /**
@@ -323,44 +406,53 @@ export class SessionSupervisor {
   }
 
   async renameWorkspace(workspaceId: WorkspaceId, displayName: string): Promise<void> {
-    const existing = await this.catalogs.workspaces.getWorkspace(workspaceId);
-    if (!existing) {
-      throw new Error(`Unknown workspace: ${workspaceId}`);
-    }
-
-    const nextWorkspace = await createCanonicalWorkspaceRef(existing.path, displayName.trim() || undefined);
-    await this.touchWorkspace(nextWorkspace);
-
-    for (const record of this.records.values()) {
-      if (record.workspace.workspaceId === workspaceId) {
-        record.workspace = nextWorkspace;
+    await this.runWorkspaceMutation(workspaceId, async () => {
+      const existing = await this.catalogs.workspaces.getWorkspace(workspaceId);
+      if (!existing) {
+        throw new Error(`Unknown workspace: ${workspaceId}`);
       }
-    }
+
+      const nextWorkspace = await createCanonicalWorkspaceRef(
+        existing.path,
+        displayName.trim() || undefined,
+      );
+      await this.registerWorkspaceRefNow(nextWorkspace);
+
+      for (const record of this.records.values()) {
+        if (record.workspace.workspaceId === workspaceId) {
+          record.workspace = nextWorkspace;
+        }
+      }
+    });
   }
 
   async removeWorkspace(workspaceId: WorkspaceId): Promise<void> {
-    const sessions = (await this.catalogs.sessions.listSessions(workspaceId)).sessions;
-    await this.catalogs.workspaces.deleteWorkspace(workspaceId);
+    await this.runWorkspaceMutation(workspaceId, async () => {
+      const sessions = (await this.catalogs.sessions.listSessions(workspaceId)).sessions;
+      await this.catalogs.workspaces.deleteWorkspace(workspaceId);
 
-    for (const session of sessions) {
-      const key = sessionKey(session.sessionRef);
-      const record = this.records.get(key);
-      if (!record) {
-        continue;
+      for (const session of sessions) {
+        const key = sessionKey(session.sessionRef);
+        const record = this.records.get(key);
+        if (!record) {
+          continue;
+        }
+
+        record.unsubscribeAgent?.();
+        record.unsubscribeAgent = undefined;
+        record.listeners.clear();
+        await this.disposeRecordRuntimeSafely(record);
+        this.records.delete(key);
       }
-
-      record.unsubscribeAgent?.();
-      record.unsubscribeAgent = undefined;
-      record.listeners.clear();
-      await this.disposeRecordRuntimeSafely(record);
-      this.records.delete(key);
-    }
+    });
   }
 
   async getTranscript(sessionRef: SessionRef): Promise<SessionTranscriptItem[]> {
     const record = this.records.get(sessionKey(sessionRef));
     if (record && record.session && !record.closed) {
-      const diskMtimeMs = record.session.isStreaming ? undefined : await this.statMtimeMs(record.sessionFile);
+      const diskMtimeMs = record.session.isStreaming
+        ? undefined
+        : await this.statMtimeMs(record.sessionFile);
       const tail = shouldTailFromDisk({
         isStreaming: record.session.isStreaming,
         diskMtimeMs,
@@ -388,7 +480,10 @@ export class SessionSupervisor {
     }
 
     const sessionManager = SessionManager.open(sessionFile);
-    return transcriptFromMessages(sessionManager.buildSessionContext().messages, sessionEntry?.updatedAt);
+    return transcriptFromMessages(
+      sessionManager.buildSessionContext().messages,
+      sessionEntry?.updatedAt,
+    );
   }
 
   private async resolveSessionFilePath(
@@ -449,30 +544,40 @@ export class SessionSupervisor {
     pending.resolve(response);
   }
 
-  async createSession(workspace: WorkspaceRef, options?: CreateSessionOptions): Promise<SessionSnapshot> {
-    await this.touchWorkspace(workspace);
+  async createSession(
+    workspace: WorkspaceRef,
+    options?: CreateSessionOptions,
+  ): Promise<SessionSnapshot> {
+    await this.registerWorkspaceRef(workspace);
 
-    const initialModel = options?.initialModel
-      ? this.resolveModel(options.initialModel.provider, options.initialModel.modelId)
-      : undefined;
-    const createOptions: CreateAgentSessionOptions = {
-      cwd: workspace.path,
-      sessionManager: SessionManager.create(workspace.path),
-      ...(this.modelRegistry ? { modelRegistry: this.modelRegistry } : {}),
+    const initialModel = options?.initialModel;
+    const createOptions: PiCreateAgentSessionOptions = {
+      ...this.baseCreateOptions(workspace.path, SessionManager.create(workspace.path)),
+      ...(initialModel
+        ? {
+            resolveInitialModel: (modelRuntime: ModelRuntime) =>
+              requireModel(modelRuntime, initialModel.provider, initialModel.modelId),
+          }
+        : {}),
+      ...(options?.initialThinkingLevel
+        ? {
+            thinkingLevel: options.initialThinkingLevel as NonNullable<
+              CreateAgentSessionOptions["thinkingLevel"]
+            >,
+          }
+        : {}),
     };
-    if (initialModel) {
-      createOptions.model = initialModel;
-    }
-    if (options?.initialThinkingLevel) {
-      createOptions.thinkingLevel = options.initialThinkingLevel as NonNullable<CreateAgentSessionOptions["thinkingLevel"]>;
-    }
 
     const runtime = await this.createAgentSessionRuntimeImpl(createOptions);
     const session = runtime.session;
 
-    const record = this.createRecord(workspace, runtime, options?.title ?? deriveWorkspaceTitle(workspace));
+    const record = this.createRecord(
+      workspace,
+      runtime,
+      options?.title ?? deriveWorkspaceTitle(workspace),
+    );
     session.sessionManager.appendSessionInfo(record.title);
-    forcePersistSession(session.sessionManager);
+    forcePersistPiSession(session.sessionManager);
     record.config = deriveSessionConfig(session.sessionManager);
     const sessionFile = record.sessionFile ?? session.sessionManager.getSessionFile();
     if (sessionFile) {
@@ -497,8 +602,14 @@ export class SessionSupervisor {
     await this.resolveForkSource(sourceRef, options);
   }
 
-  async forkSession(sourceRef: SessionRef, options: ForkSessionOptions): Promise<ForkSessionResult> {
-    const { sourceRecord, sourceFile, branch, selectedEntry } = await this.resolveForkSource(sourceRef, options);
+  async forkSession(
+    sourceRef: SessionRef,
+    options: ForkSessionOptions,
+  ): Promise<ForkSessionResult> {
+    const { sourceRecord, sourceFile, branch, selectedEntry } = await this.resolveForkSource(
+      sourceRef,
+      options,
+    );
 
     const position = options.position ?? "before";
     let targetLeafId: string | undefined;
@@ -516,27 +627,30 @@ export class SessionSupervisor {
             entry.type === "message" &&
             (entry.message.role === "user" || entry.message.role === "assistant"),
         );
-        targetLeafId = nextMessageIndex > selectedIndex
-          ? branch[nextMessageIndex - 1]?.id ?? selectedEntry.id
-          : branch[branch.length - 1]?.id ?? selectedEntry.id;
+        targetLeafId =
+          nextMessageIndex > selectedIndex
+            ? (branch[nextMessageIndex - 1]?.id ?? selectedEntry.id)
+            : (branch[branch.length - 1]?.id ?? selectedEntry.id);
       } else {
         const nextUserIndex = branch.findIndex(
           (entry, index) =>
             index > selectedIndex && entry.type === "message" && entry.message.role === "user",
         );
-        targetLeafId = nextUserIndex > selectedIndex
-          ? branch[nextUserIndex - 1]?.id ?? selectedEntry.id
-          : branch[branch.length - 1]?.id ?? selectedEntry.id;
+        targetLeafId =
+          nextUserIndex > selectedIndex
+            ? (branch[nextUserIndex - 1]?.id ?? selectedEntry.id)
+            : (branch[branch.length - 1]?.id ?? selectedEntry.id);
       }
     } else if (position === "at") {
       targetLeafId = selectedEntry.id;
     } else {
       targetLeafId = selectedEntry.parentId ?? undefined;
-      selectedText = messageText(selectedEntry.message as unknown as Record<string, unknown>) || undefined;
+      selectedText =
+        messageText(selectedEntry.message as unknown as Record<string, unknown>) || undefined;
     }
 
     const targetWorkspace = options.targetWorkspace;
-    await this.touchWorkspace(targetWorkspace);
+    await this.registerWorkspaceRef(targetWorkspace);
     const sameWorkspace = resolve(targetWorkspace.path) === resolve(sourceRecord.workspace.path);
 
     // Build a branched SessionManager containing only the history up to the fork point.
@@ -569,31 +683,34 @@ export class SessionSupervisor {
       branchedManager = forked;
     }
 
-    const createOptions: CreateAgentSessionOptions = {
-      cwd: targetWorkspace.path,
-      sessionManager: branchedManager,
-      ...(this.modelRegistry ? { modelRegistry: this.modelRegistry } : {}),
-    };
     const forkConfig = deriveSessionConfig(branchedManager);
-    if (forkConfig?.provider && forkConfig?.modelId) {
-      try {
-        createOptions.model = this.resolveModel(forkConfig.provider, forkConfig.modelId);
-      } catch {
-        // Forked model is no longer available; fall back to the runtime default.
-      }
-    }
-    if (forkConfig?.thinkingLevel) {
-      createOptions.thinkingLevel = forkConfig.thinkingLevel as NonNullable<
-        CreateAgentSessionOptions["thinkingLevel"]
-      >;
-    }
+    const forkProvider = forkConfig?.provider;
+    const forkModelId = forkConfig?.modelId;
+    const createOptions: PiCreateAgentSessionOptions = {
+      ...this.baseCreateOptions(targetWorkspace.path, branchedManager),
+      ...(forkProvider && forkModelId
+        ? {
+            // A model the source session used may not exist in the target
+            // workspace; fall back to the runtime default rather than failing.
+            resolveInitialModel: (modelRuntime: ModelRuntime) =>
+              modelRuntime.getModel(forkProvider, forkModelId),
+          }
+        : {}),
+      ...(forkConfig?.thinkingLevel
+        ? {
+            thinkingLevel: forkConfig.thinkingLevel as NonNullable<
+              CreateAgentSessionOptions["thinkingLevel"]
+            >,
+          }
+        : {}),
+    };
 
     const runtime = await this.createAgentSessionRuntimeImpl(createOptions);
     const session = runtime.session;
 
     const title = options.title ?? sourceRecord.title;
     const record = this.createRecord(targetWorkspace, runtime, title);
-    forcePersistSession(session.sessionManager);
+    forcePersistPiSession(session.sessionManager);
     record.config = deriveSessionConfig(session.sessionManager);
     const sessionFile = record.sessionFile ?? session.sessionManager.getSessionFile();
     if (sessionFile) {
@@ -628,7 +745,9 @@ export class SessionSupervisor {
     const sourceManager = sourceSession.sessionManager;
     const sourceFile = sourceRecord.sessionFile ?? sourceManager.getSessionFile();
     if (!sourceFile) {
-      throw new Error(`Session ${sessionKey(sourceRef)} cannot be forked because no session file is tracked.`);
+      throw new Error(
+        `Session ${sessionKey(sourceRef)} cannot be forked because no session file is tracked.`,
+      );
     }
 
     const branch = sourceManager.getBranch();
@@ -648,7 +767,7 @@ export class SessionSupervisor {
 
   async openSession(sessionRef: SessionRef): Promise<SessionSnapshot> {
     const record = await this.ensureRecord(sessionRef);
-    await this.touchWorkspace(record.workspace);
+    await this.touchWorkspace(record.workspace.workspaceId);
     const snapshot = buildSnapshot(record);
     await this.emit(record, {
       type: "sessionOpened",
@@ -672,11 +791,14 @@ export class SessionSupervisor {
     const session = this.requireSession(record);
     const isExtensionCommand = this.isExtensionCommand(session, input.text);
     if (session.isStreaming && !isExtensionCommand && !input.deliverAs) {
-      throw new Error("Session is already streaming. Specify deliverAs ('steer' or 'followUp') to queue the message.");
+      throw new Error(
+        "Session is already streaming. Specify deliverAs ('steer' or 'followUp') to queue the message.",
+      );
     }
 
     const isQueuedMessage = session.isStreaming && !isExtensionCommand && Boolean(input.deliverAs);
     const runId = isQueuedMessage || isExtensionCommand ? undefined : crypto.randomUUID();
+    if (!isQueuedMessage && !isExtensionCommand) record.cancellationRequested = false;
     record.runningRunId = runId ?? record.runningRunId;
     record.status = isQueuedMessage || isExtensionCommand ? record.status : "running";
     record.updatedAt = nowIso();
@@ -692,14 +814,17 @@ export class SessionSupervisor {
     await this.emit(record, sessionUpdatedEvent(record));
 
     try {
-      const images = input.attachments?.flatMap((attachment: NonNullable<SessionMessageInput["attachments"]>[number]) =>
-        attachment.kind === "image"
-          ? [{
-              type: "image" as const,
-              data: attachment.data,
-              mimeType: attachment.mimeType,
-            }]
-          : [],
+      const images = input.attachments?.flatMap(
+        (attachment: NonNullable<SessionMessageInput["attachments"]>[number]) =>
+          attachment.kind === "image"
+            ? [
+                {
+                  type: "image" as const,
+                  data: attachment.data,
+                  mimeType: attachment.mimeType,
+                },
+              ]
+            : [],
       );
       const promptText = injectFileAttachmentPreamble(input.text, input.attachments);
       if (isQueuedMessage) {
@@ -747,21 +872,27 @@ export class SessionSupervisor {
     }
   }
 
-  async replaceQueuedMessages(sessionRef: SessionRef, messages: readonly SessionQueuedMessage[]): Promise<void> {
+  async replaceQueuedMessages(
+    sessionRef: SessionRef,
+    messages: readonly SessionQueuedMessage[],
+  ): Promise<void> {
     const record = await this.ensureRecord(sessionRef);
     const session = this.requireSession(record);
     session.clearQueue();
 
     record.queuedMessages = messages.map((message) => cloneQueuedMessage(message));
     for (const message of record.queuedMessages) {
-      const images = message.attachments?.flatMap((attachment: NonNullable<SessionQueuedMessage["attachments"]>[number]) =>
-        attachment.kind === "image"
-          ? [{
-              type: "image" as const,
-              data: attachment.data,
-              mimeType: attachment.mimeType,
-            }]
-          : [],
+      const images = message.attachments?.flatMap(
+        (attachment: NonNullable<SessionQueuedMessage["attachments"]>[number]) =>
+          attachment.kind === "image"
+            ? [
+                {
+                  type: "image" as const,
+                  data: attachment.data,
+                  mimeType: attachment.mimeType,
+                },
+              ]
+            : [],
       );
       const promptText = injectFileAttachmentPreamble(message.text, message.attachments);
       await this.queuePrompt(session, promptText, message.mode, images);
@@ -778,6 +909,7 @@ export class SessionSupervisor {
       return;
     }
 
+    record.cancellationRequested = true;
     try {
       await record.session.abort();
     } catch (error) {
@@ -805,8 +937,16 @@ export class SessionSupervisor {
       throw new Error(`Session ${sessionKey(record.ref)} is not active.`);
     }
 
-    const model = this.resolveModel(selection.provider, selection.modelId);
-    const auth = await session.modelRegistry.getApiKeyAndHeaders(model);
+    // The session's own runtime, not a shared one: it holds this workspace's
+    // extension providers, so the endpoint and credentials resolved here are the
+    // ones this workspace registered even if another workspace claims the id.
+    const model = await requireSessionModel(
+      session.modelRuntime,
+      selection.provider,
+      selection.modelId,
+    );
+    const registry = new ModelRegistry(session.modelRuntime);
+    const auth = await registry.getApiKeyAndHeaders(model);
     if (!auth.ok) {
       throw new Error(auth.error);
     }
@@ -820,7 +960,7 @@ export class SessionSupervisor {
     session.sessionManager.appendModelChange(model.provider, model.id);
     this.applySessionThinkingLevel(session, previousThinkingLevel);
     await this.emitModelSelection(session, model, previousModel);
-    forcePersistSession(session.sessionManager);
+    forcePersistPiSession(session.sessionManager);
     record.config = deriveSessionConfig(session.sessionManager);
     await this.persistSnapshot(record);
     await this.emit(record, sessionUpdatedEvent(record));
@@ -830,7 +970,7 @@ export class SessionSupervisor {
     const record = await this.ensureRecord(sessionRef);
     const session = this.requireSession(record);
     this.applySessionThinkingLevel(session, thinkingLevel);
-    forcePersistSession(session.sessionManager);
+    forcePersistPiSession(session.sessionManager);
     record.config = deriveSessionConfig(session.sessionManager);
     await this.persistSnapshot(record);
     await this.emit(record, sessionUpdatedEvent(record));
@@ -845,7 +985,7 @@ export class SessionSupervisor {
 
     const sessionManager = this.getWritableSessionManager(record);
     sessionManager.appendSessionInfo(nextTitle);
-    forcePersistSession(sessionManager);
+    forcePersistPiSession(sessionManager);
     record.title = nextTitle;
     await this.persistSnapshot(record);
     await this.emit(record, sessionUpdatedEvent(record));
@@ -971,10 +1111,15 @@ export class SessionSupervisor {
     // Dedupe concurrent reopen/create for the same session. Without this, two
     // callers both pass the guard above, both build a runtime across the awaits
     // below, and the second overwrites (and leaks) the first.
-    return singleFlight(this.ensureRecordInFlight, key, () => this.createOrReopenRecord(sessionRef, key));
+    return singleFlight(this.ensureRecordInFlight, key, () =>
+      this.createOrReopenRecord(sessionRef, key),
+    );
   }
 
-  private async createOrReopenRecord(sessionRef: SessionRef, key: string): Promise<ManagedSessionRecord> {
+  private async createOrReopenRecord(
+    sessionRef: SessionRef,
+    key: string,
+  ): Promise<ManagedSessionRecord> {
     const existing = this.records.get(key);
     if (existing && existing.session && !existing.closed) {
       return existing;
@@ -989,9 +1134,12 @@ export class SessionSupervisor {
     if (!workspace) {
       throw new Error(`Workspace ${sessionEntry.workspaceId} is not in the catalog.`);
     }
-    await this.touchWorkspace(workspaceToRef(workspace));
+    await this.touchWorkspace(workspace.workspaceId);
 
-    const sessionFile = existing?.sessionFile ?? sessionEntry.sessionFilePath ?? (await this.catalogs.getSessionFile(sessionRef));
+    const sessionFile =
+      existing?.sessionFile ??
+      sessionEntry.sessionFilePath ??
+      (await this.catalogs.getSessionFile(sessionRef));
     if (!sessionFile) {
       throw new Error(`Session ${key} cannot be reopened because no session file is tracked.`);
     }
@@ -1001,14 +1149,13 @@ export class SessionSupervisor {
     // conversation. Absent/dead/own leases never block (fully advisory).
     await this.assertSessionNotForeignLeased(sessionFile);
 
-    const runtime = await this.createAgentSessionRuntimeImpl({
-      cwd: workspace.path,
-      sessionManager: SessionManager.open(sessionFile),
-      ...(this.modelRegistry ? { modelRegistry: this.modelRegistry } : {}),
-    });
+    const runtime = await this.createAgentSessionRuntimeImpl(
+      this.baseCreateOptions(workspace.path, SessionManager.open(sessionFile)),
+    );
     const session = runtime.session;
 
-    const record = existing ?? this.createRecord(workspaceToRef(workspace), runtime, sessionEntry.title);
+    const record =
+      existing ?? this.createRecord(workspaceToRef(workspace), runtime, sessionEntry.title);
     record.runtime = runtime;
     record.session = session;
     record.sessionFile = sessionFile;
@@ -1025,7 +1172,11 @@ export class SessionSupervisor {
     return record;
   }
 
-  private createRecord(workspace: WorkspaceRef, runtime: AgentSessionRuntime, title: string): ManagedSessionRecord {
+  private createRecord(
+    workspace: WorkspaceRef,
+    runtime: AgentSessionRuntime,
+    title: string,
+  ): ManagedSessionRecord {
     const session = runtime.session;
     const ref = {
       workspaceId: workspace.workspaceId,
@@ -1045,6 +1196,7 @@ export class SessionSupervisor {
       preview: undefined,
       config: deriveSessionConfig(session.sessionManager),
       runningRunId: undefined,
+      cancellationRequested: false,
       queuedMessages: [],
       closed: false,
       listeners: new Set<SessionEventListener>(),
@@ -1107,7 +1259,10 @@ export class SessionSupervisor {
     try {
       await this.disposeRecordRuntime(record);
     } catch (error) {
-      console.warn(`[pi-sdk-driver] failed to dispose runtime for ${sessionKey(record.ref)}:`, error);
+      console.warn(
+        `[pi-sdk-driver] failed to dispose runtime for ${sessionKey(record.ref)}:`,
+        error,
+      );
     }
   }
 
@@ -1156,7 +1311,10 @@ export class SessionSupervisor {
       await writeLeaseFile(nextLeasePath, buildOwnLease(this.leaseIdentity, Date.now()));
       record.leasePath = nextLeasePath;
     } catch (error) {
-      console.warn(`[pi-sdk-driver] failed to write session lease for ${sessionKey(record.ref)}:`, error);
+      console.warn(
+        `[pi-sdk-driver] failed to write session lease for ${sessionKey(record.ref)}:`,
+        error,
+      );
     }
   }
 
@@ -1169,11 +1327,17 @@ export class SessionSupervisor {
     try {
       await removeLeaseFile(leasePath);
     } catch (error) {
-      console.warn(`[pi-sdk-driver] failed to remove session lease for ${sessionKey(record.ref)}:`, error);
+      console.warn(
+        `[pi-sdk-driver] failed to remove session lease for ${sessionKey(record.ref)}:`,
+        error,
+      );
     }
   }
 
-  private async rebindRuntimeSession(record: ManagedSessionRecord, session: AgentSession): Promise<void> {
+  private async rebindRuntimeSession(
+    record: ManagedSessionRecord,
+    session: AgentSession,
+  ): Promise<void> {
     const previousKey = sessionKey(record.ref);
     const nextRef = {
       workspaceId: record.workspace.workspaceId,
@@ -1201,7 +1365,7 @@ export class SessionSupervisor {
     record.sessionFile = session.sessionFile ?? session.sessionManager.getSessionFile();
     record.unsubscribeAgent?.();
     record.unsubscribeAgent = session.subscribe((event) => {
-      void this.handleAgentEvent(record, event);
+      this.handleAgentEvent(record, event);
     });
     record.bindingExtensions = true;
     try {
@@ -1218,7 +1382,7 @@ export class SessionSupervisor {
             });
             return;
           }
-          void this.emitExtensionError(record, error.extensionPath, error.event, error.error);
+          this.emitExtensionError(record, error.extensionPath, error.event, error.error);
         },
       });
     } finally {
@@ -1261,7 +1425,9 @@ export class SessionSupervisor {
     }
   }
 
-  private createCommandContextActions(record: ManagedSessionRecord): ExtensionCommandContextActions {
+  private createCommandContextActions(
+    record: ManagedSessionRecord,
+  ): ExtensionCommandContextActions {
     return {
       waitForIdle: () => this.requireSession(record).agent.waitForIdle(),
       newSession: async (options) => {
@@ -1363,7 +1529,12 @@ export class SessionSupervisor {
             options,
             ...(opts?.timeout ? { timeoutMs: opts.timeout } : {}),
           }),
-          (response) => ("cancelled" in response && response.cancelled ? undefined : "value" in response ? response.value : undefined),
+          (response) =>
+            "cancelled" in response && response.cancelled
+              ? undefined
+              : "value" in response
+                ? response.value
+                : undefined,
         ),
       confirm: (title, message, opts) =>
         createDialogPromise(
@@ -1377,7 +1548,11 @@ export class SessionSupervisor {
             ...(opts?.timeout ? { timeoutMs: opts.timeout } : {}),
           }),
           (response) =>
-            "cancelled" in response && response.cancelled ? false : "confirmed" in response ? response.confirmed : false,
+            "cancelled" in response && response.cancelled
+              ? false
+              : "confirmed" in response
+                ? response.confirmed
+                : false,
         ),
       input: (title, placeholder, opts) =>
         createDialogPromise(
@@ -1390,7 +1565,12 @@ export class SessionSupervisor {
             ...(placeholder ? { placeholder } : {}),
             ...(opts?.timeout ? { timeoutMs: opts.timeout } : {}),
           }),
-          (response) => ("cancelled" in response && response.cancelled ? undefined : "value" in response ? response.value : undefined),
+          (response) =>
+            "cancelled" in response && response.cancelled
+              ? undefined
+              : "value" in response
+                ? response.value
+                : undefined,
         ),
       notify: (message, level) => {
         this.emitHostUiRequest(record, {
@@ -1466,7 +1646,12 @@ export class SessionSupervisor {
             title,
             ...(initialValue ? { initialValue } : {}),
           }),
-          (response) => ("cancelled" in response && response.cancelled ? undefined : "value" in response ? response.value : undefined),
+          (response) =>
+            "cancelled" in response && response.cancelled
+              ? undefined
+              : "value" in response
+                ? response.value
+                : undefined,
         ),
       setEditorComponent: () => {},
       getEditorComponent: () => undefined,
@@ -1476,7 +1661,10 @@ export class SessionSupervisor {
       },
       getAllThemes: () => [],
       getTheme: () => undefined,
-      setTheme: () => ({ success: false, error: "Theme switching not supported in pi-gui host UI" }),
+      setTheme: () => ({
+        success: false,
+        error: "Theme switching not supported in pi-gui host UI",
+      }),
       getToolsExpanded: () => false,
       setToolsExpanded: () => {},
     };
@@ -1509,17 +1697,12 @@ export class SessionSupervisor {
     await session.followUp(text, images ? [...images] : undefined);
   }
 
-  private resolveModel(provider: string, modelId: string) {
-    const model = this.modelRegistry?.find(provider, modelId);
-    if (!model) {
-      throw new Error(`Unknown model ${provider}:${modelId}`);
-    }
-    return model;
-  }
-
   private applySessionThinkingLevel(session: AgentSession, thinkingLevel: string): void {
     const availableLevels = session.getAvailableThinkingLevels();
-    const effectiveLevel = clampThinkingLevel(thinkingLevel, availableLevels) as AgentSession["thinkingLevel"];
+    const effectiveLevel = clampThinkingLevel(
+      thinkingLevel,
+      availableLevels,
+    ) as AgentSession["thinkingLevel"];
     if (effectiveLevel !== session.agent.state.thinkingLevel) {
       session.agent.state.thinkingLevel = effectiveLevel;
       session.sessionManager.appendThinkingLevelChange(effectiveLevel);
@@ -1530,12 +1713,18 @@ export class SessionSupervisor {
 
   private async emitModelSelection(
     session: AgentSession,
-    model: ReturnType<SessionSupervisor["resolveModel"]>,
+    model: PiModelInfo,
     previousModel: AgentSession["model"],
   ): Promise<void> {
-    const emitModelSelect = (session as unknown as {
-      _emitModelSelect?: (nextModel: unknown, previousModel: unknown, source: string) => Promise<void>;
-    })._emitModelSelect;
+    const emitModelSelect = (
+      session as unknown as {
+        _emitModelSelect?: (
+          nextModel: unknown,
+          previousModel: unknown,
+          source: string,
+        ) => Promise<void>;
+      }
+    )._emitModelSelect;
     if (!emitModelSelect) {
       return;
     }
@@ -1547,22 +1736,26 @@ export class SessionSupervisor {
     request: Extract<SessionDriverEvent, { type: "hostUiRequest" }>["request"],
   ): void {
     this.applyExtensionUiRequest(record, request);
-    this.queueDriverEvents(record, [
-      {
-        type: "hostUiRequest",
-        sessionRef: record.ref,
-        timestamp: nowIso(),
-        request,
-      },
-    ], { persistSnapshot: false });
+    this.queueDriverEvents(
+      record,
+      [
+        {
+          type: "hostUiRequest",
+          sessionRef: record.ref,
+          timestamp: nowIso(),
+          request,
+        },
+      ],
+      { persistSnapshot: false },
+    );
   }
 
-  private async emitExtensionError(
+  private emitExtensionError(
     record: ManagedSessionRecord,
     extensionPath: string,
     eventName: string,
     error: string,
-  ): Promise<void> {
+  ): void {
     this.emitHostUiRequest(record, {
       kind: "notify",
       requestId: crypto.randomUUID(),
@@ -1619,7 +1812,10 @@ export class SessionSupervisor {
     }
   }
 
-  private replayExtensionUiState(record: ManagedSessionRecord, listener: SessionEventListener): void {
+  private replayExtensionUiState(
+    record: ManagedSessionRecord,
+    listener: SessionEventListener,
+  ): void {
     const timestamp = nowIso();
 
     for (const [key, text] of record.extensionUiState.statuses) {
@@ -1705,12 +1901,17 @@ export class SessionSupervisor {
     }
 
     record.sessionFile = session.sessionFile ?? session.sessionManager.getSessionFile();
-    record.title = session.sessionName?.trim() || record.title || deriveWorkspaceTitle(record.workspace);
+    record.title =
+      session.sessionName?.trim() || record.title || deriveWorkspaceTitle(record.workspace);
     record.status = session.isStreaming ? "running" : "idle";
-    record.runningRunId = session.isStreaming ? record.runningRunId ?? crypto.randomUUID() : undefined;
+    record.runningRunId = session.isStreaming
+      ? (record.runningRunId ?? crypto.randomUUID())
+      : undefined;
     record.config = deriveSessionConfig(session.sessionManager);
     record.preview =
-      session.messages.length > 0 ? extractPreview(session.messages[session.messages.length - 1]) : undefined;
+      session.messages.length > 0
+        ? extractPreview(session.messages[session.messages.length - 1])
+        : undefined;
     record.sessionCommands = this.collectSessionCommands(session);
     await this.persistSnapshot(record);
     if (options.emitUpdate) {
@@ -1742,21 +1943,29 @@ export class SessionSupervisor {
       (error) => {
         // Contain the failure so the queue keeps flowing. A rethrow here would
         // leave record.eventQueue rejected and freeze the session forever.
-        console.warn(`[pi-sdk-driver] event queue work failed for ${sessionKey(record.ref)}:`, error);
+        console.warn(
+          `[pi-sdk-driver] event queue work failed for ${sessionKey(record.ref)}:`,
+          error,
+        );
       },
     );
   }
 
-  private async handleAgentEvent(record: ManagedSessionRecord, event: AgentSessionEvent): Promise<void> {
+  private handleAgentEvent(record: ManagedSessionRecord, event: AgentSessionEvent): void {
     const mapped = this.mapAgentEvent(record, event);
     if (mapped.length === 0) {
       return;
     }
 
-    this.queueDriverEvents(record, mapped);
+    this.queueDriverEvents(record, mapped, {
+      persistSnapshot: shouldPersistSnapshotForAgentEvent(event.type),
+    });
   }
 
-  private mapAgentEvent(record: ManagedSessionRecord, event: AgentSessionEvent): SessionDriverEvent[] {
+  private mapAgentEvent(
+    record: ManagedSessionRecord,
+    event: AgentSessionEvent,
+  ): SessionDriverEvent[] {
     const timestamp = nowIso();
 
     switch (event.type) {
@@ -1767,75 +1976,102 @@ export class SessionSupervisor {
       case "message_start":
       case "message_end":
         if (event.message.role === "user") {
-          const queuedMessage = reconcileQueuedMessagesForStartedUserMessage(record, event.message, timestamp);
+          const queuedMessage = reconcileQueuedMessagesForStartedUserMessage(
+            record,
+            event.message,
+            timestamp,
+          );
           if (queuedMessage) {
             this.updatePreviewFromMessage(record, event.message);
-            return [{
-              type: "queuedMessageStarted" as const,
-              sessionRef: record.ref,
-              timestamp,
-              message: queuedMessage,
-            }, sessionUpdatedEvent(record)];
+            return [
+              {
+                type: "queuedMessageStarted" as const,
+                sessionRef: record.ref,
+                timestamp,
+                message: queuedMessage,
+              },
+              sessionUpdatedEvent(record),
+            ];
           }
         }
         this.updatePreviewFromMessage(record, event.message);
         return [sessionUpdatedEvent(record)];
       case "message_update":
         this.updatePreviewFromMessage(record, event.message);
-        if (event.message.role === "assistant" && event.assistantMessageEvent.type === "text_delta") {
-          return toDriverEvents({
-            type: "assistantDelta" as const,
-            sessionRef: record.ref,
-            timestamp,
-            text: event.assistantMessageEvent.delta ?? "",
-          }, record);
+        if (
+          event.message.role === "assistant" &&
+          event.assistantMessageEvent.type === "text_delta"
+        ) {
+          return toDriverEvents(
+            {
+              type: "assistantDelta" as const,
+              sessionRef: record.ref,
+              timestamp,
+              text: event.assistantMessageEvent.delta ?? "",
+            },
+            record,
+          );
         }
         return [sessionUpdatedEvent(record)];
       case "tool_execution_start":
         record.status = "running";
-        return toDriverEvents({
-          type: "toolStarted" as const,
-          sessionRef: record.ref,
-          timestamp,
-          toolName: event.toolName,
-          callId: event.toolCallId,
-          input: event.args,
-        }, record);
+        return toDriverEvents(
+          {
+            type: "toolStarted" as const,
+            sessionRef: record.ref,
+            timestamp,
+            toolName: event.toolName,
+            callId: event.toolCallId,
+            input: event.args,
+          },
+          record,
+        );
       case "tool_execution_update":
-        return toDriverEvents({
-          type: "toolUpdated" as const,
-          sessionRef: record.ref,
-          timestamp,
-          callId: event.toolCallId,
-          ...(typeof event.partialResult === "string" ? { text: event.partialResult } : {}),
-          ...(typeof event.partialResult === "number" ? { progress: event.partialResult } : {}),
-        }, record);
+        return toDriverEvents(
+          {
+            type: "toolUpdated" as const,
+            sessionRef: record.ref,
+            timestamp,
+            callId: event.toolCallId,
+            ...(typeof event.partialResult === "string" ? { text: event.partialResult } : {}),
+            ...(typeof event.partialResult === "number" ? { progress: event.partialResult } : {}),
+          },
+          record,
+        );
       case "tool_execution_end":
-        return toDriverEvents({
-          type: "toolFinished" as const,
-          sessionRef: record.ref,
-          timestamp,
-          callId: event.toolCallId,
-          success: !event.isError,
-          output: event.result,
-        }, record);
+        return toDriverEvents(
+          {
+            type: "toolFinished" as const,
+            sessionRef: record.ref,
+            timestamp,
+            callId: event.toolCallId,
+            success: !event.isError,
+            output: event.result,
+          },
+          record,
+        );
       case "turn_end":
         return [sessionUpdatedEvent(record)];
       case "agent_end": {
-        const outcome = determineRunOutcome(event.messages);
+        const outcome = determineRunOutcome(event.messages, record.cancellationRequested);
+        record.cancellationRequested = false;
         const runId = record.runningRunId;
         record.runningRunId = undefined;
-        record.status = outcome.success ? "idle" : "failed";
+        record.status = outcome.status === "failed" ? "failed" : "idle";
         record.updatedAt = timestamp;
-        if (!outcome.success && outcome.error) {
+        if (outcome.status === "failed") {
           record.preview = outcome.error.message;
         }
         if (record.session) {
           record.sessionCommands = this.collectSessionCommands(record.session);
         }
 
+        // User cancellation is neither successful completion nor a runtime
+        // failure. Publish idle without triggering completion/failure consumers.
+        if (outcome.status === "cancelled") return [sessionUpdatedEvent(record)];
+
         return toDriverEvents(
-          outcome.success
+          outcome.status === "completed"
             ? {
                 type: "runCompleted" as const,
                 sessionRef: record.ref,
@@ -1846,7 +2082,7 @@ export class SessionSupervisor {
                 type: "runFailed" as const,
                 sessionRef: record.ref,
                 timestamp,
-                error: outcome.error ?? toSessionErrorInfo(undefined, "RUN_FAILED"),
+                error: outcome.error,
               },
           record,
           runId,
@@ -1871,7 +2107,10 @@ export class SessionSupervisor {
       } catch (error) {
         // Isolate listeners: one throwing must not skip the remaining ones or
         // reject the caller (which would poison the event queue).
-        console.warn(`[pi-sdk-driver] session listener failed for ${sessionKey(record.ref)}:`, error);
+        console.warn(
+          `[pi-sdk-driver] session listener failed for ${sessionKey(record.ref)}:`,
+          error,
+        );
       }
     }
   }
@@ -1944,15 +2183,63 @@ export class SessionSupervisor {
     return listing.workspaces.length;
   }
 
-  private async touchWorkspace(workspace: WorkspaceRef): Promise<void> {
+  private async touchWorkspace(workspaceId: WorkspaceId): Promise<void> {
+    await this.runWorkspaceMutation(workspaceId, () => this.touchWorkspaceNow(workspaceId));
+  }
+
+  private async touchWorkspaceNow(
+    workspaceId: WorkspaceId,
+  ): Promise<WorkspaceCatalogSnapshot["workspaces"][number] | undefined> {
+    const current = await this.catalogs.workspaces.getWorkspace(workspaceId);
+    if (!current) {
+      return undefined;
+    }
+
+    const touched = {
+      ...current,
+      lastOpenedAt: nowIso(),
+    };
+    await this.catalogs.workspaces.upsertWorkspace(touched);
+    return touched;
+  }
+
+  private async registerWorkspaceRef(workspace: WorkspaceRef): Promise<void> {
+    await this.runWorkspaceMutation(workspace.workspaceId, () =>
+      this.registerWorkspaceRefNow(workspace),
+    );
+  }
+
+  private async registerWorkspaceRefNow(workspace: WorkspaceRef): Promise<void> {
+    const current = await this.catalogs.workspaces.getWorkspace(workspace.workspaceId);
     await this.catalogs.workspaces.upsertWorkspace({
       workspaceId: workspace.workspaceId,
       path: workspace.path,
-      displayName: workspace.displayName ?? deriveWorkspaceTitle(workspace),
+      displayName: workspace.displayName ?? current?.displayName ?? deriveWorkspaceTitle(workspace),
       lastOpenedAt: nowIso(),
-      sortOrder: await this.deriveWorkspaceSortOrder(workspace.workspaceId),
-      pinned: false,
+      sortOrder: current?.sortOrder ?? (await this.deriveWorkspaceSortOrder(workspace.workspaceId)),
+      pinned: current?.pinned ?? false,
     });
+  }
+
+  private async runWorkspaceMutation<T>(
+    workspaceId: WorkspaceId,
+    mutation: () => Promise<T>,
+  ): Promise<T> {
+    const previous = this.workspaceMutationQueues.get(workspaceId) ?? Promise.resolve();
+    const result = previous.catch(() => undefined).then(mutation);
+    const settled = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.workspaceMutationQueues.set(workspaceId, settled);
+
+    try {
+      return await result;
+    } finally {
+      if (this.workspaceMutationQueues.get(workspaceId) === settled) {
+        this.workspaceMutationQueues.delete(workspaceId);
+      }
+    }
   }
 
   private sessionEntryFromInfo(
@@ -1962,7 +2249,9 @@ export class SessionSupervisor {
     existingEntry?: SessionCatalogSnapshot["sessions"][number],
   ): SessionCatalogSnapshot["sessions"][number] {
     const runtimeSnapshot =
-      runtimeRecord && runtimeRecord.session && !runtimeRecord.closed ? buildSnapshot(runtimeRecord) : undefined;
+      runtimeRecord && runtimeRecord.session && !runtimeRecord.closed
+        ? buildSnapshot(runtimeRecord)
+        : undefined;
     const previewSnippet = runtimeSnapshot?.preview ?? previewFromSessionInfo(info);
     const archivedAt = runtimeSnapshot?.archivedAt ?? existingEntry?.archivedAt;
     const titleFromInfo = titleFromSessionInfo(info);
@@ -1972,7 +2261,8 @@ export class SessionSupervisor {
         sessionId: info.id,
       },
       workspaceId: workspace.workspaceId,
-      title: runtimeSnapshot?.title ?? resolvedCatalogSessionTitle(existingEntry?.title, titleFromInfo),
+      title:
+        runtimeSnapshot?.title ?? resolvedCatalogSessionTitle(existingEntry?.title, titleFromInfo),
       updatedAt: runtimeSnapshot?.updatedAt ?? info.modified.toISOString(),
       status: runtimeSnapshot?.status ?? "idle",
       sessionFilePath: info.path,
@@ -1986,7 +2276,10 @@ export class SessionSupervisor {
     return entry;
   }
 
-  private async updateArchivedState(sessionRef: SessionRef, archivedAt: string | undefined): Promise<void> {
+  private async updateArchivedState(
+    sessionRef: SessionRef,
+    archivedAt: string | undefined,
+  ): Promise<void> {
     const key = sessionKey(sessionRef);
     const record = this.records.get(key);
     if (record) {
@@ -2015,8 +2308,12 @@ export class SessionSupervisor {
             workspaceId: sessionEntry.workspaceId,
             title: sessionEntry.title,
             updatedAt: sessionEntry.updatedAt,
-            ...(sessionEntry.previewSnippet !== undefined ? { previewSnippet: sessionEntry.previewSnippet } : {}),
-            ...(sessionEntry.sessionFilePath !== undefined ? { sessionFilePath: sessionEntry.sessionFilePath } : {}),
+            ...(sessionEntry.previewSnippet !== undefined
+              ? { previewSnippet: sessionEntry.previewSnippet }
+              : {}),
+            ...(sessionEntry.sessionFilePath !== undefined
+              ? { sessionFilePath: sessionEntry.sessionFilePath }
+              : {}),
             status: sessionEntry.status,
           };
 
@@ -2029,7 +2326,10 @@ function resolvedCatalogSessionTitle(existingTitle: string | undefined, infoTitl
   if (!trimmedExisting) {
     return infoTitle;
   }
-  if (trimmedExisting === NEW_THREAD_PLACEHOLDER_TITLE && infoTitle !== NEW_THREAD_PLACEHOLDER_TITLE) {
+  if (
+    trimmedExisting === NEW_THREAD_PLACEHOLDER_TITLE &&
+    infoTitle !== NEW_THREAD_PLACEHOLDER_TITLE
+  ) {
     return infoTitle;
   }
   return trimmedExisting;
@@ -2058,7 +2358,11 @@ function resolveForkSourceEntry(
     (item): item is SessionTranscriptMessage => item.kind === "message",
   );
   if (options.sourceMessageIndex !== undefined) {
-    return findBranchEntryForRenderedMessageIndex(branch, renderedMessageItems, options.sourceMessageIndex);
+    return findBranchEntryForRenderedMessageIndex(
+      branch,
+      renderedMessageItems,
+      options.sourceMessageIndex,
+    );
   }
 
   if (options.userMessageIndex === undefined) {
@@ -2075,7 +2379,11 @@ function resolveForkSourceEntry(
   });
   return renderedSourceMessageIndex === -1
     ? undefined
-    : findBranchEntryForRenderedMessageIndex(branch, renderedMessageItems, renderedSourceMessageIndex);
+    : findBranchEntryForRenderedMessageIndex(
+        branch,
+        renderedMessageItems,
+        renderedSourceMessageIndex,
+      );
 }
 
 function findBranchEntryForRenderedMessageIndex(
@@ -2136,7 +2444,9 @@ async function removeIntermediateForkSession(
 
 function clampThinkingLevel(level: string, availableLevels: readonly string[]): string {
   const available = new Set(availableLevels);
-  const requestedIndex = THINKING_LEVEL_ORDER.indexOf(level as (typeof THINKING_LEVEL_ORDER)[number]);
+  const requestedIndex = THINKING_LEVEL_ORDER.indexOf(
+    level as (typeof THINKING_LEVEL_ORDER)[number],
+  );
   if (requestedIndex === -1) {
     return availableLevels[0] ?? "off";
   }
@@ -2155,7 +2465,10 @@ function clampThinkingLevel(level: string, availableLevels: readonly string[]): 
   return availableLevels[0] ?? "off";
 }
 
-async function createCanonicalWorkspaceRef(path: string, displayName?: string): Promise<WorkspaceRef> {
+async function createCanonicalWorkspaceRef(
+  path: string,
+  displayName?: string,
+): Promise<WorkspaceRef> {
   const canonicalPath = await canonicalizePath(path);
   return createWorkspaceRef(canonicalPath, displayName);
 }
@@ -2186,7 +2499,8 @@ function runtimeSourceInfoFromLoose(
 }
 
 function getRegisteredCommands(session: AgentSession): readonly RegisteredCommandAdapter[] {
-  return (session.extensionRunner?.getRegisteredCommands() ?? []) as readonly RegisteredCommandAdapter[];
+  return (session.extensionRunner?.getRegisteredCommands() ??
+    []) as readonly RegisteredCommandAdapter[];
 }
 
 function getPromptTemplates(session: AgentSession): readonly PromptTemplateAdapter[] {
@@ -2359,8 +2673,13 @@ function previewForTreeMessage(
   if (Array.isArray(content)) {
     const preview = truncate(
       content
-        .flatMap((part) =>
-          typeof part === "object" && part !== null && "type" in part && part.type === "text" && "text" in part && typeof part.text === "string"
+        .flatMap((part: unknown) =>
+          typeof part === "object" &&
+          part !== null &&
+          "type" in part &&
+          part.type === "text" &&
+          "text" in part &&
+          typeof part.text === "string"
             ? [part.text]
             : [],
         )
@@ -2452,8 +2771,13 @@ function previewForTreeContent(content: unknown): string | undefined {
   return (
     truncate(
       content
-        .flatMap((part) =>
-          typeof part === "object" && part !== null && "type" in part && part.type === "text" && "text" in part && typeof part.text === "string"
+        .flatMap((part: unknown) =>
+          typeof part === "object" &&
+          part !== null &&
+          "type" in part &&
+          part.type === "text" &&
+          "text" in part &&
+          typeof part.text === "string"
             ? [part.text]
             : [],
         )
@@ -2467,10 +2791,12 @@ function previewForTreeContent(content: unknown): string | undefined {
 const extensionUiThemeStub = new Proxy(
   {},
   {
-    get: () => (...args: unknown[]) => {
-      const last = args.at(-1);
-      return typeof last === "string" ? last : "";
-    },
+    get:
+      () =>
+      (...args: unknown[]) => {
+        const last = args.at(-1);
+        return typeof last === "string" ? last : "";
+      },
   },
 ) as ExtensionUIContext["theme"];
 
@@ -2479,13 +2805,20 @@ function cloneQueuedMessage(message: SessionQueuedMessage): SessionQueuedMessage
     ...message,
     ...(message.attachments
       ? {
-          attachments: message.attachments.map((attachment: NonNullable<SessionQueuedMessage["attachments"]>[number]) => ({ ...attachment })),
+          attachments: message.attachments.map(
+            (attachment: NonNullable<SessionQueuedMessage["attachments"]>[number]) => ({
+              ...attachment,
+            }),
+          ),
         }
       : {}),
   };
 }
 
-function queuedMessageFromInput(input: SessionMessageInput, timestamp: string): SessionQueuedMessage {
+function queuedMessageFromInput(
+  input: SessionMessageInput,
+  timestamp: string,
+): SessionQueuedMessage {
   return {
     id: crypto.randomUUID(),
     mode: input.deliverAs!,
@@ -2514,14 +2847,18 @@ function reconcileQueuedMessagesForStartedUserMessage(
     return undefined;
   }
 
-  const steeringIndex = record.queuedMessages.findIndex((item) => item.mode === "steer" && item.text === text);
+  const steeringIndex = record.queuedMessages.findIndex(
+    (item) => item.mode === "steer" && item.text === text,
+  );
   if (steeringIndex !== -1) {
     const [started] = record.queuedMessages.splice(steeringIndex, 1);
     record.updatedAt = timestamp;
     return started;
   }
 
-  const followUpIndex = record.queuedMessages.findIndex((item) => item.mode === "followUp" && item.text === text);
+  const followUpIndex = record.queuedMessages.findIndex(
+    (item) => item.mode === "followUp" && item.text === text,
+  );
   if (followUpIndex !== -1) {
     const [started] = record.queuedMessages.splice(followUpIndex, 1);
     record.updatedAt = timestamp;

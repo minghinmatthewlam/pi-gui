@@ -10,7 +10,12 @@ import {
   makeUserDataDir,
   makeWorkspace,
 } from "../helpers/electron-app";
-import { createThread, selectSessionByTitle, setSessionVisibilityOverride, type SessionContext } from "./session-event-test-helpers";
+import {
+  createThread,
+  selectSessionByTitle,
+  setSessionVisibilityOverride,
+  type SessionContext,
+} from "./session-event-test-helpers";
 
 async function emitRunStarted(
   harness: Awaited<ReturnType<typeof launchDesktop>>,
@@ -91,10 +96,16 @@ test("runs two sessions in parallel without sidebar status bleed", async () => {
     await emitRunStarted(harness, sessionA, "A", runIdA);
 
     await expect
-      .poll(async () => {
-        const state = await getDesktopState(window);
-        return state.workspaces[0]?.sessions.find((session) => session.title === "Session A")?.status ?? "";
-      }, { timeout: 30_000 })
+      .poll(
+        async () => {
+          const state = await getDesktopState(window);
+          return (
+            state.workspaces[0]?.sessions.find((session) => session.title === "Session A")
+              ?.status ?? ""
+          );
+        },
+        { timeout: 30_000 },
+      )
       .toBe("running");
 
     await selectSessionByTitle(window, "Session B");
@@ -102,16 +113,19 @@ test("runs two sessions in parallel without sidebar status bleed", async () => {
     await emitRunStarted(harness, sessionB, "B", runIdB);
 
     await expect
-      .poll(async () => {
-        const state = await getDesktopState(window);
-        const workspace = state.workspaces[0];
-        const currentA = workspace?.sessions.find((session) => session.title === "Session A");
-        const currentB = workspace?.sessions.find((session) => session.title === "Session B");
-        return {
-          sessionAStatus: currentA?.status,
-          sessionBStatus: currentB?.status,
-        };
-      }, { timeout: 45_000 })
+      .poll(
+        async () => {
+          const state = await getDesktopState(window);
+          const workspace = state.workspaces[0];
+          const currentA = workspace?.sessions.find((session) => session.title === "Session A");
+          const currentB = workspace?.sessions.find((session) => session.title === "Session B");
+          return {
+            sessionAStatus: currentA?.status,
+            sessionBStatus: currentB?.status,
+          };
+        },
+        { timeout: 45_000 },
+      )
       .toEqual({
         sessionAStatus: "running",
         sessionBStatus: "running",
@@ -128,22 +142,27 @@ test("runs two sessions in parallel without sidebar status bleed", async () => {
     ]);
     expect(runningAlignedTitles[0]).not.toBeNull();
     expect(runningAlignedTitles[1]).not.toBeNull();
-    expect(Math.abs((runningAlignedTitles[0]?.x ?? 0) - (runningAlignedTitles[1]?.x ?? 0))).toBeLessThanOrEqual(1);
+    expect(
+      Math.abs((runningAlignedTitles[0]?.x ?? 0) - (runningAlignedTitles[1]?.x ?? 0)),
+    ).toBeLessThanOrEqual(1);
 
     await emitRunCompleted(harness, sessionA, "A", runIdA);
     await emitRunCompleted(harness, sessionB, "B", runIdB);
 
     await expect
-      .poll(async () => {
-        const state = await getDesktopState(window);
-        const workspace = state.workspaces[0];
-        const currentA = workspace?.sessions.find((session) => session.title === "Session A");
-        const currentB = workspace?.sessions.find((session) => session.title === "Session B");
-        return {
-          sessionAStatus: currentA?.status,
-          sessionBStatus: currentB?.status,
-        };
-      }, { timeout: 120_000 })
+      .poll(
+        async () => {
+          const state = await getDesktopState(window);
+          const workspace = state.workspaces[0];
+          const currentA = workspace?.sessions.find((session) => session.title === "Session A");
+          const currentB = workspace?.sessions.find((session) => session.title === "Session B");
+          return {
+            sessionAStatus: currentA?.status,
+            sessionBStatus: currentB?.status,
+          };
+        },
+        { timeout: 120_000 },
+      )
       .toEqual({
         sessionAStatus: "idle",
         sessionBStatus: "idle",
@@ -159,7 +178,9 @@ test("runs two sessions in parallel without sidebar status bleed", async () => {
     ]);
     expect(alignedTitles[0]).not.toBeNull();
     expect(alignedTitles[1]).not.toBeNull();
-    expect(Math.abs((alignedTitles[0]?.x ?? 0) - (alignedTitles[1]?.x ?? 0))).toBeLessThanOrEqual(1);
+    expect(Math.abs((alignedTitles[0]?.x ?? 0) - (alignedTitles[1]?.x ?? 0))).toBeLessThanOrEqual(
+      1,
+    );
 
     await clickSession(window, "Session A");
     await expect(window.locator(".topbar__session")).toHaveText("Session A");
@@ -175,8 +196,6 @@ test("runs two sessions in parallel without sidebar status bleed", async () => {
           case "activity":
           case "summary":
             return `${item.kind}:${item.label}`;
-          default:
-            return item.kind;
         }
       });
 
@@ -209,34 +228,43 @@ test("switches threads promptly while sessions are already running", async () =>
     await createNamedThread(window, "Session B");
 
     const promptA =
-      "Use your bash tool and run `python - <<'PY'\nimport time\nprint(\"A start\")\ntime.sleep(12)\nprint(\"A done\")\nPY` then reply with exactly `A complete`.";
+      'Use your bash tool and run `python - <<\'PY\'\nimport time\nprint("A start")\ntime.sleep(12)\nprint("A done")\nPY` then reply with exactly `A complete`.';
     const promptB =
-      "Use your bash tool and run `python - <<'PY'\nimport time\nprint(\"B start\")\ntime.sleep(12)\nprint(\"B done\")\nPY` then reply with exactly `B complete`.";
+      'Use your bash tool and run `python - <<\'PY\'\nimport time\nprint("B start")\ntime.sleep(12)\nprint("B done")\nPY` then reply with exactly `B complete`.';
 
     await selectSessionByTitle(window, "Session A");
     await window.getByTestId("composer").fill(promptA);
     await window.getByTestId("composer").press("Enter");
     await expect
-      .poll(async () => {
-        const state = await getDesktopState(window);
-        return state.workspaces[0]?.sessions.find((session) => session.title === "Session A")?.status ?? "";
-      }, { timeout: 30_000 })
+      .poll(
+        async () => {
+          const state = await getDesktopState(window);
+          return (
+            state.workspaces[0]?.sessions.find((session) => session.title === "Session A")
+              ?.status ?? ""
+          );
+        },
+        { timeout: 30_000 },
+      )
       .toBe("running");
 
     await selectSessionByTitle(window, "Session B");
     await window.getByTestId("composer").fill(promptB);
     await window.getByTestId("composer").press("Enter");
     await expect
-      .poll(async () => {
-        const state = await getDesktopState(window);
-        const workspace = state.workspaces[0];
-        const sessionA = workspace?.sessions.find((session) => session.title === "Session A");
-        const sessionB = workspace?.sessions.find((session) => session.title === "Session B");
-        return {
-          sessionAStatus: sessionA?.status,
-          sessionBStatus: sessionB?.status,
-        };
-      }, { timeout: 45_000 })
+      .poll(
+        async () => {
+          const state = await getDesktopState(window);
+          const workspace = state.workspaces[0];
+          const sessionA = workspace?.sessions.find((session) => session.title === "Session A");
+          const sessionB = workspace?.sessions.find((session) => session.title === "Session B");
+          return {
+            sessionAStatus: sessionA?.status,
+            sessionBStatus: sessionB?.status,
+          };
+        },
+        { timeout: 45_000 },
+      )
       .toEqual({
         sessionAStatus: "running",
         sessionBStatus: "running",
@@ -247,24 +275,44 @@ test("switches threads promptly while sessions are already running", async () =>
 
     await clickSession(window, "Session A");
     await expect(window.locator(".topbar__session")).toHaveText("Session A", { timeout: 1_000 });
-    await expect(window.locator(".session-row--active")).toContainText("Session A", { timeout: 1_000 });
-    await expect(sessionARow).toHaveAttribute("data-sidebar-indicator", "running", { timeout: 1_000 });
+    await expect(window.locator(".session-row--active")).toContainText("Session A", {
+      timeout: 1_000,
+    });
+    await expect(sessionARow).toHaveAttribute("data-sidebar-indicator", "running", {
+      timeout: 1_000,
+    });
     await expect
-      .poll(async () => {
-        const state = await getDesktopState(window);
-        return state.workspaces[0]?.sessions.find((session) => session.title === "Session B")?.status ?? "";
-      }, { timeout: 1_000 })
+      .poll(
+        async () => {
+          const state = await getDesktopState(window);
+          return (
+            state.workspaces[0]?.sessions.find((session) => session.title === "Session B")
+              ?.status ?? ""
+          );
+        },
+        { timeout: 1_000 },
+      )
       .toBe("running");
 
     await clickSession(window, "Session B");
     await expect(window.locator(".topbar__session")).toHaveText("Session B", { timeout: 1_000 });
-    await expect(window.locator(".session-row--active")).toContainText("Session B", { timeout: 1_000 });
-    await expect(sessionBRow).toHaveAttribute("data-sidebar-indicator", "running", { timeout: 1_000 });
+    await expect(window.locator(".session-row--active")).toContainText("Session B", {
+      timeout: 1_000,
+    });
+    await expect(sessionBRow).toHaveAttribute("data-sidebar-indicator", "running", {
+      timeout: 1_000,
+    });
     await expect
-      .poll(async () => {
-        const state = await getDesktopState(window);
-        return state.workspaces[0]?.sessions.find((session) => session.title === "Session A")?.status ?? "";
-      }, { timeout: 1_000 })
+      .poll(
+        async () => {
+          const state = await getDesktopState(window);
+          return (
+            state.workspaces[0]?.sessions.find((session) => session.title === "Session A")
+              ?.status ?? ""
+          );
+        },
+        { timeout: 1_000 },
+      )
       .toBe("running");
   } finally {
     await harness.close();

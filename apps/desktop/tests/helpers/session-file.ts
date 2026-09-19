@@ -13,7 +13,10 @@ export interface SeededSessionFileMessage {
 }
 
 /** Resolve a session's pi JSONL file path from the app's catalog. */
-export async function sessionFilePathFromCatalog(userDataDir: string, sessionRef: SessionRefLike): Promise<string> {
+export async function sessionFilePathFromCatalog(
+  userDataDir: string,
+  sessionRef: SessionRefLike,
+): Promise<string> {
   const catalogs = JSON.parse(await readFile(join(userDataDir, "catalogs.json"), "utf8")) as {
     sessions: Array<{ sessionRef: SessionRefLike; sessionFilePath?: string }>;
     sessionFiles?: Record<string, string>;
@@ -23,9 +26,12 @@ export async function sessionFilePathFromCatalog(userDataDir: string, sessionRef
       (session) =>
         session.sessionRef.workspaceId === sessionRef.workspaceId &&
         session.sessionRef.sessionId === sessionRef.sessionId,
-    )?.sessionFilePath ?? catalogs.sessionFiles?.[`${sessionRef.workspaceId}:${sessionRef.sessionId}`];
+    )?.sessionFilePath ??
+    catalogs.sessionFiles?.[`${sessionRef.workspaceId}:${sessionRef.sessionId}`];
   if (!sessionFilePath) {
-    throw new Error(`No session file tracked for ${sessionRef.workspaceId}:${sessionRef.sessionId}`);
+    throw new Error(
+      `No session file tracked for ${sessionRef.workspaceId}:${sessionRef.sessionId}`,
+    );
   }
   return sessionFilePath;
 }
@@ -61,9 +67,9 @@ export async function appendMessagesToSessionFile(
           ? {
               role: "assistant",
               content: [{ type: "text", text: message.text }],
-              api: "test",
-              provider: "test",
-              model: "test",
+              api: "openai-responses",
+              provider: "openai",
+              model: "gpt-5",
               usage: {
                 input: 0,
                 output: 0,
@@ -81,7 +87,11 @@ export async function appendMessagesToSessionFile(
     return entry;
   });
 
-  await appendFile(sessionFilePath, `${entries.map((entry) => JSON.stringify(entry)).join("\n")}\n`, "utf8");
+  await appendFile(
+    sessionFilePath,
+    `${entries.map((entry) => JSON.stringify(entry)).join("\n")}\n`,
+    "utf8",
+  );
 }
 
 /**
@@ -96,13 +106,19 @@ export async function createSessionFileBeside(
   fileName: string,
   messages: readonly SeededSessionFileMessage[],
 ): Promise<string> {
-  const firstLine = (await readFile(siblingSessionFilePath, "utf8")).split("\n").find((line) => line.trim());
+  const firstLine = (await readFile(siblingSessionFilePath, "utf8"))
+    .split("\n")
+    .find((line) => line.trim());
   const header = JSON.parse(firstLine ?? "{}") as { type?: string };
   if (header.type !== "session") {
     throw new Error(`First line of ${siblingSessionFilePath} is not a session header`);
   }
   const sessionFilePath = join(dirname(siblingSessionFilePath), fileName);
-  const newHeader = { ...header, id: `cli-seeded-${Date.now()}`, timestamp: new Date().toISOString() };
+  const newHeader = {
+    ...header,
+    id: `cli-seeded-${Date.now()}`,
+    timestamp: new Date().toISOString(),
+  };
   await writeFile(sessionFilePath, `${JSON.stringify(newHeader)}\n`, "utf8");
   await appendMessagesToSessionFile(sessionFilePath, messages);
   return sessionFilePath;

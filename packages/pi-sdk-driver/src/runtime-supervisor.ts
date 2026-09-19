@@ -1,8 +1,10 @@
 import { readFile } from "node:fs/promises";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import {
+  CredentialSynchronizationError,
   DefaultPackageManager,
   DefaultResourceLoader,
+  ModelRuntime,
   type PackageSource,
   SettingsManager,
   parseFrontmatter,
@@ -26,15 +28,18 @@ import type {
 } from "@pi-gui/session-driver/runtime-types";
 import type { WorkspaceRef } from "@pi-gui/session-driver";
 import { createRuntimeDependencies } from "./runtime-deps.js";
-import { createSettingsManagerWithoutNpmPackages, isGlobalNpmLookupError } from "./npm-package-fallback.js";
+import {
+  createSettingsManagerWithoutNpmPackages,
+  isGlobalNpmLookupError,
+} from "./npm-package-fallback.js";
 import { skillSlashCommand } from "./runtime-command-utils.js";
-import type { AuthStatus, AuthStorage, ModelRegistry } from "@earendil-works/pi-coding-agent";
 import {
   BUILT_IN_PROVIDER_IDS,
   CustomProviderStore,
   type CustomProviderEntry,
   type CustomProviderInput,
 } from "./custom-provider-store.js";
+import { savePiProjectSettings } from "./compat/pi-project-settings.js";
 
 export {
   BUILT_IN_PROVIDER_IDS,
@@ -42,7 +47,11 @@ export {
   isValidHttpBaseUrl,
   OPENAI_COMPLETIONS_API,
 } from "./custom-provider-store.js";
-export type { CustomProviderEntry, CustomProviderInput, CustomProviderModelInput } from "./custom-provider-store.js";
+export type {
+  CustomProviderEntry,
+  CustomProviderInput,
+  CustomProviderModelInput,
+} from "./custom-provider-store.js";
 
 interface ModelSettingsSnapshot {
   readonly defaultProvider?: string;
@@ -51,11 +60,28 @@ interface ModelSettingsSnapshot {
   readonly enabledModelPatterns: readonly string[];
 }
 
+/** A queued `pi.registerProvider()` call, as the extension runtime records it. */
+type ExtensionProviderRegistration = ReturnType<
+  DefaultResourceLoader["getExtensions"]
+>["runtime"]["pendingProviderRegistrations"][number];
+type ExtensionNativeProviderRegistration = ReturnType<
+  DefaultResourceLoader["getExtensions"]
+>["runtime"]["pendingNativeProviderRegistrations"][number];
+type ProviderAuthStatus = ReturnType<ModelRuntime["getProviderAuthStatus"]>;
+type StoredCredentialType = Awaited<ReturnType<ModelRuntime["listCredentials"]>>[number]["type"];
+type LoginAuthType = Parameters<ModelRuntime["login"]>[1];
+type LoginInteraction = Parameters<ModelRuntime["login"]>[2];
+
 interface RuntimeContext {
   readonly workspace: WorkspaceRef;
   readonly settingsManager: SettingsManager;
   readonly packageManager: DefaultPackageManager;
   readonly resourceLoader: DefaultResourceLoader;
+  /** `registerProvider()` calls this workspace's extensions made, in call order. */
+  extensionProviders: readonly ExtensionProviderRegistration[];
+  nativeProviders: readonly ExtensionNativeProviderRegistration[];
+  /** Runtime the snapshot is built from, owned by this workspace. */
+  modelRuntime: ModelRuntime;
 }
 
 export interface RuntimeInlineExtensionMetadata {
@@ -63,15 +89,8 @@ export interface RuntimeInlineExtensionMetadata {
   readonly description?: string;
 }
 
-interface ProjectWritableSettingsManager {
-  markProjectModified(field: string, nestedKey?: string): void;
-  saveProjectSettings(settings: Record<string, unknown>): void;
-}
-
 export interface RuntimeSupervisorOptions {
   readonly agentDir?: string;
-  readonly authStorage?: AuthStorage;
-  readonly modelRegistry?: ModelRegistry;
   readonly extensionFactories?: readonly ExtensionFactory[];
   readonly inlineExtensionMetadata?: readonly RuntimeInlineExtensionMetadata[];
   readonly customProviderStore?: CustomProviderStore;
@@ -87,8 +106,8 @@ interface PackageMetadata {
 
 export class RuntimeSupervisor implements RuntimeResourceDriver {
   private readonly agentDir: string;
-  private readonly authStorage: AuthStorage;
-  private readonly modelRegistry: ModelRegistry;
+  private readonly modelsJsonPath: string;
+  private readonly authPath: string;
   private readonly extensionFactories: readonly ExtensionFactory[];
   private readonly inlineExtensionMetadata: readonly RuntimeInlineExtensionMetadata[];
   private readonly customProviderStore: CustomProviderStore;
@@ -97,8 +116,8 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
   constructor(options: RuntimeSupervisorOptions = {}) {
     const deps = createRuntimeDependencies(options);
     this.agentDir = deps.agentDir;
-    this.authStorage = deps.authStorage;
-    this.modelRegistry = deps.modelRegistry;
+    this.modelsJsonPath = deps.modelsJsonPath;
+    this.authPath = deps.authPath;
     this.extensionFactories = options.extensionFactories ?? [];
     this.inlineExtensionMetadata = options.inlineExtensionMetadata ?? [];
     this.customProviderStore = deps.customProviderStore;
@@ -111,32 +130,38 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
 
   async refreshRuntime(workspace: WorkspaceRef): Promise<RuntimeSnapshot> {
     const context = await this.ensureContext(workspace);
-    context.settingsManager.reload();
-    this.authStorage.reload();
-    this.modelRegistry.refresh();
-    await context.resourceLoader.reload();
+    await context.settingsManager.reload();
+    await this.reloadResources(context);
     await this.autoEnableModelsForAuthenticatedProviders(context);
     return this.buildSnapshot(context);
   }
 
-  async login(workspace: WorkspaceRef, providerId: string, callbacks: RuntimeLoginCallbacks): Promise<RuntimeSnapshot> {
+  async login(
+    workspace: WorkspaceRef,
+    providerId: string,
+    callbacks: RuntimeLoginCallbacks,
+  ): Promise<RuntimeSnapshot> {
     const context = await this.ensureContext(workspace);
-    await this.authStorage.login(providerId, toPiOAuthLoginCallbacks(callbacks));
-    this.modelRegistry.refresh();
-    await context.resourceLoader.reload();
+    const provider = context.modelRuntime.getProvider(providerId);
+    const authType: LoginAuthType = provider?.auth.oauth ? "oauth" : "api_key";
+    await context.modelRuntime.login(providerId, authType, toAuthInteraction(callbacks));
+    await this.reloadResources(context);
     await this.autoEnableModelsForAuthenticatedProviders(context, [providerId]);
     return this.buildSnapshot(context);
   }
 
   async logout(workspace: WorkspaceRef, providerId: string): Promise<RuntimeSnapshot> {
     const context = await this.ensureContext(workspace);
-    this.authStorage.logout(providerId);
-    this.modelRegistry.refresh();
-    await context.resourceLoader.reload();
+    await context.modelRuntime.logout(providerId);
+    await this.reloadResources(context);
     return this.buildSnapshot(context);
   }
 
-  async setProviderApiKey(workspace: WorkspaceRef, providerId: string, apiKey: string): Promise<RuntimeSnapshot> {
+  async setProviderApiKey(
+    workspace: WorkspaceRef,
+    providerId: string,
+    apiKey: string,
+  ): Promise<RuntimeSnapshot> {
     const context = await this.ensureContext(workspace);
     const normalized = apiKey.trim();
     if (!normalized) {
@@ -145,9 +170,19 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
     if (!providerSupportsDesktopApiKeySetup(providerId)) {
       throw new Error(`API key setup is not supported for ${providerId}.`);
     }
-    this.authStorage.set(providerId, { type: "api_key", key: normalized });
-    this.modelRegistry.refresh();
-    await context.resourceLoader.reload();
+    // Persist through login, not setRuntimeApiKey: the latter is an in-memory
+    // overlay, and reloadResources builds a fresh ModelRuntime from auth.json.
+    try {
+      await context.modelRuntime.login(providerId, "api_key", {
+        prompt: async () => normalized,
+        notify: () => undefined,
+      });
+    } catch (error) {
+      if (!(error instanceof CredentialSynchronizationError)) {
+        throw error;
+      }
+    }
+    await this.reloadResources(context);
     await this.autoEnableModelsForAuthenticatedProviders(context, [providerId]);
     return this.buildSnapshot(context);
   }
@@ -156,26 +191,35 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
     return this.customProviderStore.list();
   }
 
-  async setCustomProvider(workspace: WorkspaceRef, input: CustomProviderInput): Promise<RuntimeSnapshot> {
-    const oauthProviderIds = new Set(this.authStorage.getOAuthProviders().map((provider) => provider.id));
+  async setCustomProvider(
+    workspace: WorkspaceRef,
+    input: CustomProviderInput,
+  ): Promise<RuntimeSnapshot> {
+    const context = await this.ensureContext(workspace);
+    const oauthProviderIds = new Set(
+      context.modelRuntime
+        .getProviders()
+        .filter((provider) => Boolean(provider.auth.oauth))
+        .map((provider) => provider.id),
+    );
     if (BUILT_IN_PROVIDER_IDS.has(input.providerId) || oauthProviderIds.has(input.providerId)) {
       throw new Error(
         `Provider ID "${input.providerId}" conflicts with a built-in provider. Pick a unique ID.`,
       );
     }
-    const context = await this.ensureContext(workspace);
     await this.customProviderStore.set(input);
-    this.modelRegistry.refresh();
-    await context.resourceLoader.reload();
+    await this.reloadResources(context);
     await this.autoEnableModelsForAuthenticatedProviders(context, [input.providerId]);
     return this.buildSnapshot(context);
   }
 
-  async deleteCustomProvider(workspace: WorkspaceRef, providerId: string): Promise<RuntimeSnapshot> {
+  async deleteCustomProvider(
+    workspace: WorkspaceRef,
+    providerId: string,
+  ): Promise<RuntimeSnapshot> {
     const context = await this.ensureContext(workspace);
     await this.customProviderStore.delete(providerId);
-    this.modelRegistry.refresh();
-    await context.resourceLoader.reload();
+    await this.reloadResources(context);
     return this.buildSnapshot(context);
   }
 
@@ -200,15 +244,15 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
     },
   ): Promise<RuntimeSnapshot> {
     const context = await this.ensureContext(workspace);
-    const settingsManager = context.settingsManager as unknown as ProjectWritableSettingsManager;
     const projectSettings = context.settingsManager.getProjectSettings() as Record<string, unknown>;
     projectSettings.defaultProvider = selection.provider;
     projectSettings.defaultModel = selection.modelId;
-    settingsManager.markProjectModified("defaultProvider");
-    settingsManager.markProjectModified("defaultModel");
-    settingsManager.saveProjectSettings(projectSettings);
+    savePiProjectSettings(context.settingsManager, projectSettings, [
+      "defaultProvider",
+      "defaultModel",
+    ]);
     await context.settingsManager.flush();
-    context.settingsManager.reload();
+    await context.settingsManager.reload();
     return this.buildSnapshot(context);
   }
 
@@ -233,46 +277,53 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
     if (!thinkingLevel) {
       throw new Error("Thinking level is required.");
     }
-    const settingsManager = context.settingsManager as unknown as ProjectWritableSettingsManager;
     const projectSettings = context.settingsManager.getProjectSettings() as Record<string, unknown>;
     projectSettings.defaultThinkingLevel = thinkingLevel;
-    settingsManager.markProjectModified("defaultThinkingLevel");
-    settingsManager.saveProjectSettings(projectSettings);
+    savePiProjectSettings(context.settingsManager, projectSettings, ["defaultThinkingLevel"]);
     await context.settingsManager.flush();
-    context.settingsManager.reload();
+    await context.settingsManager.reload();
     return this.buildSnapshot(context);
   }
 
-  async setEnableSkillCommands(workspace: WorkspaceRef, enabled: boolean): Promise<RuntimeSnapshot> {
+  async setEnableSkillCommands(
+    workspace: WorkspaceRef,
+    enabled: boolean,
+  ): Promise<RuntimeSnapshot> {
     const context = await this.ensureContext(workspace);
     context.settingsManager.setEnableSkillCommands(enabled);
     await context.settingsManager.flush();
-    await context.resourceLoader.reload();
+    await this.reloadResources(context);
     return this.buildSnapshot(context);
   }
 
-  async setScopedModelPatterns(workspace: WorkspaceRef, patterns: readonly string[]): Promise<RuntimeSnapshot> {
+  async setScopedModelPatterns(
+    workspace: WorkspaceRef,
+    patterns: readonly string[],
+  ): Promise<RuntimeSnapshot> {
     const context = await this.ensureContext(workspace);
     context.settingsManager.setEnabledModels(patterns.length > 0 ? [...patterns] : undefined);
     await context.settingsManager.flush();
     return this.buildSnapshot(context);
   }
 
-  async setProjectScopedModelPatterns(workspace: WorkspaceRef, patterns: readonly string[]): Promise<RuntimeSnapshot> {
+  async setProjectScopedModelPatterns(
+    workspace: WorkspaceRef,
+    patterns: readonly string[],
+  ): Promise<RuntimeSnapshot> {
     const context = await this.ensureContext(workspace);
-    const settingsManager = context.settingsManager as unknown as ProjectWritableSettingsManager;
     const projectSettings = context.settingsManager.getProjectSettings() as Record<string, unknown>;
     projectSettings.enabledModels = patterns.length > 0 ? [...patterns] : undefined;
-    settingsManager.markProjectModified("enabledModels");
-    settingsManager.saveProjectSettings(projectSettings);
+    savePiProjectSettings(context.settingsManager, projectSettings, ["enabledModels"]);
     await context.settingsManager.flush();
-    context.settingsManager.reload();
+    await context.settingsManager.reload();
     return this.buildSnapshot(context);
   }
 
   async getGlobalModelSettings(workspace: WorkspaceRef): Promise<ModelSettingsSnapshot> {
     const context = await this.ensureContext(workspace);
-    return toModelSettingsSnapshot(context.settingsManager.getGlobalSettings() as Record<string, unknown>);
+    return toModelSettingsSnapshot(
+      context.settingsManager.getGlobalSettings() as Record<string, unknown>,
+    );
   }
 
   async getCurrentModelSettings(workspace: WorkspaceRef): Promise<ModelSettingsSnapshot> {
@@ -318,31 +369,43 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
     return snapshot;
   }
 
-  async setSkillEnabled(workspace: WorkspaceRef, filePath: string, enabled: boolean): Promise<RuntimeSnapshot> {
+  async setSkillEnabled(
+    workspace: WorkspaceRef,
+    filePath: string,
+    enabled: boolean,
+  ): Promise<RuntimeSnapshot> {
     const context = await this.ensureContext(workspace);
     const resolvedPaths = await this.resolveRuntimePaths(context);
-    const resource = resolvedPaths.skills.find((entry) => resolve(entry.path) === resolve(filePath));
+    const resource = resolvedPaths.skills.find(
+      (entry) => resolve(entry.path) === resolve(filePath),
+    );
     if (!resource) {
       throw new Error(`Unknown skill: ${filePath}`);
     }
 
     this.toggleResource(context, resource, enabled, "skill");
     await context.settingsManager.flush();
-    await context.resourceLoader.reload();
+    await this.reloadResources(context);
     return this.buildSnapshot(context);
   }
 
-  async setExtensionEnabled(workspace: WorkspaceRef, filePath: string, enabled: boolean): Promise<RuntimeSnapshot> {
+  async setExtensionEnabled(
+    workspace: WorkspaceRef,
+    filePath: string,
+    enabled: boolean,
+  ): Promise<RuntimeSnapshot> {
     const context = await this.ensureContext(workspace);
     const resolvedPaths = await this.resolveRuntimePaths(context);
-    const resource = resolvedPaths.extensions.find((entry) => resolve(entry.path) === resolve(filePath));
+    const resource = resolvedPaths.extensions.find(
+      (entry) => resolve(entry.path) === resolve(filePath),
+    );
     if (!resource) {
       throw new Error(`Unknown extension: ${filePath}`);
     }
 
     this.toggleResource(context, resource, enabled, "extension");
     await context.settingsManager.flush();
-    await context.resourceLoader.reload();
+    await this.reloadResources(context);
     return this.buildSnapshot(context);
   }
 
@@ -397,23 +460,141 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
       await resourceLoader.reload();
     }
 
+    const applied = await this.applyExtensionProviders(resourceLoader);
     const context: RuntimeContext = {
       workspace,
       settingsManager,
       packageManager,
       resourceLoader,
+      extensionProviders: applied.accepted,
+      nativeProviders: applied.acceptedNative,
+      modelRuntime: applied.runtime,
     };
     this.contexts.set(workspace.workspaceId, context);
     return context;
   }
 
+  /**
+   * Drop a workspace's cached context.
+   *
+   * Contexts hold that workspace's resource loader, settings manager, and model
+   * runtime, so a removed workspace has to give them up — otherwise its
+   * extensions keep their providers alive for the rest of the process.
+   */
+  removeWorkspace(workspaceId: WorkspaceRef["workspaceId"]): void {
+    this.contexts.delete(workspaceId);
+  }
+
+  private async reloadResources(context: RuntimeContext): Promise<void> {
+    await context.resourceLoader.reload();
+    const applied = await this.applyExtensionProviders(context.resourceLoader);
+    context.extensionProviders = applied.accepted;
+    context.nativeProviders = applied.acceptedNative;
+    context.modelRuntime = applied.runtime;
+  }
+
+  /**
+   * Drain the providers this workspace's extensions registered while loading.
+   *
+   * `pi` queues `pi.registerProvider()` calls made during extension load on the
+   * resource loader's extension runtime and flushes them when session services are
+   * created (`createAgentSessionServices`). The runtime snapshot never goes through
+   * that path, so without this the model list only ever shows built-ins,
+   * `models.json` providers, and custom providers — extension-provided models are
+   * invisible in settings and pickers even though sessions can use them.
+   *
+   * Each reload replays every enabled extension, so the drained queue is the
+   * workspace's complete current set: providers whose extension was disabled or
+   * removed simply do not come back.
+   *
+   * The queue is kept in call order rather than collapsed per provider id.
+   * `registerProvider()` is a merge, not an assignment — a full registration
+   * followed by a `baseUrl`-only one keeps the models and re-points them — so
+   * only replaying every call reproduces what `pi` itself would build.
+   */
+  private drainExtensionProviders(resourceLoader: DefaultResourceLoader): {
+    readonly registrations: ExtensionProviderRegistration[];
+    readonly nativeRegistrations: ExtensionNativeProviderRegistration[];
+  } {
+    const { runtime } = resourceLoader.getExtensions();
+    const registrations = [...runtime.pendingProviderRegistrations];
+    const nativeRegistrations = [...runtime.pendingNativeProviderRegistrations];
+    runtime.pendingProviderRegistrations = [];
+    runtime.pendingNativeProviderRegistrations = [];
+    return { registrations, nativeRegistrations };
+  }
+
+  private async applyExtensionProviders(resourceLoader: DefaultResourceLoader): Promise<{
+    readonly runtime: ModelRuntime;
+    readonly accepted: ExtensionProviderRegistration[];
+    readonly acceptedNative: ExtensionNativeProviderRegistration[];
+  }> {
+    const drained = this.drainExtensionProviders(resourceLoader);
+    return this.buildWorkspaceModelRuntime(drained.registrations, drained.nativeRegistrations);
+  }
+
+  /**
+   * Build a cwd-scoped runtime from disk plus this workspace's extension providers.
+   *
+   * A fresh instance rather than mutating a shared runtime: passing one runtime
+   * into every session is what lets two workspaces steal each other's dispatch
+   * for the same provider id. Constructing a runtime has no global effect.
+   */
+  private async buildWorkspaceModelRuntime(
+    registrations: readonly ExtensionProviderRegistration[],
+    nativeRegistrations: readonly ExtensionNativeProviderRegistration[],
+  ): Promise<{
+    readonly runtime: ModelRuntime;
+    readonly accepted: ExtensionProviderRegistration[];
+    readonly acceptedNative: ExtensionNativeProviderRegistration[];
+  }> {
+    const runtime = await ModelRuntime.create({
+      authPath: this.authPath,
+      modelsPath: this.modelsJsonPath,
+      refreshOnCreate: false,
+    });
+    const accepted: ExtensionProviderRegistration[] = [];
+    for (const registration of registrations) {
+      const { name, config, extensionPath } = registration;
+      try {
+        // Copy: registering merges into the stored config object in place, which
+        // would let a later registration rewrite our captured config.
+        runtime.registerProvider(name, { ...config });
+        accepted.push(registration);
+      } catch (error) {
+        console.warn(
+          `[pi-gui] Extension "${extensionPath}" failed to register provider "${name}": ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+    }
+    const acceptedNative: ExtensionNativeProviderRegistration[] = [];
+    for (const registration of nativeRegistrations) {
+      const { provider, extensionPath } = registration;
+      try {
+        runtime.registerNativeProvider(provider);
+        acceptedNative.push(registration);
+      } catch (error) {
+        console.warn(
+          `[pi-gui] Extension "${extensionPath}" failed to register native provider "${provider.id}": ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+    }
+    await runtime.refresh({ allowNetwork: false });
+    return { runtime, accepted, acceptedNative };
+  }
+
   private async buildSnapshot(context: RuntimeContext): Promise<RuntimeSnapshot> {
+    await context.modelRuntime.refresh({ allowNetwork: false });
     const resolvedPaths = await this.resolveRuntimePaths(context);
     const [skills, extensions, providers, models] = await Promise.all([
       this.buildSkillRecords(context, resolvedPaths.skills),
       this.buildExtensionRecords(context, resolvedPaths.extensions),
-      this.buildProviderRecords(),
-      this.buildModelRecords(),
+      this.buildProviderRecords(context),
+      this.buildModelRecords(context),
     ]);
 
     const defaultProvider = context.settingsManager.getDefaultProvider();
@@ -445,7 +626,9 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
         throw error;
       }
 
-      const fallbackSettingsManager = createSettingsManagerWithoutNpmPackages(context.settingsManager);
+      const fallbackSettingsManager = createSettingsManagerWithoutNpmPackages(
+        context.settingsManager,
+      );
       if (!fallbackSettingsManager) {
         throw error;
       }
@@ -465,43 +648,57 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
     }
   }
 
-  private async buildProviderRecords(): Promise<readonly RuntimeProviderRecord[]> {
-    const oauthProviders = new Map(this.authStorage.getOAuthProviders().map((provider) => [provider.id, provider]));
+  private async buildProviderRecords(
+    context: RuntimeContext,
+  ): Promise<readonly RuntimeProviderRecord[]> {
+    const runtime = context.modelRuntime;
+    const credentials = await runtime.listCredentials();
+    const credentialByProvider = new Map(
+      credentials.map((credential) => [credential.providerId, credential.type] as const),
+    );
+    const oauthProviders = new Map(
+      runtime
+        .getProviders()
+        .filter((provider) => Boolean(provider.auth.oauth))
+        .map((provider) => [provider.id, provider] as const),
+    );
     const providerIds = new Set<string>([
-      ...this.modelRegistry.getAll().map((model) => model.provider),
+      ...runtime.getModels().map((model) => model.provider),
       ...oauthProviders.keys(),
-      ...this.authStorage.list(),
+      ...credentialByProvider.keys(),
     ]);
 
     return [...providerIds]
       .sort((left, right) => left.localeCompare(right))
       .map((providerId) => {
-        const auth = this.authStorage.get(providerId);
+        const storedType = credentialByProvider.get(providerId);
         const oauthProvider = oauthProviders.get(providerId);
         const apiKeySetupSupported = providerSupportsDesktopApiKeySetup(providerId);
-        const providerAuthStatus = this.modelRegistry.getProviderAuthStatus(providerId);
-        const hasAuth = providerAuthStatus.configured || this.authStorage.hasAuth(providerId);
+        const providerAuthStatus = runtime.getProviderAuthStatus(providerId);
+        const hasAuth = providerAuthStatus.configured || storedType !== undefined;
         return {
           id: providerId,
-          name: oauthProvider?.name ?? providerId,
+          name: oauthProvider?.name ?? runtime.getProvider(providerId)?.name ?? providerId,
           hasAuth,
-          authType: auth?.type ?? "none",
-          authSource: inferProviderAuthSource(auth, providerAuthStatus, apiKeySetupSupported),
+          authType: storedType ?? "none",
+          authSource: inferProviderAuthSource(storedType, providerAuthStatus, apiKeySetupSupported),
           oauthSupported: Boolean(oauthProvider),
           apiKeySetupSupported,
         };
       });
   }
 
-  private async buildModelRecords(): Promise<readonly RuntimeModelRecord[]> {
-    this.modelRegistry.refresh();
+  private async buildModelRecords(context: RuntimeContext): Promise<readonly RuntimeModelRecord[]> {
+    const runtime = context.modelRuntime;
     const availableKeys = new Set(
-      (await this.modelRegistry.getAvailable()).map((model) => `${model.provider}:${model.id}`),
+      (await runtime.getAvailable()).map((model) => `${model.provider}:${model.id}`),
     );
-    const providers = new Map((await this.buildProviderRecords()).map((provider) => [provider.id, provider]));
+    const providers = new Map(
+      (await this.buildProviderRecords(context)).map((provider) => [provider.id, provider]),
+    );
 
-    return this.modelRegistry
-      .getAll()
+    return runtime
+      .getModels()
       .map<RuntimeModelRecord>((model) => {
         const provider = providers.get(model.provider);
         return {
@@ -531,19 +728,18 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
       return;
     }
 
-    const providers = await this.buildProviderRecords();
-    const models = await this.buildModelRecords();
-    const hasSelectableModels = models.some((model) =>
-      model.available && currentPatterns.includes(`${model.providerId}/${model.modelId}`),
+    const providers = await this.buildProviderRecords(context);
+    const models = await this.buildModelRecords(context);
+    const hasSelectableModels = models.some(
+      (model) =>
+        model.available && currentPatterns.includes(`${model.providerId}/${model.modelId}`),
     );
     const candidateProviderIds =
       providerIds && providerIds.length > 0
         ? providerIds
         : hasSelectableModels
           ? []
-          : providers
-              .filter((provider) => provider.hasAuth)
-              .map((provider) => provider.id);
+          : providers.filter((provider) => provider.hasAuth).map((provider) => provider.id);
     if (candidateProviderIds.length === 0) {
       return;
     }
@@ -579,8 +775,10 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
         const loaded = loadedSkills.get(filePath);
         const fallback = loaded ? undefined : await readSkillMetadata(filePath);
         const name = loaded?.name ?? fallback?.name ?? inferSkillName(filePath);
-        const description = loaded?.description ?? fallback?.description ?? "No description provided.";
-        const disableModelInvocation = loaded?.disableModelInvocation ?? fallback?.disableModelInvocation ?? false;
+        const description =
+          loaded?.description ?? fallback?.description ?? "No description provided.";
+        const disableModelInvocation =
+          loaded?.disableModelInvocation ?? fallback?.disableModelInvocation ?? false;
 
         return {
           name,
@@ -595,7 +793,9 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
       }),
     );
 
-    return records.sort((left: RuntimeSkillRecord, right: RuntimeSkillRecord) => left.name.localeCompare(right.name));
+    return records.sort((left: RuntimeSkillRecord, right: RuntimeSkillRecord) =>
+      left.name.localeCompare(right.name),
+    );
   }
 
   private async buildExtensionRecords(
@@ -605,7 +805,9 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
     const loadedResult = context.resourceLoader.getExtensions();
     const packageMetadataCache = new Map<string, Promise<PackageMetadata>>();
     const loadedByPath = new Map(
-      loadedResult.extensions.map((extension) => [resolve(extension.resolvedPath || extension.path), extension] as const),
+      loadedResult.extensions.map(
+        (extension) => [resolve(extension.resolvedPath || extension.path), extension] as const,
+      ),
     );
     const diagnosticsByPath = new Map<string, RuntimeExtensionDiagnostic[]>();
 
@@ -623,28 +825,41 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
       resolvedExtensions.map<Promise<RuntimeExtensionRecord>>(async (resource) => {
         const path = resolve(resource.path);
         const loaded = loadedByPath.get(path);
-        const packageMetadata = await inferExtensionPackageMetadata(resource.metadata, packageMetadataCache);
+        const packageMetadata = await inferExtensionPackageMetadata(
+          resource.metadata,
+          packageMetadataCache,
+        );
         return {
           path,
           displayName: packageMetadata?.displayName ?? inferExtensionEntryName(path),
           ...(packageMetadata?.description ? { description: packageMetadata.description } : {}),
           enabled: resource.enabled,
           sourceInfo: toRuntimeSourceInfo(path, resource.metadata),
-          commands: loaded ? [...loaded.commands.keys()].sort((left, right) => left.localeCompare(right)) : [],
+          commands: loaded
+            ? [...loaded.commands.keys()].sort((left, right) => left.localeCompare(right))
+            : [],
           tools: loaded
             ? [...loaded.tools.values()]
                 .map((tool) => tool.definition.name)
                 .sort((left, right) => left.localeCompare(right))
             : [],
-          flags: loaded ? [...loaded.flags.keys()].sort((left, right) => left.localeCompare(right)) : [],
-          shortcuts: loaded ? [...loaded.shortcuts.keys()].sort((left, right) => left.localeCompare(right)) : [],
+          flags: loaded
+            ? [...loaded.flags.keys()].sort((left, right) => left.localeCompare(right))
+            : [],
+          shortcuts: loaded
+            ? [...loaded.shortcuts.keys()].sort((left, right) => left.localeCompare(right))
+            : [],
           diagnostics: diagnosticsByPath.get(path) ?? [],
         };
       }),
     );
     const resolvedRecordPaths = new Set(records.map((record) => resolve(record.path)));
     const inlineRecords = loadedResult.extensions
-      .filter((extension) => extension.path.startsWith("<inline:") && !resolvedRecordPaths.has(resolve(extension.path)))
+      .filter(
+        (extension) =>
+          extension.path.startsWith("<inline:") &&
+          !resolvedRecordPaths.has(resolve(extension.path)),
+      )
       .map((extension) => this.buildInlineExtensionRecord(extension));
     records.push(...inlineRecords);
 
@@ -655,7 +870,9 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
     );
   }
 
-  private buildInlineExtensionRecord(extension: ReturnType<DefaultResourceLoader["getExtensions"]>["extensions"][number]): RuntimeExtensionRecord {
+  private buildInlineExtensionRecord(
+    extension: ReturnType<DefaultResourceLoader["getExtensions"]>["extensions"][number],
+  ): RuntimeExtensionRecord {
     const metadata = inlineExtensionMetadataForPath(extension.path, this.inlineExtensionMetadata);
     return {
       path: extension.path,
@@ -690,11 +907,15 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
       throw new Error(`Cannot update ${kind} at scope ${scope}`);
     }
     const origin = resource.metadata.origin;
-    const settings = scope === "project" ? settingsManager.getProjectSettings() : settingsManager.getGlobalSettings();
+    const settings =
+      scope === "project"
+        ? settingsManager.getProjectSettings()
+        : settingsManager.getGlobalSettings();
     const pattern = this.relativeResourcePattern(resource.path, resource.metadata, scope, origin);
 
     if (origin === "top-level") {
-      const currentPaths = kind === "skill" ? [...(settings.skills ?? [])] : [...(settings.extensions ?? [])];
+      const currentPaths =
+        kind === "skill" ? [...(settings.skills ?? [])] : [...(settings.extensions ?? [])];
       const updated = replaceResourcePattern(currentPaths, pattern, enabled);
       this.setTopLevelResourcePaths(settingsManager, scope, kind, updated);
       return;
@@ -702,14 +923,20 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
 
     const packages = [...(settings.packages ?? [])];
     const source = resource.metadata.source;
-    const packageIndex = packages.findIndex((entry) => (typeof entry === "string" ? entry : entry.source) === source);
+    const packageIndex = packages.findIndex(
+      (entry) => (typeof entry === "string" ? entry : entry.source) === source,
+    );
     if (packageIndex < 0) {
-      throw new Error(`${titleForResourceKind(kind)} package source not found for ${resource.path}`);
+      throw new Error(
+        `${titleForResourceKind(kind)} package source not found for ${resource.path}`,
+      );
     }
 
     const currentPackage = packages[packageIndex];
-    const nextPackage = typeof currentPackage === "string" ? { source: currentPackage } : { ...currentPackage };
-    const currentPatterns = kind === "skill" ? [...(nextPackage.skills ?? [])] : [...(nextPackage.extensions ?? [])];
+    const nextPackage =
+      typeof currentPackage === "string" ? { source: currentPackage } : { ...currentPackage };
+    const currentPatterns =
+      kind === "skill" ? [...(nextPackage.skills ?? [])] : [...(nextPackage.extensions ?? [])];
     const updatedPatterns = replaceResourcePattern(currentPatterns, pattern, enabled);
     if (updatedPatterns.length > 0) {
       if (kind === "skill") {
@@ -778,21 +1005,27 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
 async function readJsonRecord(filePath: string): Promise<Record<string, unknown>> {
   try {
     const raw = await readFile(filePath, "utf8");
-    const parsed = JSON.parse(raw);
+    const parsed: unknown = JSON.parse(raw);
     return typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : {};
   } catch {
     return {};
   }
 }
 
-function replaceResourcePattern(patterns: readonly string[], resourcePattern: string, enabled: boolean): string[] {
+function replaceResourcePattern(
+  patterns: readonly string[],
+  resourcePattern: string,
+  enabled: boolean,
+): string[] {
   const next = patterns.filter((pattern) => stripPrefix(pattern) !== resourcePattern);
   next.push(`${enabled ? "+" : "-"}${resourcePattern}`);
   return next;
 }
 
 function stripPrefix(pattern: string): string {
-  return pattern.startsWith("+") || pattern.startsWith("-") || pattern.startsWith("!") ? pattern.slice(1) : pattern;
+  return pattern.startsWith("+") || pattern.startsWith("-") || pattern.startsWith("!")
+    ? pattern.slice(1)
+    : pattern;
 }
 
 async function readSkillMetadata(
@@ -864,7 +1097,7 @@ async function inferPackageMetadata(
 
 async function readPackageMetadata(packageRoot: string): Promise<PackageMetadata> {
   const folderName = basename(packageRoot).trim();
-  const packageJson = await readJsonRecord(join(packageRoot, "package.json")) as {
+  const packageJson = (await readJsonRecord(join(packageRoot, "package.json"))) as {
     readonly displayName?: unknown;
     readonly description?: unknown;
   };
@@ -906,52 +1139,92 @@ function providerSupportsDesktopApiKeySetup(providerId: string): boolean {
   return DESKTOP_API_KEY_PROVIDER_IDS.has(providerId);
 }
 
-type PiOAuthLoginCallbacks = Parameters<AuthStorage["login"]>[1];
-
-function toPiOAuthLoginCallbacks(callbacks: RuntimeLoginCallbacks): PiOAuthLoginCallbacks {
+function toAuthInteraction(callbacks: RuntimeLoginCallbacks): LoginInteraction {
   return {
-    onAuth: callbacks.onAuth,
-    onDeviceCode: (info) =>
-      callbacks.onAuth({
-        url: info.verificationUri,
-        instructions: [
-          `Enter code: ${info.userCode}`,
-          info.expiresInSeconds ? `Expires in ${info.expiresInSeconds} seconds.` : undefined,
-        ].filter((line): line is string => Boolean(line)).join("\n"),
-      }),
-    onPrompt: callbacks.onPrompt,
-    onSelect: async (prompt) => {
-      const defaultOption = prompt.options[0];
-      const choice = await callbacks.onPrompt({
-        message: `${prompt.message}\n${prompt.options.map((option, index) => `${index + 1}. ${option.label}`).join("\n")}`,
-        allowEmpty: true,
-        ...(defaultOption ? { placeholder: defaultOption.label } : {}),
-      });
-      const normalizedChoice = choice.trim();
-      if (!normalizedChoice) {
-        return defaultOption?.id;
-      }
-      const selectedIndex = Number.parseInt(normalizedChoice, 10);
-      if (Number.isInteger(selectedIndex) && selectedIndex >= 1 && selectedIndex <= prompt.options.length) {
-        return prompt.options[selectedIndex - 1]?.id;
-      }
-      return prompt.options.find((option) => option.id === normalizedChoice || option.label === normalizedChoice)?.id;
-    },
-    ...(callbacks.onProgress ? { onProgress: callbacks.onProgress } : {}),
-    ...(callbacks.onManualCodeInput ? { onManualCodeInput: callbacks.onManualCodeInput } : {}),
     ...(callbacks.signal ? { signal: callbacks.signal } : {}),
+    prompt: async (prompt) => {
+      if (prompt.type === "select") {
+        const defaultOption = prompt.options[0];
+        const choice = await callbacks.onPrompt({
+          message: `${prompt.message}\n${prompt.options
+            .map((option, index) => `${index + 1}. ${option.label}`)
+            .join("\n")}`,
+          allowEmpty: true,
+          ...(defaultOption ? { placeholder: defaultOption.label } : {}),
+        });
+        const normalizedChoice = choice.trim();
+        if (!normalizedChoice) {
+          return defaultOption?.id ?? "";
+        }
+        const selectedIndex = Number.parseInt(normalizedChoice, 10);
+        if (
+          Number.isInteger(selectedIndex) &&
+          selectedIndex >= 1 &&
+          selectedIndex <= prompt.options.length
+        ) {
+          return prompt.options[selectedIndex - 1]?.id ?? normalizedChoice;
+        }
+        return (
+          prompt.options.find(
+            (option) => option.id === normalizedChoice || option.label === normalizedChoice,
+          )?.id ?? normalizedChoice
+        );
+      }
+      if (prompt.type === "manual_code" && callbacks.onManualCodeInput) {
+        return callbacks.onManualCodeInput();
+      }
+      return callbacks.onPrompt({
+        message: prompt.message,
+        allowEmpty: false,
+        ...(prompt.placeholder ? { placeholder: prompt.placeholder } : {}),
+      });
+    },
+    notify: (event) => {
+      if (event.type === "auth_url") {
+        Promise.resolve(
+          callbacks.onAuth({
+            url: event.url,
+            ...(event.instructions ? { instructions: event.instructions } : {}),
+          }),
+        ).catch((error: unknown) => {
+          console.error("OAuth authorization callback failed", error);
+        });
+        return;
+      }
+      if (event.type === "device_code") {
+        Promise.resolve(
+          callbacks.onAuth({
+            url: event.verificationUri,
+            instructions: [
+              `Enter code: ${event.userCode}`,
+              event.expiresInSeconds ? `Expires in ${event.expiresInSeconds} seconds.` : undefined,
+            ]
+              .filter((line): line is string => Boolean(line))
+              .join("\n"),
+          }),
+        ).catch((error: unknown) => {
+          console.error("OAuth device-code callback failed", error);
+        });
+        return;
+      }
+      if (event.type === "progress" || event.type === "info") {
+        Promise.resolve(callbacks.onProgress?.(event.message)).catch((error: unknown) => {
+          console.error("OAuth progress callback failed", error);
+        });
+      }
+    },
   };
 }
 
 function inferProviderAuthSource(
-  auth: { readonly type: "oauth" | "api_key" } | undefined,
-  providerAuthStatus: AuthStatus,
+  storedType: StoredCredentialType | undefined,
+  providerAuthStatus: ProviderAuthStatus,
   apiKeySetupSupported: boolean,
 ): "none" | "oauth" | "auth_file" | "env" | "external" {
-  if (auth?.type === "oauth") {
+  if (storedType === "oauth") {
     return "oauth";
   }
-  if (auth?.type === "api_key") {
+  if (storedType === "api_key") {
     return "auth_file";
   }
   switch (providerAuthStatus.source) {
@@ -999,10 +1272,15 @@ function toModelSettingsSnapshot(settings: Record<string, unknown>): ModelSettin
     enabledModelPatterns: Array.isArray(settings.enabledModels)
       ? settings.enabledModels.filter((value): value is string => typeof value === "string")
       : [],
-    ...(typeof settings.defaultProvider === "string" ? { defaultProvider: settings.defaultProvider } : {}),
+    ...(typeof settings.defaultProvider === "string"
+      ? { defaultProvider: settings.defaultProvider }
+      : {}),
     ...(typeof settings.defaultModel === "string" ? { defaultModelId: settings.defaultModel } : {}),
     ...(typeof settings.defaultThinkingLevel === "string"
-      ? { defaultThinkingLevel: settings.defaultThinkingLevel as ModelSettingsSnapshot["defaultThinkingLevel"] }
+      ? {
+          defaultThinkingLevel:
+            settings.defaultThinkingLevel as ModelSettingsSnapshot["defaultThinkingLevel"],
+        }
       : {}),
   } satisfies ModelSettingsSnapshot;
 }

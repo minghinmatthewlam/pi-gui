@@ -16,8 +16,8 @@
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 16px;
-  --font-sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, "SF Pro Text",
-    "Segoe UI", sans-serif;
+  --font-sans:
+    ui-sans-serif, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
   --font-mono: "SF Mono", "Fira Code", "Fira Mono", Menlo, Consolas, monospace;
 }
 
@@ -120,11 +120,8 @@ video {
 .hero {
   padding: 140px 0 80px;
   text-align: center;
-  background: radial-gradient(
-      ellipse 70% 40% at 50% -5%,
-      rgba(106, 85, 242, 0.07) 0%,
-      transparent 100%
-    ),
+  background:
+    radial-gradient(ellipse 70% 40% at 50% -5%, rgba(106, 85, 242, 0.07) 0%, transparent 100%),
     linear-gradient(180deg, #f5f3ff 0%, #ffffff 50%);
 }
 
@@ -190,8 +187,11 @@ video {
   font-weight: 600;
   border: none;
   cursor: pointer;
-  transition: background 150ms ease, transform 150ms ease,
-    box-shadow 150ms ease, border-color 150ms ease;
+  transition:
+    background 150ms ease,
+    transform 150ms ease,
+    box-shadow 150ms ease,
+    border-color 150ms ease;
   white-space: nowrap;
 }
 
@@ -317,7 +317,9 @@ video {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  transition: border-color 200ms ease, box-shadow 200ms ease;
+  transition:
+    border-color 200ms ease,
+    box-shadow 200ms ease;
 }
 
 .feature-card:hover {

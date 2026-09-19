@@ -39,14 +39,19 @@ test("forks a thread from an assistant response into a new sidebar session", asy
     const beforeSelectedSessionId = before.selectedSessionId;
 
     // Fork after the second assistant response (codex-style); history up to and including it branches off.
-    const secondAnswer = transcript.locator(".timeline-item--assistant", { hasText: "Second fork answer" });
+    const secondAnswer = transcript.locator(".timeline-item--assistant", {
+      hasText: "Second fork answer",
+    });
     await secondAnswer.hover();
     await secondAnswer.getByTestId("fork-from-message").click();
 
     const forkModal = window.getByTestId("fork-modal");
     await expect(forkModal).toBeVisible();
     await expect(window.getByTestId("fork-modal-preview")).toContainText("Second fork answer");
-    await expect(window.getByTestId("fork-environment-local")).toHaveAttribute("aria-pressed", "true");
+    await expect(window.getByTestId("fork-environment-local")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
 
     await window.getByTestId("fork-modal-confirm").click();
     await expect(forkModal).toHaveCount(0);

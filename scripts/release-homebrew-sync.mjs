@@ -20,18 +20,21 @@ async function main() {
       "asset-name": { type: "string" },
       "asset-url": { type: "string" },
       "cask-token": { type: "string", default: "pi-gui" },
-      "commit": { type: "boolean", default: false },
+      commit: { type: "boolean", default: false },
       "commit-message": { type: "string" },
       "dmg-path": { type: "string" },
       "dry-run": { type: "boolean", default: false },
-      "git-user-email": { type: "string", default: "41898282+github-actions[bot]@users.noreply.github.com" },
+      "git-user-email": {
+        type: "string",
+        default: "41898282+github-actions[bot]@users.noreply.github.com",
+      },
       "git-user-name": { type: "string", default: "github-actions[bot]" },
       "github-repo": { type: "string" },
-      "push": { type: "boolean", default: false },
-      "sha256": { type: "string" },
-      "tag": { type: "string" },
+      push: { type: "boolean", default: false },
+      sha256: { type: "string" },
+      tag: { type: "string" },
       "tap-dir": { type: "string" },
-      "version": { type: "string" },
+      version: { type: "string" },
     },
     strict: true,
   });
@@ -51,7 +54,8 @@ async function main() {
       token: process.env.GITHUB_TOKEN,
     }));
 
-  const sha256 = values.sha256 ?? (values["dmg-path"] ? await computeFileSha256(values["dmg-path"]) : undefined);
+  const sha256 =
+    values.sha256 ?? (values["dmg-path"] ? await computeFileSha256(values["dmg-path"]) : undefined);
   if (!sha256) {
     throw new Error("Pass either --sha256 or --dmg-path.");
   }
@@ -66,7 +70,9 @@ async function main() {
   });
 
   if (!result.changed) {
-    process.stdout.write(`${JSON.stringify({ changed: false, caskPath: result.caskPath }, null, 2)}\n`);
+    process.stdout.write(
+      `${JSON.stringify({ changed: false, caskPath: result.caskPath }, null, 2)}\n`,
+    );
     return;
   }
 

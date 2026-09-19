@@ -19,27 +19,41 @@ async function beginPrompt(
   message: string,
   placeholder: string,
 ): Promise<void> {
-  await electronApp.evaluate((_electron, payload) => {
-    const hooks = (globalThis as {
-      __PI_APP_TEST_HOOKS?: {
-        promptForText?: (message: string, placeholder?: string, allowEmpty?: boolean) => Promise<string>;
-      };
-    }).__PI_APP_TEST_HOOKS;
-    if (!hooks?.promptForText) {
-      throw new Error("promptForText test hook is unavailable");
-    }
-    (globalThis as { __promptOutcome?: Promise<PromptOutcome> }).__promptOutcome = hooks
-      .promptForText(payload.message, payload.placeholder, false)
-      .then((value) => ({ ok: true as const, value }))
-      .catch((error: unknown) => ({ ok: false as const, error: error instanceof Error ? error.message : String(error) }));
-  }, { message, placeholder });
+  await electronApp.evaluate(
+    (_electron, payload) => {
+      const hooks = (
+        globalThis as {
+          __PI_APP_TEST_HOOKS?: {
+            promptForText?: (
+              message: string,
+              placeholder?: string,
+              allowEmpty?: boolean,
+            ) => Promise<string>;
+          };
+        }
+      ).__PI_APP_TEST_HOOKS;
+      if (!hooks?.promptForText) {
+        throw new Error("promptForText test hook is unavailable");
+      }
+      (globalThis as { __promptOutcome?: Promise<PromptOutcome> }).__promptOutcome = hooks
+        .promptForText(payload.message, payload.placeholder, false)
+        .then((value) => ({ ok: true as const, value }))
+        .catch((error: unknown) => ({
+          ok: false as const,
+          error: error instanceof Error ? error.message : String(error),
+        }));
+    },
+    { message, placeholder },
+  );
 }
 
 async function readPromptOutcome(
   electronApp: Awaited<ReturnType<typeof launchDesktop>>["electronApp"],
 ): Promise<PromptOutcome> {
   return electronApp.evaluate(
-    () => (globalThis as { __promptOutcome?: Promise<PromptOutcome> }).__promptOutcome as Promise<PromptOutcome>,
+    () =>
+      (globalThis as { __promptOutcome?: Promise<PromptOutcome> })
+        .__promptOutcome as Promise<PromptOutcome>,
   );
 }
 

@@ -11,7 +11,7 @@ import {
   stageFile,
   type GitCommandExecutor,
   type GitCommandResult,
-} from "../../electron/app-store-diff";
+} from "../../electron/platform/files/app-store-diff";
 
 const execFileAsync = promisify(execFile);
 
@@ -19,10 +19,7 @@ function pathologicalPath(label: string): string {
   return ` ${label} with space\t"quoted"\nsource -> destination `;
 }
 
-function gitResult(
-  stdout = "",
-  error: Error | null = null,
-): GitCommandResult {
+function gitResult(stdout = "", error: Error | null = null): GitCommandResult {
   return { error, stdout };
 }
 
@@ -107,9 +104,8 @@ test("uses machine-safe status arguments and returns typed failures", async () =
     },
   ]);
 
-  const executionFailure = await getChangedFiles(
-    "/workspace",
-    async () => gitResult("", new Error("injected Git failure")),
+  const executionFailure = await getChangedFiles("/workspace", async () =>
+    gitResult("", new Error("injected Git failure")),
   );
   expect(executionFailure).toEqual({
     state: "unavailable",
@@ -119,9 +115,8 @@ test("uses machine-safe status arguments and returns typed failures", async () =
     },
   });
 
-  const invalidOutput = await getChangedFiles(
-    "/workspace",
-    async () => gitResult("?? not NUL terminated"),
+  const invalidOutput = await getChangedFiles("/workspace", async () =>
+    gitResult("?? not NUL terminated"),
   );
   expect(invalidOutput).toEqual({
     state: "unavailable",
@@ -154,9 +149,7 @@ test("passes exact paths as isolated argv values for diff and stage", async () =
   await expect(getFileDiff("/workspace", exactPath, executeGit)).resolves.toBe("untracked diff");
   const renameDestination = pathologicalPath("rename destination");
   const renameSource = pathologicalPath("rename source");
-  await expect(
-    stageFile("/workspace", exactPath, { executeGit }),
-  ).resolves.toBeUndefined();
+  await expect(stageFile("/workspace", exactPath, { executeGit })).resolves.toBeUndefined();
   await expect(
     stageFile("/workspace", renameDestination, { sourcePath: renameSource, executeGit }),
   ).resolves.toBeUndefined();
@@ -201,7 +194,10 @@ test("stages both exact paths for a filesystem rename", async () => {
 });
 
 test("round-trips pathological paths through a real Git repository", async () => {
-  test.skip(process.platform === "win32", "Win32 filenames cannot represent tabs, quotes, or newlines.");
+  test.skip(
+    process.platform === "win32",
+    "Win32 filenames cannot represent tabs, quotes, or newlines.",
+  );
 
   const workspacePath = await mkdtemp(join(tmpdir(), "pi-gui-changed-files-"));
   const modifiedPath = pathologicalPath("modified");
@@ -293,7 +289,9 @@ test("round-trips pathological paths through a real Git repository", async () =>
       staged: false,
     });
 
-    await expect(getFileDiff(workspacePath, untrackedPath)).resolves.toContain("untracked contents");
+    await expect(getFileDiff(workspacePath, untrackedPath)).resolves.toContain(
+      "untracked contents",
+    );
     await expect(getFileDiff(workspacePath, pathspecMagicPath)).resolves.toContain(
       "literal pathspec contents",
     );

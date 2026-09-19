@@ -1,0 +1,40 @@
+{
+  "assets": [
+    {
+      "path": "docs/assets/demo.gif",
+      "producer": "marketing:demo",
+      "consumers": [{ "path": "README.md", "reference": "./docs/assets/demo.gif" }]
+    },
+    {
+      "path": "docs/assets/demo.mp4",
+      "producer": "marketing:demo",
+      "consumers": [{ "path": "README.md", "reference": "./docs/assets/demo.mp4" }]
+    },
+    {
+      "path": "apps/website/public/demo.mp4",
+      "producer": "marketing:demo",
+      "consumers": [{ "path": "apps/website/app/page.tsx", "reference": "/demo.mp4" }]
+    },
+    {
+      "path": "video/public/captures/parallel-sessions.mp4",
+      "producer": "marketing:capture",
+      "consumers": [{ "path": "video/src/PiShowcase.tsx", "reference": "parallel-sessions.mp4" }]
+    },
+    {
+      "path": "video/public/captures/slash-commands.mp4",
+      "producer": "marketing:capture",
+      "consumers": [{ "path": "video/src/PiShowcase.tsx", "reference": "slash-commands.mp4" }]
+    },
+    {
+      "path": "video/public/captures/skills-settings.mp4",
+      "producer": "marketing:capture",
+      "consumers": [{ "path": "video/src/PiShowcase.tsx", "reference": "skills-settings.mp4" }]
+    },
+    {
+      "path": "video/out/pi-showcase.mp4",
+      "producer": "marketing:render",
+      "consumers": []
+    }
+  ],
+  "retention": "Keep existing media and captured evidence. Producers may replace only the outputs listed here. Demo and showcase captures retain their temporary profiles and frames under .artifacts. Use PI_GUI_MARKETING_STAGE_DIR for proof runs that must not replace tracked media."
+}

@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { writeJsonFileAtomic } from "./atomic-write.js";
+import { writeJsonFileAtomic } from "@pi-gui/catalogs/node/atomic-write";
 import {
   BUILT_IN_PROVIDER_IDS,
   CUSTOM_PROVIDER_ID_PATTERN,
@@ -12,7 +12,11 @@ import {
   type CustomProviderModelInput,
 } from "./custom-provider-types.js";
 
-export type { CustomProviderEntry, CustomProviderInput, CustomProviderModelInput } from "./custom-provider-types.js";
+export type {
+  CustomProviderEntry,
+  CustomProviderInput,
+  CustomProviderModelInput,
+} from "./custom-provider-types.js";
 export {
   BUILT_IN_PROVIDER_IDS,
   CUSTOM_PROVIDER_ID_PATTERN,
@@ -21,6 +25,10 @@ export {
   OPENAI_COMPLETIONS_API,
   PI_GUI_CUSTOM_PROVIDER_MARKER,
 } from "./custom-provider-types.js";
+
+interface ModelsJson extends Record<string, unknown> {
+  providers?: Record<string, unknown>;
+}
 
 export class CustomProviderStore {
   private queue: Promise<unknown> = Promise.resolve();
@@ -40,7 +48,10 @@ export class CustomProviderStore {
       const data = await readModelsJson(this.modelsJsonPath);
       const providers = ensureProvidersRecord(data);
       const existing = providers[input.providerId];
-      if (existing && typeof existing === "object" && !isPiGuiCustomProviderConfig(input.providerId, existing as Record<string, unknown>)) {
+      if (
+        Object.hasOwn(providers, input.providerId) &&
+        (!isRecord(existing) || !isPiGuiCustomProviderConfig(input.providerId, existing))
+      ) {
         throw new Error(
           `Provider ID "${input.providerId}" already exists in models.json and is not managed by pi-gui.`,
         );
@@ -54,14 +65,14 @@ export class CustomProviderStore {
     return this.enqueue(async () => {
       const data = await readModelsJson(this.modelsJsonPath);
       const providers = data.providers;
-      if (!providers || typeof providers !== "object" || !(providerId in providers)) {
+      if (!providers || !Object.hasOwn(providers, providerId)) {
         return false;
       }
-      const existing = (providers as Record<string, unknown>)[providerId];
-      if (!existing || typeof existing !== "object" || !isPiGuiCustomProviderConfig(providerId, existing as Record<string, unknown>)) {
+      const existing = providers[providerId];
+      if (!isRecord(existing) || !isPiGuiCustomProviderConfig(providerId, existing)) {
         return false;
       }
-      delete (providers as Record<string, unknown>)[providerId];
+      delete providers[providerId];
       await atomicWriteJson(this.modelsJsonPath, data);
       return true;
     });
@@ -81,7 +92,9 @@ function validateInput(input: CustomProviderInput): void {
     );
   }
   if (!isValidHttpBaseUrl(input.baseUrl)) {
-    throw new Error(`Base URL must start with http:// or https://: ${JSON.stringify(input.baseUrl)}`);
+    throw new Error(
+      `Base URL must start with http:// or https://: ${JSON.stringify(input.baseUrl)}`,
+    );
   }
   if (input.models.length === 0) {
     throw new Error("At least one model is required.");
@@ -113,17 +126,17 @@ function toProviderConfig(input: CustomProviderInput): Record<string, unknown> {
   };
 }
 
-function readCustomProviders(data: Record<string, unknown>): readonly CustomProviderEntry[] {
+function readCustomProviders(data: ModelsJson): readonly CustomProviderEntry[] {
   const providers = data.providers;
-  if (!providers || typeof providers !== "object") {
+  if (!providers) {
     return [];
   }
   const entries: CustomProviderEntry[] = [];
-  for (const [providerId, rawConfig] of Object.entries(providers as Record<string, unknown>)) {
-    if (!rawConfig || typeof rawConfig !== "object") {
+  for (const [providerId, rawConfig] of Object.entries(providers)) {
+    if (!isRecord(rawConfig)) {
       continue;
     }
-    const config = rawConfig as Record<string, unknown>;
+    const config = rawConfig;
     if (!isPiGuiCustomProviderConfig(providerId, config)) {
       continue;
     }
@@ -177,11 +190,12 @@ function isPiGuiCustomProviderConfig(providerId: string, config: Record<string, 
   );
 }
 
-function ensureProvidersRecord(data: Record<string, unknown>): Record<string, unknown> {
-  if (!data.providers || typeof data.providers !== "object") {
-    data.providers = {};
-  }
-  return data.providers as Record<string, unknown>;
+function ensureProvidersRecord(data: ModelsJson): Record<string, unknown> {
+  return (data.providers ??= {});
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 function isMissingFileError(error: unknown): boolean {
@@ -189,7 +203,7 @@ function isMissingFileError(error: unknown): boolean {
   return code === "ENOENT" || code === "ENOTDIR";
 }
 
-async function readModelsJson(path: string): Promise<Record<string, unknown>> {
+async function readModelsJson(path: string): Promise<ModelsJson> {
   let text: string;
   try {
     text = await readFile(path, "utf8");
@@ -212,10 +226,15 @@ async function readModelsJson(path: string): Promise<Record<string, unknown>> {
       })`,
     );
   }
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+  if (!isRecord(parsed)) {
     throw new Error(`${path} must contain a JSON object at the top level.`);
   }
-  return parsed as Record<string, unknown>;
+  if (Object.hasOwn(parsed, "providers") && !isRecord(parsed.providers)) {
+    throw new Error(
+      `${path} must contain a JSON object for providers. Existing data was not changed.`,
+    );
+  }
+  return { ...parsed, ...(isRecord(parsed.providers) ? { providers: parsed.providers } : {}) };
 }
 
 async function atomicWriteJson(path: string, data: Record<string, unknown>): Promise<void> {

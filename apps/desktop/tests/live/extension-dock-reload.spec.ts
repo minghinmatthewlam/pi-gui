@@ -1,4 +1,10 @@
-import { writeProjectExtension, createNamedThread, launchDesktop, makeUserDataDir, makeWorkspace } from "../helpers/electron-app";
+import {
+  writeProjectExtension,
+  createNamedThread,
+  launchDesktop,
+  makeUserDataDir,
+  makeWorkspace,
+} from "../helpers/electron-app";
 import { expect, test } from "@playwright/test";
 
 const initialExtensionSource = String.raw`
@@ -65,7 +71,9 @@ test("resets dock expansion on /reload and extension enable or disable transitio
     await expect(dockBody).toHaveCount(0);
 
     await window.getByRole("button", { name: "Extensions", exact: true }).click();
-    const extensionCard = window.getByTestId("extensions-list").getByRole("button", { name: /reload-dock-extension/i });
+    const extensionCard = window
+      .getByTestId("extensions-list")
+      .getByRole("button", { name: /reload-dock-extension/i });
     await extensionCard.click();
     await window.getByRole("button", { name: "Disable", exact: true }).click();
     await window.getByRole("button", { name: "Back to app", exact: true }).click();
@@ -105,7 +113,11 @@ test("refreshes runtime with new extension output and keeps the dock collapsed a
     await dockToggle.click();
     await expect(dockBody).toContainText("Initial widget line");
 
-    await writeProjectExtension(workspacePath, "reload-dock-extension.ts", refreshedExtensionSource);
+    await writeProjectExtension(
+      workspacePath,
+      "reload-dock-extension.ts",
+      refreshedExtensionSource,
+    );
     await window.getByRole("button", { name: "Extensions", exact: true }).click();
     await window.getByRole("button", { name: "Refresh", exact: true }).click();
     await window.getByRole("button", { name: "Back to app", exact: true }).click();

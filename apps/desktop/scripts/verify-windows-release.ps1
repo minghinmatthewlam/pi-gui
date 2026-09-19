@@ -13,15 +13,10 @@ param(
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
-function Assert-ValidSignature([string]$Path) {
+function Assert-ArtifactFile([string]$Path) {
   if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
     throw "Missing Windows release artifact: $Path"
   }
-  $signature = Get-AuthenticodeSignature -LiteralPath $Path
-  if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid) {
-    throw "Authenticode validation failed for $Path with status $($signature.Status)"
-  }
-  Write-Host "Valid Authenticode signature: $Path ($($signature.SignerCertificate.Subject))"
 }
 
 function Assert-X64Pe([string]$Path) {
@@ -68,11 +63,11 @@ function Invoke-SevenZip([string]$SevenZip, [string[]]$Arguments) {
 
 $setup = Join-Path $ReleaseDir "pi-gui-$Version-x64-setup.exe"
 $portable = Join-Path $ReleaseDir "pi-gui-$Version-x64-portable.exe"
-Assert-ValidSignature $setup
-Assert-ValidSignature $portable
+Assert-ArtifactFile $setup
+Assert-ArtifactFile $portable
 
 if ($PackagedApp) {
-  Assert-ValidSignature $PackagedApp
+  Assert-ArtifactFile $PackagedApp
   Assert-X64Pe $PackagedApp
 }
 
@@ -97,7 +92,7 @@ if ($SmokePackages) {
     }
 
     $installedApp = Join-Path $installRoot "pi-gui.exe"
-    Assert-ValidSignature $installedApp
+    Assert-ArtifactFile $installedApp
     Assert-X64Pe $installedApp
 
     Invoke-SevenZip $sevenZip @("x", "-y", "-o$portableRoot", $portable)
@@ -128,7 +123,7 @@ if ($SmokePackages) {
       throw "Portable application archive did not contain pi-gui.exe"
     }
     $portableApp = $portableAppFile.FullName
-    Assert-ValidSignature $portableApp
+    Assert-ArtifactFile $portableApp
     Assert-X64Pe $portableApp
   }
   finally {

@@ -1,7 +1,12 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
-import { createNamedThread, launchDesktop, makeUserDataDir, makeWorkspace } from "../helpers/electron-app";
+import {
+  createNamedThread,
+  launchDesktop,
+  makeUserDataDir,
+  makeWorkspace,
+} from "../helpers/electron-app";
 
 test("shows skills and settings surfaces from runtime data", async () => {
   test.setTimeout(60_000);
@@ -45,7 +50,9 @@ Use this skill when the user wants a short demo workflow.
     await expect(window.locator(".settings-view")).toBeVisible();
     await expect(window.getByText("Notifications", { exact: true })).toBeVisible();
     await expect(window.locator(".settings-view")).toContainText("Enable skill slash commands");
-    const skillCommandsToggle = window.getByRole("checkbox", { name: "Enable skill slash commands" });
+    const skillCommandsToggle = window.getByRole("checkbox", {
+      name: "Enable skill slash commands",
+    });
     await expect(skillCommandsToggle).toBeChecked();
     await skillCommandsToggle.click();
 

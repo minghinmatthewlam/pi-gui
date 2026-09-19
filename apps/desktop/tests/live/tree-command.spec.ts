@@ -1,5 +1,10 @@
 import { expect, test } from "@playwright/test";
-import { getRealAuthConfig, launchDesktop, makeUserDataDir, makeWorkspace } from "../helpers/electron-app";
+import {
+  getRealAuthConfig,
+  launchDesktop,
+  makeUserDataDir,
+  makeWorkspace,
+} from "../helpers/electron-app";
 
 test("runs /tree summarize flow against a real provider and surfaces the branch summary", async () => {
   test.setTimeout(240_000);
@@ -33,14 +38,18 @@ test("runs /tree summarize flow against a real provider and surfaces the branch 
 
     const treeModal = window.getByTestId("tree-modal");
     await expect(treeModal).toBeVisible();
-    await treeModal.locator(".tree-row__content", { hasText: "Reply with exactly ROOT-ONE." }).click();
+    await treeModal
+      .locator(".tree-row__content", { hasText: "Reply with exactly ROOT-ONE." })
+      .click();
     await treeModal.getByRole("button", { name: "Continue" }).click();
     await expect(window.getByTestId("tree-summary-step")).toBeVisible();
     await treeModal.getByRole("button", { name: "Summarize" }).click();
     await treeModal.getByRole("button", { name: "Switch branch" }).click();
 
     await expect(treeModal).toHaveCount(0, { timeout: 150_000 });
-    await expect(window.locator(".timeline-item--summary-card")).toContainText("Branch summary", { timeout: 150_000 });
+    await expect(window.locator(".timeline-item--summary-card")).toContainText("Branch summary", {
+      timeout: 150_000,
+    });
     await expect(composer).toHaveValue("Reply with exactly ROOT-ONE.");
   } finally {
     await harness.close();

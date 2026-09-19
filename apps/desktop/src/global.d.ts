@@ -1,4 +1,4 @@
-import type { PiDesktopApi } from "./ipc";
+import type { PiDesktopApi } from "../contracts/ipc";
 
 export {};
 

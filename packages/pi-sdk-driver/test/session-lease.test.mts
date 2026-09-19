@@ -22,7 +22,13 @@ const TTL = 60_000;
 
 function foreignSnapshot(overrides: Partial<LeaseInfo> = {}, mtimeMs = 1_000): LeaseSnapshot {
   return {
-    info: { pid: 9999, hostname: "other-host", startedAt: "2026-07-03T00:00:00.000Z", surface: "pi-gui", ...overrides },
+    info: {
+      pid: 9999,
+      hostname: "other-host",
+      startedAt: "2026-07-03T00:00:00.000Z",
+      surface: "pi-gui",
+      ...overrides,
+    },
     mtimeMs,
   };
 }
@@ -36,18 +42,18 @@ async function withTempDir(fn: (dir: string) => Promise<void>): Promise<void> {
   }
 }
 
-test("lease path is a .lease sibling of the session file (ignored by pi's .jsonl discovery)", () => {
+await test("lease path is a .lease sibling of the session file (ignored by pi's .jsonl discovery)", () => {
   assert.equal(sessionLeasePath("/x/2026_abc.jsonl"), "/x/2026_abc.jsonl.lease");
   assert.ok(!sessionLeasePath("/x/2026_abc.jsonl").endsWith(".jsonl"));
 });
 
-test("isSameHolder matches on pid + hostname only", () => {
+await test("isSameHolder matches on pid + hostname only", () => {
   assert.ok(isSameHolder({ pid: 4242, hostname: "self-host" }, SELF));
   assert.ok(!isSameHolder({ pid: 4242, hostname: "other-host" }, SELF));
   assert.ok(!isSameHolder({ pid: 1, hostname: "self-host" }, SELF));
 });
 
-test("same-host lease is dead when its pid is gone, alive when pid runs and mtime fresh", () => {
+await test("same-host lease is dead when its pid is gone, alive when pid runs and mtime fresh", () => {
   const snap = foreignSnapshot({ hostname: "self-host" }, 10_000);
   const dead = isLeaseDead(snap, { now: 20_000, ttlMs: TTL, self: SELF, isPidAlive: () => false });
   const alive = isLeaseDead(snap, { now: 20_000, ttlMs: TTL, self: SELF, isPidAlive: () => true });
@@ -55,17 +61,23 @@ test("same-host lease is dead when its pid is gone, alive when pid runs and mtim
   assert.equal(alive, false);
 });
 
-test("cross-host lease falls back to TTL: fresh mtime alive, stale mtime dead", () => {
+await test("cross-host lease falls back to TTL: fresh mtime alive, stale mtime dead", () => {
   const snap = foreignSnapshot({ hostname: "other-host" }, 10_000);
   // isPidAlive must never be consulted for a different host, so make it throw.
   const boom = () => {
     throw new Error("pid check must not run cross-host");
   };
-  assert.equal(isLeaseDead(snap, { now: 10_000 + TTL - 1, ttlMs: TTL, self: SELF, isPidAlive: boom }), false);
-  assert.equal(isLeaseDead(snap, { now: 10_000 + TTL + 1, ttlMs: TTL, self: SELF, isPidAlive: boom }), true);
+  assert.equal(
+    isLeaseDead(snap, { now: 10_000 + TTL - 1, ttlMs: TTL, self: SELF, isPidAlive: boom }),
+    false,
+  );
+  assert.equal(
+    isLeaseDead(snap, { now: 10_000 + TTL + 1, ttlMs: TTL, self: SELF, isPidAlive: boom }),
+    true,
+  );
 });
 
-test("leaseBlocksBinding: own lease never blocks, foreign+alive blocks, foreign+dead does not", () => {
+await test("leaseBlocksBinding: own lease never blocks, foreign+alive blocks, foreign+dead does not", () => {
   const opts = { now: 20_000, ttlMs: TTL, self: SELF, isPidAlive: () => true };
   const own: LeaseSnapshot = { info: buildOwnLease(SELF, 19_000), mtimeMs: 19_000 };
   assert.equal(leaseBlocksBinding(own, opts), false);
@@ -77,13 +89,13 @@ test("leaseBlocksBinding: own lease never blocks, foreign+alive blocks, foreign+
   assert.equal(leaseBlocksBinding(foreignDead, opts), false);
 });
 
-test("defaultIsPidAlive: current process alive, invalid pids not alive", () => {
+await test("defaultIsPidAlive: current process alive, invalid pids not alive", () => {
   assert.equal(defaultIsPidAlive(process.pid), true);
   assert.equal(defaultIsPidAlive(0), false);
   assert.equal(defaultIsPidAlive(-1), false);
 });
 
-test("write/read/remove lease round-trips and tolerates missing + corrupt files", async () => {
+await test("write/read/remove lease round-trips and tolerates missing + corrupt files", async () => {
   await withTempDir(async (dir) => {
     const leasePath = join(dir, "session.jsonl.lease");
     assert.equal(await readLeaseSnapshot(leasePath), undefined, "missing lease reads as undefined");
@@ -104,7 +116,7 @@ test("write/read/remove lease round-trips and tolerates missing + corrupt files"
   });
 });
 
-test("stale takeover: a dead foreign lease can be overwritten by our own", async () => {
+await test("stale takeover: a dead foreign lease can be overwritten by our own", async () => {
   await withTempDir(async (dir) => {
     const leasePath = join(dir, "session.jsonl.lease");
     await writeLeaseFile(leasePath, {
@@ -117,7 +129,12 @@ test("stale takeover: a dead foreign lease can be overwritten by our own", async
     const stale = await readLeaseSnapshot(leasePath);
     assert.ok(stale);
     // Same host, pid reported dead → does not block, so we take over.
-    const blocks = leaseBlocksBinding(stale!, { now: Date.now(), ttlMs: TTL, self: SELF, isPidAlive: () => false });
+    const blocks = leaseBlocksBinding(stale!, {
+      now: Date.now(),
+      ttlMs: TTL,
+      self: SELF,
+      isPidAlive: () => false,
+    });
     assert.equal(blocks, false);
 
     await writeLeaseFile(leasePath, buildOwnLease(SELF, Date.now()));

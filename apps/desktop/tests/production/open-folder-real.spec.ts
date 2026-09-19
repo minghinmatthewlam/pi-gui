@@ -1,6 +1,11 @@
 import { basename } from "node:path";
 import { expect, test } from "@playwright/test";
-import { getDesktopState, launchDesktop, makeUserDataDir, makeWorkspace } from "../helpers/electron-app";
+import {
+  getDesktopState,
+  launchDesktop,
+  makeUserDataDir,
+  makeWorkspace,
+} from "../helpers/electron-app";
 import { acceptOpenFolderDialog, assertAccessibilityReady } from "../helpers/macos-ui";
 
 test.skip(process.platform !== "darwin", "Real open-folder production coverage is macOS-only");
@@ -29,11 +34,16 @@ test("opens the real macOS folder picker from the empty state button and adds th
     ]);
 
     await expect
-      .poll(async () => {
-        const state = await getDesktopState(window);
-        const selectedWorkspace = state.workspaces.find((workspace) => workspace.id === state.selectedWorkspaceId);
-        return selectedWorkspace?.path ?? null;
-      }, { timeout: 20_000 })
+      .poll(
+        async () => {
+          const state = await getDesktopState(window);
+          const selectedWorkspace = state.workspaces.find(
+            (workspace) => workspace.id === state.selectedWorkspaceId,
+          );
+          return selectedWorkspace?.path ?? null;
+        },
+        { timeout: 20_000 },
+      )
       .toBe(workspacePath);
 
     await expect(window.getByTestId("workspace-list")).toContainText(basename(workspacePath));

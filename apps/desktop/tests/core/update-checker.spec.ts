@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { compareSemver, releaseUrlFor } from "../../electron/update-checker";
+import { compareSemver, releaseUrlFor } from "../../electron/platform/update-checker";
 
 /**
  * Unit coverage for the version comparison that gates update notifications.

@@ -53,13 +53,17 @@ test("thread menu supports rename, archive/restore, mark read, copy id, and righ
   ]);
   await writeFile(
     uiStatePath,
-    `${JSON.stringify({
-      ...uiState,
-      lastViewedAtBySession: {
-        ...(uiState.lastViewedAtBySession ?? {}),
-        [rawSessionKey]: new Date(activityAt - 1_000).toISOString(),
+    `${JSON.stringify(
+      {
+        ...uiState,
+        lastViewedAtBySession: {
+          ...(uiState.lastViewedAtBySession ?? {}),
+          [rawSessionKey]: new Date(activityAt - 1_000).toISOString(),
+        },
       },
-    }, null, 2)}\n`,
+      null,
+      2,
+    )}\n`,
     "utf8",
   );
 
@@ -78,7 +82,9 @@ test("thread menu supports rename, archive/restore, mark read, copy id, and righ
     await captureProof(window, "01-open-menu.png");
 
     await menu.getByRole("button", { name: "Copy session id" }).click();
-    await expect.poll(() => window.evaluate(() => navigator.clipboard.readText())).toBe(target!.sessionId);
+    await expect
+      .poll(() => window.evaluate(() => navigator.clipboard.readText()))
+      .toBe(target!.sessionId);
 
     await row.click({ button: "right" });
     await row.getByRole("menu").getByRole("button", { name: "Mark as read" }).click();
@@ -108,9 +114,10 @@ test("thread menu supports rename, archive/restore, mark read, copy id, and righ
     expect(gapWidth).toBeLessThanOrEqual(3);
     expect(trailingBox!.width).toBeLessThan(92);
     const gapPoint = { x: gapStart + gapWidth / 2, y: rowBox!.y + rowBox!.height / 2 };
-    const hitIsAction = await window.evaluate(({ x, y }) =>
-      document.elementFromPoint(x, y)?.closest(".session-row__action") !== null,
-    gapPoint);
+    const hitIsAction = await window.evaluate(
+      ({ x, y }) => document.elementFromPoint(x, y)?.closest(".session-row__action") !== null,
+      gapPoint,
+    );
     expect(hitIsAction).toBe(false);
     await window.mouse.click(gapPoint.x, gapPoint.y);
     await expect(window.locator(".topbar__session")).toHaveText(targetTitle);
@@ -129,16 +136,22 @@ test("thread menu supports rename, archive/restore, mark read, copy id, and righ
     await row.hover();
     await row.locator(".session-row__menu-button").click();
     await row.getByRole("menu").getByRole("button", { name: "Archive" }).click();
-    await expect(window.locator(".session-list > .session-row", { hasText: renamedTitle })).toHaveCount(0);
+    await expect(
+      window.locator(".session-list > .session-row", { hasText: renamedTitle }),
+    ).toHaveCount(0);
     const archivedToggle = window.locator(".archived-thread-group__toggle");
     await expect(archivedToggle).toBeVisible();
     await captureProof(window, "04-archived.png");
 
     await archivedToggle.click();
-    const archivedRow = window.locator(".session-list--archived .session-row", { hasText: renamedTitle });
+    const archivedRow = window.locator(".session-list--archived .session-row", {
+      hasText: renamedTitle,
+    });
     await archivedRow.click({ button: "right" });
     await archivedRow.getByRole("menu").getByRole("button", { name: "Restore" }).click();
-    await expect(window.locator(".session-list > .session-row", { hasText: renamedTitle })).toHaveCount(1);
+    await expect(
+      window.locator(".session-list > .session-row", { hasText: renamedTitle }),
+    ).toHaveCount(1);
   } finally {
     await harness.close();
   }

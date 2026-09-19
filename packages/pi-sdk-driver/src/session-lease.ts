@@ -1,8 +1,8 @@
 import { rm, stat } from "node:fs/promises";
 import { readFile } from "node:fs/promises";
 import { hostname } from "node:os";
-import { writeJsonFileAtomic } from "./atomic-write.js";
-import { isMissingFileError } from "./json-catalog-store.js";
+import { writeJsonFileAtomic } from "@pi-gui/catalogs/node/atomic-write";
+import { isMissingFileError } from "@pi-gui/catalogs/node";
 
 /**
  * Advisory single-writer lease convention for pi session files.
@@ -145,7 +145,12 @@ export async function readLeaseSnapshot(leasePath: string): Promise<LeaseSnapsho
     ) {
       return undefined;
     }
-    info = { pid: parsed.pid, hostname: parsed.hostname, startedAt: parsed.startedAt, surface: parsed.surface };
+    info = {
+      pid: parsed.pid,
+      hostname: parsed.hostname,
+      startedAt: parsed.startedAt,
+      surface: parsed.surface,
+    };
   } catch {
     // A corrupt lease is treated as absent: advisory data must never wedge us.
     return undefined;
