@@ -6,6 +6,7 @@ import type {
   DesktopAppState,
   WorkspaceSessionTarget,
 } from "../../contracts/desktop-state";
+import type { ClipboardImageRead } from "../../contracts/composer-attachments";
 import {
   desktopIpc,
   type ChangedFilesResult,
@@ -17,6 +18,7 @@ import type { NotificationPermissionService } from "../platform/notification-per
 import type { TerminalService } from "../platform/terminal-service";
 import type { ThemeManager } from "../platform/theme-manager";
 import type { WindowOwner } from "../windows/window-owner";
+import { assertComposerAttachmentPixels } from "./composer-attachment-pixels";
 import {
   expectAppView,
   expectBoolean,
@@ -154,7 +156,7 @@ export interface DesktopIpcCapabilities {
   readonly pickComposerAttachments: (
     window: BrowserWindow,
   ) => Promise<readonly ComposerAttachment[] | undefined>;
-  readonly readClipboardImage: () => ComposerAttachment | null;
+  readonly readClipboardImage: () => ClipboardImageRead;
   readonly validateComposerAttachments: (
     attachments: readonly ComposerAttachment[],
   ) => readonly ComposerAttachment[];
@@ -536,9 +538,13 @@ export function registerDesktopIpc({
   ipcMain.handle(desktopIpc.createSession, (event, rawInput: unknown) =>
     run(event, () => owners.conversation.createSession(expectCreateSessionInput(rawInput))),
   );
-  ipcMain.handle(desktopIpc.startThread, (event, rawInput: unknown) =>
-    run(event, () => owners.conversation.startThread(expectStartThreadInput(rawInput))),
-  );
+  ipcMain.handle(desktopIpc.startThread, (event, rawInput: unknown) => {
+    const input = expectStartThreadInput(rawInput);
+    if (input.attachments?.length) {
+      assertComposerAttachmentPixels(input.attachments);
+    }
+    return run(event, () => owners.conversation.startThread(input));
+  });
   ipcMain.handle(desktopIpc.forkThread, (event, rawInput: unknown) =>
     run(event, () => owners.conversation.forkThread(expectForkThreadInput(rawInput))),
   );
@@ -594,6 +600,7 @@ export function registerDesktopIpc({
     if (!attachments?.length) {
       return windows.stateForWindow(window);
     }
+    assertComposerAttachmentPixels(attachments);
     return windows.runStateAction(window, () =>
       owners.conversation.addComposerAttachments(target, attachments),
     );
@@ -607,6 +614,7 @@ export function registerDesktopIpc({
     const attachments = capabilities.validateComposerAttachments(
       expectComposerAttachments(rawAttachments),
     );
+    assertComposerAttachmentPixels(attachments);
     return run(event, () => owners.conversation.addComposerAttachments(target, attachments));
   });
   ipcMain.handle(desktopIpc.removeComposerAttachment, (event, rawAttachmentId: unknown) => {

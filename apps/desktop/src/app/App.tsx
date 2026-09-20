@@ -459,6 +459,7 @@ export default function App() {
     handleSlashKeyDown: slashMenu.handleSlashKeyDown,
     newThreadComposerRef: newThread.composerRef,
     appendNewThreadAttachment: newThread.appendAttachment,
+    onNewThreadComposerError: newThread.setComposerError,
   });
 
   useEffect(() => {

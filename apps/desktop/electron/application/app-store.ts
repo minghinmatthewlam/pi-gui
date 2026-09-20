@@ -104,6 +104,10 @@ import {
 } from "./app-store-utils";
 import type { CustomProviderConfig } from "../../contracts/ipc";
 import { resolveRepoWorkspaceId } from "../../contracts/workspace-roots";
+import {
+  composerImageSavedSkipMessage,
+  quarantineComposerAttachments,
+} from "../../contracts/composer-attachments";
 import { SessionStateMap, type QueuedComposerEditState } from "../conversation/session-state-map";
 import {
   createEmptyExtensionUiState,
@@ -1581,7 +1585,13 @@ export class DesktopAppStore {
       return;
     }
     try {
-      await this.validatePersistedAttachments();
+      const skippedSavedAttachments = await this.validatePersistedAttachments();
+      if (skippedSavedAttachments > 0) {
+        startupDiagnostics.push({
+          scope: "application",
+          message: composerImageSavedSkipMessage(skippedSavedAttachments),
+        });
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.error("[app-store] saved attachment validation failed; startup stopped", error);
@@ -1600,7 +1610,13 @@ export class DesktopAppStore {
       return;
     }
     try {
-      await this.migrateLegacyPersistence(persisted);
+      const skippedLegacyAttachments = await this.migrateLegacyPersistence(persisted);
+      if (skippedLegacyAttachments > 0) {
+        startupDiagnostics.push({
+          scope: "application",
+          message: composerImageSavedSkipMessage(skippedLegacyAttachments),
+        });
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.error("[app-store] legacy UI state migration failed; startup stopped", error);
@@ -1776,22 +1792,34 @@ export class DesktopAppStore {
     this.emit();
   }
 
-  private async migrateLegacyPersistence(persisted: LegacyPersistedUiState): Promise<void> {
+  private async migrateLegacyPersistence(persisted: LegacyPersistedUiState): Promise<number> {
     const attachmentEntries = Object.entries(persisted.composerAttachmentsBySession ?? {});
-    await Promise.all(
+    const skippedCounts = await Promise.all(
       attachmentEntries.map(async ([key, attachments]) => {
         const cloned = cloneComposerAttachments(attachments as readonly ComposerAttachment[]);
-        if (cloned.length > 0) {
-          this.sessionState.composerAttachmentsBySession.set(key, cloned);
-          await this.attachmentStore.write(key, cloned);
+        const quarantined = quarantineComposerAttachments(cloned);
+        if (quarantined.kept.length > 0) {
+          this.sessionState.composerAttachmentsBySession.set(key, quarantined.kept);
+          await this.attachmentStore.write(key, quarantined.kept);
         }
+        return quarantined.skipped;
       }),
     );
+    return skippedCounts.reduce((total, count) => total + count, 0);
   }
 
-  private async validatePersistedAttachments(): Promise<void> {
+  private async validatePersistedAttachments(): Promise<number> {
     const keys = await this.attachmentStore.listKeys();
-    await Promise.all(keys.map((key) => this.attachmentStore.read(key)));
+    const skippedCounts = await Promise.all(
+      keys.map(async (key) => {
+        const attachments = await this.attachmentStore.read(key);
+        if (!attachments) {
+          return 0;
+        }
+        return quarantineComposerAttachments(attachments).skipped;
+      }),
+    );
+    return skippedCounts.reduce((total, count) => total + count, 0);
   }
 
   async refreshState(options: RefreshStateOptions = {}): Promise<DesktopAppState> {
@@ -2268,12 +2296,11 @@ export class DesktopAppStore {
     }
 
     const attachments = await this.attachmentStore.read(key);
-    if (attachments?.length) {
-      this.sessionState.composerAttachmentsBySession.set(
-        key,
-        cloneComposerAttachments(attachments),
-      );
+    if (attachments === undefined) {
+      return;
     }
+    const quarantined = quarantineComposerAttachments(cloneComposerAttachments(attachments));
+    this.sessionState.composerAttachmentsBySession.set(key, quarantined.kept);
   }
 
   private async ensureRuntimeLoaded(

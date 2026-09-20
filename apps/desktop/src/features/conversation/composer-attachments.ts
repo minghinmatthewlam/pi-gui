@@ -1,7 +1,16 @@
 /// <reference lib="dom" />
 
-import type { KeyboardEvent } from "react";
-import { SUPPORTED_COMPOSER_IMAGE_TYPES } from "../../../contracts/composer-attachments";
+import { type KeyboardEvent } from "react";
+import {
+  assertComposerAttachmentsAccepted,
+  assertComposerImageBytes,
+  assertComposerImagePixels,
+  composerImageAggregateLimitError,
+  decodedImageByteLength,
+  SUPPORTED_COMPOSER_IMAGE_TYPES,
+  totalComposerImageBytes,
+  type ClipboardImageRead,
+} from "../../../contracts/composer-attachments";
 import type {
   ComposerAttachment,
   ComposerFileAttachment,
@@ -10,8 +19,9 @@ import type {
 
 export function handleClipboardImageShortcut(
   event: KeyboardEvent<HTMLTextAreaElement>,
-  readClipboardImage: (() => ComposerImageAttachment | null) | undefined,
+  readClipboardImage: (() => ClipboardImageRead) | undefined,
   onImage: (attachment: ComposerImageAttachment) => void,
+  onError?: (message: string) => void,
 ): boolean {
   if (!(event.metaKey || event.ctrlKey) || event.shiftKey || event.key.toLowerCase() !== "v") {
     return false;
@@ -21,10 +31,17 @@ export function handleClipboardImageShortcut(
   if (!clipboardImage) {
     return false;
   }
-
-  event.preventDefault();
-  onImage(clipboardImage);
-  return true;
+  if (clipboardImage.ok) {
+    event.preventDefault();
+    onImage(clipboardImage.attachment);
+    return true;
+  }
+  if (clipboardImage.message) {
+    event.preventDefault();
+    onError?.(clipboardImage.message);
+    return true;
+  }
+  return false;
 }
 
 type ComposerImageMimeType = (typeof SUPPORTED_COMPOSER_IMAGE_TYPES)[number]["mimeType"];
@@ -124,9 +141,26 @@ export function extractFilesFromDataTransfer(
 
 export async function readComposerAttachmentsFromFiles(
   files: readonly File[],
+  existing: readonly ComposerAttachment[] = [],
 ): Promise<ComposerAttachment[]> {
-  const attachments = await Promise.all(dedupeFiles(files).map(readComposerAttachmentFromFile));
-  return attachments.filter((attachment): attachment is ComposerAttachment => Boolean(attachment));
+  const unique = dedupeFiles(files);
+  const imageFiles = unique.filter(isImageFile);
+  for (const file of imageFiles) {
+    assertComposerImageBytes(file.size);
+  }
+  const claimedImageBytes = imageFiles.reduce((total, file) => total + file.size, 0);
+  const aggregate = composerImageAggregateLimitError(
+    totalComposerImageBytes(existing) + claimedImageBytes,
+  );
+  if (aggregate) {
+    throw aggregate;
+  }
+
+  const attachments = await Promise.all(unique.map(readComposerAttachmentFromFile));
+  const drafted = attachments.filter((attachment): attachment is ComposerAttachment =>
+    Boolean(attachment),
+  );
+  return [...assertComposerAttachmentsAccepted(existing, drafted)];
 }
 
 async function readComposerAttachmentFromFile(file: File): Promise<ComposerAttachment | null> {
@@ -137,22 +171,45 @@ async function readComposerAttachmentFromFile(file: File): Promise<ComposerAttac
   return readFileAttachmentFromFile(file as FileWithPath);
 }
 
-function readImageAttachmentFromFile(file: File): Promise<ComposerImageAttachment | null> {
+async function readImageAttachmentFromFile(file: File): Promise<ComposerImageAttachment | null> {
+  assertComposerImageBytes(file.size);
+  const dataUrl = await readFileAsDataUrl(file);
+  if (dataUrl === null) {
+    return null;
+  }
+  const commaIndex = dataUrl.indexOf(",");
+  const data = dataUrl.slice(commaIndex + 1);
+  assertComposerImageBytes(decodedImageByteLength(data));
+  const dimensions = await readImageDimensions(dataUrl);
+  if (dimensions) {
+    assertComposerImagePixels(dimensions.width, dimensions.height);
+  }
+  return {
+    id: crypto.randomUUID(),
+    kind: "image",
+    name: file.name || "pasted-image.png",
+    mimeType: inferImageMimeType(file) ?? "image/png",
+    data,
+  };
+}
+
+function readFileAsDataUrl(file: File): Promise<string | null> {
   return new Promise((resolve) => {
     const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = reader.result as string;
-      const commaIndex = dataUrl.indexOf(",");
-      resolve({
-        id: crypto.randomUUID(),
-        kind: "image",
-        name: file.name || "pasted-image.png",
-        mimeType: inferImageMimeType(file) ?? "image/png",
-        data: dataUrl.slice(commaIndex + 1),
-      });
-    };
+    reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : null);
     reader.onerror = () => resolve(null);
     reader.readAsDataURL(file);
+  });
+}
+
+function readImageDimensions(
+  dataUrl: string,
+): Promise<{ readonly width: number; readonly height: number } | null> {
+  return new Promise((resolve) => {
+    const image = new Image();
+    image.onload = () => resolve({ width: image.naturalWidth, height: image.naturalHeight });
+    image.onerror = () => resolve(null);
+    image.src = dataUrl;
   });
 }
 

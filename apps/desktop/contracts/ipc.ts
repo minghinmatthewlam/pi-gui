@@ -4,10 +4,10 @@ import type {
   NavigateSessionTreeResult,
   SessionTreeSnapshot,
 } from "@pi-gui/session-driver/types";
+import type { ClipboardImageRead } from "./composer-attachments";
 import type {
   AppView,
   ComposerAttachment,
-  ComposerImageAttachment,
   CreateSessionInput,
   CreateWorktreeInput,
   DesktopAppState,
@@ -293,7 +293,7 @@ export interface PiDesktopApi {
   onSelectedTranscriptChanged(listener: PiDesktopSelectedTranscriptListener): () => void;
   onCommand(listener: (command: PiDesktopCommand) => void): () => void;
   onWorkspacePicked(listener: (workspaceId: string) => void): () => void;
-  onClipboardImagePasted(listener: (attachment: ComposerImageAttachment) => void): () => void;
+  onClipboardImagePasted(listener: (result: ClipboardImageRead) => void): () => void;
   getPathForFile(file: File): string;
   addWorkspacePath(path: string): Promise<DesktopAppState>;
   pickWorkspace(): Promise<DesktopAppState>;
@@ -414,7 +414,7 @@ export interface PiDesktopApi {
     callback: (status: DesktopNotificationPermissionStatus) => void,
   ): () => void;
   pickComposerAttachments(): Promise<DesktopAppState>;
-  readClipboardImage(): ComposerImageAttachment | null;
+  readClipboardImage(): ClipboardImageRead;
   addComposerAttachments(attachments: readonly ComposerAttachment[]): Promise<DesktopAppState>;
   removeComposerAttachment(attachmentId: string): Promise<DesktopAppState>;
   editQueuedComposerMessage(messageId: string, currentDraft?: string): Promise<DesktopAppState>;

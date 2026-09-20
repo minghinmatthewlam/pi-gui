@@ -18,6 +18,7 @@ import {
   type StartThreadInput,
   type WorkspaceRecord,
 } from "../../../../contracts/desktop-state";
+import { acceptComposerAttachments } from "../../../../contracts/composer-attachments";
 import { updateSnapshot } from "../../../app/desktop-app-state";
 import {
   extractFilesFromDataTransfer,
@@ -102,25 +103,44 @@ export function useNewThreadController(params: UseNewThreadControllerParams) {
     setPrompt(value);
   }, []);
 
-  const addAttachments = useCallback((files: File[]) => {
-    void readComposerAttachmentsFromFiles(files)
-      .then((added) => {
-        if (added.length === 0) {
-          return;
-        }
-        setAttachments((current) => [...current, ...added]);
-      })
-      .catch((error: unknown) => {
-        setComposerError(error instanceof Error ? error.message : String(error));
-      });
-  }, []);
+  const addAttachments = useCallback(
+    (files: File[]) => {
+      void readComposerAttachmentsFromFiles(files, attachments)
+        .then((added) => {
+          if (added.length === 0) {
+            return;
+          }
+          setAttachments((current) => {
+            const accepted = acceptComposerAttachments(current, added);
+            if (!accepted.ok) {
+              setComposerError(accepted.error.message);
+              return current;
+            }
+            setComposerError(undefined);
+            return [...current, ...accepted.attachments];
+          });
+        })
+        .catch((error: unknown) => {
+          setComposerError(error instanceof Error ? error.message : String(error));
+        });
+    },
+    [attachments],
+  );
 
   const removeAttachment = useCallback((attachmentId: string) => {
     setAttachments((current) => current.filter((attachment) => attachment.id !== attachmentId));
   }, []);
 
   const appendAttachment = useCallback((attachment: ComposerAttachment) => {
-    setAttachments((current) => [...current, attachment]);
+    setAttachments((current) => {
+      const accepted = acceptComposerAttachments(current, [attachment]);
+      if (!accepted.ok) {
+        setComposerError(accepted.error.message);
+        return current;
+      }
+      setComposerError(undefined);
+      return [...current, ...accepted.attachments];
+    });
   }, []);
 
   const resetSurface = useCallback(
@@ -321,7 +341,14 @@ export function useNewThreadController(params: UseNewThreadControllerParams) {
 
   const handleComposerKeyDown = useCallback(
     (event: KeyboardEvent<HTMLTextAreaElement>) => {
-      if (handleClipboardImageShortcut(event, api?.readClipboardImage, appendAttachment)) {
+      if (
+        handleClipboardImageShortcut(
+          event,
+          api?.readClipboardImage,
+          appendAttachment,
+          setComposerError,
+        )
+      ) {
         return;
       }
 
@@ -434,6 +461,7 @@ export function useNewThreadController(params: UseNewThreadControllerParams) {
       startThread,
       openSurface,
       resetSurface,
+      setComposerError,
     }),
     [
       workspace,

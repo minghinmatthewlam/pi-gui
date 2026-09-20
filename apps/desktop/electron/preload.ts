@@ -16,6 +16,7 @@ import {
   type TerminalPanelSnapshot,
   type TerminalSize,
 } from "../contracts/ipc";
+import type { ClipboardImageRead } from "../contracts/composer-attachments";
 import type {
   NavigateSessionTreeOptions,
   NavigateSessionTreeResult,
@@ -26,7 +27,6 @@ import type { RuntimeSettingsSnapshot } from "@pi-gui/session-driver/runtime-typ
 import type {
   AppView,
   ComposerAttachment,
-  ComposerImageAttachment,
   CreateSessionInput,
   CreateWorktreeInput,
   DesktopAppState,
@@ -115,9 +115,9 @@ contextBridge.exposeInMainWorld("piApp", {
       ipcRenderer.removeListener(desktopIpc.workspacePicked, handle);
     };
   },
-  onClipboardImagePasted: (listener: (attachment: ComposerImageAttachment) => void) => {
-    const handle = (_event: Electron.IpcRendererEvent, attachment: ComposerImageAttachment) => {
-      listener(attachment);
+  onClipboardImagePasted: (listener: (result: ClipboardImageRead) => void) => {
+    const handle = (_event: Electron.IpcRendererEvent, result: ClipboardImageRead) => {
+      listener(result);
     };
     ipcRenderer.on(desktopIpc.clipboardImagePasted, handle);
     return () => {
@@ -390,7 +390,7 @@ contextBridge.exposeInMainWorld("piApp", {
   pickComposerAttachments: () =>
     ipcRenderer.invoke(desktopIpc.pickComposerAttachments) as Promise<DesktopAppState>,
   readClipboardImage: () =>
-    ipcRenderer.sendSync(desktopIpc.readClipboardImage) as ComposerImageAttachment | null,
+    ipcRenderer.sendSync(desktopIpc.readClipboardImage) as ClipboardImageRead,
   addComposerAttachments: (attachments: readonly ComposerAttachment[]) =>
     ipcRenderer.invoke(desktopIpc.addComposerAttachments, attachments) as Promise<DesktopAppState>,
   removeComposerAttachment: (attachmentId: string) =>

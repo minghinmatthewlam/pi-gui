@@ -11,6 +11,7 @@ import type {
   WorkspaceSessionTarget,
 } from "../../contracts/desktop-state";
 import { toSessionRef } from "../application/app-store-utils";
+import { assertComposerAttachmentsAccepted } from "../../contracts/composer-attachments";
 import {
   formatSessionConfigStatus,
   hasRuntimeSlashCommand,
@@ -237,7 +238,8 @@ async function addComposerAttachments(
 
   const key = sessionKey(sessionRef);
   const existing = store.conversationState.composerAttachmentsBySession.get(key) ?? [];
-  const next = [...existing, ...attachments];
+  const accepted = assertComposerAttachmentsAccepted(existing, attachments);
+  const next = [...existing, ...accepted];
   store.conversationState.composerAttachmentsBySession.set(key, next);
   store.publishComposerAttachments(sessionRef, next);
   await store.persistComposerAttachments(key, next);

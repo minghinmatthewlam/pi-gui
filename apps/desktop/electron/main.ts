@@ -40,7 +40,12 @@ import {
   type CustomProviderProbeInput,
   type CustomProviderProbeResult,
 } from "../contracts/ipc";
-import { SUPPORTED_COMPOSER_IMAGE_TYPES } from "../contracts/composer-attachments";
+import {
+  assertComposerImageBytes,
+  assertComposerImagePixels,
+  SUPPORTED_COMPOSER_IMAGE_TYPES,
+  type ClipboardImageRead,
+} from "../contracts/composer-attachments";
 import type {
   ComposerAttachment,
   ComposerFileAttachment,
@@ -182,8 +187,6 @@ function createTestExtensionContext(sessionRef: SessionRef): ExtensionContext {
 const OPEN_FOLDER_MENU_ITEM_ID = "file.open-folder";
 const CHECK_FOR_UPDATES_MENU_ITEM_ID = "app.check-for-updates";
 const QUIT_FLUSH_TIMEOUT_MS = 5_000;
-const MAX_CLIPBOARD_IMAGE_BYTES = 10 * 1024 * 1024;
-const MAX_CLIPBOARD_IMAGE_DIMENSION = 8_192;
 
 function getTerminalService(): TerminalService {
   if (!terminalService) {
@@ -245,28 +248,44 @@ function openExternalWebUrl(url: string): boolean {
   return true;
 }
 
-function readClipboardImageAttachment(): ComposerImageAttachment | null {
+function readClipboardImageAttachment(): ClipboardImageRead {
   const image = clipboard.readImage();
   if (image.isEmpty()) {
-    return null;
+    return { ok: false };
   }
 
   const size = image.getSize();
-  if (size.width > MAX_CLIPBOARD_IMAGE_DIMENSION || size.height > MAX_CLIPBOARD_IMAGE_DIMENSION) {
-    return null;
+  try {
+    assertComposerImagePixels(size.width, size.height);
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : String(error),
+    };
   }
 
   const png = image.toPNG();
-  if (png.length === 0 || png.length > MAX_CLIPBOARD_IMAGE_BYTES) {
-    return null;
+  if (png.length === 0) {
+    return { ok: false };
+  }
+  try {
+    assertComposerImageBytes(png.length);
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : String(error),
+    };
   }
 
   return {
-    id: randomUUID(),
-    kind: "image",
-    name: "pasted-image.png",
-    mimeType: "image/png",
-    data: png.toString("base64"),
+    ok: true,
+    attachment: {
+      id: randomUUID(),
+      kind: "image",
+      name: "pasted-image.png",
+      mimeType: "image/png",
+      data: png.toString("base64"),
+    },
   };
 }
 
@@ -341,7 +360,7 @@ function createWindow(): BrowserWindow {
 
     if (platformModifier && !input.shift && lowerKey === "v") {
       const clipboardImage = readClipboardImageAttachment();
-      if (clipboardImage) {
+      if (clipboardImage.ok || clipboardImage.message) {
         event.preventDefault();
         window.webContents.send(desktopIpc.clipboardImagePasted, clipboardImage);
         return;
@@ -936,7 +955,15 @@ async function readComposerImageAttachment(
   filePath: string,
   mimeType: string,
 ): Promise<ComposerImageAttachment> {
+  const stats = await stat(filePath);
+  assertComposerImageBytes(stats.size);
   const buffer = await readFile(filePath);
+  assertComposerImageBytes(buffer.length);
+  const image = nativeImage.createFromBuffer(buffer);
+  if (!image.isEmpty()) {
+    const size = image.getSize();
+    assertComposerImagePixels(size.width, size.height);
+  }
   return {
     id: randomUUID(),
     kind: "image",

@@ -12,6 +12,7 @@ import {
   type DesktopAppState,
   type SessionRecord,
 } from "../../../../contracts/desktop-state";
+import type { ClipboardImageRead } from "../../../../contracts/composer-attachments";
 import { updateSnapshot } from "../../../app/desktop-app-state";
 import {
   extractFilesFromDataTransfer,
@@ -37,6 +38,7 @@ interface UseSessionComposerParams {
   readonly handleSlashKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => boolean;
   readonly newThreadComposerRef: MutableRefObject<HTMLTextAreaElement | null>;
   readonly appendNewThreadAttachment: (attachment: ComposerImageAttachment) => void;
+  readonly onNewThreadComposerError: (message: string) => void;
 }
 
 export function useSessionComposer(params: UseSessionComposerParams) {
@@ -55,6 +57,7 @@ export function useSessionComposer(params: UseSessionComposerParams) {
     handleSlashKeyDown,
     newThreadComposerRef,
     appendNewThreadAttachment,
+    onNewThreadComposerError,
   } = params;
 
   const [attachmentsClearedOnSubmit, setAttachmentsClearedOnSubmit] = useState(false);
@@ -223,7 +226,10 @@ export function useSessionComposer(params: UseSessionComposerParams) {
     if (!api) {
       return;
     }
-    const valid = await readComposerAttachmentsFromFiles(files);
+    const valid = await readComposerAttachmentsFromFiles(
+      files,
+      snapshot?.composerAttachments ?? [],
+    );
     if (valid.length === 0) {
       return;
     }
@@ -237,6 +243,7 @@ export function useSessionComposer(params: UseSessionComposerParams) {
   const handleComposerPaste = (event: ClipboardEvent<HTMLDivElement>) => {
     handleImagePaste(event, (files) => {
       void addAttachmentsToSessionComposer(files).catch((error: unknown) => {
+        setComposerLimitError(error);
         console.error("[renderer] addAttachmentsToSessionComposer failed", error);
       });
     });
@@ -245,42 +252,64 @@ export function useSessionComposer(params: UseSessionComposerParams) {
   const handleComposerDrop = (event: DragEvent<HTMLDivElement>) => {
     handleAttachmentDrop(event, (files) => {
       void addAttachmentsToSessionComposer(files).catch((error: unknown) => {
+        setComposerLimitError(error);
         console.error("[renderer] addAttachmentsToSessionComposer failed", error);
       });
     });
   };
 
-  function handlePastedClipboardImage(clipboardImage: ComposerImageAttachment) {
+  function setComposerLimitError(error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    setSnapshot((current) => (current ? { ...current, lastError: message } : current));
+  }
+
+  function handlePastedClipboardImage(clipboardImage: ClipboardImageRead) {
+    if (!clipboardImage.ok) {
+      if (!clipboardImage.message) {
+        return;
+      }
+      if (document.activeElement === newThreadComposerRef.current) {
+        onNewThreadComposerError(clipboardImage.message);
+        return;
+      }
+      setComposerLimitError(clipboardImage.message);
+      return;
+    }
     const activeElement = document.activeElement;
     if (activeElement === composerRef.current) {
       if (!api) {
         return;
       }
-      void updateSnapshot(setSnapshot, () => api.addComposerAttachments([clipboardImage])).catch(
-        (error: unknown) => {
-          console.error("[renderer] addComposerAttachments failed", error);
-        },
-      );
+      void updateSnapshot(setSnapshot, () =>
+        api.addComposerAttachments([clipboardImage.attachment]),
+      ).catch((error: unknown) => {
+        console.error("[renderer] addComposerAttachments failed", error);
+      });
       return;
     }
 
     if (activeElement === newThreadComposerRef.current) {
-      appendNewThreadAttachment(clipboardImage);
+      appendNewThreadAttachment(clipboardImage.attachment);
     }
   }
 
   const handleComposerKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (
-      handleClipboardImageShortcut(event, api?.readClipboardImage, (clipboardImage) => {
-        if (!api) {
-          return;
-        }
-        void updateSnapshot(setSnapshot, () => api.addComposerAttachments([clipboardImage])).catch(
-          (error: unknown) => {
+      handleClipboardImageShortcut(
+        event,
+        api?.readClipboardImage,
+        (clipboardImage) => {
+          if (!api) {
+            return;
+          }
+          void updateSnapshot(setSnapshot, () =>
+            api.addComposerAttachments([clipboardImage]),
+          ).catch((error: unknown) => {
             console.error("[renderer] addComposerAttachments failed", error);
-          },
-        );
-      })
+          });
+        },
+        setComposerLimitError,
+      )
     ) {
       return;
     }

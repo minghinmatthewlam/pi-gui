@@ -24,6 +24,7 @@ import type {
   CustomProviderProbeInput,
   TerminalSize,
 } from "../../contracts/ipc";
+import { assertComposerAttachmentsAccepted } from "../../contracts/composer-attachments";
 
 export function expectString(value: unknown, name: string): string {
   if (typeof value !== "string") {
@@ -361,7 +362,7 @@ export function expectComposerAttachments(
   if (!Array.isArray(value)) {
     throw new TypeError(`${name} must be an array`);
   }
-  return value.map((attachment, index) => {
+  const attachments = value.map((attachment, index) => {
     const itemName = `${name}[${index}]`;
     const record = expectRecord(attachment, itemName);
     const common = {
@@ -387,6 +388,7 @@ export function expectComposerAttachments(
     }
     throw new TypeError(`${itemName}.kind must be image or file`);
   });
+  return assertComposerAttachmentsAccepted([], attachments);
 }
 
 export function expectOptionalDeliverOptions(
