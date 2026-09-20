@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import {
   COMPOSER_IMAGE_MAX_BYTES,
   composerImageBytesLimitMessage,
@@ -54,6 +54,7 @@ test("rejects oversized drag-drop, picker, and forged IPC images with a composer
       composerImageBytesLimitMessage(),
     );
     await expect(window.locator(".composer-attachment")).toHaveCount(0);
+    await captureComposerProof(window, "composer_oversize_error.png");
 
     await stubNextOpenDialog(harness, [hugePath]);
     await window.getByRole("button", { name: "Attach files" }).click();
@@ -64,8 +65,12 @@ test("rejects oversized drag-drop, picker, and forged IPC images with a composer
 
     const ipcError = await window.evaluate(
       async (data) => {
+        const app = globalThis.window.piApp;
+        if (!app) {
+          throw new Error("piApp IPC bridge is unavailable");
+        }
         try {
-          await window.piApp?.addComposerAttachments([
+          await app.addComposerAttachments([
             {
               id: "forged",
               kind: "image",
@@ -152,9 +157,19 @@ test("relaunch skips oversized saved images without halting startup", async () =
     );
     await expect(window.locator(".composer-attachment")).toHaveCount(1);
     await expect(window.locator(".composer-attachment__name")).toContainText("tiny.png");
+    await captureComposerProof(window, "composer_restore_skip_diagnostic.png");
     expect(await readFile(attachmentPath, "utf8")).toBe(original);
   } finally {
     await second.close();
   }
   expect(await readFile(attachmentPath, "utf8")).toBe(original);
 });
+
+async function captureComposerProof(window: Page, fileName: string): Promise<void> {
+  const captureDir = process.env.PI_APP_CAPTURE_ARTIFACTS;
+  if (!captureDir) {
+    return;
+  }
+  await mkdir(captureDir, { recursive: true });
+  await window.screenshot({ path: join(captureDir, fileName), fullPage: false });
+}
