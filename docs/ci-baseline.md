@@ -44,6 +44,11 @@ Root `pnpm e2e` delegates to the desktop core command, which builds first and
 uses the canonical desktop Playwright configuration. The root Playwright config
 shares that configuration instead of maintaining weaker independent defaults.
 
+`pnpm verify:release-config` (CI typecheck and Linux package jobs) now also
+enforces the GitHub Actions Node 24 allowlist for every workflow. Guard tests
+cover that policy. Application Node stays 22; action runtimes are a separate
+pin.
+
 The existing macOS Electron core, website build, Linux installation/package and
 Windows package jobs remain separate. `pnpm check` alone does not prove these
 surfaces. Real-provider and native desktop verification retain their own lanes.

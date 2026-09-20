@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { validateConfiguration } from "app-builder-lib/out/util/config/config.js";
 import { DebugLogger } from "builder-util";
 import { parseDocument } from "yaml";
+import { assertWorkflowActionPolicy, isAction } from "../../../scripts/workflow-action-policy.mjs";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoDir = path.resolve(scriptDir, "..", "..", "..");
@@ -82,8 +83,8 @@ function validateCiWorkflow(workflow) {
 
   const candidateUpload = stepNamed(linuxJob, "Upload immutable Linux CI candidate");
   assert(
-    candidateUpload.uses === "actions/upload-artifact@v4",
-    "Linux CI candidate must use upload-artifact v4",
+    isAction(candidateUpload.uses, "actions/upload-artifact"),
+    "Linux CI candidate must use upload-artifact",
   );
   assert(
     candidateUpload.with?.path === "apps/desktop/release-candidate/",
@@ -96,7 +97,7 @@ function validateCiWorkflow(workflow) {
 
   const proofUpload = stepNamed(linuxJob, "Upload Linux package proof");
   assert(
-    proofUpload.uses === "actions/upload-artifact@v4" &&
+    isAction(proofUpload.uses, "actions/upload-artifact") &&
       proofUpload.with?.path === "apps/desktop/release-proof/linux/",
     "Linux CI must retain native package proof logs separately",
   );
@@ -194,7 +195,7 @@ function validateBuilderConfig(config, desktopPackage, afterRemoveSource) {
 
 function validateBuildJob(job, platform) {
   const upload = stepNamed(job, `Upload immutable ${platform} candidate`);
-  assert(upload.uses === "actions/upload-artifact@v4", `${platform} must use upload-artifact v4`);
+  assert(isAction(upload.uses, "actions/upload-artifact"), `${platform} must use upload-artifact`);
   assert(
     upload.with?.["if-no-files-found"] === "error",
     `${platform} candidate upload must fail when files are missing`,
@@ -226,7 +227,7 @@ function validateWorkflow(workflow, finalizerSource, linuxVerifierSource, window
 
   const releaseSteps = Object.entries(jobs).flatMap(([jobName, job]) =>
     (job.steps ?? [])
-      .filter(({ uses }) => uses === "softprops/action-gh-release@v2")
+      .filter(({ uses }) => isAction(uses, "softprops/action-gh-release"))
       .map((step) => ({ jobName, step })),
   );
   assert(releaseSteps.length === 1, "Release workflow must have exactly one GitHub release action");
@@ -289,7 +290,7 @@ function validateWorkflow(workflow, finalizerSource, linuxVerifierSource, window
   );
   const linuxProofUpload = stepNamed(linuxJob, "Upload Linux package proof");
   assert(
-    linuxProofUpload.uses === "actions/upload-artifact@v4" &&
+    isAction(linuxProofUpload.uses, "actions/upload-artifact") &&
       linuxProofUpload.with?.path === "apps/desktop/release-proof/linux-build/" &&
       Number(linuxProofUpload.with?.["retention-days"]) >= 14,
     "Linux release build must retain native package proof for at least 14 days",
@@ -373,7 +374,7 @@ function validateWorkflow(workflow, finalizerSource, linuxVerifierSource, window
   );
   const stateCheck = stepNamed(stageDraft, "Check existing release state");
   const stateCheckIndex = steps.indexOf(stateCheck);
-  const uploadIndex = steps.findIndex(({ uses }) => uses === "softprops/action-gh-release@v2");
+  const uploadIndex = steps.findIndex(({ uses }) => isAction(uses, "softprops/action-gh-release"));
   assert(
     candidateIndex >= 0 && candidateIndex < stateCheckIndex && stateCheckIndex < uploadIndex,
     "Candidate validation and fail-closed state lookup must precede draft upload",
@@ -559,6 +560,7 @@ const [
   readFile(path.join(scriptDir, "..", "resources", "linux", "after-remove.sh"), "utf8"),
 ]);
 
+await assertWorkflowActionPolicy(repoDir);
 await validateConfiguration(builderConfig, new DebugLogger(false));
 validateBuilderConfig(builderConfig, JSON.parse(desktopPackageSource), afterRemoveSource);
 validateCiWorkflow(ciWorkflow);
