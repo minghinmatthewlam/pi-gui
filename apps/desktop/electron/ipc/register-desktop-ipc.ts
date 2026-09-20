@@ -558,15 +558,13 @@ export function registerDesktopIpc({
   ipcMain.handle(desktopIpc.createSession, (event, rawInput: unknown) =>
     run(event, () => owners.conversation.createSession(expectCreateSessionInput(rawInput))),
   );
-  ipcMain.handle(desktopIpc.startThread, (event, rawInput: unknown) =>
-    runCatchingLimits(event, async () => {
-      const input = expectStartThreadInput(rawInput);
-      if (input.attachments?.length) {
-        assertComposerAttachmentPixels(input.attachments);
-      }
-      return run(event, () => owners.conversation.startThread(input));
-    }),
-  );
+  ipcMain.handle(desktopIpc.startThread, (event, rawInput: unknown) => {
+    const input = expectStartThreadInput(rawInput);
+    if (input.attachments?.length) {
+      assertComposerAttachmentPixels(input.attachments);
+    }
+    return run(event, () => owners.conversation.startThread(input));
+  });
   ipcMain.handle(desktopIpc.forkThread, (event, rawInput: unknown) =>
     run(event, () => owners.conversation.forkThread(expectForkThreadInput(rawInput))),
   );

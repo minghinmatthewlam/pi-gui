@@ -104,10 +104,8 @@ import {
 } from "./app-store-utils";
 import type { CustomProviderConfig } from "../../contracts/ipc";
 import { resolveRepoWorkspaceId } from "../../contracts/workspace-roots";
-import {
-  composerImageSavedSkipMessage,
-  quarantineComposerAttachments,
-} from "../../contracts/composer-attachments";
+import { composerImageSavedSkipMessage } from "../../contracts/composer-attachments";
+import { quarantinePersistedComposerAttachments } from "../ipc/composer-attachment-pixels";
 import { SessionStateMap, type QueuedComposerEditState } from "../conversation/session-state-map";
 import {
   createEmptyExtensionUiState,
@@ -1801,7 +1799,7 @@ export class DesktopAppStore {
     const skippedCounts = await Promise.all(
       attachmentEntries.map(async ([key, attachments]) => {
         const cloned = cloneComposerAttachments(attachments as readonly ComposerAttachment[]);
-        const quarantined = quarantineComposerAttachments(cloned);
+        const quarantined = quarantinePersistedComposerAttachments(cloned);
         if (quarantined.kept.length > 0) {
           this.sessionState.composerAttachmentsBySession.set(key, quarantined.kept);
           await this.attachmentStore.write(key, quarantined.kept);
@@ -1820,7 +1818,7 @@ export class DesktopAppStore {
         if (!attachments) {
           return 0;
         }
-        return quarantineComposerAttachments(attachments).skipped;
+        return quarantinePersistedComposerAttachments(attachments).skipped;
       }),
     );
     return skippedCounts.reduce((total, count) => total + count, 0);
@@ -2303,7 +2301,9 @@ export class DesktopAppStore {
     if (attachments === undefined) {
       return;
     }
-    const quarantined = quarantineComposerAttachments(cloneComposerAttachments(attachments));
+    const quarantined = quarantinePersistedComposerAttachments(
+      cloneComposerAttachments(attachments),
+    );
     this.sessionState.composerAttachmentsBySession.set(key, quarantined.kept);
   }
 

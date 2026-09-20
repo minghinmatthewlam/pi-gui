@@ -166,6 +166,7 @@ export function assertComposerAttachmentsAccepted(
   return result.attachments;
 }
 
+/** Byte and aggregate skip for restore. Main also applies `quarantinePersistedComposerAttachments`. */
 export function quarantineComposerAttachments(attachments: readonly ComposerAttachment[]): {
   readonly kept: ComposerAttachment[];
   readonly skipped: number;
