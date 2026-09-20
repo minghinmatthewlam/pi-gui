@@ -9,7 +9,9 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
     <RendererErrorBoundary
       onRelaunch={() => {
-        void window.piApp?.relaunchApplication();
+        window.piApp?.relaunchApplication()?.catch((error: unknown) => {
+          console.error("[renderer] relaunchApplication failed", error);
+        });
       }}
     >
       <App />

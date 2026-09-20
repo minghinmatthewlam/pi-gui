@@ -405,7 +405,9 @@ export function useDesktopAppState(): DesktopAppSession {
     if (!api) {
       return;
     }
-    void api.relaunchApplication();
+    api.relaunchApplication().catch((error: unknown) => {
+      console.error("[renderer] relaunchApplication failed", error);
+    });
   }, []);
 
   return {
