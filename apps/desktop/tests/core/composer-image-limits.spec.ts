@@ -351,7 +351,7 @@ test("startThread rejects oversize-pixel images without clearing the new-thread 
     await openNewThread(window);
     const composer = window.getByTestId("new-thread-composer");
     await composer.fill("keep this draft");
-    const sessionsBefore = (await getDesktopState(window)).sessions.length;
+    const before = await getDesktopState(window);
 
     const result = await window.evaluate(async (data) => {
       const app = globalThis.window.piApp;
@@ -393,7 +393,9 @@ test("startThread rejects oversize-pixel images without clearing the new-thread 
     expect(result.message).toContain(composerImagePixelsLimitMessage());
     await expect(composer).toHaveValue("keep this draft");
     await expect(window.getByTestId("new-thread-composer")).toBeVisible();
-    expect((await getDesktopState(window)).sessions.length).toBe(sessionsBefore);
+    const after = await getDesktopState(window);
+    expect(after.activeView).toBe("new-thread");
+    expect(after.selectedSessionId).toBe(before.selectedSessionId);
     await captureComposerProof(window, "composer_start_thread_pixel_reject.png");
   } finally {
     await harness.close();
