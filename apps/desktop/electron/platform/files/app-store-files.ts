@@ -1,5 +1,6 @@
-import { execFile } from "node:child_process";
-import { open } from "node:fs/promises";
+import { open, readdir, readFile } from "node:fs/promises";
+import path from "node:path";
+import ignore from "ignore";
 import type { WorkspaceFilePreview } from "../../../contracts/ipc";
 import { resolveExistingWorkspacePath } from "./workspace-paths";
 
@@ -7,42 +8,28 @@ const fileCache = new Map<string, { files: string[]; timestamp: number }>();
 const CACHE_TTL_MS = 30_000;
 const CACHE_MAX_ENTRIES = 20;
 const MAX_PREVIEW_BYTES = 200 * 1024;
+const DEFAULT_MAX_FILES = 20_000;
+const ALWAYS_IGNORED_NAMES = new Set([".git", "node_modules", ".DS_Store"]);
 
-export function listWorkspaceFiles(
+export interface ListWorkspaceFilesOptions {
+  readonly force?: boolean;
+  readonly maxFiles?: number;
+}
+
+type PathIgnore = ReturnType<typeof ignore>;
+
+export async function listWorkspaceFiles(
   workspacePath: string,
-  options: { readonly force?: boolean } = {},
+  options: ListWorkspaceFilesOptions = {},
 ): Promise<string[]> {
   const cached = fileCache.get(workspacePath);
   if (!options.force && cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
-    return Promise.resolve(cached.files);
+    return cached.files;
   }
 
-  return new Promise((resolve) => {
-    execFile(
-      "git",
-      ["ls-files", "--cached", "--others", "--exclude-standard"],
-      { cwd: workspacePath, maxBuffer: 5 * 1024 * 1024 },
-      (error, stdout) => {
-        if (error) {
-          resolve([]);
-          return;
-        }
-        const files = stdout
-          .split("\n")
-          .map((line) => line.trim())
-          .filter(Boolean)
-          .sort();
-        if (fileCache.size >= CACHE_MAX_ENTRIES) {
-          const oldest = fileCache.keys().next().value;
-          if (oldest !== undefined) {
-            fileCache.delete(oldest);
-          }
-        }
-        fileCache.set(workspacePath, { files, timestamp: Date.now() });
-        resolve(files);
-      },
-    );
-  });
+  const files = await walkWorkspaceFiles(workspacePath, options.maxFiles ?? DEFAULT_MAX_FILES);
+  rememberListedFiles(workspacePath, files);
+  return files;
 }
 
 export async function readWorkspaceFile(
@@ -79,4 +66,84 @@ export async function readWorkspaceFile(
   } finally {
     await handle.close();
   }
+}
+
+function rememberListedFiles(workspacePath: string, files: string[]): void {
+  if (fileCache.size >= CACHE_MAX_ENTRIES && !fileCache.has(workspacePath)) {
+    const oldest = fileCache.keys().next().value;
+    if (oldest !== undefined) {
+      fileCache.delete(oldest);
+    }
+  }
+  fileCache.set(workspacePath, { files, timestamp: Date.now() });
+}
+
+async function walkWorkspaceFiles(workspacePath: string, maxFiles: number): Promise<string[]> {
+  const ig = ignore();
+  ig.add([...ALWAYS_IGNORED_NAMES]);
+  try {
+    ig.add(await readFile(path.join(workspacePath, ".gitignore"), "utf8"));
+  } catch (error) {
+    if (!isNotFound(error)) {
+      console.error("[main] Failed to read workspace .gitignore", workspacePath, error);
+    }
+  }
+
+  const files: string[] = [];
+  await walkDirectory(workspacePath, "", ig, files, maxFiles);
+  files.sort((left, right) => left.localeCompare(right));
+  return files;
+}
+
+async function walkDirectory(
+  absoluteDir: string,
+  relativeDir: string,
+  ig: PathIgnore,
+  files: string[],
+  maxFiles: number,
+): Promise<void> {
+  if (files.length >= maxFiles) {
+    return;
+  }
+
+  let entries;
+  try {
+    entries = await readdir(absoluteDir, { withFileTypes: true });
+  } catch (error) {
+    if (relativeDir === "" && !isNotFound(error)) {
+      console.error("[main] listWorkspaceFiles failed", absoluteDir, error);
+    }
+    return;
+  }
+
+  entries.sort((left, right) => left.name.localeCompare(right.name));
+  for (const entry of entries) {
+    if (files.length >= maxFiles) {
+      return;
+    }
+    if (ALWAYS_IGNORED_NAMES.has(entry.name)) {
+      continue;
+    }
+
+    const relativePath = relativeDir ? `${relativeDir}/${entry.name}` : entry.name;
+    if (entry.isDirectory()) {
+      if (isIgnoredPath(ig, relativePath, true)) {
+        continue;
+      }
+      await walkDirectory(path.join(absoluteDir, entry.name), relativePath, ig, files, maxFiles);
+      continue;
+    }
+
+    if (!isIgnoredPath(ig, relativePath, false)) {
+      files.push(relativePath);
+    }
+  }
+}
+
+function isIgnoredPath(ig: PathIgnore, relativePath: string, isDirectory: boolean): boolean {
+  return ig.ignores(relativePath) || (isDirectory && ig.ignores(`${relativePath}/`));
+}
+
+function isNotFound(error: unknown): boolean {
+  return Boolean(error && typeof error === "object" && "code" in error && error.code === "ENOENT");
 }
