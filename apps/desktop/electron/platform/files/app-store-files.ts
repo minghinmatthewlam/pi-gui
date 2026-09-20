@@ -141,7 +141,7 @@ async function walkDirectory(
 }
 
 function isIgnoredPath(ig: PathIgnore, relativePath: string, isDirectory: boolean): boolean {
-  return ig.ignores(relativePath) || (isDirectory && ig.ignores(`${relativePath}/`));
+  return ig.ignores(isDirectory ? `${relativePath}/` : relativePath);
 }
 
 function isNotFound(error: unknown): boolean {

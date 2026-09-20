@@ -57,6 +57,18 @@ test("omits files ignored by the workspace .gitignore", async () => {
   expect(files).toEqual([".gitignore", "keep.ts"]);
 });
 
+test("descends into directories un-ignored after a catch-all gitignore", async () => {
+  const workspacePath = await makeFolder("star-gitignore");
+  await writeFile(join(workspacePath, ".gitignore"), "*\n!src/\n!src/**\n!README.md\n", "utf8");
+  await mkdir(join(workspacePath, "src"), { recursive: true });
+  await writeFile(join(workspacePath, "README.md"), "# keep\n", "utf8");
+  await writeFile(join(workspacePath, "secret.txt"), "nope\n", "utf8");
+  await writeFile(join(workspacePath, "src", "app.ts"), "export {}\n", "utf8");
+
+  const files = await listWorkspaceFiles(workspacePath, { force: true });
+  expect(files).toEqual(["README.md", "src/app.ts"]);
+});
+
 test("returns an empty list for a missing folder", async () => {
   const files = await listWorkspaceFiles(join(tmpdir(), "pi-gui-missing-workspace-files"), {
     force: true,
