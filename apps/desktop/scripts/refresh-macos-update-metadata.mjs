@@ -48,7 +48,7 @@ export async function refreshMacUpdateMetadata({ releaseDir, version }) {
   if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(version)) {
     throw new Error(`Invalid release version: ${version}`);
   }
-  const base = `pi-gui-${version}-arm64`;
+  const base = `pi-gui-${version}-universal`;
   const dmgName = `${base}.dmg`;
   const zipName = `${base}.zip`;
   const dmgPath = path.join(releaseDir, dmgName);
