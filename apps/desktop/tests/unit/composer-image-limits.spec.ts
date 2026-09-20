@@ -13,7 +13,7 @@ import {
   quarantineComposerAttachments,
 } from "../../contracts/composer-attachments";
 import type { ComposerAttachment } from "../../contracts/desktop-state";
-import { TINY_PNG_BASE64 } from "../helpers/native-input";
+import { TINY_PNG_BASE64 } from "../helpers/electron-app";
 import { expectComposerAttachments } from "../../electron/ipc/request-validation";
 
 function imageAttachment(data: string, id = "image"): ComposerAttachment {
