@@ -1,7 +1,11 @@
 import { sessionKey } from "@pi-gui/session-driver";
 import type { SessionDriverEvent, SessionRef } from "@pi-gui/session-driver";
 
-/** Trailing-edge interval for streaming transcript / sidebar publishes. */
+/**
+ * Trailing-edge interval for streaming transcript / sidebar publishes.
+ * Hidden macOS CI windows coalesce Node timers past this delay, so Electron
+ * proofs must poll for the flush instead of waiting interval+slack once.
+ */
 export const STREAMING_UI_PUBLISH_INTERVAL_MS = 50;
 
 /**

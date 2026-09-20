@@ -1,6 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
 import type { SessionDriverEvent, SessionRef } from "@pi-gui/session-driver";
-import { STREAMING_UI_PUBLISH_INTERVAL_MS } from "../../electron/conversation/streaming-ui-publisher";
 import {
   createSessionViaIpc,
   emitTestSessionEvent,
@@ -157,7 +156,14 @@ test("coalesces token publishes without losing stick-to-bottom or wheel unpin", 
       events.push(runningSnapshot(context, runId, `tok${index}`, timestamp));
     }
     await emitTestSessionEvents(harness, events);
-    await window.waitForTimeout(STREAMING_UI_PUBLISH_INTERVAL_MS + 40);
+    // Hidden macOS CI windows coalesce Node timers past 50ms. A fixed
+    // STREAMING_UI_PUBLISH_INTERVAL_MS+40 wait returned state-changed=0 on
+    // desktop-core (run 35487349740) while the UI still showed Working….
+    await expect
+      .poll(async () => (await readPublishCounts(window)).state, {
+        message: "trailing coalesced flush must deliver at least one state-changed",
+      })
+      .toBeGreaterThan(0);
 
     const counts = await readPublishCounts(window);
     expect(
@@ -165,7 +171,6 @@ test("coalesces token publishes without losing stick-to-bottom or wheel unpin", 
       `state-changed count ${counts.state} should be far below ${DELTA_COUNT * 2} token events`,
     ).toBeLessThan(8);
     expect(counts.transcript).toBeLessThan(12);
-    expect(counts.state).toBeGreaterThan(0);
 
     const expectedTail = `tok${DELTA_COUNT - 1} `;
     await expect(window.getByTestId("transcript")).toContainText(expectedTail);
@@ -195,7 +200,6 @@ test("coalesces token publishes without losing stick-to-bottom or wheel unpin", 
       awayEvents.push(runningSnapshot(context, awayRunId, `away${index}`, timestamp));
     }
     await emitTestSessionEvents(harness, awayEvents);
-    await window.waitForTimeout(STREAMING_UI_PUBLISH_INTERVAL_MS + 40);
     await expect(window.getByTestId("transcript")).toContainText("away19 ");
     await expect
       .poll(async () => {
