@@ -541,7 +541,6 @@ function WorkspaceGroupContent(
   const isCollapsed = wsMenu.collapsedWorkspaces[rootWorkspace.id] ?? false;
   const historyExpanded = wsMenu.expandedHistoryByWorkspace[rootWorkspace.id] ?? false;
   const history = workspaceHistoryList(threads, historyExpanded);
-  const historyListId = `workspace-history-${rootWorkspace.id}`;
   const historyToggleLabel = historyExpanded ? "Show less" : "Show more";
 
   return (
@@ -700,7 +699,7 @@ function WorkspaceGroupContent(
       ) : null}
       {!isCollapsed ? (
         <>
-          <div className="session-list session-list--history" id={historyListId}>
+          <div className="session-list session-list--history">
             {history.visible.map((thread) => {
               const active =
                 thread.workspaceId === selectedWorkspace?.id &&
@@ -735,7 +734,6 @@ function WorkspaceGroupContent(
           </div>
           {history.overflow ? (
             <button
-              aria-controls={historyListId}
               aria-expanded={historyExpanded}
               className="workspace-history-toggle"
               type="button"
