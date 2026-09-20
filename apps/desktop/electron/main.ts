@@ -42,6 +42,7 @@ import {
 } from "../contracts/ipc";
 import {
   assertComposerImageBytes,
+  assertComposerImageFileSizes,
   assertComposerImagePixels,
   SUPPORTED_COMPOSER_IMAGE_TYPES,
   type ClipboardImageRead,
@@ -816,7 +817,7 @@ app
             }
           }
         },
-        pickComposerAttachments: async (window) => {
+        pickComposerAttachments: async (window, existing = []) => {
           const parent = resolveDialogWindow(window);
           const result = parent
             ? await dialog.showOpenDialog(parent, {
@@ -830,7 +831,7 @@ app
           if (result.canceled || result.filePaths.length === 0) {
             return undefined;
           }
-          return Promise.all(result.filePaths.map(readComposerAttachment));
+          return readComposerAttachmentsFromPaths(result.filePaths, existing);
         },
         readClipboardImage: readClipboardImageAttachment,
         validateComposerAttachments: (attachments) =>
@@ -932,6 +933,23 @@ function resolveInitialWorkspacePaths(): readonly string[] {
   }
 
   return [];
+}
+
+async function readComposerAttachmentsFromPaths(
+  filePaths: readonly string[],
+  existing: readonly ComposerAttachment[] = [],
+): Promise<ComposerAttachment[]> {
+  const planned = filePaths.map((filePath) => ({
+    filePath,
+    mimeType: mimeTypeForPath(filePath),
+  }));
+  const imageSizes = await Promise.all(
+    planned
+      .filter((entry) => entry.mimeType.startsWith("image/"))
+      .map(async (entry) => (await stat(entry.filePath)).size),
+  );
+  assertComposerImageFileSizes(imageSizes, existing);
+  return Promise.all(planned.map((entry) => readComposerAttachment(entry.filePath)));
 }
 
 async function readComposerAttachment(filePath: string): Promise<ComposerAttachment> {

@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import {
   acceptComposerAttachments,
   assertComposerImageBytes,
+  assertComposerImageFileSizes,
   assertComposerImagePixels,
   COMPOSER_IMAGE_MAX_BYTES,
   COMPOSER_IMAGE_MAX_BYTES_TOTAL,
@@ -90,6 +91,28 @@ test("accept enforces per-image and aggregate limits and ignores file attachment
     expect(rejected.error.message).toBe(composerImageAggregateLimitMessage());
   }
   expect(COMPOSER_IMAGE_MAX_BYTES_TOTAL).toBe(3 * COMPOSER_IMAGE_MAX_BYTES);
+});
+
+test("file-size preflight rejects per-image and aggregate payloads before a read", () => {
+  expect(() => assertComposerImageFileSizes([COMPOSER_IMAGE_MAX_BYTES])).not.toThrow();
+  expect(() => assertComposerImageFileSizes([COMPOSER_IMAGE_MAX_BYTES + 1])).toThrow(
+    composerImageBytesLimitMessage(),
+  );
+  expect(() =>
+    assertComposerImageFileSizes([
+      COMPOSER_IMAGE_MAX_BYTES,
+      COMPOSER_IMAGE_MAX_BYTES,
+      COMPOSER_IMAGE_MAX_BYTES,
+    ]),
+  ).not.toThrow();
+  expect(() =>
+    assertComposerImageFileSizes([
+      COMPOSER_IMAGE_MAX_BYTES,
+      COMPOSER_IMAGE_MAX_BYTES,
+      COMPOSER_IMAGE_MAX_BYTES,
+      COMPOSER_IMAGE_MAX_BYTES,
+    ]),
+  ).toThrow(composerImageAggregateLimitMessage());
 });
 
 test("quarantine skips oversized saved images without dropping files or valid siblings", () => {

@@ -113,6 +113,24 @@ export function assertComposerImagePixels(width: number, height: number): void {
   }
 }
 
+/** Stat-sized image files before `readFile` / `FileReader`. File attachments are omitted. */
+export function assertComposerImageFileSizes(
+  fileSizes: readonly number[],
+  existing: readonly ComposerAttachment[] = [],
+): void {
+  let incomingBytes = 0;
+  for (const size of fileSizes) {
+    assertComposerImageBytes(size);
+    incomingBytes += size;
+  }
+  const aggregate = composerImageAggregateLimitError(
+    totalComposerImageBytes(existing) + incomingBytes,
+  );
+  if (aggregate) {
+    throw aggregate;
+  }
+}
+
 export function acceptComposerAttachments(
   existing: readonly ComposerAttachment[],
   incoming: readonly ComposerAttachment[],

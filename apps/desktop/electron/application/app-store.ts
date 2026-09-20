@@ -291,6 +291,10 @@ export class DesktopAppStore {
         this.state.selectedWorkspaceId === sessionRef.workspaceId &&
         this.state.selectedSessionId === sessionRef.sessionId,
       clearConversationError: () => {
+        const selected = this.selectedSessionRef();
+        if (selected) {
+          this.sessionState.sessionErrorsBySession.delete(sessionKey(selected));
+        }
         this.state = { ...this.state, lastError: undefined, revision: this.state.revision + 1 };
       },
       publishComposerAttachments: (sessionRef, attachments) => {

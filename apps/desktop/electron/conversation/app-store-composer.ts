@@ -241,6 +241,7 @@ async function addComposerAttachments(
   const accepted = assertComposerAttachmentsAccepted(existing, attachments);
   const next = [...existing, ...accepted];
   store.conversationState.composerAttachmentsBySession.set(key, next);
+  store.clearConversationError();
   store.publishComposerAttachments(sessionRef, next);
   await store.persistComposerAttachments(key, next);
   return store.emit();

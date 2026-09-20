@@ -1,8 +1,10 @@
+import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import {
   COMPOSER_IMAGE_MAX_BYTES,
+  composerImageAggregateLimitMessage,
   composerImageBytesLimitMessage,
   composerImageSavedSkipMessage,
 } from "../../contracts/composer-attachments";
@@ -14,16 +16,21 @@ import {
   makeWorkspace,
   stubNextOpenDialog,
   writeTinyPng,
+  type DesktopHarness,
 } from "../helpers/electron-app";
 
 test("rejects oversized drag-drop, picker, and forged IPC images with a composer error", async () => {
-  test.setTimeout(90_000);
+  test.setTimeout(120_000);
   const userDataDir = await makeUserDataDir();
   const workspacePath = await makeWorkspace("composer-image-limits");
   const hugePath = join(workspacePath, "huge.png");
   const tinyPath = join(workspacePath, "tiny.png");
+  const bulkPaths = [0, 1, 2, 3].map((index) => join(workspacePath, `bulk-${index}.png`));
   await writeFile(hugePath, Buffer.alloc(COMPOSER_IMAGE_MAX_BYTES + 1, 1));
   await writeTinyPng(tinyPath);
+  await Promise.all(
+    bulkPaths.map((filePath) => writeFile(filePath, Buffer.alloc(COMPOSER_IMAGE_MAX_BYTES, 1))),
+  );
 
   const harness = await launchDesktop(userDataDir, {
     initialWorkspaces: [workspacePath],
@@ -50,44 +57,52 @@ test("rejects oversized drag-drop, picker, and forged IPC images with a composer
       { surfaceTestId: "composer-surface", byteLength: COMPOSER_IMAGE_MAX_BYTES + 1 },
     );
 
-    await expect(window.getByTestId("composer-error-banner")).toContainText(
+    await expect(window.getByTestId("composer-error-banner")).toHaveText(
       composerImageBytesLimitMessage(),
     );
     await expect(window.locator(".composer-attachment")).toHaveCount(0);
     await captureComposerProof(window, "composer_oversize_error.png");
 
+    await attachTinyAndClear(window, harness, tinyPath);
+
     await stubNextOpenDialog(harness, [hugePath]);
     await window.getByRole("button", { name: "Attach files" }).click();
-    await expect(window.getByTestId("composer-error-banner")).toContainText(
+    await expect(window.getByTestId("composer-error-banner")).toHaveText(
       composerImageBytesLimitMessage(),
     );
     await expect(window.locator(".composer-attachment")).toHaveCount(0);
 
-    const ipcError = await window.evaluate(
+    await attachTinyAndClear(window, harness, tinyPath);
+
+    await stubNextOpenDialog(harness, bulkPaths);
+    await window.getByRole("button", { name: "Attach files" }).click();
+    await expect(window.getByTestId("composer-error-banner")).toHaveText(
+      composerImageAggregateLimitMessage(),
+    );
+    await expect(window.locator(".composer-attachment")).toHaveCount(0);
+
+    await attachTinyAndClear(window, harness, tinyPath);
+
+    await window.evaluate(
       async (data) => {
         const app = globalThis.window.piApp;
         if (!app) {
           throw new Error("piApp IPC bridge is unavailable");
         }
-        try {
-          await app.addComposerAttachments([
-            {
-              id: "forged",
-              kind: "image",
-              name: "forged.png",
-              mimeType: "image/png",
-              data,
-            },
-          ]);
-          return null;
-        } catch (error) {
-          return error instanceof Error ? error.message : String(error);
-        }
+        await app.addComposerAttachments([
+          {
+            id: "forged",
+            kind: "image",
+            name: "forged.png",
+            mimeType: "image/png",
+            data,
+          },
+        ]);
       },
       Buffer.alloc(COMPOSER_IMAGE_MAX_BYTES + 1, 1).toString("base64"),
     );
-    expect(ipcError).toContain("larger than 10 MB");
-    await expect(window.getByTestId("composer-error-banner")).toContainText(
+    expect((await getDesktopState(window)).lastError).toBe(composerImageBytesLimitMessage());
+    await expect(window.getByTestId("composer-error-banner")).toHaveText(
       composerImageBytesLimitMessage(),
     );
     await expect(window.locator(".composer-attachment")).toHaveCount(0);
@@ -165,8 +180,23 @@ test("relaunch skips oversized saved images without halting startup", async () =
   expect(await readFile(attachmentPath, "utf8")).toBe(original);
 });
 
+async function attachTinyAndClear(
+  window: Page,
+  harness: DesktopHarness,
+  tinyPath: string,
+): Promise<void> {
+  await stubNextOpenDialog(harness, [tinyPath]);
+  await window.getByRole("button", { name: "Attach files" }).click();
+  await expect(window.locator(".composer-attachment--image")).toHaveCount(1);
+  await window.getByRole("button", { name: "Remove tiny.png" }).click();
+  await expect(window.locator(".composer-attachment")).toHaveCount(0);
+  await expect(window.getByTestId("composer-error-banner")).toHaveCount(0);
+}
+
 async function captureComposerProof(window: Page, fileName: string): Promise<void> {
-  const captureDir = process.env.PI_APP_CAPTURE_ARTIFACTS;
+  const captureDir =
+    process.env.PI_APP_CAPTURE_ARTIFACTS ??
+    (existsSync("/opt/cursor/artifacts") ? "/opt/cursor/artifacts" : undefined);
   if (!captureDir) {
     return;
   }

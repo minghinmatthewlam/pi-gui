@@ -4,11 +4,10 @@ import { type KeyboardEvent } from "react";
 import {
   assertComposerAttachmentsAccepted,
   assertComposerImageBytes,
+  assertComposerImageFileSizes,
   assertComposerImagePixels,
-  composerImageAggregateLimitError,
   decodedImageByteLength,
   SUPPORTED_COMPOSER_IMAGE_TYPES,
-  totalComposerImageBytes,
   type ClipboardImageRead,
 } from "../../../contracts/composer-attachments";
 import type {
@@ -145,16 +144,10 @@ export async function readComposerAttachmentsFromFiles(
 ): Promise<ComposerAttachment[]> {
   const unique = dedupeFiles(files);
   const imageFiles = unique.filter(isImageFile);
-  for (const file of imageFiles) {
-    assertComposerImageBytes(file.size);
-  }
-  const claimedImageBytes = imageFiles.reduce((total, file) => total + file.size, 0);
-  const aggregate = composerImageAggregateLimitError(
-    totalComposerImageBytes(existing) + claimedImageBytes,
+  assertComposerImageFileSizes(
+    imageFiles.map((file) => file.size),
+    existing,
   );
-  if (aggregate) {
-    throw aggregate;
-  }
 
   const attachments = await Promise.all(unique.map(readComposerAttachmentFromFile));
   const drafted = attachments.filter((attachment): attachment is ComposerAttachment =>
