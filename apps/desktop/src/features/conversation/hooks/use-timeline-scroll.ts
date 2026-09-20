@@ -682,7 +682,9 @@ export function useTimelineScroll({
         if (!pinnedToBottomRef.current && !preserveBottomOnNextPaneResizeRef.current) {
           return;
         }
-        requestPinnedBottomAlignment("auto", { preferExactRestore: true });
+        // Height wrap of the last row is not a structure change. Exact restore
+        // (virtualization disable) stays on the marker path when item count grows.
+        requestPinnedBottomAlignment("auto", { preferExactRestore: false });
       });
     },
     [

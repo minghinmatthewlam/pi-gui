@@ -8,34 +8,67 @@ export const STREAMING_UI_PUBLISH_INTERVAL_MS = 50;
  * Token-level `assistantDelta` always arrives with a redundant `sessionUpdated`
  * (preview/timestamp). Publishing full app state for each pair was the leftover
  * #93 CPU path after #114. Defer those two; flush immediately on discrete events.
+ *
+ * `trackedRunId` is the last observed `snapshot.runningRunId` for this session.
+ * A new run id (Send after Stop) is not deferred. Do not pass
+ * `runningSinceBySession.has` — user cancel never clears that map.
  */
 export function shouldDeferStreamingUiPublish(
   event: SessionDriverEvent,
-  alreadyTrackingRun: boolean,
+  trackedRunId: string | undefined,
 ): boolean {
   if (event.type === "assistantDelta") {
     return true;
   }
-  return (
-    event.type === "sessionUpdated" && alreadyTrackingRun && event.snapshot.status === "running"
-  );
+  if (event.type !== "sessionUpdated" || event.snapshot.status !== "running") {
+    return false;
+  }
+  const runId = event.snapshot.runningRunId;
+  return Boolean(runId) && runId === trackedRunId;
 }
 
 /**
  * At most one UI publish per session per interval. Later tokens in the window
- * mark the same slot dirty; a discrete event cancels the timer because it is
- * about to `emit()` itself.
+ * reuse the pending timer; a discrete event cancels it because it is about to
+ * `emit()` itself. Also owns last-seen runningRunId so Stop→Send is immediate.
  */
 export class StreamingUiPublisher {
   private readonly pending = new Map<
     string,
     { readonly sessionRef: SessionRef; readonly timer: ReturnType<typeof setTimeout> }
   >();
+  private readonly trackedRunId = new Map<string, string>();
 
   constructor(
     private readonly publish: (sessionRef: SessionRef) => void,
     private readonly intervalMs: number = STREAMING_UI_PUBLISH_INTERVAL_MS,
   ) {}
+
+  shouldDefer(event: SessionDriverEvent): boolean {
+    return shouldDeferStreamingUiPublish(
+      event,
+      this.trackedRunId.get(sessionKey(event.sessionRef)),
+    );
+  }
+
+  /**
+   * Record the run id after the defer decision for this event so the first
+   * running tick is not deferred by its own write.
+   */
+  observe(event: SessionDriverEvent): void {
+    const key = sessionKey(event.sessionRef);
+    if (event.type === "sessionClosed") {
+      this.trackedRunId.delete(key);
+      return;
+    }
+    if (
+      event.type === "sessionUpdated" &&
+      event.snapshot.status === "running" &&
+      event.snapshot.runningRunId
+    ) {
+      this.trackedRunId.set(key, event.snapshot.runningRunId);
+    }
+  }
 
   schedule(sessionRef: SessionRef): void {
     const key = sessionKey(sessionRef);

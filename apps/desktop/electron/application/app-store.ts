@@ -73,10 +73,7 @@ import {
   applySessionEventState,
   updateSessionRecord,
 } from "../conversation/app-store-session-state";
-import {
-  StreamingUiPublisher,
-  shouldDeferStreamingUiPublish,
-} from "../conversation/streaming-ui-publisher";
+import { StreamingUiPublisher } from "../conversation/streaming-ui-publisher";
 import type { RefreshStateOptions } from "./refresh-state-options";
 import {
   readPersistedUiState,
@@ -2759,12 +2756,10 @@ export class DesktopAppStore {
     if (subscriptionKey !== key) {
       this.migrateSessionSubscriptionKey(subscriptionKey, key);
     }
-    // Capture before applyTimelineEvent so the first running sessionUpdated still
-    // publishes immediately (sidebar indicator) while later token ticks coalesce.
-    const alreadyTrackingRun = this.sessionState.runningSinceBySession.has(key);
     // Apply-then-publish is wrapped so the finally always either emits or
     // schedules a coalesced emit. Token-level assistantDelta / redundant
     // sessionUpdated ticks must not publish a full app snapshot per token.
+    // First running tick for a new runningRunId still emits immediately.
     try {
       const knownSession = this.sessionFromState(event.sessionRef);
       const shouldFollowSessionMutation =
@@ -2913,7 +2908,7 @@ export class DesktopAppStore {
     } catch (error) {
       console.error(`[app-store] failed to apply session event ${event.type} for ${key}`, error);
     } finally {
-      if (shouldDeferStreamingUiPublish(event, alreadyTrackingRun)) {
+      if (this.streamingUiPublisher.shouldDefer(event)) {
         this.streamingUiPublisher.schedule(event.sessionRef);
         await this.emitSessionEvent(event, this.state);
       } else {
@@ -2922,6 +2917,7 @@ export class DesktopAppStore {
         this.publishSelectedTranscriptFor(event.sessionRef);
         await this.emitSessionEvent(event, snapshot);
       }
+      this.streamingUiPublisher.observe(event);
     }
   }
 
