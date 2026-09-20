@@ -29,6 +29,7 @@ export interface WorkspaceMenuState {
   readonly workspaceRenameDraft: string;
   readonly setWorkspaceRenameDraft: Dispatch<SetStateAction<string>>;
   readonly expandedArchivedByWorkspace: Record<string, boolean>;
+  readonly expandedHistoryByWorkspace: Record<string, boolean>;
   readonly collapsedWorkspaces: Record<string, boolean>;
   readonly environmentMenuOpen: boolean;
   readonly setEnvironmentMenuOpen: Dispatch<SetStateAction<boolean>>;
@@ -43,6 +44,7 @@ export interface WorkspaceMenuState {
   readonly cancelRename: () => void;
   readonly removeWorkspace: (workspace: WorkspaceRecord) => void;
   readonly toggleArchived: (workspaceId: string, open: boolean) => void;
+  readonly setHistoryExpanded: (workspaceId: string, expanded: boolean) => void;
   readonly toggleWorkspaceCollapsed: (workspaceId: string) => void;
   readonly expandWorkspace: (workspaceId: string) => void;
   readonly createWorktree: (
@@ -65,6 +67,9 @@ export function useWorkspaceMenu(params: UseWorkspaceMenuParams): WorkspaceMenuS
   const [workspaceRenameId, setWorkspaceRenameId] = useState<string | null>(null);
   const [workspaceRenameDraft, setWorkspaceRenameDraft] = useState("");
   const [expandedArchivedByWorkspace, setExpandedArchivedByWorkspace] = useState<
+    Record<string, boolean>
+  >({});
+  const [expandedHistoryByWorkspace, setExpandedHistoryByWorkspace] = useState<
     Record<string, boolean>
   >({});
   const [collapsedWorkspaces, setCollapsedWorkspaces] = useState<Record<string, boolean>>({});
@@ -177,6 +182,15 @@ export function useWorkspaceMenu(params: UseWorkspaceMenuParams): WorkspaceMenuS
     setExpandedArchivedByWorkspace((current) => ({ ...current, [workspaceId]: open }));
   };
 
+  const setHistoryExpanded = (workspaceId: string, expanded: boolean) => {
+    setExpandedHistoryByWorkspace((current) => {
+      if (Boolean(current[workspaceId]) === expanded) {
+        return current;
+      }
+      return { ...current, [workspaceId]: expanded };
+    });
+  };
+
   const toggleWorkspaceCollapsed = (workspaceId: string) => {
     setCollapsedWorkspaces((current) => ({ ...current, [workspaceId]: !current[workspaceId] }));
   };
@@ -245,6 +259,7 @@ export function useWorkspaceMenu(params: UseWorkspaceMenuParams): WorkspaceMenuS
     workspaceRenameDraft,
     setWorkspaceRenameDraft,
     expandedArchivedByWorkspace,
+    expandedHistoryByWorkspace,
     collapsedWorkspaces,
     environmentMenuOpen,
     setEnvironmentMenuOpen,
@@ -259,6 +274,7 @@ export function useWorkspaceMenu(params: UseWorkspaceMenuParams): WorkspaceMenuS
     cancelRename,
     removeWorkspace,
     toggleArchived,
+    setHistoryExpanded,
     toggleWorkspaceCollapsed,
     expandWorkspace,
     createWorktree,

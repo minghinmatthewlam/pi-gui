@@ -43,6 +43,7 @@ import { useThreadMenu, type ThreadMenuState } from "./hooks/use-thread-menu";
 import {
   comparePinnedThreads,
   sessionThreadKey,
+  workspaceHistoryList,
   type ThreadGroup,
   type ThreadListEntry,
 } from "./thread-groups";
@@ -396,21 +397,26 @@ export function Sidebar(props: SidebarProps) {
                 ))}
               </SortableContext>
               {orphanGroups.map((group) => (
-                <WorkspaceGroupContent
+                <section
                   key={group.rootWorkspace.id}
-                  group={group}
-                  canDrag={false}
-                  selectedWorkspace={selectedWorkspace}
-                  selectedSession={selectedSession}
-                  linkedWorktreeByWorkspaceId={linkedWorktreeByWorkspaceId}
-                  wsMenu={wsMenu}
-                  api={api}
-                  threadMenu={threadMenu}
-                  onArchiveSession={onArchiveSession}
-                  onSelectSession={onSelectSession}
-                  onSetSessionPinned={onSetSessionPinned}
-                  onUnarchiveSession={onUnarchiveSession}
-                />
+                  className="workspace-group"
+                  data-workspace-id={group.rootWorkspace.id}
+                >
+                  <WorkspaceGroupContent
+                    group={group}
+                    canDrag={false}
+                    selectedWorkspace={selectedWorkspace}
+                    selectedSession={selectedSession}
+                    linkedWorktreeByWorkspaceId={linkedWorktreeByWorkspaceId}
+                    wsMenu={wsMenu}
+                    api={api}
+                    threadMenu={threadMenu}
+                    onArchiveSession={onArchiveSession}
+                    onSelectSession={onSelectSession}
+                    onSetSessionPinned={onSetSessionPinned}
+                    onUnarchiveSession={onUnarchiveSession}
+                  />
+                </section>
               ))}
             </div>
             <DragOverlay>
@@ -492,6 +498,7 @@ function SortableWorkspaceGroup(props: WorkspaceGroupProps) {
       ref={setNodeRef}
       style={style}
       className={`workspace-group ${isDragging ? "workspace-group--dragging" : ""}`}
+      data-workspace-id={group.rootWorkspace.id}
     >
       <WorkspaceGroupContent
         {...props}
@@ -532,6 +539,10 @@ function WorkspaceGroupContent(
   const linkedWorktree = linkedWorktreeByWorkspaceId.get(rootWorkspace.id);
   const archivedSectionOpen = wsMenu.expandedArchivedByWorkspace[rootWorkspace.id] ?? false;
   const isCollapsed = wsMenu.collapsedWorkspaces[rootWorkspace.id] ?? false;
+  const historyExpanded = wsMenu.expandedHistoryByWorkspace[rootWorkspace.id] ?? false;
+  const history = workspaceHistoryList(threads, historyExpanded);
+  const historyListId = `workspace-history-${rootWorkspace.id}`;
+  const historyToggleLabel = historyExpanded ? "Show less" : "Show more";
 
   return (
     <>
@@ -689,8 +700,8 @@ function WorkspaceGroupContent(
       ) : null}
       {!isCollapsed ? (
         <>
-          <div className="session-list">
-            {threads.map((thread) => {
+          <div className="session-list session-list--history" id={historyListId}>
+            {history.visible.map((thread) => {
               const active =
                 thread.workspaceId === selectedWorkspace?.id &&
                 thread.session.id === selectedSession?.id;
@@ -722,6 +733,17 @@ function WorkspaceGroupContent(
               );
             })}
           </div>
+          {history.overflow ? (
+            <button
+              aria-controls={historyListId}
+              aria-expanded={historyExpanded}
+              className="workspace-history-toggle"
+              type="button"
+              onClick={() => wsMenu.setHistoryExpanded(rootWorkspace.id, !historyExpanded)}
+            >
+              {historyToggleLabel}
+            </button>
+          ) : null}
           {archivedThreads.length > 0 ? (
             <div className="archived-thread-group">
               <button

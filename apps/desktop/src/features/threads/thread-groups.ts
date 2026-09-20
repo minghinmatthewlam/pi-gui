@@ -139,6 +139,19 @@ function partitionThreads(
   };
 }
 
+export const WORKSPACE_HISTORY_PREVIEW_LIMIT = 5;
+
+export function workspaceHistoryList<T>(
+  threads: readonly T[],
+  expanded: boolean,
+): { readonly visible: readonly T[]; readonly overflow: boolean } {
+  const overflow = threads.length > WORKSPACE_HISTORY_PREVIEW_LIMIT;
+  return {
+    visible: overflow && !expanded ? threads.slice(0, WORKSPACE_HISTORY_PREVIEW_LIMIT) : threads,
+    overflow,
+  };
+}
+
 export function sessionThreadKey(thread: ThreadListEntry): string {
   return `${thread.workspaceId}:${thread.session.id}`;
 }
