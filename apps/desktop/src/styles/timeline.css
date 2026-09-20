@@ -722,6 +722,30 @@
   font-size: 13px;
 }
 
+.transcript-hydrate-error {
+  padding: var(--space-4);
+  border-radius: var(--radius-xl);
+  border: 1px dashed var(--line-strong);
+  background: var(--surface-overlay-muted);
+}
+
+.transcript-hydrate-error h2 {
+  margin: 0 0 var(--space-2);
+  font-size: 17px;
+  letter-spacing: var(--tracking-tight);
+}
+
+.transcript-hydrate-error p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.transcript-hydrate-error__actions {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
 /* ---- Inline diff -------------------------------------------------------- */
 
 .diff-inline {

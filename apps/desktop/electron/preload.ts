@@ -465,4 +465,5 @@ contextBridge.exposeInMainWorld("piApp", {
       ipcRenderer.removeListener(desktopIpc.themeChanged, handler);
     };
   },
+  relaunchApplication: () => ipcRenderer.invoke(desktopIpc.relaunchApplication) as Promise<void>,
 } satisfies PiDesktopApi);

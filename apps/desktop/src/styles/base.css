@@ -203,6 +203,13 @@ svg {
   margin-top: 12px;
 }
 
+.loading-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: 18px;
+}
+
 .empty-state {
   padding: var(--space-4);
   border-radius: var(--radius-xl);

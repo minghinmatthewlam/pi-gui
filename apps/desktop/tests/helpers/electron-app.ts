@@ -1716,3 +1716,167 @@ export async function createSessionViaIpc(
     timeout: 15_000,
   });
 }
+
+export const HYDRATE_TEST_SENTINEL = "hydrate-test-sentinel-token=/private/secret-path";
+
+export type IpcInvokeControlMode = "passthrough" | "reject" | "replace" | "record";
+
+export interface IpcInvokeControlSnapshot {
+  readonly mode: IpcInvokeControlMode;
+  readonly invokeCount: number;
+  readonly rejectCount: number;
+  readonly sentinel: string;
+}
+
+export async function installIpcInvokeControl(
+  harness: DesktopHarness,
+  channel: string,
+  options: {
+    readonly mode: IpcInvokeControlMode;
+    readonly sentinel?: string;
+    readonly replacement?: unknown;
+  },
+): Promise<void> {
+  await harness.electronApp.evaluate(
+    ({ ipcMain }, payload) => {
+      type InvokeHandler = (...args: unknown[]) => unknown;
+      type Control = {
+        mode: "passthrough" | "reject" | "replace" | "record";
+        invokeCount: number;
+        rejectCount: number;
+        sentinel: string;
+        replacement?: unknown;
+        original: InvokeHandler;
+      };
+      const invokeHandlers = (
+        ipcMain as typeof ipcMain & { readonly _invokeHandlers?: Map<string, InvokeHandler> }
+      )._invokeHandlers;
+      const originalHandler = invokeHandlers?.get(payload.channel);
+      if (!originalHandler) {
+        throw new Error(`No IPC handler registered for ${payload.channel}`);
+      }
+
+      const store = globalThis as typeof globalThis & {
+        __PI_TEST_IPC_INVOKE_CONTROL__?: Record<string, Control>;
+      };
+      store.__PI_TEST_IPC_INVOKE_CONTROL__ ??= {};
+      const existing = store.__PI_TEST_IPC_INVOKE_CONTROL__[payload.channel];
+      if (existing) {
+        existing.mode = payload.mode;
+        existing.sentinel = payload.sentinel;
+        existing.replacement = payload.replacement;
+        return;
+      }
+
+      const control: Control = {
+        mode: payload.mode,
+        invokeCount: 0,
+        rejectCount: 0,
+        sentinel: payload.sentinel,
+        replacement: payload.replacement,
+        original: originalHandler,
+      };
+      store.__PI_TEST_IPC_INVOKE_CONTROL__[payload.channel] = control;
+
+      ipcMain.removeHandler(payload.channel);
+      ipcMain.handle(payload.channel, async (...args) => {
+        control.invokeCount += 1;
+        if (control.mode === "reject") {
+          control.rejectCount += 1;
+          throw new Error(control.sentinel);
+        }
+        if (control.mode === "replace") {
+          return control.replacement;
+        }
+        if (control.mode === "record") {
+          return undefined;
+        }
+        return control.original(...args);
+      });
+    },
+    {
+      channel,
+      mode: options.mode,
+      sentinel: options.sentinel ?? HYDRATE_TEST_SENTINEL,
+      replacement: options.replacement,
+    },
+  );
+}
+
+export async function setIpcInvokeControl(
+  harness: DesktopHarness,
+  channel: string,
+  patch: {
+    readonly mode?: IpcInvokeControlMode;
+    readonly replacement?: unknown;
+  },
+): Promise<void> {
+  await harness.electronApp.evaluate(
+    (_electron, payload) => {
+      type Control = {
+        mode: "passthrough" | "reject" | "replace" | "record";
+        invokeCount: number;
+        rejectCount: number;
+        sentinel: string;
+        replacement?: unknown;
+      };
+      const store = globalThis as typeof globalThis & {
+        __PI_TEST_IPC_INVOKE_CONTROL__?: Record<string, Control>;
+      };
+      const control = store.__PI_TEST_IPC_INVOKE_CONTROL__?.[payload.channel];
+      if (!control) {
+        throw new Error(`No IPC invoke control installed for ${payload.channel}`);
+      }
+      if (payload.mode !== undefined) {
+        control.mode = payload.mode;
+      }
+      if (payload.replacement !== undefined) {
+        control.replacement = payload.replacement;
+      }
+    },
+    { channel, mode: patch.mode, replacement: patch.replacement },
+  );
+}
+
+export async function readIpcInvokeControl(
+  harness: DesktopHarness,
+  channel: string,
+): Promise<IpcInvokeControlSnapshot> {
+  return harness.electronApp.evaluate((_electron, targetChannel) => {
+    type Control = {
+      mode: "passthrough" | "reject" | "replace" | "record";
+      invokeCount: number;
+      rejectCount: number;
+      sentinel: string;
+    };
+    const store = globalThis as typeof globalThis & {
+      __PI_TEST_IPC_INVOKE_CONTROL__?: Record<string, Control>;
+    };
+    const control = store.__PI_TEST_IPC_INVOKE_CONTROL__?.[targetChannel];
+    if (!control) {
+      throw new Error(`No IPC invoke control installed for ${targetChannel}`);
+    }
+    return {
+      mode: control.mode,
+      invokeCount: control.invokeCount,
+      rejectCount: control.rejectCount,
+      sentinel: control.sentinel,
+    };
+  }, channel);
+}
+
+export async function reloadDesktopRenderer(window: Page): Promise<void> {
+  await window.reload();
+  await window.waitForLoadState("domcontentloaded");
+  await window.waitForFunction(() => Boolean(globalThis.window.piApp), undefined, {
+    timeout: 15_000,
+  });
+}
+
+export async function rejectIpcInvokes(
+  harness: DesktopHarness,
+  channel: string,
+  sentinel = HYDRATE_TEST_SENTINEL,
+): Promise<void> {
+  await installIpcInvokeControl(harness, channel, { mode: "reject", sentinel });
+}

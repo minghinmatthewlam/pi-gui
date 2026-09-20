@@ -62,6 +62,16 @@ let notificationManager: NotificationManager | undefined;
 let notificationPermissionService: NotificationPermissionService | undefined;
 let terminalService: TerminalService | undefined;
 let integratedTerminalShell = "";
+let applicationRelaunchRequested = false;
+
+function requestApplicationRelaunch(): void {
+  if (applicationRelaunchRequested) {
+    return;
+  }
+  applicationRelaunchRequested = true;
+  app.relaunch();
+  app.quit();
+}
 
 interface OrchestrationRuntimeToolTestInput {
   readonly toolName: string;
@@ -811,6 +821,7 @@ app
         getChangedFiles,
         getFileDiff,
         stageFile,
+        relaunchApplication: requestApplicationRelaunch,
       },
     });
 

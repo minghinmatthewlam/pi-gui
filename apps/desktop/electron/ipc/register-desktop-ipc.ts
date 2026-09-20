@@ -170,6 +170,7 @@ export interface DesktopIpcCapabilities {
     filePath: string,
     options: { readonly sourcePath?: string },
   ) => Promise<void>;
+  readonly relaunchApplication: () => void;
 }
 
 export interface RegisterDesktopIpcOptions {
@@ -217,6 +218,10 @@ export function registerDesktopIpc({
   ipcMain.handle(desktopIpc.openExternal, (event, rawUrl: unknown) => {
     windows.windowForSender(event.sender);
     return capabilities.openExternal(expectString(rawUrl, "url"));
+  });
+  ipcMain.handle(desktopIpc.relaunchApplication, (event) => {
+    windows.windowForSender(event.sender);
+    capabilities.relaunchApplication();
   });
   ipcMain.handle(desktopIpc.stateRequest, (event) =>
     owners.state.getStateForView(windows.viewForSender(event.sender)),

@@ -144,6 +144,7 @@ export const desktopIpc = {
   themeChanged: "pi-gui:theme-changed",
   ping: "app:ping",
   openExternal: "app:open-external",
+  relaunchApplication: "pi-gui:relaunch-application",
 } as const;
 
 export const desktopCommands = {
@@ -445,4 +446,5 @@ export interface PiDesktopApi {
   getResolvedTheme(): Promise<"light" | "dark">;
   setThemeMode(mode: "system" | "light" | "dark"): Promise<DesktopAppState>;
   onThemeChanged(callback: (theme: "light" | "dark") => void): () => void;
+  relaunchApplication(): Promise<void>;
 }
