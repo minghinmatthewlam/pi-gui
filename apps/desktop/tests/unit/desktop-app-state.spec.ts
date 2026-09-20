@@ -230,3 +230,98 @@ test("a failed state pull does not clear a snapshot that a push already provided
   });
   expect(retryableHydrationTargets(model)).toEqual(["selected-transcript"]);
 });
+
+test("a late transcript pull failure does not hide a pushed transcript", () => {
+  const pushed: SelectedTranscriptRecord = {
+    workspaceId: "ws",
+    sessionId: "live",
+    transcript: [],
+  };
+  const live = snapshot(1, { selectedWorkspaceId: "ws", selectedSessionId: "live" });
+  const model = reduceAll([
+    { type: "state-pushed", state: live },
+    { type: "transcript-pull-started", attemptId: 1 },
+    { type: "transcript-pushed", record: pushed },
+    { type: "transcript-pull-failed", attemptId: 1 },
+  ]);
+
+  expect(model.transcriptRecord).toBe(pushed);
+  expect(model.transcriptFailed).toBe(false);
+  expect(deriveDesktopAppView(model)).toEqual({
+    kind: "ready",
+    snapshot: live,
+    transcript: { kind: "ready", record: pushed },
+  });
+  expect(retryableHydrationTargets(model)).toEqual([]);
+});
+
+test("switching sessions clears a transcript failure for the previous thread", () => {
+  const first = snapshot(1, { selectedWorkspaceId: "ws", selectedSessionId: "a" });
+  const next = snapshot(2, { selectedWorkspaceId: "ws", selectedSessionId: "b" });
+  let model = reduceAll([
+    { type: "state-pushed", state: first },
+    { type: "transcript-pull-started", attemptId: 1 },
+    { type: "transcript-pull-failed", attemptId: 1 },
+  ]);
+
+  expect(deriveDesktopAppView(model)).toEqual({
+    kind: "ready",
+    snapshot: first,
+    transcript: {
+      kind: "failed",
+      failure: { code: "selected-transcript-request-failed" },
+      retrying: false,
+    },
+  });
+
+  model = reduceDesktopHydration(model, { type: "state-patched", snapshot: next });
+  expect(model.transcriptFailed).toBe(false);
+  expect(model.transcriptRecord).toBeNull();
+  expect(model.transcriptInFlightId).toBeNull();
+  expect(deriveDesktopAppView(model)).toEqual({
+    kind: "ready",
+    snapshot: next,
+    transcript: { kind: "loading" },
+  });
+
+  model = reduceDesktopHydration(model, { type: "transcript-pull-failed", attemptId: 1 });
+  expect(deriveDesktopAppView(model)).toEqual({
+    kind: "ready",
+    snapshot: next,
+    transcript: { kind: "loading" },
+  });
+
+  const pushed: SelectedTranscriptRecord = {
+    workspaceId: "ws",
+    sessionId: "b",
+    transcript: [],
+  };
+  model = reduceDesktopHydration(model, { type: "transcript-pushed", record: pushed });
+  expect(deriveDesktopAppView(model)).toEqual({
+    kind: "ready",
+    snapshot: next,
+    transcript: { kind: "ready", record: pushed },
+  });
+});
+
+test("a session switch keeps a transcript that already matches the new selection", () => {
+  const first = snapshot(1, { selectedWorkspaceId: "ws", selectedSessionId: "a" });
+  const next = snapshot(2, { selectedWorkspaceId: "ws", selectedSessionId: "b" });
+  const record: SelectedTranscriptRecord = {
+    workspaceId: "ws",
+    sessionId: "b",
+    transcript: [],
+  };
+  const model = reduceAll([
+    { type: "state-pushed", state: first },
+    { type: "transcript-pushed", record },
+    { type: "state-pushed", state: next },
+  ]);
+
+  expect(model.transcriptInFlightId).toBeNull();
+  expect(deriveDesktopAppView(model)).toEqual({
+    kind: "ready",
+    snapshot: next,
+    transcript: { kind: "ready", record },
+  });
+});

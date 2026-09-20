@@ -136,6 +136,58 @@ function mergeLiveSnapshot(
   return current && incoming.revision < current.revision ? current : incoming;
 }
 
+function selectedSessionKey(snapshot: DesktopAppState | null): string {
+  if (!snapshot) {
+    return "";
+  }
+  return `${snapshot.selectedWorkspaceId}:${snapshot.selectedSessionId}`;
+}
+
+function transcriptMatchesSnapshot(
+  record: SelectedTranscriptRecord | null,
+  snapshot: DesktopAppState | null,
+): boolean {
+  return Boolean(
+    record &&
+    snapshot &&
+    record.workspaceId === snapshot.selectedWorkspaceId &&
+    record.sessionId === snapshot.selectedSessionId,
+  );
+}
+
+function withLiveSnapshot(
+  current: DesktopHydrationModel,
+  next: DesktopAppState | null,
+): DesktopHydrationModel {
+  // The first snapshot (or a cleared one) is not a user session switch. Dual-lane
+  // hydrate can settle the transcript before state, and those tests keep the record.
+  if (!current.liveSnapshot || !next) {
+    return { ...current, liveSnapshot: next };
+  }
+  const selectionChanged = selectedSessionKey(current.liveSnapshot) !== selectedSessionKey(next);
+  if (!selectionChanged) {
+    return { ...current, liveSnapshot: next };
+  }
+  if (transcriptMatchesSnapshot(current.transcriptRecord, next)) {
+    return {
+      ...current,
+      liveSnapshot: next,
+      transcriptFailed: false,
+      transcriptSettled: true,
+      transcriptInFlightId: null,
+    };
+  }
+  return {
+    ...current,
+    liveSnapshot: next,
+    transcriptFailed: false,
+    transcriptSettled: false,
+    transcriptRecord: null,
+    receivedPushedTranscript: false,
+    transcriptInFlightId: null,
+  };
+}
+
 export function reduceDesktopHydration(
   current: DesktopHydrationModel,
   event: DesktopHydrationEvent,
@@ -156,10 +208,9 @@ export function reduceDesktopHydration(
         return current;
       }
       return {
-        ...current,
+        ...withLiveSnapshot(current, mergeLiveSnapshot(current.liveSnapshot, event.state)),
         stateInFlightId: null,
         stateFailed: false,
-        liveSnapshot: mergeLiveSnapshot(current.liveSnapshot, event.state),
       };
     case "state-pull-failed":
       if (current.stateInFlightId !== event.attemptId) {
@@ -172,12 +223,11 @@ export function reduceDesktopHydration(
       };
     case "state-pushed":
       return {
-        ...current,
-        liveSnapshot: mergeLiveSnapshot(current.liveSnapshot, event.state),
+        ...withLiveSnapshot(current, mergeLiveSnapshot(current.liveSnapshot, event.state)),
         stateFailed: false,
       };
     case "state-patched":
-      return { ...current, liveSnapshot: event.snapshot };
+      return withLiveSnapshot(current, event.snapshot);
     case "transcript-pull-started":
       return {
         ...current,
@@ -206,6 +256,14 @@ export function reduceDesktopHydration(
     case "transcript-pull-failed":
       if (current.transcriptInFlightId !== event.attemptId) {
         return current;
+      }
+      if (current.receivedPushedTranscript) {
+        return {
+          ...current,
+          transcriptInFlightId: null,
+          transcriptFailed: false,
+          transcriptSettled: true,
+        };
       }
       return {
         ...current,
