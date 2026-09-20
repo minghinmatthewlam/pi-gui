@@ -25,9 +25,14 @@ Record exact feature/entry point, command, result and evidence directory. `compl
 | Next       | [Archive and restore](archive.md)               | Default proof on a real conversation; core spec adds hover/group checks                                 |
 | Supporting | [Settings](settings.md)                         | `--smoke`: visible navigation and preference restart                                                    |
 | Supporting | [Skills](skills.md)                             | `--smoke` covers opening only; separate recipe tests Try and aliases                                    |
+| Supporting | [Extension dock](extension-dock.md)             | `--maintenance`: expand local extension output and collapse after reload                                |
 | Supporting | [Worktrees](worktrees.md)                       | Separate scratch-Git recipe; not in default proof                                                       |
 
 Packaged-app launch, native dialogs/clipboard, model/account onboarding, attachments, file/diff/terminal interaction, and broader extension behavior require separate mapped journeys as those features are changed. Do not claim full-app coverage from this initial map.
+
+## Maintenance journey
+
+`../scripts/prove.sh --maintenance`, run with the explicit auth environment in the parent skill, exercises every mapped feature in a single normal-mode app and restarts that profile for persistence. It covers functional skill Try, settings behavior, queue/keyboard-steer with separate ordered assistant responses, pin/unpin during an active run, actual Git worktree creation and extension-dock reload in addition to conversation continuity. It does not claim every sub-feature or native control. Source readers inspect each feature; retained scratch notes record the current audit outcome rather than adding a run diary here.
 
 ## Latest observed proof (2026-09-19)
 

@@ -31,6 +31,12 @@ Both commands build first, show and focus Electron with `PI_APP_TEST_MODE` remov
 
 Each run uses a scratch workspace and isolated profile. The conversation proof copies only the selected provider credentials into a mode-0700 private temporary directory outside the evidence tree, with a mode-0600 auth file. It creates a minimal model configuration there once and reuses it across restart. It does not modify the source profile. Do not publish the private directory or credentials. Separate profiles prevent history collision, but build output and foreground input are shared: serialize runs and do not drive the user's installed app.
 
+## Maintenance sweep
+
+With the same explicit real-auth environment, run `scripts/prove.sh --maintenance` to exercise every mapped feature in one owned app, with a restart for persistence. It extends conversation proof with functional skill Try, disabling skill commands and checking the composer effect, pin/unpin during an active real-provider run, queued follow-up plus steering, permanent worktree creation checked against Git, and extension-dock expansion/reload. Its scratch repository and skill are setup fixtures; they do not prove native folder opening or skill creation.
+
+Maintenance preserves its fixture repository, created worktree and private profile. It does not claim every sub-feature: queue-row editing/deletion, skill management, cross-profile isolation and native controls still require separate journeys. A failure ends the drive and closes the owned app; inspect evidence and health-check a fresh instance before retrying.
+
 ## Doctor
 
 On each launch, focus the owned app and perform the recipe's read-only identity checks: app path resolves to this checkout's `apps/desktop`, userData equals this run's profile, native window is visible and focused, test mode is absent, and main-process test hooks are absent. `firstWindow()` waits for DOM load and the preload bridge. Doctor JSON records actual paths and PID. Successful sending validates usable authentication; a configured provider name alone does not.
@@ -69,8 +75,9 @@ Root `AGENTS.md` prohibits deleting temporary artifacts without approval. Retain
 
 ## Helpers
 
-- `scripts/prove.sh [--conversation|--smoke]`: executable CLI; default is conversation. Builds, allocates artifacts, runs the chosen recipe, preserves exit status, checks retained proof.
+- `scripts/prove.sh [--conversation|--smoke|--maintenance]`: executable CLI; default is conversation. Builds, allocates artifacts, runs the chosen recipe, preserves exit status, checks retained proof.
 - `scripts/conversation.spec.ts`: default real-provider user journey.
+- `scripts/maintenance-journey.ts`: opt-in full feature-map journey and scratch Git/skill fixtures.
 - `scripts/proof.spec.ts`: secondary no-provider UI smoke.
 - `scripts/playwright.config.ts`: inherits repo defaults, selects these recipes, disables retries.
 

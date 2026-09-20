@@ -27,3 +27,7 @@ Preconditions: isolated workspace containing the Demo Skill/Plan Loop fixtures c
 
 - Inserting a command does not prove executing the skill through a provider.
 - The skill preference can intentionally hide slash commands. Check it before interpreting a missing menu as a discovery failure.
+
+## Maintenance coverage
+
+Normal-mode `scripts/prove.sh --maintenance` seeds Demo Skill and verifies browse/detail/Try. Search, Refresh, New skill, per-skill Enable/Disable and Open folder are additional visible controls; do not infer their coverage from Try. Open folder requires separate native evidence.

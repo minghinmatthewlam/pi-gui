@@ -27,3 +27,7 @@ Preconditions: explicitly enabled real auth and a working provider/model. This f
 - A skipped real-auth spec is not a pass. Capture the unmet precondition.
 - Do not infer steering success from prompt text appearing in the transcript; check assistant-only content.
 - Treat this map entry as required when changing queue/steering behavior, and report it separately if not run.
+
+## Maintenance coverage
+
+The normal-mode `scripts/prove.sh --maintenance` now covers queue/keyboard-steer/order with assistant-only assertions. Queue-row Edit, Cancel, Delete and Steer controls also exist (`queued-composer-messages.tsx`); this journey does not yet cover those controls.

@@ -32,3 +32,7 @@ Preconditions: isolated profile and two fixture folders for sidebar switching.
 - `createNamedThread` uses IPC; this existing spec proves selection/draft behavior, not user-driven thread creation or provider execution.
 - Injected transcript deltas establish renderer behavior only; real run proof belongs in live.
 - Testing unpin only while idle or after restart misses action-queue blocking. Require the pin change before the active prompt completes. For live-provider confirmation, exercise the same controls during a real running follow-up and check that the run continues; the default conversation recipe does not currently include this checkpoint.
+
+## Maintenance coverage
+
+Normal-mode `scripts/prove.sh --maintenance` covers pin/unpin while a real-provider run is still active. Conversation selection asserts composer focus after the destination renders, without explicitly focusing it. Physical folder picking and pinned drag order remain separate journeys.

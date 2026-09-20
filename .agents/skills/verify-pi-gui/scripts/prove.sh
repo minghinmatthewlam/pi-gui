@@ -4,7 +4,8 @@ cd "$(dirname "$0")/../../../.."
 case "${1:-}" in
   ""|--conversation) spec=conversation.spec.ts ;;
   --smoke) spec=proof.spec.ts ;;
-  *) printf 'Usage: %s [--conversation|--smoke]\n' "$0" >&2; exit 2 ;;
+  --maintenance) spec=conversation.spec.ts; export PI_GUI_MAINTENANCE=1 ;;
+  *) printf 'Usage: %s [--conversation|--smoke|--maintenance]\n' "$0" >&2; exit 2 ;;
 esac
 mkdir -p .artifacts/verify-pi-gui
 PI_GUI_PROOF_DIR=$(mktemp -d "$PWD/.artifacts/verify-pi-gui/run-XXXXXX")
@@ -39,6 +40,12 @@ if [ "$result" -eq 0 ]; then
   if [ "$spec" = conversation.spec.ts ]; then
     test -s "$PI_GUI_PROOF_DIR/restart-bravo.png"
     test -s "$PI_GUI_PROOF_DIR/stream-samples.json"
+    if [ "${PI_GUI_MAINTENANCE:-}" = 1 ]; then
+      test -s "$PI_GUI_PROOF_DIR/maintenance-worktrees.png"
+      test -s "$PI_GUI_PROOF_DIR/maintenance-follow-ups.png"
+      test -s "$PI_GUI_PROOF_DIR/maintenance-extension-dock.png"
+      test -s "$PI_GUI_PROOF_DIR/maintenance-settings-restart.png"
+    fi
   else
     test -s "$PI_GUI_PROOF_DIR/restart.png"
   fi

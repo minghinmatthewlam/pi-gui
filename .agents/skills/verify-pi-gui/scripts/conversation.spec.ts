@@ -1,3 +1,4 @@
+import { prepareMaintenanceWorkspace, driveMaintenanceFeatures } from "./maintenance-journey";
 import { test, expect, type Page } from "@playwright/test";
 import { chmod, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -8,7 +9,8 @@ import {
 } from "../../../../apps/desktop/tests/helpers/electron-app";
 
 test("real conversation: stream, switch, tool, stop, archive, restart", async () => {
-  test.setTimeout(360_000);
+  const maintenance = process.env.PI_GUI_MAINTENANCE === "1";
+  test.setTimeout(maintenance ? 600_000 : 360_000);
   const evidence = process.env.PI_GUI_PROOF_DIR!;
   const source = process.env.PI_APP_REAL_AUTH_SOURCE_DIR;
   const provider = process.env.PI_GUI_PROVIDER;
@@ -40,6 +42,7 @@ test("real conversation: stream, switch, tool, stop, archive, restart", async ()
   );
   const workspace = join(evidence, "workspace");
   await mkdir(workspace, { recursive: true });
+  if (maintenance) await prepareMaintenanceWorkspace(workspace);
   const runs: Array<{ pid: number; closed: boolean }> = [];
   const completed: string[] = [];
   // Synthetic scratch drafts only. Native input can reach this focused window
@@ -153,6 +156,7 @@ test("real conversation: stream, switch, tool, stop, archive, restart", async ()
     await row(id).locator(".session-row__select").click();
     await expect(page.locator(".session-row--active")).toHaveAttribute("data-session-id", id);
     await expect(page.getByTestId("composer")).toBeVisible();
+    await expect(page.getByTestId("composer")).toBeFocused();
   };
   const start = async (prompt: string) => {
     await page
@@ -356,6 +360,11 @@ test("real conversation: stream, switch, tool, stop, archive, restart", async ()
         .toHaveValue(drafts.bravo);
       await checkpoint("archive-restore");
     });
+    if (maintenance) {
+      await driveMaintenanceFeatures(page, workspace, checkpoint);
+      await select(bravo);
+      await page.getByTestId("composer").fill(drafts.bravo);
+    }
     await close();
     phase = "restart";
     await launch();
@@ -373,6 +382,14 @@ test("real conversation: stream, switch, tool, stop, archive, restart", async ()
         await checkpoint(id === alpha ? "restart-alpha" : "restart-bravo");
       }
     });
+    if (maintenance) {
+      await page.getByRole("button", { name: "Settings", exact: true }).click();
+      await page.getByRole("button", { name: "General", exact: true }).click();
+      await expect(
+        page.getByRole("checkbox", { name: "Enable skill slash commands" }),
+      ).not.toBeChecked();
+      await checkpoint("maintenance-settings-restart");
+    }
   } catch (error) {
     if (harness && page!)
       await page.screenshot({ path: join(evidence, "failure.png") }).catch(() => {});

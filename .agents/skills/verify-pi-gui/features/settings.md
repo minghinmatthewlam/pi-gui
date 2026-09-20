@@ -27,3 +27,7 @@ Preconditions: isolated built app; no provider login needed.
 - A changed checkbox in one window does not prove persistence.
 - The smoke preserves its isolated profile as evidence; it does not modify the user's profile.
 - Notification permission tests use OS-boundary doubles in core. They do not prove real macOS authorization.
+
+## Maintenance coverage
+
+Normal-mode `scripts/prove.sh --maintenance` disables skill commands, verifies `/skill` no longer opens the menu, and checks the disabled preference after restart in the same profile.
