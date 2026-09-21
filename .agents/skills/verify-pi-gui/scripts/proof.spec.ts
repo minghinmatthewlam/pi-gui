@@ -22,7 +22,6 @@ test("visible app navigation and settings persistence without test hooks", async
       initialWorkspaces: [workspace],
       scrubProviderEnv: true,
       envOverrides: { PI_APP_TEST_MODE: undefined },
-      recordVideoDir: join(evidence, "videos"),
     });
   const doctor = async (harness: DesktopHarness) => {
     await harness.focusWindow();

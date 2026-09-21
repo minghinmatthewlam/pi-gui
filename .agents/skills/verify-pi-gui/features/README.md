@@ -8,7 +8,7 @@ Build the current checkout. Use a visible, focused Electron process with test mo
 
 ## Driving conventions
 
-The parent skill documents the default `scripts/prove.sh` conversation command and the separate `--smoke` UI check. Drive mutations through buttons, keyboard, and composer input; use DOM/state reads only for observation. No session-creation IPC, synthetic assistant events, or seeded transcripts in core conversation proof. The scratch workspace and initial model configuration are setup fixtures, not UI proof of those setup paths.
+The parent skill documents the default `scripts/prove.sh` conversation command, `--maintenance` for the remaining mapped surfaces, and the separate `--smoke` UI check. Drive mutations through buttons, keyboard, and composer input; use DOM/state reads only for observation. No session-creation IPC, synthetic assistant events, or seeded transcripts in conversation or maintenance proof. The scratch workspace and initial model configuration are setup fixtures, not UI proof of those setup paths.
 
 ## Proof and skip reporting
 
@@ -20,13 +20,13 @@ Record exact feature/entry point, command, result and evidence directory. `compl
 | ---------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
 | Core       | [Conversations](conversations.md)               | Default real-provider proof: send, streaming, completion, tool, stop                                    |
 | Core       | [Thread continuity](thread-continuity.md)       | Default proof: switch while running, isolation, background completion, drafts, restart, archive/restore |
-| Next       | [Queued follow-ups and steering](follow-ups.md) | Existing real-auth recipe; separate, not in default proof                                               |
-| Next       | [Folders and threads](navigation.md)            | Sidebar/shortcut/native-folder recipes; pin ordering, restart, and pin/unpin during a pending prompt    |
+| Next       | [Queued follow-ups and steering](follow-ups.md) | `--maintenance`: visible Enter-queue and modified-Enter steer with real auth                            |
+| Next       | [Folders and threads](navigation.md)            | `--maintenance`: New thread until Show more Today, and pin/unpin while a run is going                   |
 | Next       | [Archive and restore](archive.md)               | Default proof on a real conversation; core spec adds hover/group checks                                 |
 | Supporting | [Settings](settings.md)                         | `--smoke`: visible navigation and preference restart                                                    |
-| Supporting | [Skills](skills.md)                             | `--smoke` covers opening only; separate recipe tests Try and aliases                                    |
+| Supporting | [Skills](skills.md)                             | `--smoke` covers opening; `--maintenance` covers Try and aliases                                        |
 | Supporting | [Scheduled tasks](scheduled-tasks.md)           | Core Electron specs for list/create/fire/tool; not in default conversation proof                        |
-| Supporting | [Worktrees](worktrees.md)                       | Separate scratch-Git recipe; not in default proof                                                       |
+| Supporting | [Worktrees](worktrees.md)                       | `--maintenance` creates a permanent worktree and checks `git worktree list`                             |
 
 Packaged-app launch, native dialogs/clipboard, model/account onboarding, attachments, file/diff/terminal interaction, and broader extension behavior require separate mapped journeys as those features are changed. Do not claim full-app coverage from this initial map.
 
