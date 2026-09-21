@@ -32,6 +32,7 @@ import {
 } from "./scheduled-tasks/scheduled-task-runtime";
 import { getChangedFiles, getFileDiff, stageFile } from "./platform/files/app-store-diff";
 import { listWorkspaceFiles, readWorkspaceFile } from "./platform/files/app-store-files";
+import { resolveExistingWorkspacePath } from "./platform/files/workspace-paths";
 import { MAIN_DEV_RELOAD_MARKER } from "./dev-reload-main-probe";
 import { NotificationManager } from "./platform/notification-manager";
 import { NotificationPermissionService } from "./platform/notification-permission";
@@ -906,6 +907,10 @@ app
           attachments.flatMap(validateComposerAttachmentPayload),
         listWorkspaceFiles,
         readWorkspaceFile,
+        revealWorkspaceFile: async (workspacePath, filePath) => {
+          const resolved = await resolveExistingWorkspacePath(workspacePath, filePath);
+          shell.showItemInFolder(resolved);
+        },
         getChangedFiles,
         getFileDiff,
         stageFile,
