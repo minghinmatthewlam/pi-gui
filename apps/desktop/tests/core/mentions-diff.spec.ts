@@ -40,7 +40,9 @@ test("shows workspace file mentions from the composer and inserts the selected f
       "Extensions",
       "Files",
     ]);
-    await expect(mentionMenu.locator(".mention-menu__item")).toHaveCount(3);
+    await expect(mentionMenu.locator(".mention-menu__item")).toHaveCount(4);
+    await expect(mentionMenu).toContainText("Thread orchestration");
+    await expect(mentionMenu).toContainText("Scheduled tasks");
 
     await composer.pressSequentially("README");
     await expect(mentionMenu.locator(".mention-menu__item")).toHaveCount(1);

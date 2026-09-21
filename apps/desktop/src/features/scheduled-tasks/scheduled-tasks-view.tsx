@@ -176,7 +176,9 @@ export function ScheduledTasksView({
                           setMenuTaskId(undefined);
                           void updateSnapshot(setSnapshot, () =>
                             api.updateScheduledTask(task.id, { status: "active" }),
-                          );
+                          ).catch((error: unknown) => {
+                            console.error("[renderer] updateScheduledTask failed", error);
+                          });
                         }}
                       >
                         Resume
@@ -189,7 +191,9 @@ export function ScheduledTasksView({
                           setMenuTaskId(undefined);
                           void updateSnapshot(setSnapshot, () =>
                             api.updateScheduledTask(task.id, { status: "paused" }),
-                          );
+                          ).catch((error: unknown) => {
+                            console.error("[renderer] updateScheduledTask failed", error);
+                          });
                         }}
                       >
                         Pause
@@ -210,7 +214,11 @@ export function ScheduledTasksView({
                       type="button"
                       onClick={() => {
                         setMenuTaskId(undefined);
-                        void updateSnapshot(setSnapshot, () => api.deleteScheduledTask(task.id));
+                        void updateSnapshot(setSnapshot, () =>
+                          api.deleteScheduledTask(task.id),
+                        ).catch((error: unknown) => {
+                          console.error("[renderer] deleteScheduledTask failed", error);
+                        });
                       }}
                     >
                       Delete
