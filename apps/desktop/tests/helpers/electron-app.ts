@@ -145,18 +145,23 @@ export async function launchDesktop(
   const normalized = normalizeLaunchOptions(options);
   const agentDir = await prepareAgentDir(userDataDir, normalized);
   const env = buildDesktopLaunchEnv(userDataDir, agentDir, normalized);
-  const electronApp = await electron.launch({
-    args: electronCliArgs(desktopDir),
-    cwd: desktopDir,
-    env,
-    ...(normalized.recordVideoDir
+  // Playwright's Electron video recorder can stall loadURL on Linux, leaving a
+  // placeholder BrowserWindow whose URL never leaves empty. Skip it there;
+  // callers still capture screenshots and traces.
+  const recordVideo =
+    normalized.recordVideoDir && process.platform !== "linux"
       ? {
           recordVideo: {
             dir: normalized.recordVideoDir,
             ...(normalized.recordVideoSize ? { size: normalized.recordVideoSize } : {}),
           },
         }
-      : {}),
+      : {};
+  const electronApp = await electron.launch({
+    args: electronCliArgs(desktopDir),
+    cwd: desktopDir,
+    env,
+    ...recordVideo,
   });
 
   return createDesktopHarness(electronApp);
