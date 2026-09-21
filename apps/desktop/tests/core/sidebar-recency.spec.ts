@@ -5,6 +5,7 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 import type { DesktopAppState, SessionRecord } from "../../contracts/desktop-state";
 import {
   chooseThreadGrouping,
+  expectThreadGrouping,
   createSessionViaIpc,
   desktopShortcut,
   getDesktopState,
@@ -36,7 +37,10 @@ test("caps each time bucket at five and hides workspace headers", async () => {
     await createHistoryThreads(window, workspaceA.id, numberedThreadTitles("A", 6));
     await createHistoryThreads(window, workspaceB.id, numberedThreadTitles("B", 2));
 
-    await expect(window.getByRole("button", { name: "Group threads" })).toHaveText("Time");
+    const customize = window.getByRole("button", { name: "Customize Sidebar" });
+    await customize.hover();
+    await expect(window.getByRole("tooltip", { name: "Customize Sidebar" })).toBeVisible();
+    await expectThreadGrouping(window, "time");
     const today = recencySection(window, "Today");
     await expect(today).toBeVisible();
     await expect(today.locator(".session-row")).toHaveCount(5);
@@ -420,7 +424,7 @@ test("caps a long Last 7 Days bucket and sorts the folder by last send", async (
   try {
     const window = await thirdRun.firstWindow();
     await waitForWorkspaceByPath(window, workspacePath);
-    await expect(window.getByRole("button", { name: "Group threads" })).toHaveText("Workspace");
+    await expectThreadGrouping(window, "workspace");
     await expect(window.locator(".workspace-group .session-row__title").first()).toHaveText(
       "Sent later",
     );

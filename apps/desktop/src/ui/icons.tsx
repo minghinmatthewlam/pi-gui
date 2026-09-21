@@ -284,6 +284,39 @@ export function ChevronRightIcon() {
   );
 }
 
+export function CheckIcon() {
+  return (
+    <Icon>
+      <path
+        d="m5.2 10.4 3.1 3.1 6.5-6.8"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.6"
+      />
+    </Icon>
+  );
+}
+
+export function CustomizeSidebarIcon() {
+  return (
+    <Icon>
+      <path
+        d="M3.2 5.2h4.4M10.6 5.2h6.2M3.2 10h7.2M13.6 10h3.2M3.2 14.8h2.2M8.6 14.8h8.2"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="1.5"
+      />
+      <path
+        d="M8.8 3.6v3.2M12.4 8.4v3.2M6.6 13.2v3.2"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="1.5"
+      />
+    </Icon>
+  );
+}
+
 export function CopyIcon() {
   return (
     <Icon>

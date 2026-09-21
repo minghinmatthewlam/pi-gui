@@ -134,24 +134,48 @@
   text-transform: none;
 }
 
-.thread-grouping__button {
-  height: 28px;
-  padding: 0 8px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-md);
-  color: var(--muted-strong);
-  font-size: 12px;
-  font-weight: 560;
-}
-
-.thread-grouping__button:hover {
-  background: var(--theme-control-hover-bg, var(--overlay-hover));
-}
-
-.thread-grouping__menu {
-  top: calc(100% + 4px);
+.shortcut-tooltip-wrap.thread-grouping .shortcut-tooltip {
+  left: auto;
   right: 0;
-  min-width: 140px;
+  transform: translateY(-2px);
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.shortcut-tooltip-wrap.thread-grouping:hover .shortcut-tooltip,
+.shortcut-tooltip-wrap.thread-grouping:focus-within .shortcut-tooltip {
+  opacity: 1;
+  transform: none;
+}
+
+.thread-grouping__menu,
+.thread-grouping__submenu {
+  position: fixed;
+  z-index: 80;
+  min-width: 188px;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.thread-grouping__submenu {
+  min-width: 168px;
+}
+
+.thread-grouping__parent--open {
+  background: var(--theme-control-hover-bg, var(--surface-muted));
+}
+
+.thread-grouping__option {
+  justify-content: flex-start;
+  gap: 8px;
+}
+
+.thread-grouping__check {
+  width: 16px;
+  height: 16px;
+  display: grid;
+  place-items: center;
+  flex: none;
 }
 
 .thread-history-toggle {

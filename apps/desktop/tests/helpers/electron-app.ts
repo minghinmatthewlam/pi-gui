@@ -1742,9 +1742,25 @@ export async function chooseThreadGrouping(
   grouping: "time" | "workspace",
 ): Promise<void> {
   const label = grouping === "time" ? "Time" : "Workspace";
-  await window.getByRole("button", { name: "Group threads" }).click();
+  await window.getByRole("button", { name: "Customize Sidebar" }).click();
+  await window.getByRole("menuitem", { name: "Grouping" }).click();
   await window.getByRole("menuitemradio", { name: label, exact: true }).click();
-  await expect(window.getByRole("button", { name: "Group threads" })).toHaveText(label);
+  await expectThreadGrouping(window, grouping);
+}
+
+export async function expectThreadGrouping(
+  window: Page,
+  grouping: "time" | "workspace",
+): Promise<void> {
+  const label = grouping === "time" ? "Time" : "Workspace";
+  await window.getByRole("button", { name: "Customize Sidebar" }).click();
+  await window.getByRole("menuitem", { name: "Grouping" }).click();
+  await expect(window.getByRole("menuitemradio", { name: label, exact: true })).toHaveAttribute(
+    "aria-checked",
+    "true",
+  );
+  await window.keyboard.press("Escape");
+  await expect(window.getByRole("menu", { name: "Customize Sidebar" })).toBeHidden();
 }
 
 export async function createSessionViaIpc(

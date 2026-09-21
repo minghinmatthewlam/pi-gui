@@ -1,4 +1,12 @@
-import { forwardRef, useEffect, useRef, useState, type CSSProperties } from "react";
+import {
+  forwardRef,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
+import { createPortal } from "react-dom";
 import {
   DndContext,
   DragOverlay,
@@ -27,7 +35,10 @@ import type {
 } from "../../../contracts/desktop-state";
 import {
   ArchiveIcon,
+  CheckIcon,
   ChevronDownIcon,
+  ChevronRightIcon,
+  CustomizeSidebarIcon,
   ExtensionIcon,
   FolderIcon,
   PinIcon,
@@ -928,20 +939,56 @@ function ThreadGroupingControl({
   readonly onChange: (grouping: ThreadGrouping) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [submenuOpen, setSubmenuOpen] = useState(false);
+  const [menuStyle, setMenuStyle] = useState<CSSProperties>({});
+  const [submenuStyle, setSubmenuStyle] = useState<CSSProperties>({});
   const wrapRef = useRef<HTMLSpanElement | null>(null);
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const groupingRef = useRef<HTMLButtonElement | null>(null);
+  const submenuTimer = useRef<number | null>(null);
+
+  const closeSubmenuSoon = () => {
+    if (submenuTimer.current !== null) {
+      window.clearTimeout(submenuTimer.current);
+    }
+    submenuTimer.current = window.setTimeout(() => {
+      submenuTimer.current = null;
+      setSubmenuOpen(false);
+    }, 140);
+  };
+
+  const keepSubmenu = () => {
+    if (submenuTimer.current !== null) {
+      window.clearTimeout(submenuTimer.current);
+      submenuTimer.current = null;
+    }
+    setSubmenuOpen(true);
+  };
+
+  const closeMenu = () => {
+    if (submenuTimer.current !== null) {
+      window.clearTimeout(submenuTimer.current);
+      submenuTimer.current = null;
+    }
+    setSubmenuOpen(false);
+    setOpen(false);
+  };
 
   useEffect(() => {
     if (!open) {
       return undefined;
     }
     const handlePointerDown = (event: MouseEvent) => {
-      if (!wrapRef.current?.contains(event.target as Node)) {
-        setOpen(false);
+      const target = event.target as Node;
+      if (wrapRef.current?.contains(target) || menuRef.current?.contains(target)) {
+        return;
       }
+      closeMenu();
     };
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        setOpen(false);
+        closeMenu();
       }
     };
     window.addEventListener("mousedown", handlePointerDown);
@@ -952,48 +999,131 @@ function ThreadGroupingControl({
     };
   }, [open]);
 
+  useEffect(
+    () => () => {
+      if (submenuTimer.current !== null) {
+        window.clearTimeout(submenuTimer.current);
+      }
+    },
+    [],
+  );
+
+  useLayoutEffect(() => {
+    if (!open || !buttonRef.current) {
+      return;
+    }
+    const rect = buttonRef.current.getBoundingClientRect();
+    setMenuStyle({
+      top: rect.bottom + 6,
+      right: Math.max(8, window.innerWidth - rect.right),
+    });
+  }, [open]);
+
+  useLayoutEffect(() => {
+    if (!submenuOpen || !groupingRef.current) {
+      return;
+    }
+    const rect = groupingRef.current.getBoundingClientRect();
+    const width = 176;
+    const gap = 8;
+    const openRight = rect.right + gap;
+    setSubmenuStyle(
+      openRight + width <= window.innerWidth - 8
+        ? { top: rect.top - 6, left: openRight }
+        : { top: rect.top - 6, left: Math.max(8, rect.left - gap - width) },
+    );
+  }, [submenuOpen]);
+
   return (
-    <span className="thread-grouping" ref={wrapRef}>
+    <span className="shortcut-tooltip-wrap thread-grouping" ref={wrapRef}>
       <button
+        ref={buttonRef}
         aria-expanded={open}
         aria-haspopup="menu"
-        aria-label="Group threads"
-        className="thread-grouping__button"
+        aria-label="Customize Sidebar"
+        className="icon-button"
         type="button"
-        onClick={() => setOpen((current) => !current)}
+        onClick={() => {
+          if (open) {
+            closeMenu();
+            return;
+          }
+          setOpen(true);
+        }}
       >
-        {grouping === "time" ? "Time" : "Workspace"}
+        <CustomizeSidebarIcon />
       </button>
-      {open ? (
-        <div
-          aria-label="Group threads"
-          className="workspace-menu thread-grouping__menu"
-          role="menu"
-        >
-          {(
-            [
-              ["time", "Time"],
-              ["workspace", "Workspace"],
-            ] as const
-          ).map(([value, label]) => (
-            <button
-              key={value}
-              aria-checked={grouping === value}
-              className="workspace-menu__item"
-              role="menuitemradio"
-              type="button"
-              onClick={() => {
-                setOpen(false);
-                if (value !== grouping) {
-                  onChange(value);
-                }
-              }}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      ) : null}
+      {open ? null : (
+        <span className="shortcut-tooltip" role="tooltip">
+          Customize Sidebar
+        </span>
+      )}
+      {open
+        ? createPortal(
+            <div ref={menuRef}>
+              <div
+                aria-label="Customize Sidebar"
+                className="workspace-menu thread-grouping__menu"
+                role="menu"
+                style={menuStyle}
+              >
+                <button
+                  ref={groupingRef}
+                  aria-expanded={submenuOpen}
+                  aria-haspopup="menu"
+                  className={`workspace-menu__item${submenuOpen ? " thread-grouping__parent--open" : ""}`}
+                  role="menuitem"
+                  type="button"
+                  onClick={() => {
+                    keepSubmenu();
+                  }}
+                  onMouseEnter={keepSubmenu}
+                  onMouseLeave={closeSubmenuSoon}
+                >
+                  <span>Grouping</span>
+                  <ChevronRightIcon />
+                </button>
+              </div>
+              {submenuOpen ? (
+                <div
+                  aria-label="Grouping"
+                  className="workspace-menu thread-grouping__submenu"
+                  role="menu"
+                  style={submenuStyle}
+                  onMouseEnter={keepSubmenu}
+                  onMouseLeave={closeSubmenuSoon}
+                >
+                  {(
+                    [
+                      ["time", "Time"],
+                      ["workspace", "Workspace"],
+                    ] as const
+                  ).map(([value, label]) => (
+                    <button
+                      key={value}
+                      aria-checked={grouping === value}
+                      className="workspace-menu__item thread-grouping__option"
+                      role="menuitemradio"
+                      type="button"
+                      onClick={() => {
+                        closeMenu();
+                        if (value !== grouping) {
+                          onChange(value);
+                        }
+                      }}
+                    >
+                      <span aria-hidden="true" className="thread-grouping__check">
+                        {grouping === value ? <CheckIcon /> : null}
+                      </span>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>,
+            document.body,
+          )
+        : null}
     </span>
   );
 }
