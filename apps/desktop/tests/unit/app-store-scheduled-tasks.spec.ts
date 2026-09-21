@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import type { SessionRef, SessionSnapshot } from "@pi-gui/session-driver";
+import type { SessionRef, SessionSnapshot, WorkspaceRef } from "@pi-gui/session-driver";
 import type {
   DesktopAppState,
   SessionRecord,
@@ -14,6 +14,13 @@ import {
 const workspaceId = "ws-1";
 const sessionId = "session-1";
 const sessionRef: SessionRef = { workspaceId, sessionId };
+const workspaceRef: WorkspaceRef = { workspaceId, path: "/tmp" };
+
+interface ScheduledTaskTestHost extends ScheduledTaskOwnerHost {
+  tasks: ScheduledTaskRecord[];
+  deliverCalls: { readonly sessionRef: SessionRef; readonly text: string }[];
+  transcripts: Map<string, TranscriptMessage[]>;
+}
 
 function sessionRecord(status: SessionRecord["status"] = "idle"): SessionRecord {
   return {
@@ -42,7 +49,7 @@ function dueIntervalTask(overrides: Partial<ScheduledTaskRecord> = {}): Schedule
   };
 }
 
-function snapshotFrom(host: ReturnType<typeof createHost>, lastError?: string): DesktopAppState {
+function snapshotFrom(host: ScheduledTaskTestHost, lastError?: string): DesktopAppState {
   return {
     scheduledTasks: host.tasks,
     lastError,
@@ -55,11 +62,11 @@ function createHost(
     readonly sessionStatus?: SessionRecord["status"];
     readonly deliver?: (sessionRef: SessionRef, text: string) => Promise<string | undefined>;
   } = {},
-) {
-  const host = {
+): ScheduledTaskTestHost {
+  const host: ScheduledTaskTestHost = {
     tasks: [...(options.tasks ?? [])],
-    deliverCalls: [] as { readonly sessionRef: SessionRef; readonly text: string }[],
-    transcripts: new Map<string, TranscriptMessage[]>(),
+    deliverCalls: [],
+    transcripts: new Map(),
     driver: {
       createSession: async () => {
         throw new Error("createSession should not run in these tests");
@@ -67,21 +74,20 @@ function createHost(
     },
     initialize: async () => undefined,
     scheduledTasks: () => host.tasks,
-    replaceScheduledTasks: (tasks: readonly ScheduledTaskRecord[]) => {
+    replaceScheduledTasks: (tasks) => {
       host.tasks = [...tasks];
     },
     persistScheduledTasks: async () => undefined,
     canWriteScheduledTasks: () => true,
     emit: () => snapshotFrom(host),
     refreshState: async () => snapshotFrom(host),
-    withError: async (error: unknown) =>
+    withError: async (error) =>
       snapshotFrom(host, error instanceof Error ? error.message : String(error)),
     selectedWorkspaceId: () => workspaceId,
     selectedSessionId: () => sessionId,
     workspaces: () => [],
-    workspaceRefFromState: (id: string) =>
-      id === workspaceId ? { workspaceId: id, path: "/tmp" } : undefined,
-    sessionFromState: (ref: SessionRef) =>
+    workspaceRefFromState: (id) => (id === workspaceId ? workspaceRef : undefined),
+    sessionFromState: (ref) =>
       ref.sessionId === sessionId ? sessionRecord(options.sessionStatus) : undefined,
     createForegroundSession: async () => snapshotFrom(host),
     seedSession: (_snapshot: SessionSnapshot) => undefined,
@@ -89,7 +95,7 @@ function createHost(
     ensureSessionReady: async () => undefined,
     buildCreateSessionOptions: async () => ({}),
     updateComposerDraft: async () => snapshotFrom(host),
-    deliverBackgroundInstruction: async (ref: SessionRef, text: string) => {
+    deliverBackgroundInstruction: async (ref, text) => {
       host.deliverCalls.push({ sessionRef: ref, text });
       if (options.deliver) {
         return options.deliver(ref, text);
@@ -104,12 +110,7 @@ function createHost(
       host.transcripts.set(`${ref.workspaceId}:${ref.sessionId}`, [message]);
       return message.id;
     },
-    transcriptFor: (ref: SessionRef) =>
-      host.transcripts.get(`${ref.workspaceId}:${ref.sessionId}`) ?? [],
-  } satisfies ScheduledTaskOwnerHost & {
-    tasks: ScheduledTaskRecord[];
-    deliverCalls: { readonly sessionRef: SessionRef; readonly text: string }[];
-    transcripts: Map<string, TranscriptMessage[]>;
+    transcriptFor: (ref) => host.transcripts.get(`${ref.workspaceId}:${ref.sessionId}`) ?? [],
   };
   return host;
 }
