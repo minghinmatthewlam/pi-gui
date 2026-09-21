@@ -16,16 +16,16 @@ Record exact feature/entry point, command, result and evidence directory. `compl
 
 ## Features, in priority order
 
-| Priority   | Feature                                         | Executable coverage                                                                                     |
-| ---------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| Core       | [Conversations](conversations.md)               | Default real-provider proof: send, streaming, completion, tool, stop                                    |
-| Core       | [Thread continuity](thread-continuity.md)       | Default proof: switch while running, isolation, background completion, drafts, restart, archive/restore |
-| Next       | [Queued follow-ups and steering](follow-ups.md) | `--maintenance`: visible Enter-queue and modified-Enter steer with real auth                            |
-| Next       | [Folders and threads](navigation.md)            | `--maintenance`: New thread until Show more Today, and pin/unpin while a run is going                   |
-| Next       | [Archive and restore](archive.md)               | Default proof on a real conversation; core spec adds hover/group checks                                 |
-| Supporting | [Settings](settings.md)                         | `--smoke`: visible navigation and preference restart                                                    |
-| Supporting | [Skills](skills.md)                             | `--smoke` covers opening; `--maintenance` covers Try and aliases                                        |
-| Supporting | [Scheduled tasks](scheduled-tasks.md)           | Core Electron specs for list/create/fire/tool; not in default conversation proof                        |
+| Priority   | Feature                                         | Executable coverage                                                                                          |
+| ---------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Core       | [Conversations](conversations.md)               | Default real-provider proof: send, streaming, completion, tool, stop                                         |
+| Core       | [Thread continuity](thread-continuity.md)       | Default proof: switch while running, isolation, background completion, drafts, restart, archive/restore      |
+| Next       | [Queued follow-ups and steering](follow-ups.md) | `--maintenance`: visible Enter-queue and modified-Enter steer with real auth                                 |
+| Next       | [Folders and threads](navigation.md)            | `--maintenance`: New thread until Show more Today, and pin/unpin while a run is going                        |
+| Next       | [Archive and restore](archive.md)               | Default proof on a real conversation; core spec adds hover/group checks                                      |
+| Supporting | [Settings](settings.md)                         | `--smoke`: visible navigation and preference restart                                                         |
+| Supporting | [Skills](skills.md)                             | `--smoke` covers opening; `--maintenance` covers Try and aliases                                             |
+| Supporting | [Scheduled tasks](scheduled-tasks.md)           | Core Electron specs for list/create/fire/tool; not in default conversation proof                             |
 | Supporting | [Worktrees](worktrees.md)                       | `--maintenance` switches to Workspace grouping, creates a permanent worktree, and checks `git worktree list` |
 
 Packaged-app launch, native dialogs/clipboard, model/account onboarding, attachments, file/diff/terminal interaction, and broader extension behavior require separate mapped journeys as those features are changed. Do not claim full-app coverage from this initial map.
