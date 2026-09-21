@@ -538,6 +538,7 @@ async function fireDueScheduledTasks(
       };
       await writeTask(store, claimedTask);
 
+      const firedAt = nowIso(new Date());
       let sessionRef: SessionRef | undefined;
       try {
         if (claimedTask.target.kind === "new-thread") {
@@ -560,13 +561,13 @@ async function fireDueScheduledTasks(
           store,
           sessionRef,
           claimedTask.instruction,
-          claimedTask.lastRunAt,
+          firedAt,
         );
         const run: ScheduledTaskRun = {
           id: randomUUID(),
           sessionId: sessionRef.sessionId,
           workspaceId: sessionRef.workspaceId,
-          firedAt: nowIso(now),
+          firedAt,
           instruction: claimedTask.instruction,
           ...(userMessageId ? { userMessageId } : {}),
           outcome: "started",
@@ -590,18 +591,14 @@ async function fireDueScheduledTasks(
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         const failedMessageId = sessionRef
-          ? lastUserMessageId(
-              store.transcriptFor(sessionRef),
-              claimedTask.instruction,
-              claimedTask.lastRunAt,
-            )
+          ? lastUserMessageId(store.transcriptFor(sessionRef), claimedTask.instruction, firedAt)
           : undefined;
         const failedRun: ScheduledTaskRun | undefined = sessionRef
           ? {
               id: randomUUID(),
               sessionId: sessionRef.sessionId,
               workspaceId: sessionRef.workspaceId,
-              firedAt: nowIso(now),
+              firedAt,
               instruction: claimedTask.instruction,
               ...(failedMessageId ? { userMessageId: failedMessageId } : {}),
               outcome: "failed",
