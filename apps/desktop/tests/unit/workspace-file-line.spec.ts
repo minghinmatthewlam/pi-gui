@@ -4,8 +4,10 @@ import remarkParse from "remark-parse";
 import { unified } from "unified";
 import {
   decodeWorkspaceFileLine,
+  encodeWorkspaceFileLine,
   parseWorkspaceFileLine,
   remarkWorkspaceFileLines,
+  workspaceFileLineFromAnchorProps,
 } from "../../src/features/conversation/workspace-file-line";
 
 const WORKSPACE = "/repo";
@@ -47,6 +49,14 @@ test("parseWorkspaceFileLine accepts the chosen spellings", () => {
     line: 3,
     endLine: 3,
   });
+});
+
+test("react-markdown passes file lines on the data attribute, not the href", () => {
+  const file = { path: "src/app.ts", line: 3, endLine: 3 };
+  const encoded = encodeWorkspaceFileLine(file);
+  expect(workspaceFileLineFromAnchorProps({ "data-workspace-file-line": encoded })).toEqual(file);
+  expect(workspaceFileLineFromAnchorProps({ href: "src/app.ts:3" })).toBeNull();
+  expect(workspaceFileLineFromAnchorProps({ dataWorkspaceFileLine: encoded })).toEqual(file);
 });
 
 test("parseWorkspaceFileLine rejects web, mail, file, escape, and missing lines", () => {

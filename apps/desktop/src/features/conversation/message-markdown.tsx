@@ -2,8 +2,8 @@ import { memo, useMemo } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
-  decodeWorkspaceFileLine,
   remarkWorkspaceFileLines,
+  workspaceFileLineFromAnchorProps,
   type WorkspaceFileLine,
 } from "./workspace-file-line";
 
@@ -18,8 +18,7 @@ function markdownComponents(
       return <code className={className}>{code}</code>;
     },
     a: ({ href, children, ...props }) => {
-      const encoded = (props as { dataWorkspaceFileLine?: string }).dataWorkspaceFileLine;
-      const file = onOpenWorkspaceFileLine ? decodeWorkspaceFileLine(encoded) : null;
+      const file = onOpenWorkspaceFileLine ? workspaceFileLineFromAnchorProps(props) : null;
       if (file && onOpenWorkspaceFileLine) {
         return (
           <button

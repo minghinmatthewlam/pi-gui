@@ -63,6 +63,12 @@ export function encodeWorkspaceFileLine(file: WorkspaceFileLine): string {
   return `${file.line}:${file.endLine}:${encodeURIComponent(file.path)}`;
 }
 
+export function workspaceFileLineFromAnchorProps(props: object): WorkspaceFileLine | null {
+  const record = props as { dataWorkspaceFileLine?: unknown; "data-workspace-file-line"?: unknown };
+  const encoded = record["data-workspace-file-line"] ?? record.dataWorkspaceFileLine;
+  return typeof encoded === "string" ? decodeWorkspaceFileLine(encoded) : null;
+}
+
 export function decodeWorkspaceFileLine(value: string | undefined): WorkspaceFileLine | null {
   if (!value) {
     return null;
@@ -113,6 +119,7 @@ function annotateFileLines(node: MarkdownNode, workspacePath: string | null): vo
     if (child.type === "link" && typeof child.url === "string") {
       const file = parseWorkspaceFileLine(decodeLinkDestination(child.url), workspacePath);
       if (file) {
+        child.url = "";
         child.data = {
           ...child.data,
           hProperties: {
