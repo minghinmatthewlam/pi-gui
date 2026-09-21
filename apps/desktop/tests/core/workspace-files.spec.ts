@@ -106,6 +106,8 @@ test("Files explorer drops the previous workspace tree after a folder switch", a
   try {
     const window = await harness.firstWindow();
     await createNamedThread(window, "Alpha files", { workspaceName: "alpha-files-workspace" });
+    await createNamedThread(window, "Bravo files", { workspaceName: "bravo-files-workspace" });
+    await window.locator(".session-row__select", { hasText: "Alpha files" }).click();
     await window.locator(".topbar__actions").getByLabel("Toggle files").click();
     const tree = window.getByTestId("file-workbench-tree");
     await expect(
@@ -115,13 +117,17 @@ test("Files explorer drops the previous workspace tree after a folder switch", a
       tree.locator('.file-workbench__tree-row--file[data-file-path="bravo-only.md"]'),
     ).toHaveCount(0);
 
-    await createNamedThread(window, "Bravo files", { workspaceName: "bravo-files-workspace" });
-    await expect(window.getByTestId("file-workbench")).toBeVisible();
+    await window.locator(".session-row__select", { hasText: "Bravo files" }).click();
+    const workbench = window.getByTestId("file-workbench");
+    if ((await workbench.count()) === 0) {
+      await window.locator(".topbar__actions").getByLabel("Toggle files").click();
+    }
+    await expect(workbench).toBeVisible();
     await expect(
-      tree.locator('.file-workbench__tree-row--file[data-file-path="bravo-only.md"]'),
+      workbench.locator('.file-workbench__tree-row--file[data-file-path="bravo-only.md"]'),
     ).toBeVisible();
     await expect(
-      tree.locator('.file-workbench__tree-row--file[data-file-path="alpha-only.md"]'),
+      workbench.locator('.file-workbench__tree-row--file[data-file-path="alpha-only.md"]'),
     ).toHaveCount(0);
   } finally {
     await harness.close();
