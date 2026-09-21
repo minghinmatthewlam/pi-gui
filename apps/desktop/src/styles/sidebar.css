@@ -820,6 +820,24 @@
   color: var(--text-strong);
 }
 
+.session-row__shortcut {
+  font-size: 12px;
+  font-weight: 560;
+  color: var(--muted-strong);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.session-row--shortcut .session-row__workspace-icon,
+.session-row--shortcut .session-row__action,
+.session-row--shortcut.session-row--pinned .session-row__pin-action,
+.session-row--shortcut:hover .session-row__action,
+.session-row--shortcut:focus-within .session-row__action {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
 .archived-thread-group {
   padding-left: 24px;
   display: grid;

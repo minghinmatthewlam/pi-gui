@@ -8,8 +8,11 @@ import {
 } from "../../contracts/desktop-state";
 import {
   buildThreadSidebarModel,
+  recencyHistoryExpansionKey,
   sessionThreadKey,
   threadHistoryPreview,
+  visibleThreadShortcutOrder,
+  workspaceHistoryExpansionKey,
 } from "../../src/features/threads/thread-groups";
 
 const now = new Date(2026, 8, 21, 15, 0, 0);
@@ -243,6 +246,127 @@ test("sorts a workspace folder by last user message, not catalog updatedAt", () 
     "Sent earlier today",
     "Opened recently",
   ]);
+});
+
+test("numbers shortcut slots pinned first, then visible rows", () => {
+  const olderPin = session("pin", "Older pin", {
+    updatedAt: isoDaysAgo(8),
+    lastInteractedAt: isoDaysAgo(2),
+    pinnedAt: isoDaysAgo(1),
+  });
+  const newerSend = session("send", "Newer send", {
+    updatedAt: isoDaysAgo(0, 16),
+    lastInteractedAt: isoDaysAgo(0, 16),
+  });
+  const hidden = Array.from({ length: 5 }, (_, index) =>
+    session(`extra-${index}`, `Extra ${index}`, {
+      updatedAt: isoDaysAgo(0, 10 - index),
+      lastInteractedAt: isoDaysAgo(0, 10 - index),
+    }),
+  );
+  const week = session("week", "Week thread", {
+    updatedAt: isoDaysAgo(3),
+    lastInteractedAt: isoDaysAgo(3),
+  });
+  const archived = session("archived", "Archived", {
+    updatedAt: isoDaysAgo(0, 18),
+    lastInteractedAt: isoDaysAgo(0, 18),
+    archivedAt: isoDaysAgo(0, 18),
+  });
+  const model = buildThreadSidebarModel(
+    state([workspace("alpha", "Alpha", [olderPin, newerSend, ...hidden, week, archived])], {
+      pinnedSessionOrder: ["alpha:pin"],
+    }),
+    nowMs,
+  );
+
+  expect(model.recencyOrder[0]?.session.title).toBe("Newer send");
+  expect(
+    visibleThreadShortcutOrder({ grouping: "time", model }).map((thread) => thread.session.title),
+  ).toEqual(["Older pin", "Newer send", "Extra 0", "Extra 1", "Extra 2", "Extra 3", "Week thread"]);
+  expect(
+    visibleThreadShortcutOrder({
+      grouping: "time",
+      model,
+      expandedHistory: new Set([recencyHistoryExpansionKey("today")]),
+    }).map((thread) => thread.session.title),
+  ).toEqual([
+    "Older pin",
+    "Newer send",
+    "Extra 0",
+    "Extra 1",
+    "Extra 2",
+    "Extra 3",
+    "Extra 4",
+    "Week thread",
+  ]);
+  expect(
+    visibleThreadShortcutOrder({ grouping: "time", model, archivedOpen: true }).at(-1)?.session
+      .title,
+  ).toBe("Archived");
+});
+
+test("numbers workspace rows after pins, skipping collapsed overflow", () => {
+  const pin = session("pin", "Pinned", {
+    updatedAt: isoDaysAgo(1),
+    lastInteractedAt: isoDaysAgo(1),
+    pinnedAt: isoDaysAgo(0),
+  });
+  const alphaThreads = Array.from({ length: 6 }, (_, index) =>
+    session(`a-${index}`, `Alpha ${index}`, {
+      updatedAt: isoDaysAgo(0, 12 - index),
+      lastInteractedAt: isoDaysAgo(0, 12 - index),
+    }),
+  );
+  const beta = session("b", "Beta thread", {
+    updatedAt: isoDaysAgo(0, 8),
+    lastInteractedAt: isoDaysAgo(0, 8),
+  });
+  const model = buildThreadSidebarModel(
+    state(
+      [workspace("alpha", "Alpha", [pin, ...alphaThreads]), workspace("beta", "Beta", [beta])],
+      { pinnedSessionOrder: ["alpha:pin"] },
+    ),
+    nowMs,
+  );
+
+  expect(
+    visibleThreadShortcutOrder({ grouping: "workspace", model }).map(
+      (thread) => thread.session.title,
+    ),
+  ).toEqual(["Pinned", "Alpha 0", "Alpha 1", "Alpha 2", "Alpha 3", "Alpha 4", "Beta thread"]);
+  expect(
+    visibleThreadShortcutOrder({
+      grouping: "workspace",
+      model,
+      expandedHistory: new Set([workspaceHistoryExpansionKey("alpha")]),
+    }).map((thread) => thread.session.title),
+  ).toEqual([
+    "Pinned",
+    "Alpha 0",
+    "Alpha 1",
+    "Alpha 2",
+    "Alpha 3",
+    "Alpha 4",
+    "Alpha 5",
+    "Beta thread",
+  ]);
+});
+
+test("numbers visible rows in order when nothing is pinned", () => {
+  const model = buildThreadSidebarModel(
+    state([
+      workspace("alpha", "Alpha", [
+        session("today", "Today thread", { updatedAt: isoDaysAgo(0) }),
+        session("older", "Older thread", { updatedAt: isoDaysAgo(40) }),
+      ]),
+    ]),
+    nowMs,
+  );
+
+  expect(
+    visibleThreadShortcutOrder({ grouping: "time", model }).map((thread) => thread.session.title),
+  ).toEqual(["Today thread", "Older thread"]);
 });
 
 test("caps a history list at five until it is expanded", () => {

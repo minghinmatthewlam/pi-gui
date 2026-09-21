@@ -1,6 +1,7 @@
 import type {
   DesktopAppState,
   SessionRecord,
+  ThreadGrouping,
   WorkspaceRecord,
 } from "../../../contracts/desktop-state";
 import {
@@ -186,6 +187,50 @@ function collectThreadEntries(state: DesktopAppState): ThreadListEntry[] {
 
 export function sessionThreadKey(thread: ThreadListEntry): string {
   return `${thread.workspaceId}:${thread.session.id}`;
+}
+
+const EMPTY_EXPANDED_HISTORY: ReadonlySet<string> = new Set();
+
+export function workspaceHistoryExpansionKey(workspaceId: string): string {
+  return `workspace:${workspaceId}`;
+}
+
+export function recencyHistoryExpansionKey(bucket: RecencyBucketId): string {
+  return `bucket:${bucket}`;
+}
+
+export interface VisibleThreadShortcutOptions {
+  readonly grouping: ThreadGrouping;
+  readonly model: ThreadSidebarModel;
+  readonly expandedHistory?: ReadonlySet<string>;
+  readonly archivedOpen?: boolean;
+}
+
+export function visibleThreadShortcutOrder(
+  options: VisibleThreadShortcutOptions,
+): readonly ThreadListEntry[] {
+  const expandedHistory = options.expandedHistory ?? EMPTY_EXPANDED_HISTORY;
+  const unpinned =
+    options.grouping === "workspace"
+      ? options.model.workspaceGroups.flatMap(
+          (group) =>
+            threadHistoryPreview(
+              group.threads,
+              expandedHistory.has(workspaceHistoryExpansionKey(group.workspace.id)),
+            ).visible,
+        )
+      : options.model.recencySections.flatMap(
+          (section) =>
+            threadHistoryPreview(
+              section.threads,
+              expandedHistory.has(recencyHistoryExpansionKey(section.bucket)),
+            ).visible,
+        );
+  return [
+    ...options.model.pinnedThreads,
+    ...unpinned,
+    ...(options.archivedOpen ? options.model.archivedThreads : []),
+  ];
 }
 
 export function comparePinnedThreads(

@@ -187,6 +187,8 @@ const RECENT_THREAD_COMMANDS = [
   desktopCommands.selectRecentThread9,
 ] as const;
 
+export const THREAD_SHORTCUT_SLOT_COUNT = RECENT_THREAD_COMMANDS.length;
+
 export function getDesktopShortcutLabel(platform: NodeJS.Platform, key: string): string {
   return `${platform === "darwin" ? "⌘" : "Ctrl+"}${key.toUpperCase()}`;
 }

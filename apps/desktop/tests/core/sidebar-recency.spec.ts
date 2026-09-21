@@ -127,7 +127,7 @@ test("bumps a sent thread to the top of Today", async () => {
   }
 });
 
-test("selects recency-order threads with 1-9 even when another thread is pinned", async () => {
+test("selects pinned threads first with 1-9 and paints badges while the modifier is held", async () => {
   test.setTimeout(120_000);
   const userDataDir = await makeUserDataDir("pi-app-user-data-recency-shortcut-");
   const agentDir = join(userDataDir, "agent");
@@ -143,6 +143,7 @@ test("selects recency-order threads with 1-9 even when another thread is pinned"
     const window = await harness.firstWindow();
     const workspace = await waitForWorkspaceByPath(window, workspacePath);
     await createHistoryThreads(window, workspace.id, ["Alpha", "Bravo", "Charlie"]);
+    await expectShortcutBadges(window, ["Charlie", "Bravo", "Alpha"]);
 
     const charlieRow = window.locator(".session-row", { hasText: "Charlie" });
     await charlieRow.hover();
@@ -151,6 +152,7 @@ test("selects recency-order threads with 1-9 even when another thread is pinned"
     const pinned = window.getByRole("region", { name: "Pinned threads" });
     await expect(pinned.locator(".session-row__title")).toHaveText(["Charlie"]);
     await expectTodayTitles(window, ["Bravo", "Alpha"]);
+    await expectShortcutBadges(window, ["Charlie", "Bravo", "Alpha"]);
 
     await recencySection(window, "Today")
       .locator(".session-row__select", { hasText: "Alpha" })
@@ -163,13 +165,14 @@ test("selects recency-order threads with 1-9 even when another thread is pinned"
       .locator(".session-row__select", { hasText: "Alpha" })
       .click();
     await expect(window.locator(".topbar__session")).toHaveText("Alpha");
-    await sendComposerPrompt(window, "Send makes Alpha ⌘1");
+    await sendComposerPrompt(window, "Send moves Alpha to the top of Today");
     await expectTodayTitles(window, ["Alpha", "Bravo"]);
+    await expectShortcutBadges(window, ["Charlie", "Alpha", "Bravo"]);
     await window.keyboard.press(desktopShortcut("1"));
-    await expect(window.locator(".topbar__session")).toHaveText("Alpha");
-    await window.keyboard.press(desktopShortcut("2"));
     await expect(window.locator(".topbar__session")).toHaveText("Charlie");
-    await captureSidebarProof(window, "shortcut-recency-over-pin.png");
+    await window.keyboard.press(desktopShortcut("2"));
+    await expect(window.locator(".topbar__session")).toHaveText("Alpha");
+    await captureSidebarProof(window, "shortcut-pinned-before-send.png");
   } finally {
     await harness.close();
   }
@@ -466,6 +469,26 @@ async function sendComposerPrompt(window: Page, text: string): Promise<void> {
       { timeout: 15_000 },
     )
     .toContain(text);
+}
+
+const commandModifier = process.platform === "darwin" ? "Meta" : "Control";
+
+async function expectShortcutBadges(window: Page, titles: readonly string[]): Promise<void> {
+  await window.keyboard.down(commandModifier);
+  try {
+    await expect(window.locator("[data-thread-shortcut]")).toHaveCount(titles.length);
+    for (const [index, title] of titles.entries()) {
+      await expect(
+        window.locator(`[data-thread-shortcut="${index + 1}"] .session-row__title`),
+      ).toHaveText(title);
+      await expect(
+        window.locator(`[data-thread-shortcut="${index + 1}"] .session-row__shortcut`),
+      ).toHaveText(process.platform === "darwin" ? `⌘${index + 1}` : `Ctrl+${index + 1}`);
+    }
+  } finally {
+    await window.keyboard.up(commandModifier);
+  }
+  await expect(window.locator("[data-thread-shortcut]")).toHaveCount(0);
 }
 
 function recencySection(window: Page, label: string): Locator {

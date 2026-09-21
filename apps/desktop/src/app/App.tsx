@@ -45,7 +45,11 @@ import { deriveModelOnboardingState } from "../features/settings/model-onboardin
 import type { SettingsSection } from "../features/settings/settings-view";
 import { SecondarySurfaces } from "./secondary-surfaces";
 import { NewThreadView } from "../features/threads/new-thread-view";
-import { buildThreadSidebarModel } from "../features/threads/thread-groups";
+import {
+  buildThreadSidebarModel,
+  visibleThreadShortcutOrder,
+  type ThreadListEntry,
+} from "../features/threads/thread-groups";
 import { Sidebar } from "../features/threads/sidebar";
 import { SidebarToggleButton } from "../features/threads/sidebar-toggle-button";
 import type { SidePanelPickerChoice } from "./side-panel-picker";
@@ -311,6 +315,9 @@ export default function App() {
   );
   const threadSidebarModelRef = useRef(threadSidebarModel);
   threadSidebarModelRef.current = threadSidebarModel;
+  const threadGroupingRef = useRef(snapshot?.threadGrouping ?? "time");
+  threadGroupingRef.current = snapshot?.threadGrouping ?? "time";
+  const threadShortcutOrderRef = useRef<readonly ThreadListEntry[] | null>(null);
   const focusComposer = () => {
     window.requestAnimationFrame(() => {
       if (restoreTopmostDialogFocus()) {
@@ -618,7 +625,16 @@ export default function App() {
       }
       const recentIndex = recentThreadShortcutIndex(command);
       if (recentIndex !== undefined) {
-        const thread = threadSidebarModelRef.current?.recencyOrder[recentIndex];
+        const model = threadSidebarModelRef.current;
+        const threads =
+          threadShortcutOrderRef.current ??
+          (model
+            ? visibleThreadShortcutOrder({
+                grouping: threadGroupingRef.current,
+                model,
+              })
+            : []);
+        const thread = threads[recentIndex];
         if (!thread || !api) {
           return true;
         }
@@ -1025,6 +1041,7 @@ export default function App() {
           selectedSession={selectedSession}
           visibleWorkspaces={visibleWorkspaces}
           threadSidebarModel={threadSidebarModel ?? buildThreadSidebarModel(snapshot)}
+          threadShortcutOrderRef={threadShortcutOrderRef}
           threadGrouping={snapshot.threadGrouping}
           linkedWorktreeByWorkspaceId={linkedWorktreeByWorkspaceId}
           wsMenu={wsMenu}
