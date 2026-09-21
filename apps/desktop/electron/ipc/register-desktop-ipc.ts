@@ -170,6 +170,7 @@ export interface DesktopIpcCapabilities {
     options?: { readonly force?: boolean },
   ) => Promise<readonly unknown[]>;
   readonly readWorkspaceFile: (workspacePath: string, filePath: string) => Promise<unknown>;
+  readonly revealWorkspaceFile: (workspacePath: string, filePath: string) => Promise<void>;
   readonly getChangedFiles: (workspacePath: string) => Promise<ChangedFilesResult>;
   readonly getFileDiff: (workspacePath: string, filePath: string) => Promise<string>;
   readonly stageFile: (
@@ -854,6 +855,18 @@ function registerWorkspaceFileIpc(
         throw new Error(`Unknown workspace: ${workspaceId}`);
       }
       return capabilities.readWorkspaceFile(workspacePath, expectString(rawFilePath, "filePath"));
+    },
+  );
+  ipcMain.handle(
+    desktopIpc.revealWorkspaceFile,
+    async (event, rawWorkspaceId: unknown, rawFilePath: unknown) => {
+      windows.windowForSender(event.sender);
+      const workspaceId = expectNonEmptyString(rawWorkspaceId, "workspaceId");
+      const workspacePath = workspace.getWorkspacePath(workspaceId);
+      if (!workspacePath) {
+        throw new Error(`Unknown workspace: ${workspaceId}`);
+      }
+      await capabilities.revealWorkspaceFile(workspacePath, expectString(rawFilePath, "filePath"));
     },
   );
   ipcMain.handle(desktopIpc.getChangedFiles, async (event, rawWorkspaceId: unknown) => {

@@ -18,6 +18,11 @@ import { restoreTopmostDialogFocus } from "../ui/dialog-focus";
 import { ComposerPanel } from "../features/conversation/composer-panel";
 import { DiffPanel } from "../features/workbench/diff-panel";
 import type { DiffPanelFileRequest } from "../features/workbench/diff-panel-types";
+import { FileWorkbench } from "../features/workbench/file-workbench";
+import {
+  EMPTY_FILE_TABS,
+  type FileWorkbenchTabs,
+} from "../features/workbench/file-workbench-state";
 import { buildModelOptions } from "../features/conversation/composer-commands";
 import {
   desktopCommands,
@@ -79,6 +84,7 @@ export default function App() {
   const [takeoverTerminalSessionKey, setTakeoverTerminalSessionKey] = useState("");
   const [terminalHeight, setTerminalHeight] = useState(340);
   const [diffFileRequest, setDiffFileRequest] = useState<DiffPanelFileRequest | null>(null);
+  const [fileTabs, setFileTabs] = useState<FileWorkbenchTabs>(EMPTY_FILE_TABS);
   const [promptRailVisible, setPromptRailVisible] = useState(loadPromptRailVisible);
   const api = window.piApp;
   const sidebarToggleStateRef = useRef<{
@@ -250,11 +256,13 @@ export default function App() {
     if (snapshot && snapshot.workspaces.length === 0) {
       setOpenTerminalSessionKey("");
       setTakeoverTerminalSessionKey("");
+      setFileTabs(EMPTY_FILE_TABS);
     }
   }, [snapshot]);
   useEffect(() => {
     setOpenTerminalSessionKey("");
     setTakeoverTerminalSessionKey("");
+    setFileTabs(EMPTY_FILE_TABS);
   }, [selectedSessionKey]);
   const selectedExtensionDock = useMemo(
     () => buildExtensionDockModel(selectedExtensionUi),
@@ -648,7 +656,7 @@ export default function App() {
   const mainClassName = [
     "main",
     sidePanelMode ? "main--with-side-panel" : "",
-    sidePanelMode ? "main--with-diff" : "",
+    sidePanelMode === "files" ? "main--with-files" : "",
     isTerminalVisibleForSelectedThread ? "main--with-terminal" : "",
     showTerminalTakeover ? "main--terminal-takeover" : "",
     snapshot.startupDiagnostics.length > 0 ? "main--with-startup-diagnostics" : "",
@@ -1170,16 +1178,24 @@ export default function App() {
             {terminalPanel}
           </>
         )}
-        {sidePanelMode && selectedWorkspace && selectedSession ? (
+        {sidePanelMode === "changes" && selectedWorkspace && selectedSession ? (
           <DiffPanel
-            key={sidePanelMode}
-            panelMode={sidePanelMode}
             workspaceId={selectedWorkspace.id}
             sessionId={selectedSession.id}
             api={api}
             sessionStatus={selectedSession.status}
             fileRequest={diffFileRequest}
             contexts={fileWorkbenchContexts}
+          />
+        ) : null}
+        {sidePanelMode === "files" && selectedWorkspace && selectedSession ? (
+          <FileWorkbench
+            api={api}
+            onTabsChange={setFileTabs}
+            sessionStatus={selectedSession.status}
+            tabs={fileTabs}
+            worktree={selectedWorktree}
+            workspace={selectedWorkspace}
           />
         ) : null}
       </main>

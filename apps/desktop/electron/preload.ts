@@ -439,6 +439,8 @@ contextBridge.exposeInMainWorld("piApp", {
       workspaceId,
       filePath,
     ) as Promise<WorkspaceFilePreview>,
+  revealWorkspaceFile: (workspaceId: string, filePath: string) =>
+    ipcRenderer.invoke(desktopIpc.revealWorkspaceFile, workspaceId, filePath) as Promise<void>,
   getChangedFiles: (workspaceId: string) =>
     ipcRenderer.invoke(desktopIpc.getChangedFiles, workspaceId) as Promise<ChangedFilesResult>,
   getFileDiff: (workspaceId: string, filePath: string) =>
