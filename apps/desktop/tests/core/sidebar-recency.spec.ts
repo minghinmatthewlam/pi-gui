@@ -277,6 +277,9 @@ async function createHistoryThreads(
 
 function localDaysAgo(days: number, hour = 12): string {
   const now = new Date();
+  if (days === 0) {
+    return new Date(now.getTime() - 5_000).toISOString();
+  }
   return new Date(
     now.getFullYear(),
     now.getMonth(),
