@@ -159,7 +159,28 @@ export const desktopCommands = {
   openNewThread: "open-new-thread",
   toggleTerminal: "toggle-terminal",
   toggleSidebar: "toggle-sidebar",
+  selectRecentThread1: "select-recent-thread-1",
+  selectRecentThread2: "select-recent-thread-2",
+  selectRecentThread3: "select-recent-thread-3",
+  selectRecentThread4: "select-recent-thread-4",
+  selectRecentThread5: "select-recent-thread-5",
+  selectRecentThread6: "select-recent-thread-6",
+  selectRecentThread7: "select-recent-thread-7",
+  selectRecentThread8: "select-recent-thread-8",
+  selectRecentThread9: "select-recent-thread-9",
 } as const;
+
+const RECENT_THREAD_COMMANDS = [
+  desktopCommands.selectRecentThread1,
+  desktopCommands.selectRecentThread2,
+  desktopCommands.selectRecentThread3,
+  desktopCommands.selectRecentThread4,
+  desktopCommands.selectRecentThread5,
+  desktopCommands.selectRecentThread6,
+  desktopCommands.selectRecentThread7,
+  desktopCommands.selectRecentThread8,
+  desktopCommands.selectRecentThread9,
+] as const;
 
 export function getDesktopShortcutLabel(platform: NodeJS.Platform, key: string): string {
   return `${platform === "darwin" ? "⌘" : "Ctrl+"}${key.toUpperCase()}`;
@@ -170,6 +191,11 @@ export type PiDesktopSelectedTranscriptListener = (
   payload: SelectedTranscriptRecord | null,
 ) => void;
 export type PiDesktopCommand = (typeof desktopCommands)[keyof typeof desktopCommands];
+
+export function recentThreadShortcutIndex(command: PiDesktopCommand): number | undefined {
+  const index = (RECENT_THREAD_COMMANDS as readonly string[]).indexOf(command);
+  return index >= 0 ? index : undefined;
+}
 
 export type ChangedFileStatus =
   "added" | "copied" | "deleted" | "modified" | "renamed" | "untracked";
@@ -285,6 +311,15 @@ export function getDesktopCommandFromShortcut(
 
   if (isShiftO) {
     return desktopCommands.openNewThread;
+  }
+
+  if (!input.shift) {
+    const digitFromKey = /^[1-9]$/.test(input.key) ? input.key : undefined;
+    const digitFromCode = input.code?.match(/^Digit([1-9])$/)?.[1];
+    const digit = digitFromKey ?? digitFromCode;
+    if (digit) {
+      return RECENT_THREAD_COMMANDS[Number(digit) - 1];
+    }
   }
 
   return undefined;

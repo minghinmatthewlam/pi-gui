@@ -89,9 +89,8 @@ test("aligns workspace names with session titles in the sidebar gutter", async (
     await expect(window.getByTestId("workspace-list")).toContainText(basename(workspacePath));
     await createSessionViaIpc(window, workspacePath, "Aligned session");
 
-    const workspaceGroup = window.locator(".workspace-group").first();
-    const workspaceName = workspaceGroup.locator(".workspace-row__name");
-    const sessionTitle = workspaceGroup.locator(".session-row__title", {
+    const workspaceName = window.locator(".workspace-row__name").first();
+    const sessionTitle = window.locator(".session-row__title", {
       hasText: "Aligned session",
     });
 

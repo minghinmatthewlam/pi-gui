@@ -28,9 +28,6 @@ export interface WorkspaceMenuState {
   readonly workspaceRenameId: string | null;
   readonly workspaceRenameDraft: string;
   readonly setWorkspaceRenameDraft: Dispatch<SetStateAction<string>>;
-  readonly expandedArchivedByWorkspace: Record<string, boolean>;
-  readonly expandedHistoryByWorkspace: Record<string, boolean>;
-  readonly collapsedWorkspaces: Record<string, boolean>;
   readonly environmentMenuOpen: boolean;
   readonly setEnvironmentMenuOpen: Dispatch<SetStateAction<boolean>>;
   readonly workspaceMenuWrapRef: RefObject<HTMLSpanElement | null>;
@@ -43,10 +40,6 @@ export interface WorkspaceMenuState {
   readonly submitRename: (workspace: WorkspaceRecord) => void;
   readonly cancelRename: () => void;
   readonly removeWorkspace: (workspace: WorkspaceRecord) => void;
-  readonly toggleArchived: (workspaceId: string, open: boolean) => void;
-  readonly setHistoryExpanded: (workspaceId: string, expanded: boolean) => void;
-  readonly toggleWorkspaceCollapsed: (workspaceId: string) => void;
-  readonly expandWorkspace: (workspaceId: string) => void;
   readonly createWorktree: (
     workspaceId: string,
     fromSessionWorkspaceId?: string,
@@ -66,13 +59,6 @@ export function useWorkspaceMenu(params: UseWorkspaceMenuParams): WorkspaceMenuS
   const [workspaceMenuId, setWorkspaceMenuId] = useState<string | null>(null);
   const [workspaceRenameId, setWorkspaceRenameId] = useState<string | null>(null);
   const [workspaceRenameDraft, setWorkspaceRenameDraft] = useState("");
-  const [expandedArchivedByWorkspace, setExpandedArchivedByWorkspace] = useState<
-    Record<string, boolean>
-  >({});
-  const [expandedHistoryByWorkspace, setExpandedHistoryByWorkspace] = useState<
-    Record<string, boolean>
-  >({});
-  const [collapsedWorkspaces, setCollapsedWorkspaces] = useState<Record<string, boolean>>({});
   const [environmentMenuOpen, setEnvironmentMenuOpen] = useState(false);
 
   const workspaceMenuWrapRef = useRef<HTMLSpanElement | null>(null);
@@ -178,30 +164,6 @@ export function useWorkspaceMenu(params: UseWorkspaceMenuParams): WorkspaceMenuS
     );
   };
 
-  const toggleArchived = (workspaceId: string, open: boolean) => {
-    setExpandedArchivedByWorkspace((current) => ({ ...current, [workspaceId]: open }));
-  };
-
-  const setHistoryExpanded = (workspaceId: string, expanded: boolean) => {
-    setExpandedHistoryByWorkspace((current) => {
-      if (Boolean(current[workspaceId]) === expanded) {
-        return current;
-      }
-      return { ...current, [workspaceId]: expanded };
-    });
-  };
-
-  const toggleWorkspaceCollapsed = (workspaceId: string) => {
-    setCollapsedWorkspaces((current) => ({ ...current, [workspaceId]: !current[workspaceId] }));
-  };
-
-  const expandWorkspace = (workspaceId: string) => {
-    setCollapsedWorkspaces((current) => {
-      if (!current[workspaceId]) return current;
-      return { ...current, [workspaceId]: false };
-    });
-  };
-
   const createWorktree = (
     workspaceId: string,
     fromSessionWorkspaceId?: string,
@@ -258,9 +220,6 @@ export function useWorkspaceMenu(params: UseWorkspaceMenuParams): WorkspaceMenuS
     workspaceRenameId,
     workspaceRenameDraft,
     setWorkspaceRenameDraft,
-    expandedArchivedByWorkspace,
-    expandedHistoryByWorkspace,
-    collapsedWorkspaces,
     environmentMenuOpen,
     setEnvironmentMenuOpen,
     workspaceMenuWrapRef,
@@ -273,10 +232,6 @@ export function useWorkspaceMenu(params: UseWorkspaceMenuParams): WorkspaceMenuS
     submitRename,
     cancelRename,
     removeWorkspace,
-    toggleArchived,
-    setHistoryExpanded,
-    toggleWorkspaceCollapsed,
-    expandWorkspace,
     createWorktree,
     removeWorktree,
     selectWorkspace,

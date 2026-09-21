@@ -44,6 +44,7 @@ export class SessionStateMap {
   readonly queuedComposerEditsBySession = new Map<string, QueuedComposerEditState>();
   readonly sessionConfigBySession = new Map<string, SessionConfig>();
   readonly lastViewedAtBySession = new Map<string, string>();
+  readonly lastInteractedAtBySession = new Map<string, string>();
   readonly pinnedAtBySession = new Map<string, string>();
   pinnedSessionOrder: string[] = [];
   readonly sessionErrorsBySession = new Map<string, string>();
@@ -87,6 +88,7 @@ export class SessionStateMap {
       this.queuedComposerEditsBySession,
       this.sessionConfigBySession,
       this.lastViewedAtBySession,
+      this.lastInteractedAtBySession,
       this.pinnedAtBySession,
       this.sessionErrorsBySession,
       this.sessionSubscriptions,
@@ -118,6 +120,7 @@ export class SessionStateMap {
     for (const map of [
       this.composerDraftsBySession,
       this.lastViewedAtBySession,
+      this.lastInteractedAtBySession,
       this.pinnedAtBySession,
     ]) {
       for (const key of map.keys()) {
@@ -149,6 +152,7 @@ export class SessionStateMap {
     this.queuedComposerEditsBySession.delete(key);
     this.sessionConfigBySession.delete(key);
     this.lastViewedAtBySession.delete(key);
+    this.lastInteractedAtBySession.delete(key);
     this.pinnedAtBySession.delete(key);
     this.pinnedSessionOrder = this.pinnedSessionOrder.filter((entry) => entry !== key);
     this.sessionErrorsBySession.delete(key);

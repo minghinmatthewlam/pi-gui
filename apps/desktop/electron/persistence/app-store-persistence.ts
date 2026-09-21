@@ -16,7 +16,7 @@ import { readJsonWithBackup, writeFileAtomicQueued } from "./atomic-file-write";
 import { decodeAttachments } from "./attachment-store";
 
 export interface PersistedUiState {
-  readonly version?: 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15;
+  readonly version?: 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16;
   readonly selectedWorkspaceId?: string;
   readonly selectedSessionId?: string;
   readonly activeView?: AppView;
@@ -29,6 +29,7 @@ export interface PersistedUiState {
   readonly notificationPreferences?: Partial<NotificationPreferences>;
   readonly integratedTerminalShell?: string;
   readonly lastViewedAtBySession?: Record<string, string>;
+  readonly lastInteractedAtBySession?: Record<string, string>;
   readonly pinnedAtBySession?: Record<string, string>;
   readonly pinnedSessionOrder?: readonly string[];
   readonly workspaceOrder?: readonly string[];
@@ -88,6 +89,7 @@ export function decodePersistedUiState(parsed: unknown): LegacyPersistedUiState 
         ? candidate.integratedTerminalShell
         : undefined,
     lastViewedAtBySession: toStringRecord(candidate.lastViewedAtBySession),
+    lastInteractedAtBySession: toStringRecord(candidate.lastInteractedAtBySession),
     pinnedAtBySession: toStringRecord(candidate.pinnedAtBySession),
     pinnedSessionOrder: toStringArray(candidate.pinnedSessionOrder),
     workspaceOrder: toStringArray(candidate.workspaceOrder),
@@ -118,7 +120,7 @@ export async function writePersistedUiState(
   const serialized = `${JSON.stringify(
     {
       ...payload,
-      version: 15,
+      version: 16,
     } satisfies PersistedUiState,
     null,
     2,
@@ -150,6 +152,7 @@ function validateUiState(value: unknown): Record<string, unknown> {
       "notificationPreferences",
       "integratedTerminalShell",
       "lastViewedAtBySession",
+      "lastInteractedAtBySession",
       "pinnedAtBySession",
       "pinnedSessionOrder",
       "workspaceOrder",
@@ -189,7 +192,12 @@ function validateUiState(value: unknown): Record<string, unknown> {
     "integratedTerminalShell",
   ])
     optional(root, key, string);
-  for (const key of ["composerDraftsBySession", "lastViewedAtBySession", "pinnedAtBySession"])
+  for (const key of [
+    "composerDraftsBySession",
+    "lastViewedAtBySession",
+    "lastInteractedAtBySession",
+    "pinnedAtBySession",
+  ])
     optional(root, key, stringRecord);
   for (const key of ["pinnedSessionOrder", "workspaceOrder"]) optional(root, key, strings);
   for (const key of ["sidebarCollapsed", "allowMultiple", "enableTransparency"])
@@ -433,7 +441,7 @@ function toAppView(value: unknown): AppView | undefined {
 }
 
 function toPersistedVersion(value: unknown): NonNullable<PersistedUiState["version"]> | undefined {
-  return typeof value === "number" && Number.isInteger(value) && value >= 2 && value <= 15
+  return typeof value === "number" && Number.isInteger(value) && value >= 2 && value <= 16
     ? (value as NonNullable<PersistedUiState["version"]>)
     : undefined;
 }

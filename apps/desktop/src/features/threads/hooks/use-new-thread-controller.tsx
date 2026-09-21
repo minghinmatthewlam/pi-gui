@@ -43,7 +43,6 @@ interface UseNewThreadControllerParams {
   readonly rootWorkspaceOptions: readonly WorkspaceRecord[];
   readonly visibleWorkspaces: readonly WorkspaceRecord[];
   readonly selectedWorkspace: WorkspaceRecord | undefined;
-  readonly expandWorkspace: (workspaceId: string) => void;
   readonly openSettings: (workspaceId?: string, section?: SettingsSection) => void;
   readonly flushComposerDraft: () => void;
 }
@@ -57,7 +56,6 @@ export function useNewThreadController(params: UseNewThreadControllerParams) {
     rootWorkspaceOptions,
     visibleWorkspaces,
     selectedWorkspace,
-    expandWorkspace,
     openSettings,
     flushComposerDraft,
   } = params;
@@ -288,7 +286,6 @@ export function useNewThreadController(params: UseNewThreadControllerParams) {
       modelId: resolvedModelId,
       thinkingLevel: resolvedThinkingLevel,
     };
-    expandWorkspace(rootWorkspaceId);
     void updateSnapshot(setSnapshot, () => api.startThread(input))
       .then(() => {
         setPrompt("");
@@ -305,7 +302,6 @@ export function useNewThreadController(params: UseNewThreadControllerParams) {
     api,
     attachments,
     environment,
-    expandWorkspace,
     modelOnboarding.requiresModelSelection,
     prompt,
     resolvedModelId,

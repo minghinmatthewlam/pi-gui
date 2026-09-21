@@ -96,6 +96,7 @@ export interface SessionRecord {
   readonly updatedAt: string;
   readonly pinnedAt?: string;
   readonly lastViewedAt?: string;
+  readonly lastInteractedAt?: string;
   readonly archivedAt?: string;
   readonly preview: string;
   readonly status: SessionStatus;
@@ -334,6 +335,7 @@ export interface DesktopAppState {
   readonly notificationPreferences: NotificationPreferences;
   readonly integratedTerminalShell: string;
   readonly lastViewedAtBySession: Readonly<Record<string, string>>;
+  readonly lastInteractedAtBySession: Readonly<Record<string, string>>;
   readonly pinnedAtBySession: Readonly<Record<string, string>>;
   readonly pinnedSessionOrder: readonly string[];
   readonly workspaceOrder: readonly string[];
@@ -383,6 +385,7 @@ export function createEmptyDesktopAppState(): DesktopAppState {
     },
     integratedTerminalShell: "",
     lastViewedAtBySession: {},
+    lastInteractedAtBySession: {},
     pinnedAtBySession: {},
     pinnedSessionOrder: [],
     workspaceOrder: [],

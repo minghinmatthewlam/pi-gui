@@ -16,6 +16,7 @@ for (const invalid of [
   { version: 15, appGlobalModelSettings: { defaultThinkingLevel: "unknown" } },
   { version: 15, futureData: "retain" },
   { version: 15, notificationPreferences: { futureSetting: true } },
+  { version: 16, lastInteractedAtBySession: { one: 42 } },
   [],
 ]) {
   test(`preserves invalid UI state ${JSON.stringify(invalid)}`, async () => {
@@ -29,6 +30,24 @@ for (const invalid of [
     expect(await readFile(path, "utf8")).toBe(original);
   });
 }
+
+test("reads v15 ui-state without lastInteractedAt and writes v16", async () => {
+  const path = join(await mkdtemp(join(tmpdir(), "ui-state-recency-")), "ui-state.json");
+  await writeFile(path, JSON.stringify({ version: 15, composerDraft: "kept" }));
+  const decoded = await readPersistedUiState(path);
+  expect(decoded.version).toBe(15);
+  expect(decoded.lastInteractedAtBySession).toBeUndefined();
+  await writePersistedUiState(path, {
+    composerDraft: "kept",
+    lastInteractedAtBySession: { "ws:sess": "2026-09-21T12:00:00.000Z" },
+  });
+  const written = JSON.parse(await readFile(path, "utf8")) as {
+    version: number;
+    lastInteractedAtBySession: Record<string, string>;
+  };
+  expect(written.version).toBe(16);
+  expect(written.lastInteractedAtBySession).toEqual({ "ws:sess": "2026-09-21T12:00:00.000Z" });
+});
 
 test("backup recovery retains damaged bytes and the good backup", async () => {
   const dir = await mkdtemp(join(tmpdir(), "ui-state-backup-"));

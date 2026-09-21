@@ -116,6 +116,7 @@ interface ConversationOwnerHost {
     attachments: readonly ComposerAttachment[],
   ): Promise<void>;
   schedulePersistUiState(): void;
+  recordUserMessageRecency(sessionRef: SessionRef): boolean;
   getQueuedComposerMessages(sessionRef: SessionRef): readonly QueuedComposerMessage[];
   setQueuedComposerEditState(
     sessionRef: SessionRef,
@@ -547,6 +548,7 @@ async function submitComposerToSession(
         );
         store.publishSelectedTranscriptFor(sessionRef);
       }
+      store.recordUserMessageRecency(sessionRef);
       await store.driver.replaceQueuedMessages(sessionRef, nextSessionQueuedMessages);
       return store.refreshState({
         clearLastError: true,
@@ -715,6 +717,7 @@ async function sendMessageToSession(
   if (store.sessionFromState(sessionRef)?.archivedAt) {
     await store.driver.unarchiveSession(sessionRef);
   }
+  store.recordUserMessageRecency(sessionRef);
   const optimisticMessageId = appendUserMessage(
     store.conversationState.transcriptCache,
     sessionRef,
