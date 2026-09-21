@@ -37,22 +37,36 @@ export function FileWorkbench({
 }: FileWorkbenchProps) {
   const [files, setFiles] = useState<readonly string[] | null>(null);
   const [loading, setLoading] = useState(false);
+  const [listError, setListError] = useState<string | null>(null);
   const onTabsChangeRef = useRef(onTabsChange);
   onTabsChangeRef.current = onTabsChange;
+  const requestIdRef = useRef(0);
 
   const refresh = useCallback(
     (options: { readonly force?: boolean } = {}) => {
+      const requestId = ++requestIdRef.current;
       setLoading(true);
+      setListError(null);
       void api
         .listWorkspaceFiles(workspace.id, { force: options.force ?? false })
         .then((listed) => {
+          if (requestIdRef.current !== requestId) {
+            return;
+          }
           setFiles(listed);
           onTabsChangeRef.current((current) => pruneFiles(current, listed));
         })
         .catch((error: unknown) => {
+          if (requestIdRef.current !== requestId) {
+            return;
+          }
           console.error("[renderer] listWorkspaceFiles failed", error);
+          setListError("Couldn't load files");
         })
         .finally(() => {
+          if (requestIdRef.current !== requestId) {
+            return;
+          }
           setLoading(false);
         });
     },
@@ -69,7 +83,12 @@ export function FileWorkbench({
   }, [refresh, sessionStatus]);
 
   useEffect(() => {
+    setFiles(null);
+    setListError(null);
     refresh();
+    return () => {
+      requestIdRef.current += 1;
+    };
   }, [refresh]);
 
   return (
@@ -86,6 +105,7 @@ export function FileWorkbench({
         onClose={(path) => onTabsChange((current) => closeFile(current, path))}
       />
       <FileExplorer
+        error={listError}
         files={files}
         loading={loading}
         selectedPath={tabs.active}

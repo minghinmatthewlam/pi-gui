@@ -12,6 +12,7 @@ import { buildFileTree, filterWorkspaceFiles, type FileTreeNode } from "./file-t
 interface FileExplorerProps {
   readonly files: readonly string[] | null;
   readonly loading: boolean;
+  readonly error: string | null;
   readonly selectedPath: string | null;
   readonly onSelect: (path: string) => void;
   readonly onRefresh: () => void;
@@ -20,6 +21,7 @@ interface FileExplorerProps {
 export function FileExplorer({
   files,
   loading,
+  error,
   selectedPath,
   onSelect,
   onRefresh,
@@ -50,8 +52,9 @@ export function FileExplorer({
     });
   }, [selectedPath]);
 
-  const emptyCopy =
-    files === null
+  const emptyCopy = error
+    ? error
+    : files === null
       ? "Loading files..."
       : files.length === 0
         ? "No indexed files"

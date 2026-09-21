@@ -1190,6 +1190,7 @@ export default function App() {
         ) : null}
         {sidePanelMode === "files" && selectedWorkspace && selectedSession ? (
           <FileWorkbench
+            key={selectedWorkspace.id}
             api={api}
             onTabsChange={setFileTabs}
             sessionStatus={selectedSession.status}

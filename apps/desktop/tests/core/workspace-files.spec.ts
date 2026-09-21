@@ -90,3 +90,40 @@ test("Files workbench puts the explorer to the right of an open file pane", asyn
     await harness.close();
   }
 });
+
+test("Files explorer drops the previous workspace tree after a folder switch", async () => {
+  test.setTimeout(45_000);
+  const userDataDir = await makeUserDataDir();
+  const alphaPath = await makeWorkspace("alpha-files-workspace");
+  const bravoPath = await makeWorkspace("bravo-files-workspace");
+  await writeFile(join(alphaPath, "alpha-only.md"), "# alpha\n", "utf8");
+  await writeFile(join(bravoPath, "bravo-only.md"), "# bravo\n", "utf8");
+
+  const harness = await launchDesktop(userDataDir, {
+    initialWorkspaces: [alphaPath, bravoPath],
+    testMode: "background",
+  });
+  try {
+    const window = await harness.firstWindow();
+    await createNamedThread(window, "Alpha files", { workspaceName: "alpha-files-workspace" });
+    await window.locator(".topbar__actions").getByLabel("Toggle files").click();
+    const tree = window.getByTestId("file-workbench-tree");
+    await expect(
+      tree.locator('.file-workbench__tree-row--file[data-file-path="alpha-only.md"]'),
+    ).toBeVisible();
+    await expect(
+      tree.locator('.file-workbench__tree-row--file[data-file-path="bravo-only.md"]'),
+    ).toHaveCount(0);
+
+    await createNamedThread(window, "Bravo files", { workspaceName: "bravo-files-workspace" });
+    await expect(window.getByTestId("file-workbench")).toBeVisible();
+    await expect(
+      tree.locator('.file-workbench__tree-row--file[data-file-path="bravo-only.md"]'),
+    ).toBeVisible();
+    await expect(
+      tree.locator('.file-workbench__tree-row--file[data-file-path="alpha-only.md"]'),
+    ).toHaveCount(0);
+  } finally {
+    await harness.close();
+  }
+});
