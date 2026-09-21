@@ -8,7 +8,7 @@ Build the current checkout. Use a visible, focused Electron process with test mo
 
 ## Driving conventions
 
-The parent skill documents the default `scripts/prove.sh` conversation command and the separate `--smoke` UI check. Drive mutations through buttons, keyboard, and composer input; use DOM/state reads only for observation. No session-creation IPC, synthetic assistant events, or seeded transcripts in core conversation proof. The scratch workspace and initial model configuration are setup fixtures, not UI proof of those setup paths.
+The parent skill documents the default `scripts/prove.sh` conversation command, `--maintenance` for the remaining mapped surfaces, and the separate `--smoke` UI check. Drive mutations through buttons, keyboard, and composer input; use DOM/state reads only for observation. No session-creation IPC, synthetic assistant events, or seeded transcripts in core conversation proof. Thread-cap coverage in `--maintenance` seeds extra history rows through the same `createSessionViaIpc` helper the Core spec uses; it still launches without test mode or test hooks. The scratch workspace and initial model configuration are setup fixtures, not UI proof of those setup paths.
 
 ## Proof and skip reporting
 
@@ -16,20 +16,25 @@ Record exact feature/entry point, command, result and evidence directory. `compl
 
 ## Features, in priority order
 
-| Priority   | Feature                                         | Executable coverage                                                                                     |
-| ---------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| Core       | [Conversations](conversations.md)               | Default real-provider proof: send, streaming, completion, tool, stop                                    |
-| Core       | [Thread continuity](thread-continuity.md)       | Default proof: switch while running, isolation, background completion, drafts, restart, archive/restore |
-| Next       | [Queued follow-ups and steering](follow-ups.md) | Existing real-auth recipe; separate, not in default proof                                               |
-| Next       | [Folders and threads](navigation.md)            | Sidebar/shortcut/native-folder recipes; pin ordering, restart, and pin/unpin during a pending prompt    |
-| Next       | [Archive and restore](archive.md)               | Default proof on a real conversation; core spec adds hover/group checks                                 |
-| Supporting | [Settings](settings.md)                         | `--smoke`: visible navigation and preference restart                                                    |
-| Supporting | [Skills](skills.md)                             | `--smoke` covers opening only; separate recipe tests Try and aliases                                    |
-| Supporting | [Worktrees](worktrees.md)                       | Separate scratch-Git recipe; not in default proof                                                       |
+| Priority   | Feature                                         | Executable coverage                                                                                                                      |
+| ---------- | ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Core       | [Conversations](conversations.md)               | Default real-provider proof: send, streaming, completion, tool, stop                                                                     |
+| Core       | [Thread continuity](thread-continuity.md)       | Default proof: switch while running, isolation, background completion, drafts, restart, archive/restore                                  |
+| Next       | [Queued follow-ups and steering](follow-ups.md) | `--maintenance`: visible Enter-queue and modified-Enter steer with real auth                                                             |
+| Next       | [Folders and threads](navigation.md)            | `--smoke` opens New thread; `--maintenance` pins/unpins (idle and while running) and Show more/less; native folder picker stays separate |
+| Next       | [Archive and restore](archive.md)               | Default proof on a real conversation; core spec adds hover/group checks                                                                  |
+| Supporting | [Settings](settings.md)                         | `--smoke`: visible navigation and preference restart                                                                                     |
+| Supporting | [Skills](skills.md)                             | `--smoke` covers opening; `--maintenance` covers Try and aliases                                                                         |
+| Supporting | [Worktrees](worktrees.md)                       | `--maintenance` creates a permanent worktree and shows Local/Worktree                                                                    |
 
 Packaged-app launch, native dialogs/clipboard, model/account onboarding, attachments, file/diff/terminal interaction, and broader extension behavior require separate mapped journeys as those features are changed. Do not claim full-app coverage from this initial map.
 
-## Latest observed proof (2026-09-19)
+## Latest observed proof (2026-09-21)
+
+- Maintain pass on `7e12055` in Cursor cloud (Linux, `DISPLAY=:1`, `openai-codex/gpt-5.6-luna`). First conversation launch failed: Playwright Electron `recordVideo` left an empty renderer URL and hung `close()` (`run-OsEqyV`). Dropping `recordVideo` from the skill recipes unblocked doctor. Retry `run-vkyVYp` passed all 10 real-provider checkpoints with no assertion failures: streaming growth 5→20 while running, typing/small-scroll, tool file `BRAVO_TOOL_OK`, switch-during-run, Stop, drafts, archive/restore, both conversations after restart. PIDs 9249 and 9337 closed. `--smoke` `run-zHUB9x` passed settings persistence (9.4s). `--maintenance` `run-mxFkPW` passed skills Try/aliases, idle pin/unpin, Show more/less, worktree `kind === "worktree"` plus Local/Worktree, Enter-queue, pin/unpin while running, steer `STEER_DONE` then follow-up `FOLLOW_UP_DONE` with a successful `python3` tool. PIDs 12537 and 12628 closed.
+- Native folder picker, packaged launch, and pin persistence across restart remain outside these recipes. Attachments and workspace-file surfaces stayed unmapped; README already lists them as separate journeys.
+
+## Earlier observed proof (2026-09-19)
 
 - `run-iBtFrn` on product fix `2411711f`: all 10 real-provider checkpoints passed, with no assertion failures. Typing a multiline draft during streaming plus forty 4 px upward inputs progressed monotonically from 480.5 to 324.5 px; subsequent text growth kept reading position within 2 px. Jump, completion, tools, Stop, switching, archive/restore, both drafts and restart passed. The short frame sample had p95 9.2 ms and no intervals above 33 ms. PIDs 17428 and 17948 closed. This proves automated Electron wheel input, not physical trackpad hardware.
 

@@ -4,13 +4,14 @@ cd "$(dirname "$0")/../../../.."
 case "${1:-}" in
   ""|--conversation) spec=conversation.spec.ts ;;
   --smoke) spec=proof.spec.ts ;;
-  *) printf 'Usage: %s [--conversation|--smoke]\n' "$0" >&2; exit 2 ;;
+  --maintenance) spec=maintenance.spec.ts ;;
+  *) printf 'Usage: %s [--conversation|--smoke|--maintenance]\n' "$0" >&2; exit 2 ;;
 esac
 mkdir -p .artifacts/verify-pi-gui
 PI_GUI_PROOF_DIR=$(mktemp -d "$PWD/.artifacts/verify-pi-gui/run-XXXXXX")
 export PI_GUI_PROOF_DIR
 printf 'Evidence: %s\n' "$PI_GUI_PROOF_DIR"
-if [ "$spec" = conversation.spec.ts ]; then
+if [ "$spec" = conversation.spec.ts ] || [ "$spec" = maintenance.spec.ts ]; then
   if [ "${PI_APP_REAL_AUTH:-}" != 1 ] || [ -z "${PI_APP_REAL_AUTH_SOURCE_DIR:-}" ] || [ -z "${PI_GUI_PROVIDER:-}" ] || [ -z "${PI_GUI_MODEL:-}" ]; then
     printf '%s\n' 'BLOCKED: set PI_APP_REAL_AUTH=1, PI_APP_REAL_AUTH_SOURCE_DIR, PI_GUI_PROVIDER and PI_GUI_MODEL. Use --smoke only for the secondary no-provider UI check.' >"$PI_GUI_PROOF_DIR/run.log"
     cat "$PI_GUI_PROOF_DIR/run.log"
@@ -39,10 +40,16 @@ if [ "$result" -eq 0 ]; then
   if [ "$spec" = conversation.spec.ts ]; then
     test -s "$PI_GUI_PROOF_DIR/restart-bravo.png"
     test -s "$PI_GUI_PROOF_DIR/stream-samples.json"
+    test -s "$PI_GUI_PROOF_DIR/restart.zip"
+  elif [ "$spec" = maintenance.spec.ts ]; then
+    test -s "$PI_GUI_PROOF_DIR/skills-try.png"
+    test -s "$PI_GUI_PROOF_DIR/worktree.png"
+    test -s "$PI_GUI_PROOF_DIR/follow-up-idle.png"
+    test -s "$PI_GUI_PROOF_DIR/follow-ups.zip"
   else
     test -s "$PI_GUI_PROOF_DIR/restart.png"
+    test -s "$PI_GUI_PROOF_DIR/restart.zip"
   fi
-  test -s "$PI_GUI_PROOF_DIR/restart.zip"
 fi
 printf 'Retained evidence: %s\n' "$PI_GUI_PROOF_DIR"
 exit "$result"

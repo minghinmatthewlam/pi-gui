@@ -76,7 +76,8 @@ test("real conversation: stream, switch, tool, stop, archive, restart", async ()
       initialWorkspaces: [workspace],
       scrubProviderEnv: true,
       envOverrides: { PI_APP_TEST_MODE: undefined },
-      recordVideoDir: join(evidence, "videos"),
+      // Playwright Electron recordVideo can stall loadURL (empty renderer URL)
+      // and hang close() on this Linux/cloud host. Keep traces and screenshots.
     });
     runs.push({ pid: harness.electronApp.process().pid!, closed: false });
     await harness.focusWindow();

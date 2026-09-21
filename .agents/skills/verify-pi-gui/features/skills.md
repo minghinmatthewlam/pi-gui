@@ -17,7 +17,8 @@ Users browse workspace skills, inspect a skill, and insert its command into the 
 
 Preconditions: isolated workspace containing the Demo Skill/Plan Loop fixtures created by the spec; an existing fixture thread.
 
-- **Run:** `pnpm --filter @pi-gui/desktop run test:e2e:runner -- apps/desktop/tests/core/skills-settings.spec.ts`.
+- **Visible maintenance:** `.agents/skills/verify-pi-gui/scripts/prove.sh --maintenance` opens Skills, requires Demo Skill, clicks Try, and checks composer `/skill:demo-skill `. It then fills `/plan`, `/plan-loop`, and `/skill:plan-loop` and requires `slash-menu` to contain Plan Loop. It seeds those skill files in a scratch Git workspace; it does not execute the skill through a provider.
+- **Core regression:** `pnpm --filter @pi-gui/desktop run test:e2e:runner -- apps/desktop/tests/core/skills-settings.spec.ts`.
 - **Browse:** click the exact Skills button, require `skills-list` to contain Demo Skill, click the Demo Skill button, and require `.skill-detail` to contain `/skill:demo-skill`.
 - **Try:** click the exact Try button. `composer` must contain `/skill:demo-skill `.
 - **Alias:** fill `composer` with `/plan`, `/plan-loop`, and `/skill:plan-loop` separately; `slash-menu` must contain Plan Loop and its full command.
