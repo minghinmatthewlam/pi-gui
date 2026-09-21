@@ -6,6 +6,7 @@ import { expect, test } from "@playwright/test";
 import {
   addWorkspaceViaIpc,
   assertExists,
+  chooseThreadGrouping,
   createNamedThread,
   createSessionViaIpc,
   getDesktopState,
@@ -245,6 +246,7 @@ test("shows a worktree icon in the sidebar without a local text badge", async ()
     await expect(localRow).toBeVisible();
     await expect(localRow).toHaveAttribute("data-sidebar-indicator", "none");
     await expect(localRow.locator(".session-row__workspace-icon")).toHaveCount(0);
+    await chooseThreadGrouping(window, "workspace");
 
     await window
       .getByRole("button", { name: `Workspace actions for ${rootWorkspace.name}` })

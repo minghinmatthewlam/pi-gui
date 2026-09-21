@@ -9,14 +9,15 @@ import type {
   OrchestrationSupervisionLoop,
   ThemeMode,
   ThemePresetId,
+  ThreadGrouping,
 } from "../../contracts/desktop-state";
-import { isThemeMode, isThemePresetId } from "../../contracts/desktop-state";
+import { isThemeMode, isThemePresetId, isThreadGrouping } from "../../contracts/desktop-state";
 import type { ModelSettingsSnapshot } from "@pi-gui/session-driver/runtime-types";
 import { readJsonWithBackup, writeFileAtomicQueued } from "./atomic-file-write";
 import { decodeAttachments } from "./attachment-store";
 
 export interface PersistedUiState {
-  readonly version?: 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16;
+  readonly version?: 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17;
   readonly selectedWorkspaceId?: string;
   readonly selectedSessionId?: string;
   readonly activeView?: AppView;
@@ -36,6 +37,7 @@ export interface PersistedUiState {
   readonly modelSettingsScopeMode?: ModelSettingsScopeMode;
   readonly appGlobalModelSettings?: ModelSettingsSnapshot;
   readonly sidebarCollapsed?: boolean;
+  readonly threadGrouping?: ThreadGrouping;
   readonly allowMultiple?: boolean;
   readonly enableTransparency?: boolean;
   readonly themeMode?: ThemeMode;
@@ -101,6 +103,9 @@ export function decodePersistedUiState(parsed: unknown): LegacyPersistedUiState 
     appGlobalModelSettings: toPersistedModelSettingsSnapshot(candidate.appGlobalModelSettings),
     sidebarCollapsed:
       typeof candidate.sidebarCollapsed === "boolean" ? candidate.sidebarCollapsed : undefined,
+    threadGrouping: isThreadGrouping(candidate.threadGrouping)
+      ? candidate.threadGrouping
+      : undefined,
     allowMultiple:
       typeof candidate.allowMultiple === "boolean" ? candidate.allowMultiple : undefined,
     enableTransparency:
@@ -120,7 +125,7 @@ export async function writePersistedUiState(
   const serialized = `${JSON.stringify(
     {
       ...payload,
-      version: 16,
+      version: 17,
     } satisfies PersistedUiState,
     null,
     2,
@@ -159,6 +164,7 @@ function validateUiState(value: unknown): Record<string, unknown> {
       "modelSettingsScopeMode",
       "appGlobalModelSettings",
       "sidebarCollapsed",
+      "threadGrouping",
       "allowMultiple",
       "enableTransparency",
       "themeMode",
@@ -203,6 +209,7 @@ function validateUiState(value: unknown): Record<string, unknown> {
   for (const key of ["sidebarCollapsed", "allowMultiple", "enableTransparency"])
     optional(root, key, boolean);
   optional(root, "activeView", (v) => toAppView(v) !== undefined);
+  optional(root, "threadGrouping", isThreadGrouping);
   optional(root, "themeMode", isThemeMode);
   optional(root, "themePresetId", isThemePresetId);
   optional(root, "modelSettingsScopeMode", (v) => v === "per-repo" || v === "app-global");
@@ -441,7 +448,7 @@ function toAppView(value: unknown): AppView | undefined {
 }
 
 function toPersistedVersion(value: unknown): NonNullable<PersistedUiState["version"]> | undefined {
-  return typeof value === "number" && Number.isInteger(value) && value >= 2 && value <= 16
+  return typeof value === "number" && Number.isInteger(value) && value >= 2 && value <= 17
     ? (value as NonNullable<PersistedUiState["version"]>)
     : undefined;
 }

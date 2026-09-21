@@ -51,6 +51,7 @@ import {
   expectTerminalSize,
   expectThemeMode,
   expectThemePresetId,
+  expectThreadGrouping,
   expectThinkingLevel,
   expectWorkspaceFileListOptions,
 } from "./request-validation";
@@ -61,6 +62,7 @@ type StateOwner = Pick<
   | "getSelectedTranscriptForView"
   | "setActiveView"
   | "setSidebarCollapsed"
+  | "setThreadGrouping"
   | "setThemeMode"
   | "setThemePresetId"
 >;
@@ -350,6 +352,9 @@ export function registerDesktopIpc({
   });
   ipcMain.handle(desktopIpc.setSidebarCollapsed, (event, rawCollapsed: unknown) =>
     run(event, () => owners.state.setSidebarCollapsed(expectBoolean(rawCollapsed, "collapsed"))),
+  );
+  ipcMain.handle(desktopIpc.setThreadGrouping, (event, rawGrouping: unknown) =>
+    run(event, () => owners.state.setThreadGrouping(expectThreadGrouping(rawGrouping))),
   );
 
   ipcMain.handle(desktopIpc.refreshRuntime, (event, rawWorkspaceId: unknown) =>

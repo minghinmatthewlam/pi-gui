@@ -666,6 +666,8 @@ async function deliverBackgroundInstruction(
     throw new Error("Scheduled task target thread is archived.");
   }
 
+  store.recordUserMessageRecency(sessionRef);
+
   if (session.status === "running") {
     const nextMessage = buildQueuedComposerMessage({
       text: instruction,

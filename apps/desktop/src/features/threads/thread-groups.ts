@@ -20,10 +20,29 @@ export interface ThreadEnvironmentMeta {
 }
 
 export interface ThreadListEntry {
+  readonly folderId: string;
   readonly workspaceId: string;
   readonly session: SessionRecord;
   readonly environment: ThreadEnvironmentMeta;
   readonly contextLabel: string;
+}
+
+export interface WorkspaceThreadGroup {
+  readonly workspace: WorkspaceRecord;
+  readonly threads: readonly ThreadListEntry[];
+}
+
+export const THREAD_HISTORY_PREVIEW_LIMIT = 5;
+
+export function threadHistoryPreview<T>(
+  threads: readonly T[],
+  expanded: boolean,
+): { readonly visible: readonly T[]; readonly overflow: boolean } {
+  const overflow = threads.length > THREAD_HISTORY_PREVIEW_LIMIT;
+  return {
+    visible: overflow && !expanded ? threads.slice(0, THREAD_HISTORY_PREVIEW_LIMIT) : threads,
+    overflow,
+  };
 }
 
 export interface RecencyThreadSection {
@@ -34,6 +53,7 @@ export interface RecencyThreadSection {
 
 export interface ThreadSidebarModel {
   readonly folders: readonly WorkspaceRecord[];
+  readonly workspaceGroups: readonly WorkspaceThreadGroup[];
   readonly pinnedThreads: readonly ThreadListEntry[];
   readonly recencySections: readonly RecencyThreadSection[];
   readonly archivedThreads: readonly ThreadListEntry[];
@@ -58,8 +78,13 @@ export function buildThreadSidebarModel(
     .filter((entry) => !entry.session.archivedAt)
     .sort((left, right) => compareByRecency(left.session, right.session));
 
+  const folders = listFolders(state);
   return {
-    folders: listFolders(state),
+    folders,
+    workspaceGroups: folders.map((workspace) => ({
+      workspace,
+      threads: historyThreads.filter((entry) => entry.folderId === workspace.id),
+    })),
     pinnedThreads,
     recencySections: RECENCY_BUCKET_ORDER.flatMap((bucket) => {
       const threads = historyThreads.filter(
@@ -101,6 +126,7 @@ function collectThreadEntries(state: DesktopAppState): ThreadListEntry[] {
   return folders.flatMap((folder) => {
     if (folder.kind !== "primary") {
       return folder.sessions.map((session) => ({
+        folderId: folder.id,
         workspaceId: folder.id,
         session,
         environment: {
@@ -131,6 +157,7 @@ function collectThreadEntries(state: DesktopAppState): ThreadListEntry[] {
 
     return [
       ...folder.sessions.map((session) => ({
+        folderId: folder.id,
         workspaceId: folder.id,
         session,
         environment: {
@@ -141,6 +168,7 @@ function collectThreadEntries(state: DesktopAppState): ThreadListEntry[] {
       })),
       ...linkedWorkspaces.flatMap(({ workspace, worktree }) =>
         workspace.sessions.map((session) => ({
+          folderId: folder.id,
           workspaceId: workspace.id,
           session,
           environment: {

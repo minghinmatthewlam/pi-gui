@@ -2,6 +2,7 @@ import { basename } from "node:path";
 import { expect, test } from "@playwright/test";
 import {
   addWorkspaceViaIpc,
+  chooseThreadGrouping,
   createSessionViaIpc,
   getDesktopState,
   getSelectedTranscript,
@@ -88,6 +89,7 @@ test("aligns workspace names with session titles in the sidebar gutter", async (
     await waitForWorkspaceByPath(window, workspacePath);
     await expect(window.getByTestId("workspace-list")).toContainText(basename(workspacePath));
     await createSessionViaIpc(window, workspacePath, "Aligned session");
+    await chooseThreadGrouping(window, "workspace");
 
     const workspaceName = window.locator(".workspace-row__name").first();
     const sessionTitle = window.locator(".session-row__title", {

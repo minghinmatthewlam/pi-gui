@@ -938,6 +938,7 @@ export default function App() {
           selectedSession={selectedSession}
           visibleWorkspaces={visibleWorkspaces}
           threadSidebarModel={threadSidebarModel ?? buildThreadSidebarModel(snapshot)}
+          threadGrouping={snapshot.threadGrouping}
           linkedWorktreeByWorkspaceId={linkedWorktreeByWorkspaceId}
           wsMenu={wsMenu}
           api={api}

@@ -1737,6 +1737,16 @@ export async function createNamedThread(
   await expect(composer).toBeFocused({ timeout: 15_000 });
 }
 
+export async function chooseThreadGrouping(
+  window: Page,
+  grouping: "time" | "workspace",
+): Promise<void> {
+  const label = grouping === "time" ? "Time" : "Workspace";
+  await window.getByRole("button", { name: "Group threads" }).click();
+  await window.getByRole("menuitemradio", { name: label, exact: true }).click();
+  await expect(window.getByRole("button", { name: "Group threads" })).toHaveText(label);
+}
+
 export async function createSessionViaIpc(
   window: Page,
   workspaceIdOrPath: string,

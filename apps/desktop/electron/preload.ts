@@ -38,6 +38,7 @@ import type {
   SelectedTranscriptRecord,
   StartThreadInput,
   ThemePresetId,
+  ThreadGrouping,
   WorkspaceSessionTarget,
   CreateScheduledTaskInput,
   UpdateScheduledTaskInput,
@@ -195,6 +196,8 @@ contextBridge.exposeInMainWorld("piApp", {
     ipcRenderer.invoke(desktopIpc.setActiveView, view) as Promise<DesktopAppState>,
   setSidebarCollapsed: (collapsed: boolean) =>
     ipcRenderer.invoke(desktopIpc.setSidebarCollapsed, collapsed) as Promise<DesktopAppState>,
+  setThreadGrouping: (grouping: ThreadGrouping) =>
+    ipcRenderer.invoke(desktopIpc.setThreadGrouping, grouping) as Promise<DesktopAppState>,
   refreshRuntime: (workspaceId?: string) =>
     ipcRenderer.invoke(desktopIpc.refreshRuntime, workspaceId) as Promise<DesktopAppState>,
   setModelSettingsScopeMode: (mode: "app-global" | "per-repo") =>

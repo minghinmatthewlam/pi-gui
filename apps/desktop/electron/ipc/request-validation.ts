@@ -17,7 +17,9 @@ import {
   type StartThreadInput,
   type ThemeMode,
   type ThemePresetId,
+  type ThreadGrouping,
   type WorkspaceSessionTarget,
+  isThreadGrouping,
 } from "../../contracts/desktop-state";
 import type {
   CustomProviderConfig,
@@ -108,6 +110,13 @@ export function expectAppView(value: unknown, name = "view"): AppView {
     value !== "settings"
   ) {
     throw new TypeError(`${name} must be a supported app view`);
+  }
+  return value;
+}
+
+export function expectThreadGrouping(value: unknown, name = "grouping"): ThreadGrouping {
+  if (!isThreadGrouping(value)) {
+    throw new TypeError(`${name} must be time or workspace`);
   }
   return value;
 }

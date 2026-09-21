@@ -17,6 +17,7 @@ for (const invalid of [
   { version: 15, futureData: "retain" },
   { version: 15, notificationPreferences: { futureSetting: true } },
   { version: 16, lastInteractedAtBySession: { one: 42 } },
+  { version: 17, threadGrouping: "priority" },
   [],
 ]) {
   test(`preserves invalid UI state ${JSON.stringify(invalid)}`, async () => {
@@ -31,7 +32,7 @@ for (const invalid of [
   });
 }
 
-test("reads v15 ui-state without lastInteractedAt and writes v16", async () => {
+test("reads v15 ui-state without lastInteractedAt and writes v17", async () => {
   const path = join(await mkdtemp(join(tmpdir(), "ui-state-recency-")), "ui-state.json");
   await writeFile(path, JSON.stringify({ version: 15, composerDraft: "kept" }));
   const decoded = await readPersistedUiState(path);
@@ -45,8 +46,26 @@ test("reads v15 ui-state without lastInteractedAt and writes v16", async () => {
     version: number;
     lastInteractedAtBySession: Record<string, string>;
   };
-  expect(written.version).toBe(16);
+  expect(written.version).toBe(17);
   expect(written.lastInteractedAtBySession).toEqual({ "ws:sess": "2026-09-21T12:00:00.000Z" });
+});
+
+test("reads v16 ui-state without threadGrouping and writes the saved choice as v17", async () => {
+  const path = join(await mkdtemp(join(tmpdir(), "ui-state-grouping-")), "ui-state.json");
+  await writeFile(path, JSON.stringify({ version: 16, composerDraft: "kept" }));
+  const decoded = await readPersistedUiState(path);
+  expect(decoded.version).toBe(16);
+  expect(decoded.threadGrouping).toBeUndefined();
+  await writePersistedUiState(path, {
+    composerDraft: "kept",
+    threadGrouping: "workspace",
+  });
+  const written = JSON.parse(await readFile(path, "utf8")) as {
+    version: number;
+    threadGrouping: string;
+  };
+  expect(written.version).toBe(17);
+  expect(written.threadGrouping).toBe("workspace");
 });
 
 test("backup recovery retains damaged bytes and the good backup", async () => {

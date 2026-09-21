@@ -58,6 +58,7 @@ import {
   type StartupDiagnostic,
   type ThemeMode,
   type ThemePresetId,
+  type ThreadGrouping,
   type TranscriptMessage,
   type WorkspaceSessionTarget,
   isThemeMode,
@@ -1219,6 +1220,21 @@ export class DesktopAppStore {
     return this.emit();
   }
 
+  async setThreadGrouping(threadGrouping: ThreadGrouping): Promise<DesktopAppState> {
+    await this.initialize();
+    if (this.state.threadGrouping === threadGrouping) {
+      return structuredClone(this.state);
+    }
+    this.state = {
+      ...this.state,
+      threadGrouping,
+      lastError: undefined,
+      revision: this.state.revision + 1,
+    };
+    await this.persistUiState();
+    return this.emit();
+  }
+
   async setNotificationPreferences(
     preferences: Partial<NotificationPreferences>,
   ): Promise<DesktopAppState> {
@@ -1887,6 +1903,7 @@ export class DesktopAppStore {
       themeMode: persisted.themeMode ?? this.state.themeMode,
       themePresetId: persisted.themePresetId ?? this.state.themePresetId,
       sidebarCollapsed: persisted.sidebarCollapsed ?? this.state.sidebarCollapsed,
+      threadGrouping: persisted.threadGrouping ?? "time",
       enableTransparency: persisted.enableTransparency ?? this.state.enableTransparency,
       orchestrationChildren: persisted.orchestrationChildren ?? [],
     };
@@ -3523,6 +3540,7 @@ export class DesktopAppStore {
       themeMode: this.state.themeMode,
       themePresetId: this.state.themePresetId,
       sidebarCollapsed: this.state.sidebarCollapsed || undefined,
+      threadGrouping: this.state.threadGrouping,
       enableTransparency: this.state.enableTransparency,
       orchestrationChildren: orchestration.toPersistedOrchestrationChildren(
         this.state.orchestrationChildren,

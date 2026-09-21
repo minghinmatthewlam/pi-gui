@@ -9,6 +9,7 @@ import {
 import {
   buildThreadSidebarModel,
   sessionThreadKey,
+  threadHistoryPreview,
 } from "../../src/features/threads/thread-groups";
 
 const now = new Date(2026, 8, 21, 15, 0, 0);
@@ -216,4 +217,40 @@ test("labels worktree sessions with folder context", () => {
   const worktreeEntry = model.recencyOrder.find((thread) => thread.session.id === "wt-thread");
   expect(worktreeEntry?.contextLabel).toBe("Repo / feature");
   expect(worktreeEntry?.environment.kind).toBe("worktree");
+  expect(worktreeEntry?.folderId).toBe("root");
+  expect(
+    model.workspaceGroups
+      .find((group) => group.workspace.id === "root")
+      ?.threads.map((thread) => thread.session.title),
+  ).toEqual(["Local thread", "Worktree thread"]);
+});
+
+test("sorts a workspace folder by last user message, not catalog updatedAt", () => {
+  const opened = session("opened", "Opened recently", {
+    updatedAt: isoDaysAgo(0, 18),
+    lastInteractedAt: isoDaysAgo(3),
+  });
+  const sent = session("sent", "Sent earlier today", {
+    updatedAt: isoDaysAgo(4),
+    lastInteractedAt: isoDaysAgo(0, 9),
+  });
+  const model = buildThreadSidebarModel(
+    state([workspace("alpha", "Alpha", [opened, sent])]),
+    nowMs,
+  );
+
+  expect(model.workspaceGroups[0]?.threads.map((thread) => thread.session.title)).toEqual([
+    "Sent earlier today",
+    "Opened recently",
+  ]);
+});
+
+test("caps a history list at five until it is expanded", () => {
+  const threads = ["1", "2", "3", "4", "5", "6"];
+  expect(threadHistoryPreview(threads, false)).toEqual({
+    visible: ["1", "2", "3", "4", "5"],
+    overflow: true,
+  });
+  expect(threadHistoryPreview(threads, true).visible).toEqual(threads);
+  expect(threadHistoryPreview(threads.slice(0, 5), false).overflow).toBe(false);
 });

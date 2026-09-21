@@ -4,6 +4,7 @@ import { basename, join } from "node:path";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import type { DesktopAppState, SessionRecord } from "../../contracts/desktop-state";
 import {
+  chooseThreadGrouping,
   createSessionViaIpc,
   desktopShortcut,
   getDesktopState,
@@ -18,7 +19,7 @@ import {
 const proofDir =
   process.env.PI_APP_RECENCY_PROOF_DIR ?? join(tmpdir(), "pi-gui-recency-thread-list");
 
-test("shows every thread in recency buckets across folders without a five-thread cap", async () => {
+test("caps each time bucket at five and hides workspace headers", async () => {
   test.setTimeout(90_000);
   const userDataDir = await makeUserDataDir("pi-app-user-data-recency-cap-");
   const workspaceAPath = await makeWorkspace("recency-a");
@@ -35,14 +36,15 @@ test("shows every thread in recency buckets across folders without a five-thread
     await createHistoryThreads(window, workspaceA.id, numberedThreadTitles("A", 6));
     await createHistoryThreads(window, workspaceB.id, numberedThreadTitles("B", 2));
 
+    await expect(window.getByRole("button", { name: "Group threads" })).toHaveText("Time");
     const today = recencySection(window, "Today");
     await expect(today).toBeVisible();
+    await expect(today.locator(".session-row")).toHaveCount(5);
+    await expect(window.locator(".workspace-row")).toHaveCount(0);
+    await today.getByRole("button", { name: "Show more Today" }).click();
     await expect(today.locator(".session-row")).toHaveCount(8);
-    await expect(window.getByRole("button", { name: "Show more", exact: true })).toHaveCount(0);
-    await expect(window.getByRole("button", { name: "Show less", exact: true })).toHaveCount(0);
-    await expect(folderRow(window, basename(workspaceAPath)).locator(".session-row")).toHaveCount(
-      0,
-    );
+    await today.getByRole("button", { name: "Show less Today" }).click();
+    await expect(today.locator(".session-row")).toHaveCount(5);
     await expect(today.locator(".session-row__context")).toContainText([basename(workspaceAPath)]);
     await expect(today.locator(".session-row__context")).toContainText([basename(workspaceBPath)]);
     await captureSidebarProof(window, "mixed-folders-today.png");
@@ -288,6 +290,146 @@ test("groups seeded Last 7 Days, Last 30 Days, and Older threads", async () => {
   }
 });
 
+test("caps a long Last 7 Days bucket and sorts the folder by last send", async () => {
+  test.setTimeout(120_000);
+  const userDataDir = await makeUserDataDir("pi-app-user-data-grouping-");
+  const workspacePath = await makeWorkspace("grouping-folder");
+  const titles = ["Week 1", "Week 2", "Week 3", "Week 4", "Catalog newer", "Sent later"];
+  const firstRun = await launchDesktop(userDataDir, {
+    initialWorkspaces: [workspacePath],
+    testMode: "background",
+  });
+
+  let selection:
+    { readonly selectedWorkspaceId: string; readonly selectedSessionId: string } | undefined;
+  let keys: Record<string, string> | undefined;
+  let workspaceName = "";
+
+  try {
+    const window = await firstRun.firstWindow();
+    const workspace = await waitForWorkspaceByPath(window, workspacePath);
+    workspaceName = workspace.name;
+    await createHistoryThreads(window, workspace.id, titles);
+    const state = await getDesktopState(window);
+    keys = Object.fromEntries(
+      titles.map((title) => {
+        const found = findSession(state, title);
+        return [title, `${found.workspaceId}:${found.session.id}`];
+      }),
+    );
+    selection = {
+      selectedWorkspaceId: workspace.id,
+      selectedSessionId: findSession(state, "Sent later").session.id,
+    };
+  } finally {
+    await firstRun.close();
+  }
+
+  const stamps = {
+    [keys!["Week 1"]!]: localDaysAgo(2, 8),
+    [keys!["Week 2"]!]: localDaysAgo(2, 9),
+    [keys!["Week 3"]!]: localDaysAgo(2, 10),
+    [keys!["Week 4"]!]: localDaysAgo(2, 11),
+    [keys!["Catalog newer"]!]: localDaysAgo(2, 12),
+    [keys!["Sent later"]!]: localDaysAgo(2, 18),
+  };
+  await seedRecencyTimestamps(userDataDir, stamps, selection!);
+  const catalogsPath = join(userDataDir, "catalogs.json");
+  const catalogs = JSON.parse(await readFile(catalogsPath, "utf8")) as {
+    sessions: Array<{
+      sessionRef: { workspaceId: string; sessionId: string };
+      updatedAt: string;
+    }>;
+  };
+  catalogs.sessions = catalogs.sessions.map((session) => {
+    const key = `${session.sessionRef.workspaceId}:${session.sessionRef.sessionId}`;
+    if (key === keys!["Sent later"]) {
+      return { ...session, updatedAt: localDaysAgo(40) };
+    }
+    if (key === keys!["Catalog newer"]) {
+      return { ...session, updatedAt: localDaysAgo(2, 20) };
+    }
+    return session;
+  });
+  await writeFile(catalogsPath, `${JSON.stringify(catalogs, null, 2)}\n`);
+
+  const secondRun = await launchDesktop(userDataDir, { testMode: "background" });
+  try {
+    const window = await secondRun.firstWindow();
+    await waitForWorkspaceByPath(window, workspacePath);
+    const week = recencySection(window, "Last 7 Days");
+    await expect(week.locator(".session-row__title")).toHaveText([
+      "Sent later",
+      "Catalog newer",
+      "Week 4",
+      "Week 3",
+      "Week 2",
+    ]);
+    await expect(window.locator(".workspace-row")).toHaveCount(0);
+    await week.getByRole("button", { name: "Show more Last 7 Days" }).click();
+    await expect(week.locator(".session-row__title")).toHaveText([
+      "Sent later",
+      "Catalog newer",
+      "Week 4",
+      "Week 3",
+      "Week 2",
+      "Week 1",
+    ]);
+    await week.getByRole("button", { name: "Show less Last 7 Days" }).click();
+    await expect(week.locator(".session-row")).toHaveCount(5);
+
+    await chooseThreadGrouping(window, "workspace");
+    const folderThreads = window.locator(".workspace-group .session-row__title");
+    await expect(folderThreads).toHaveText([
+      "Sent later",
+      "Catalog newer",
+      "Week 4",
+      "Week 3",
+      "Week 2",
+    ]);
+    await window
+      .locator(".workspace-group")
+      .getByRole("button", { name: `Show more ${workspaceName}` })
+      .click();
+    await expect(folderThreads).toHaveText([
+      "Sent later",
+      "Catalog newer",
+      "Week 4",
+      "Week 3",
+      "Week 2",
+      "Week 1",
+    ]);
+
+    const before = findSession(await getDesktopState(window), "Catalog newer").session
+      .lastInteractedAt;
+    await window.locator(".session-row__select", { hasText: "Catalog newer" }).click();
+    await expect(window.locator(".topbar__session")).toHaveText("Catalog newer");
+    await expect(folderThreads.first()).toHaveText("Sent later");
+    expect(
+      findSession(await getDesktopState(window), "Catalog newer").session.lastInteractedAt,
+    ).toBe(before);
+
+    await expect
+      .poll(async () => readFile(join(userDataDir, "ui-state.json"), "utf8"))
+      .toContain('"threadGrouping": "workspace"');
+  } finally {
+    await secondRun.close();
+  }
+
+  const thirdRun = await launchDesktop(userDataDir, { testMode: "background" });
+  try {
+    const window = await thirdRun.firstWindow();
+    await waitForWorkspaceByPath(window, workspacePath);
+    await expect(window.getByRole("button", { name: "Group threads" })).toHaveText("Workspace");
+    await expect(window.locator(".workspace-group .session-row__title").first()).toHaveText(
+      "Sent later",
+    );
+    await expect(window.getByRole("region", { name: "Last 7 Days" })).toHaveCount(0);
+  } finally {
+    await thirdRun.close();
+  }
+});
+
 async function recencyStamps(
   window: Page,
   workspaceId: string,
@@ -324,12 +466,6 @@ async function sendComposerPrompt(window: Page, text: string): Promise<void> {
 
 function recencySection(window: Page, label: string): Locator {
   return window.getByRole("region", { name: label, exact: true });
-}
-
-function folderRow(window: Page, workspaceName: string): Locator {
-  return window.locator(".workspace-group").filter({
-    has: window.locator(".workspace-row__name", { hasText: workspaceName }),
-  });
 }
 
 async function expectTodayTitles(window: Page, titles: readonly string[]): Promise<void> {

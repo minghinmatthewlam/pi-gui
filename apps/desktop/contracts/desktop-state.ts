@@ -37,6 +37,11 @@ export const themePresetIds = [
 ] as const;
 export type ThemePresetId = (typeof themePresetIds)[number];
 export type ModelSettingsScopeMode = "app-global" | "per-repo";
+export type ThreadGrouping = "time" | "workspace";
+
+export function isThreadGrouping(value: unknown): value is ThreadGrouping {
+  return value === "time" || value === "workspace";
+}
 
 export function isThemeMode(value: unknown): value is ThemeMode {
   return value === "system" || value === "light" || value === "dark";
@@ -344,6 +349,7 @@ export interface DesktopAppState {
   readonly themeMode: ThemeMode;
   readonly themePresetId: ThemePresetId;
   readonly sidebarCollapsed: boolean;
+  readonly threadGrouping: ThreadGrouping;
   readonly enableTransparency: boolean;
   readonly startupDiagnostics: readonly StartupDiagnostic[];
   readonly revision: number;
@@ -396,6 +402,7 @@ export function createEmptyDesktopAppState(): DesktopAppState {
     themeMode: "system",
     themePresetId: "default",
     sidebarCollapsed: false,
+    threadGrouping: "time",
     enableTransparency: false,
     startupDiagnostics: [],
     revision: 0,
