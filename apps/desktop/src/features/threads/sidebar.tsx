@@ -946,6 +946,7 @@ function ThreadGroupingControl({
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const groupingRef = useRef<HTMLButtonElement | null>(null);
+  const submenuRef = useRef<HTMLDivElement | null>(null);
   const submenuTimer = useRef<number | null>(null);
 
   const closeSubmenuSoon = () => {
@@ -1015,7 +1016,10 @@ function ThreadGroupingControl({
     const rect = buttonRef.current.getBoundingClientRect();
     setMenuStyle({
       top: rect.bottom + 6,
-      right: Math.max(8, window.innerWidth - rect.right),
+      left: rect.right,
+      right: "auto",
+      width: "max-content",
+      transform: "translateX(-100%)",
     });
   }, [open]);
 
@@ -1024,14 +1028,19 @@ function ThreadGroupingControl({
       return;
     }
     const rect = groupingRef.current.getBoundingClientRect();
-    const width = 176;
-    const gap = 8;
+    const gap = 6;
+    const width = submenuRef.current?.offsetWidth ?? 0;
     const openRight = rect.right + gap;
-    setSubmenuStyle(
-      openRight + width <= window.innerWidth - 8
-        ? { top: rect.top - 6, left: openRight }
-        : { top: rect.top - 6, left: Math.max(8, rect.left - gap - width) },
-    );
+    const left =
+      width > 0 && openRight + width > window.innerWidth - 8
+        ? Math.max(8, rect.left - gap - width)
+        : openRight;
+    setSubmenuStyle({
+      top: rect.top - 6,
+      left,
+      right: "auto",
+      width: "max-content",
+    });
   }, [submenuOpen]);
 
   return (
@@ -1086,6 +1095,7 @@ function ThreadGroupingControl({
               </div>
               {submenuOpen ? (
                 <div
+                  ref={submenuRef}
                   aria-label="Grouping"
                   className="workspace-menu thread-grouping__submenu"
                   role="menu"

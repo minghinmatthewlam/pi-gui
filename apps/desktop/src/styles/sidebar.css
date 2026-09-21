@@ -148,17 +148,19 @@
   transform: none;
 }
 
-.thread-grouping__menu,
-.thread-grouping__submenu {
+.workspace-menu.thread-grouping__menu,
+.workspace-menu.thread-grouping__submenu {
   position: fixed;
+  top: auto;
+  right: auto;
+  bottom: auto;
+  left: auto;
+  width: max-content;
+  min-width: 0;
+  max-width: max-content;
   z-index: 80;
-  min-width: 188px;
   letter-spacing: normal;
   text-transform: none;
-}
-
-.thread-grouping__submenu {
-  min-width: 168px;
 }
 
 .thread-grouping__parent--open {
