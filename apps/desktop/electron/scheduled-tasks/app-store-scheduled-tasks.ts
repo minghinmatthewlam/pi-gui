@@ -12,6 +12,7 @@ import {
   SCHEDULED_TASK_INTERVIEW_PROMPT,
   assertScheduledTaskSchedule,
   assertScheduledTaskTarget,
+  onceActivationNeedsNewTime,
   type CreateScheduledTaskInput,
   type ScheduledTaskRecord,
   type ScheduledTaskRun,
@@ -90,6 +91,16 @@ export interface ScheduledTaskOwner {
 }
 
 const inFlightTaskIds = new Set<string>();
+let mutationTail: Promise<void> = Promise.resolve();
+
+function enqueueMutation<T>(work: () => Promise<T>): Promise<T> {
+  const result = mutationTail.then(work, work);
+  mutationTail = result.then(
+    () => undefined,
+    () => undefined,
+  );
+  return result;
+}
 
 function nowIso(now: Date): string {
   return now.toISOString();
@@ -141,8 +152,8 @@ function resolveNextRunAt(
   return nextRunAt(schedule, from);
 }
 
-function isDue(task: ScheduledTaskRecord, now: Date): boolean {
-  if (task.status !== "active" || !task.nextRunAt || inFlightTaskIds.has(task.id)) {
+function isClaimable(task: ScheduledTaskRecord, now: Date): boolean {
+  if (task.status !== "active" || !task.nextRunAt) {
     return false;
   }
   if (Date.parse(task.nextRunAt) > now.getTime()) {
@@ -154,15 +165,26 @@ function isDue(task: ScheduledTaskRecord, now: Date): boolean {
   return true;
 }
 
+function isDue(task: ScheduledTaskRecord, now: Date): boolean {
+  return !inFlightTaskIds.has(task.id) && isClaimable(task, now);
+}
+
 function lastUserMessageId(
   transcript: readonly TranscriptMessage[],
   instruction: string,
+  firedAt?: string,
 ): string | undefined {
+  const minCreatedAt = firedAt ? Date.parse(firedAt) : Number.NEGATIVE_INFINITY;
   for (let index = transcript.length - 1; index >= 0; index -= 1) {
     const item = transcript[index];
-    if (item?.kind === "message" && item.role === "user" && item.text === instruction) {
-      return item.id;
+    if (item?.kind !== "message" || item.role !== "user" || item.text !== instruction) {
+      continue;
     }
+    const createdAt = Date.parse(item.createdAt);
+    if (Number.isNaN(createdAt) || createdAt < minCreatedAt) {
+      continue;
+    }
+    return item.id;
   }
   return undefined;
 }
@@ -180,15 +202,18 @@ function pauseWithError(task: ScheduledTaskRecord, now: Date, error: string): Sc
 
 export function createScheduledTaskOwner(store: ScheduledTaskOwnerHost): ScheduledTaskOwner {
   return {
-    createScheduledTask: (input) => createScheduledTask(store, input),
-    updateScheduledTask: (id, patch) => updateScheduledTask(store, id, patch),
-    deleteScheduledTask: (id) => deleteScheduledTask(store, id),
-    beginScheduledTaskInterview: () => beginScheduledTaskInterview(store),
-    fireDueScheduledTasks: (now) => fireDueScheduledTasks(store, now ?? new Date()),
+    createScheduledTask: (input) => enqueueMutation(() => createScheduledTask(store, input)),
+    updateScheduledTask: (id, patch) =>
+      enqueueMutation(() => updateScheduledTask(store, id, patch)),
+    deleteScheduledTask: (id) => enqueueMutation(() => deleteScheduledTask(store, id)),
+    beginScheduledTaskInterview: () => enqueueMutation(() => beginScheduledTaskInterview(store)),
+    fireDueScheduledTasks: (now) =>
+      enqueueMutation(() => fireDueScheduledTasks(store, now ?? new Date())),
     createScheduledTaskToolResult: (parentRef, input) =>
-      createScheduledTaskToolResult(store, parentRef, input),
-    listScheduledTasksToolResult: () => listScheduledTasksToolResult(store),
-    updateScheduledTaskToolResult: (input) => updateScheduledTaskToolResult(store, input),
+      enqueueMutation(() => createScheduledTaskToolResult(store, parentRef, input)),
+    listScheduledTasksToolResult: () => enqueueMutation(() => listScheduledTasksToolResult(store)),
+    updateScheduledTaskToolResult: (input) =>
+      enqueueMutation(() => updateScheduledTaskToolResult(store, input)),
   };
 }
 
@@ -209,6 +234,48 @@ async function replaceAndPersist(
     });
   }
   return store.emit();
+}
+
+async function writeTask(
+  store: ScheduledTaskOwnerHost,
+  updated: ScheduledTaskRecord,
+): Promise<void> {
+  const current = store.scheduledTasks().map(cloneTask);
+  const index = current.findIndex((task) => task.id === updated.id);
+  if (index < 0) {
+    return;
+  }
+  current[index] = updated;
+  store.replaceScheduledTasks(current);
+  await store.persistScheduledTasks();
+}
+
+function leftoverClaimedOnce(task: ScheduledTaskRecord, now: Date): ScheduledTaskRecord {
+  if (
+    task.status !== "active" ||
+    task.schedule.kind !== "once" ||
+    !task.lastRunAt ||
+    inFlightTaskIds.has(task.id)
+  ) {
+    return task;
+  }
+  const failedRun: ScheduledTaskRun | undefined =
+    task.target.kind === "existing-thread"
+      ? {
+          id: randomUUID(),
+          sessionId: task.target.sessionId,
+          workspaceId: task.target.workspaceId,
+          firedAt: task.lastRunAt,
+          instruction: task.instruction,
+          outcome: "failed",
+          error: "Scheduled run did not finish.",
+        }
+      : undefined;
+  return pauseWithError(
+    failedRun ? appendRun(task, failedRun) : task,
+    now,
+    "Scheduled run did not finish.",
+  );
 }
 
 async function createScheduledTask(
@@ -308,6 +375,11 @@ async function updateScheduledTask(
   let nextRunAtValue = existing.nextRunAt;
   let lastRunAt = scheduleChanged ? undefined : existing.lastRunAt;
   let completedAt = existing.completedAt;
+  if (status === "active" && onceActivationNeedsNewTime(schedule, lastRunAt, now)) {
+    return store.withError(
+      "This one-time task already claimed its run. Set a new time to run it again.",
+    );
+  }
   if (status === "active") {
     completedAt = undefined;
     nextRunAtValue = resolveNextRunAt(schedule, now);
@@ -408,6 +480,7 @@ async function deliverInstruction(
   store: ScheduledTaskOwnerHost,
   sessionRef: SessionRef,
   instruction: string,
+  firedAt?: string,
 ): Promise<string | undefined> {
   await store.ensureSessionReady(sessionRef);
   const session = store.sessionFromState(sessionRef);
@@ -427,7 +500,7 @@ async function deliverInstruction(
       rollbackOptimisticMessageOnError: false,
     });
   }
-  return lastUserMessageId(store.transcriptFor(sessionRef), instruction);
+  return lastUserMessageId(store.transcriptFor(sessionRef), instruction, firedAt);
 }
 
 async function fireDueScheduledTasks(
@@ -438,12 +511,7 @@ async function fireDueScheduledTasks(
   if (!store.canWriteScheduledTasks()) {
     return store.emit();
   }
-  const leftover = store.scheduledTasks().map((task) => {
-    if (task.status === "active" && task.schedule.kind === "once" && task.lastRunAt) {
-      return pauseWithError(task, now, "Scheduled run did not finish.");
-    }
-    return task;
-  });
+  const leftover = store.scheduledTasks().map((task) => leftoverClaimedOnce(task, now));
   if (leftover.some((task, index) => task !== store.scheduledTasks()[index])) {
     await replaceAndPersist(store, leftover, false);
   }
@@ -453,15 +521,13 @@ async function fireDueScheduledTasks(
     return store.emit();
   }
 
-  let tasks = leftover.map(cloneTask);
   for (const dueTask of due) {
     inFlightTaskIds.add(dueTask.id);
     try {
-      const claimedIndex = tasks.findIndex((task) => task.id === dueTask.id);
-      if (claimedIndex < 0) {
+      const claimed = store.scheduledTasks().find((task) => task.id === dueTask.id);
+      if (!claimed || !isClaimable(claimed, now)) {
         continue;
       }
-      const claimed = tasks[claimedIndex]!;
       const advancedNext =
         claimed.schedule.kind === "once" ? claimed.nextRunAt : nextRunAt(claimed.schedule, now);
       const claimedTask: ScheduledTaskRecord = {
@@ -470,9 +536,7 @@ async function fireDueScheduledTasks(
         updatedAt: nowIso(now),
         ...(advancedNext ? { nextRunAt: advancedNext } : { nextRunAt: claimed.nextRunAt }),
       };
-      tasks[claimedIndex] = claimedTask;
-      store.replaceScheduledTasks(tasks);
-      await store.persistScheduledTasks();
+      await writeTask(store, claimedTask);
 
       let sessionRef: SessionRef | undefined;
       try {
@@ -492,7 +556,12 @@ async function fireDueScheduledTasks(
             throw new Error("Scheduled task target thread is missing or archived.");
           }
         }
-        const userMessageId = await deliverInstruction(store, sessionRef, claimedTask.instruction);
+        const userMessageId = await deliverInstruction(
+          store,
+          sessionRef,
+          claimedTask.instruction,
+          claimedTask.lastRunAt,
+        );
         const run: ScheduledTaskRun = {
           id: randomUUID(),
           sessionId: sessionRef.sessionId,
@@ -517,11 +586,15 @@ async function fireDueScheduledTasks(
                 lastError: undefined,
                 updatedAt: nowIso(now),
               };
-        tasks = tasks.map((task) => (task.id === afterSend.id ? afterSend : task));
+        await writeTask(store, afterSend);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         const failedMessageId = sessionRef
-          ? lastUserMessageId(store.transcriptFor(sessionRef), claimedTask.instruction)
+          ? lastUserMessageId(
+              store.transcriptFor(sessionRef),
+              claimedTask.instruction,
+              claimedTask.lastRunAt,
+            )
           : undefined;
         const failedRun: ScheduledTaskRun | undefined = sessionRef
           ? {
@@ -540,10 +613,8 @@ async function fireDueScheduledTasks(
           now,
           message,
         );
-        tasks = tasks.map((task) => (task.id === failed.id ? failed : task));
+        await writeTask(store, failed);
       }
-      store.replaceScheduledTasks(tasks);
-      await store.persistScheduledTasks();
     } finally {
       inFlightTaskIds.delete(dueTask.id);
     }

@@ -6,6 +6,7 @@ import {
 import {
   formatScheduledTaskRecurrence,
   formatScheduledTaskNextRun,
+  onceActivationNeedsNewTime,
   scheduledOriginsByMessageId,
   type ScheduledTaskRecord,
 } from "../../contracts/scheduled-tasks";
@@ -100,4 +101,55 @@ test("overlay matches unmatched runs by instruction and firedAt window", () => {
     },
   ]);
   expect(origins.get("msg-1")).toEqual({ taskId: "task-1", title: "Ping" });
+});
+
+test("overlay does not label a same-text user message from before firedAt", () => {
+  const task: ScheduledTaskRecord = {
+    id: "task-1",
+    title: "Ping",
+    instruction: "Say ping",
+    status: "completed",
+    schedule: { kind: "once", at: "2026-09-21T12:00:00.000Z" },
+    target: { kind: "new-thread", workspaceId: "ws" },
+    createdAt: "2026-09-21T11:00:00.000Z",
+    updatedAt: "2026-09-21T12:00:01.000Z",
+    completedAt: "2026-09-21T12:00:01.000Z",
+    runs: [
+      {
+        id: "run-1",
+        sessionId: "session-1",
+        workspaceId: "ws",
+        firedAt: "2026-09-21T12:00:00.000Z",
+        instruction: "Say ping",
+        outcome: "started",
+      },
+    ],
+  };
+  const origins = scheduledOriginsByMessageId([task], "ws", "session-1", [
+    {
+      id: "msg-prior",
+      kind: "message",
+      role: "user",
+      text: "Say ping",
+      createdAt: "2026-09-21T11:59:59.000Z",
+    },
+  ]);
+  expect(origins.has("msg-prior")).toBe(false);
+});
+
+test("onceActivationNeedsNewTime blocks resume of a claimed past once", () => {
+  expect(
+    onceActivationNeedsNewTime(
+      { kind: "once", at: "2026-09-21T12:00:00.000Z" },
+      "2026-09-21T12:00:01.000Z",
+      new Date("2026-09-21T12:05:00.000Z"),
+    ),
+  ).toBe(true);
+  expect(
+    onceActivationNeedsNewTime(
+      { kind: "once", at: "2026-09-21T13:00:00.000Z" },
+      undefined,
+      new Date("2026-09-21T12:05:00.000Z"),
+    ),
+  ).toBe(false);
 });

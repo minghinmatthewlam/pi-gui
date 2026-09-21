@@ -130,7 +130,11 @@ export function ScheduledTaskEditor({
     () => (workspace?.sessions ?? []).filter((session) => !session.archivedAt),
     [workspace],
   );
-  const canSubmit = title.trim().length > 0 && instruction.trim().length > 0 && Boolean(workspace);
+  const canSubmit =
+    title.trim().length > 0 &&
+    instruction.trim().length > 0 &&
+    Boolean(workspace) &&
+    (targetKind !== "existing-thread" || Boolean(sessionId));
   const openChatTarget =
     source?.target.kind === "existing-thread"
       ? { workspaceId: source.target.workspaceId, sessionId: source.target.sessionId }

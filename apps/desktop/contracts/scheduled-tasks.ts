@@ -120,6 +120,14 @@ export function hostTimeZone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 }
 
+export function onceActivationNeedsNewTime(
+  schedule: ScheduledTaskSchedule,
+  lastRunAt: string | undefined,
+  now: Date,
+): boolean {
+  return schedule.kind === "once" && Boolean(lastRunAt) && Date.parse(schedule.at) <= now.getTime();
+}
+
 export function isWeekday(value: unknown): value is Weekday {
   return (
     value === 0 ||
@@ -422,7 +430,7 @@ export function scheduledOriginsByMessageId(
         if (Number.isNaN(createdAt) || Number.isNaN(firedAt)) {
           return false;
         }
-        return createdAt >= firedAt - 5_000;
+        return createdAt >= firedAt;
       });
     if (!matched) {
       continue;
