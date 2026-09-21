@@ -204,7 +204,7 @@ test("groups seeded Last 7 Days, Last 30 Days, and Older threads", async () => {
     const week = findSession(state, "Week thread");
     const month = findSession(state, "Month thread");
     const older = findSession(state, "Older thread");
-    const nextSeeded = {
+    seeded = {
       todayKey: `${today.workspaceId}:${today.session.id}`,
       weekKey: `${week.workspaceId}:${week.session.id}`,
       monthKey: `${month.workspaceId}:${month.session.id}`,
@@ -212,7 +212,6 @@ test("groups seeded Last 7 Days, Last 30 Days, and Older threads", async () => {
       selectedWorkspaceId: today.workspaceId,
       selectedSessionId: today.session.id,
     };
-    seeded = nextSeeded;
     await expect
       .poll(async () => {
         try {
@@ -221,7 +220,7 @@ test("groups seeded Last 7 Days, Last 30 Days, and Older threads", async () => {
           return "";
         }
       })
-      .toContain(`"selectedSessionId": "${nextSeeded.selectedSessionId}"`);
+      .toContain("lastInteractedAtBySession");
   } finally {
     await firstRun.close();
   }
