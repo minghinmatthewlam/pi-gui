@@ -26,7 +26,7 @@ Record exact feature/entry point, command, result and evidence directory. `compl
 | Supporting | [Settings](settings.md)                         | `--smoke`: visible navigation and preference restart                                                    |
 | Supporting | [Skills](skills.md)                             | `--smoke` covers opening; `--maintenance` covers Try and aliases                                        |
 | Supporting | [Scheduled tasks](scheduled-tasks.md)           | Core Electron specs for list/create/fire/tool; not in default conversation proof                        |
-| Supporting | [Worktrees](worktrees.md)                       | `--maintenance` creates a permanent worktree and checks `git worktree list`                             |
+| Supporting | [Worktrees](worktrees.md)                       | `--maintenance` switches to Workspace grouping, creates a permanent worktree, and checks `git worktree list` |
 
 Packaged-app launch, native dialogs/clipboard, model/account onboarding, attachments, file/diff/terminal interaction, and broader extension behavior require separate mapped journeys as those features are changed. Do not claim full-app coverage from this initial map.
 

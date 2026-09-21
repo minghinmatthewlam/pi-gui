@@ -189,7 +189,15 @@ test("maintenance: skills, pin, thread list, worktree, queued follow-ups", async
         (entry) => realpathSync(entry.path) === realpathSync(workspace),
       )?.name;
       expect(rootName).toBeTruthy();
-      await page.getByRole("button", { name: `Workspace actions for ${rootName}` }).click();
+      // Time grouping hides a folder row once that folder has threads.
+      await page.getByRole("button", { name: "Customize Sidebar" }).click();
+      await page.getByRole("menuitem", { name: "Grouping" }).click();
+      await page.getByRole("menuitemradio", { name: "Workspace", exact: true }).click();
+      const workspaceActions = page.getByRole("button", {
+        name: `Workspace actions for ${rootName}`,
+      });
+      await expect(workspaceActions).toBeVisible();
+      await workspaceActions.click();
       await page.getByRole("button", { name: "Create permanent worktree" }).click();
       let selectedPath = "";
       await expect
