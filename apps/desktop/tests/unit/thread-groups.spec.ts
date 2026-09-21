@@ -94,7 +94,7 @@ test("omits empty date buckets and mixed-folder threads share one recency list",
   ]);
 });
 
-test("keeps pins out of date buckets while recencyOrder still starts with the latest pin", () => {
+test("keeps pins out of date buckets even when the pin is the latest send", () => {
   const pinned = session("pin", "Pinned recent", {
     updatedAt: isoDaysAgo(8),
     lastInteractedAt: isoDaysAgo(0, 16),
@@ -119,6 +119,31 @@ test("keeps pins out of date buckets while recencyOrder still starts with the la
     "Unpinned today",
   ]);
   expect(sessionThreadKey(model.recencyOrder[0]!)).toBe("alpha:pin");
+});
+
+test("puts a newer unpinned send ahead of an older pin in recencyOrder", () => {
+  const pinned = session("pin", "Older pin", {
+    updatedAt: isoDaysAgo(8),
+    lastInteractedAt: isoDaysAgo(2),
+    pinnedAt: isoDaysAgo(1),
+  });
+  const sent = session("send", "Newer send", {
+    updatedAt: isoDaysAgo(0, 16),
+    lastInteractedAt: isoDaysAgo(0, 16),
+  });
+  const model = buildThreadSidebarModel(
+    state([workspace("alpha", "Alpha", [pinned, sent])]),
+    nowMs,
+  );
+
+  expect(model.pinnedThreads.map((thread) => thread.session.title)).toEqual(["Older pin"]);
+  expect(model.recencySections[0]?.threads.map((thread) => thread.session.title)).toEqual([
+    "Newer send",
+  ]);
+  expect(model.recencyOrder.map((thread) => thread.session.title)).toEqual([
+    "Newer send",
+    "Older pin",
+  ]);
 });
 
 test("excludes archived threads from recencyOrder and date buckets", () => {

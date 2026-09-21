@@ -122,10 +122,13 @@ test("bumps a sent thread to the top of Today", async () => {
 });
 
 test("selects recency-order threads with 1-9 even when another thread is pinned", async () => {
-  test.setTimeout(90_000);
+  test.setTimeout(120_000);
   const userDataDir = await makeUserDataDir("pi-app-user-data-recency-shortcut-");
+  const agentDir = join(userDataDir, "agent");
+  await seedAgentDir(agentDir);
   const workspacePath = await makeWorkspace("recency-shortcut");
   const harness = await launchDesktop(userDataDir, {
+    agentDir,
     initialWorkspaces: [workspacePath],
     testMode: "background",
   });
@@ -143,10 +146,23 @@ test("selects recency-order threads with 1-9 even when another thread is pinned"
     await expect(pinned.locator(".session-row__title")).toHaveText(["Charlie"]);
     await expectTodayTitles(window, ["Bravo", "Alpha"]);
 
+    await recencySection(window, "Today")
+      .locator(".session-row__select", { hasText: "Alpha" })
+      .click();
+    await expect(window.locator(".topbar__session")).toHaveText("Alpha");
     await window.keyboard.press(desktopShortcut("1"));
     await expect(window.locator(".topbar__session")).toHaveText("Charlie");
+
+    await recencySection(window, "Today")
+      .locator(".session-row__select", { hasText: "Alpha" })
+      .click();
+    await expect(window.locator(".topbar__session")).toHaveText("Alpha");
+    await sendComposerPrompt(window, "Send makes Alpha ⌘1");
+    await expectTodayTitles(window, ["Alpha", "Bravo"]);
+    await window.keyboard.press(desktopShortcut("1"));
+    await expect(window.locator(".topbar__session")).toHaveText("Alpha");
     await window.keyboard.press(desktopShortcut("2"));
-    await expect(window.locator(".topbar__session")).toHaveText("Bravo");
+    await expect(window.locator(".topbar__session")).toHaveText("Charlie");
     await captureSidebarProof(window, "shortcut-recency-over-pin.png");
   } finally {
     await harness.close();
@@ -188,7 +204,7 @@ test("groups seeded Last 7 Days, Last 30 Days, and Older threads", async () => {
     const week = findSession(state, "Week thread");
     const month = findSession(state, "Month thread");
     const older = findSession(state, "Older thread");
-    seeded = {
+    const nextSeeded = {
       todayKey: `${today.workspaceId}:${today.session.id}`,
       weekKey: `${week.workspaceId}:${week.session.id}`,
       monthKey: `${month.workspaceId}:${month.session.id}`,
@@ -196,6 +212,7 @@ test("groups seeded Last 7 Days, Last 30 Days, and Older threads", async () => {
       selectedWorkspaceId: today.workspaceId,
       selectedSessionId: today.session.id,
     };
+    seeded = nextSeeded;
     await expect
       .poll(async () => {
         try {
@@ -204,7 +221,7 @@ test("groups seeded Last 7 Days, Last 30 Days, and Older threads", async () => {
           return "";
         }
       })
-      .toContain("lastInteractedAtBySession");
+      .toContain(`"selectedSessionId": "${nextSeeded.selectedSessionId}"`);
   } finally {
     await firstRun.close();
   }
