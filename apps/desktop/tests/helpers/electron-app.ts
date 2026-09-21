@@ -1110,6 +1110,48 @@ export async function runOrchestrationRuntimeTool(
   }, input);
 }
 
+export async function runScheduledTaskRuntimeTool(
+  harness: DesktopHarness,
+  input: OrchestrationRuntimeToolTestInput,
+): Promise<OrchestrationRuntimeToolTestResult> {
+  await harness.firstWindow();
+  return harness.electronApp.evaluate(async (_, payload) => {
+    const hooks = (
+      globalThis as {
+        __PI_APP_TEST_HOOKS?: {
+          runScheduledTaskRuntimeTool?: (
+            input: OrchestrationRuntimeToolTestInput,
+          ) => Promise<OrchestrationRuntimeToolTestResult>;
+        };
+      }
+    ).__PI_APP_TEST_HOOKS;
+    if (!hooks?.runScheduledTaskRuntimeTool) {
+      throw new Error("Scheduled-task runtime-tool hook is unavailable");
+    }
+    return hooks.runScheduledTaskRuntimeTool(payload);
+  }, input);
+}
+
+export async function fireDueScheduledTasks(
+  harness: DesktopHarness,
+  nowIso?: string,
+): Promise<DesktopAppState> {
+  await harness.firstWindow();
+  return harness.electronApp.evaluate(async (_, payload) => {
+    const hooks = (
+      globalThis as {
+        __PI_APP_TEST_HOOKS?: {
+          fireDueScheduledTasks?: (nowIso?: string) => Promise<DesktopAppState>;
+        };
+      }
+    ).__PI_APP_TEST_HOOKS;
+    if (!hooks?.fireDueScheduledTasks) {
+      throw new Error("Scheduled-task fire hook is unavailable");
+    }
+    return hooks.fireDueScheduledTasks(payload);
+  }, nowIso);
+}
+
 export async function emitTestSessionEvent(
   harness: DesktopHarness,
   event: SessionDriverEvent,

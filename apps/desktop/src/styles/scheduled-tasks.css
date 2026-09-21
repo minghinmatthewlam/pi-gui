@@ -1,0 +1,246 @@
+.scheduled-tasks-view {
+  padding: 24px 28px 32px;
+  width: min(920px, 100%);
+  margin: 0 auto;
+}
+
+.scheduled-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.scheduled-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: var(--radius-xl);
+  background: var(--surface-muted);
+}
+
+.scheduled-tabs__item {
+  border: 0;
+  background: transparent;
+  color: var(--muted-strong);
+  padding: 6px 10px;
+  border-radius: var(--radius-lg);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 560;
+}
+
+.scheduled-tabs__item--active {
+  background: var(--surface);
+  color: var(--text-strong);
+  box-shadow: var(--elevation-hairline);
+}
+
+.scheduled-create {
+  position: relative;
+}
+
+.scheduled-create__menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 8;
+  min-width: 180px;
+}
+
+.scheduled-task-list {
+  display: grid;
+  gap: 8px;
+}
+
+.scheduled-task-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-2xl);
+  background: var(--surface);
+}
+
+.scheduled-task-row__body {
+  display: grid;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  padding: 0;
+}
+
+.scheduled-task-row__title {
+  font-weight: 610;
+}
+
+.scheduled-task-row__meta {
+  color: var(--muted-strong);
+  font-size: 13px;
+}
+
+.scheduled-task-row__menu-wrap {
+  position: relative;
+}
+
+.scheduled-task-row__menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 8;
+  min-width: 140px;
+}
+
+.scheduled-editor-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 36;
+  display: flex;
+  justify-content: flex-end;
+  background: rgba(24, 31, 44, 0.28);
+  backdrop-filter: blur(8px);
+}
+
+.scheduled-editor {
+  width: min(420px, 100%);
+  height: 100%;
+  overflow: auto;
+  background: var(--surface);
+  border-left: 1px solid var(--line);
+  padding: 20px 22px 28px;
+  display: grid;
+  align-content: start;
+  gap: 14px;
+}
+
+.scheduled-editor__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.scheduled-editor__header h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 610;
+}
+
+.scheduled-editor__field {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  border: 0;
+  padding: 0;
+  color: var(--muted-strong);
+  font-size: 12px;
+  font-weight: 560;
+}
+
+.scheduled-editor__field input,
+.scheduled-editor__field textarea,
+.scheduled-editor__field select {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-default);
+  background: var(--surface);
+  color: var(--text-strong);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.scheduled-editor__choice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-strong);
+}
+
+.scheduled-editor__days {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.scheduled-editor__day {
+  border: 1px solid var(--line);
+  background: var(--surface-muted);
+  color: var(--muted-strong);
+  border-radius: 999px;
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 12px;
+}
+
+.scheduled-editor__day--active {
+  background: var(--surface);
+  color: var(--text-strong);
+  border-color: var(--line-strong);
+}
+
+.scheduled-editor__error {
+  margin: 0;
+  color: var(--error-ink);
+  font-size: 13px;
+}
+
+.scheduled-editor__actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.scheduled-task-chip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: min(768px, calc(100% - 48px));
+  margin: 0 auto 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xl);
+  background: var(--surface-muted);
+  color: var(--muted-strong);
+  font-size: 13px;
+}
+
+.timeline-item__user-stack {
+  display: grid;
+  justify-items: end;
+  gap: 4px;
+  min-width: 0;
+}
+
+.timeline-item__scheduled-origin {
+  color: var(--muted-subtle);
+  font-size: 11px;
+  font-weight: 560;
+  letter-spacing: 0.04em;
+}
+
+.chat-header__menu-wrap {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.chat-header__menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 8;
+  min-width: 210px;
+}

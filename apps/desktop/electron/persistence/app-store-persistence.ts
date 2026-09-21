@@ -424,6 +424,7 @@ function toThemePresetId(value: unknown): ThemePresetId | undefined {
 function toAppView(value: unknown): AppView | undefined {
   return value === "threads" ||
     value === "new-thread" ||
+    value === "scheduled" ||
     value === "skills" ||
     value === "extensions" ||
     value === "settings"

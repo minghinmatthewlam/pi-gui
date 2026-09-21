@@ -44,6 +44,8 @@ import {
   expectSessionTarget,
   expectSetChildSupervisionLoopInput,
   expectStartThreadInput,
+  expectCreateScheduledTaskInput,
+  expectUpdateScheduledTaskInput,
   expectString,
   expectStringArray,
   expectTerminalSize,
@@ -110,6 +112,14 @@ type OrchestrationOwner = Pick<
   "sendChildThreadFollowUp" | "setChildSupervisionLoop"
 >;
 
+type ScheduledTaskOwner = Pick<
+  DesktopAppStore,
+  | "createScheduledTask"
+  | "updateScheduledTask"
+  | "deleteScheduledTask"
+  | "beginScheduledTaskInterview"
+>;
+
 type SettingsOwner = Pick<
   DesktopAppStore,
   | "refreshRuntime"
@@ -138,6 +148,7 @@ export interface DesktopIpcOwners {
   readonly workspace: WorkspaceOwner;
   readonly conversation: ConversationOwner;
   readonly orchestration: OrchestrationOwner;
+  readonly scheduledTasks: ScheduledTaskOwner;
   readonly settings: SettingsOwner;
 }
 
@@ -577,6 +588,25 @@ export function registerDesktopIpc({
     run(event, () =>
       owners.orchestration.setChildSupervisionLoop(expectSetChildSupervisionLoopInput(rawInput)),
     ),
+  );
+  ipcMain.handle(desktopIpc.createScheduledTask, (event, rawInput: unknown) =>
+    run(event, () =>
+      owners.scheduledTasks.createScheduledTask(expectCreateScheduledTaskInput(rawInput)),
+    ),
+  );
+  ipcMain.handle(desktopIpc.updateScheduledTask, (event, rawId: unknown, rawPatch: unknown) =>
+    run(event, () =>
+      owners.scheduledTasks.updateScheduledTask(
+        expectNonEmptyString(rawId, "id"),
+        expectUpdateScheduledTaskInput(rawPatch),
+      ),
+    ),
+  );
+  ipcMain.handle(desktopIpc.deleteScheduledTask, (event, rawId: unknown) =>
+    run(event, () => owners.scheduledTasks.deleteScheduledTask(expectNonEmptyString(rawId, "id"))),
+  );
+  ipcMain.handle(desktopIpc.beginScheduledTaskInterview, (event) =>
+    run(event, () => owners.scheduledTasks.beginScheduledTaskInterview()),
   );
   ipcMain.handle(
     desktopIpc.openSkillInFinder,

@@ -25,6 +25,7 @@ Record exact feature/entry point, command, result and evidence directory. `compl
 | Next       | [Archive and restore](archive.md)               | Default proof on a real conversation; core spec adds hover/group checks                                 |
 | Supporting | [Settings](settings.md)                         | `--smoke`: visible navigation and preference restart                                                    |
 | Supporting | [Skills](skills.md)                             | `--smoke` covers opening only; separate recipe tests Try and aliases                                    |
+| Supporting | [Scheduled tasks](scheduled-tasks.md)           | Core Electron specs for list/create/fire/tool; not in default conversation proof                        |
 | Supporting | [Worktrees](worktrees.md)                       | Separate scratch-Git recipe; not in default proof                                                       |
 
 Packaged-app launch, native dialogs/clipboard, model/account onboarding, attachments, file/diff/terminal interaction, and broader extension behavior require separate mapped journeys as those features are changed. Do not claim full-app coverage from this initial map.

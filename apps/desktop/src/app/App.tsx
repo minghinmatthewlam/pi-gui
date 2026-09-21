@@ -4,7 +4,12 @@ import {
   getSelectedSession,
   getSelectedWorkspace,
   type AppView,
+  type CreateScheduledTaskInput,
 } from "../../contracts/desktop-state";
+import {
+  nonCompletedBindingForSession,
+  scheduledOriginsByMessageId,
+} from "../../contracts/scheduled-tasks";
 import { updateSnapshot, useDesktopAppState } from "./desktop-app-state";
 import { DesktopStartupSurface, toStartupSurfaceState } from "./desktop-recovery";
 import { buildFileWorkbenchContexts } from "./file-workbench-contexts";
@@ -35,6 +40,12 @@ import { SidebarToggleButton } from "../features/threads/sidebar-toggle-button";
 import { Topbar } from "./topbar";
 import { TerminalPanel } from "../features/workbench/terminal-panel";
 import { ConversationTimeline } from "../features/conversation/conversation-timeline";
+import { ScheduledTasksView } from "../features/scheduled-tasks/scheduled-tasks-view";
+import {
+  ScheduledTaskEditor,
+  type ScheduledEditorState,
+} from "../features/scheduled-tasks/scheduled-task-editor";
+import { ScheduledTaskChip } from "../features/scheduled-tasks/scheduled-task-chip";
 import {
   loadPromptRailVisible,
   savePromptRailVisible,
@@ -80,6 +91,8 @@ export default function App() {
   const [terminalHeight, setTerminalHeight] = useState(340);
   const [diffFileRequest, setDiffFileRequest] = useState<DiffPanelFileRequest | null>(null);
   const [promptRailVisible, setPromptRailVisible] = useState(loadPromptRailVisible);
+  const [scheduledEditor, setScheduledEditor] = useState<ScheduledEditorState | null>(null);
+  const [threadMenuOpen, setThreadMenuOpen] = useState(false);
   const api = window.piApp;
   const sidebarToggleStateRef = useRef<{
     readonly api: typeof window.piApp;
@@ -195,6 +208,20 @@ export default function App() {
       ? selectedTranscript
       : null;
   const activeTranscript = selectedTranscriptForSession?.transcript ?? [];
+  const scheduledOrigins = useMemo(() => {
+    if (!snapshot || !selectedWorkspace || !selectedSession) {
+      return new Map();
+    }
+    return scheduledOriginsByMessageId(
+      snapshot.scheduledTasks,
+      selectedWorkspace.id,
+      selectedSession.id,
+      activeTranscript,
+    );
+  }, [activeTranscript, selectedSession, selectedWorkspace, snapshot]);
+  const scheduledBinding = selectedSession
+    ? nonCompletedBindingForSession(snapshot?.scheduledTasks ?? [], selectedSession.id)
+    : undefined;
   const transcriptHydration = desktop.view.kind === "ready" ? desktop.view.transcript : undefined;
   const transcriptFailed = transcriptHydration?.kind === "failed" ? transcriptHydration : null;
   const isTranscriptLoading =
@@ -816,6 +843,35 @@ export default function App() {
     );
   };
 
+  const handleCreateScheduledTaskWithPi = () => {
+    void updateSnapshot(setSnapshot, () => api.beginScheduledTaskInterview()).catch(
+      (error: unknown) => {
+        console.error("[renderer] beginScheduledTaskInterview failed", error);
+      },
+    );
+  };
+
+  const handleSubmitScheduledTask = (input: CreateScheduledTaskInput) => {
+    const action =
+      scheduledEditor?.mode === "edit"
+        ? () => api.updateScheduledTask(scheduledEditor.taskId, input)
+        : () => api.createScheduledTask(input);
+    void updateSnapshot(setSnapshot, action)
+      .then((state) => {
+        if (!state.lastError) {
+          setScheduledEditor(null);
+        }
+      })
+      .catch((error: unknown) => {
+        console.error("[renderer] save scheduled task failed", error);
+      });
+  };
+
+  const handleOpenScheduledChat = (target: { workspaceId: string; sessionId: string }) => {
+    setScheduledEditor(null);
+    handleSelectSession(target);
+  };
+
   if (secondarySurfaceView) {
     return (
       <SecondarySurfaces
@@ -921,7 +977,17 @@ export default function App() {
           terminalPanel
         ) : (
           <>
-            {snapshot.activeView === "new-thread" ? (
+            {snapshot.activeView === "scheduled" ? (
+              <ScheduledTasksView
+                tasks={snapshot.scheduledTasks}
+                lastError={snapshot.lastError}
+                api={api}
+                setSnapshot={setSnapshot}
+                updateSnapshot={updateSnapshot}
+                onCreateWithPi={handleCreateScheduledTaskWithPi}
+                onOpenEditor={setScheduledEditor}
+              />
+            ) : snapshot.activeView === "new-thread" ? (
               rootWorkspaceOptions.length > 0 ? (
                 <NewThreadView
                   workspaces={rootWorkspaceOptions}
@@ -1004,6 +1070,50 @@ export default function App() {
                             ? runningLabel
                             : formatRelativeTime(selectedSession.updatedAt)}
                         </div>
+                        <div className="chat-header__menu-wrap">
+                          <button
+                            aria-haspopup="menu"
+                            aria-expanded={threadMenuOpen}
+                            aria-label="Thread actions"
+                            className="icon-button"
+                            data-testid="thread-header-menu"
+                            type="button"
+                            onClick={() => setThreadMenuOpen((open) => !open)}
+                          >
+                            …
+                          </button>
+                          {threadMenuOpen ? (
+                            <div className="workspace-menu chat-header__menu" role="menu">
+                              <button
+                                className="workspace-menu__item"
+                                data-testid="thread-add-scheduled-task"
+                                type="button"
+                                onClick={() => {
+                                  setThreadMenuOpen(false);
+                                  if (scheduledBinding) {
+                                    setScheduledEditor({
+                                      mode: "edit",
+                                      taskId: scheduledBinding.id,
+                                    });
+                                    return;
+                                  }
+                                  setScheduledEditor({
+                                    mode: "create",
+                                    prefill: {
+                                      target: {
+                                        kind: "existing-thread",
+                                        workspaceId: selectedWorkspace.id,
+                                        sessionId: selectedSession.id,
+                                      },
+                                    },
+                                  });
+                                }}
+                              >
+                                {scheduledBinding ? "Edit scheduled task…" : "Add scheduled task…"}
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
                       </div>
                     </div>
 
@@ -1040,9 +1150,16 @@ export default function App() {
                         selectedSession.status === "running" ? undefined : openForkModal
                       }
                       promptRailVisible={promptRailVisible}
+                      scheduledOrigins={scheduledOrigins}
                     />
                   </div>
                 </section>
+                {scheduledBinding ? (
+                  <ScheduledTaskChip
+                    task={scheduledBinding}
+                    onOpen={() => setScheduledEditor({ mode: "edit", taskId: scheduledBinding.id })}
+                  />
+                ) : null}
                 <ComposerPanel
                   key={selectedSessionKey}
                   activeSlashCommand={slashMenu.activeSlashFlow?.command}
@@ -1183,6 +1300,23 @@ export default function App() {
           />
         ) : null}
       </main>
+      {scheduledEditor ? (
+        <ScheduledTaskEditor
+          editor={scheduledEditor}
+          task={
+            scheduledEditor.mode === "edit"
+              ? snapshot.scheduledTasks.find((task) => task.id === scheduledEditor.taskId)
+              : undefined
+          }
+          workspaces={snapshot.workspaces}
+          selectedWorkspaceId={snapshot.selectedWorkspaceId}
+          busy={false}
+          error={snapshot.lastError}
+          onClose={() => setScheduledEditor(null)}
+          onSubmit={handleSubmitScheduledTask}
+          onOpenChat={handleOpenScheduledChat}
+        />
+      ) : null}
     </div>
   );
 }

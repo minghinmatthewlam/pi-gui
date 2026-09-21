@@ -34,6 +34,7 @@ import {
   RestoreIcon,
   SettingsIcon,
   SkillIcon,
+  ClockIcon,
   WorktreeIcon,
 } from "../../ui/icons";
 import type { PiDesktopApi } from "../../../contracts/ipc";
@@ -283,6 +284,15 @@ export function Sidebar(props: SidebarProps) {
           >
             <FolderIcon />
             <span>Threads</span>
+          </button>
+          <button
+            className={`sidebar__nav-item ${activeView === "scheduled" ? "sidebar__nav-item--active" : ""}`}
+            type="button"
+            data-testid="sidebar-scheduled"
+            onClick={() => onSetActiveView("scheduled")}
+          >
+            <ClockIcon />
+            <span>Scheduled</span>
           </button>
           <button
             className="sidebar__nav-item"

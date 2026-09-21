@@ -25,6 +25,11 @@ import {
   createOrchestrationRuntimeTools,
   type OrchestrationRuntimeBridge,
 } from "./orchestration/orchestration-runtime";
+import {
+  createScheduledTaskRuntimeExtension,
+  createScheduledTaskRuntimeTools,
+  type ScheduledTaskRuntimeBridge,
+} from "./scheduled-tasks/scheduled-task-runtime";
 import { getChangedFiles, getFileDiff, stageFile } from "./platform/files/app-store-diff";
 import { listWorkspaceFiles, readWorkspaceFile } from "./platform/files/app-store-files";
 import { MAIN_DEV_RELOAD_MARKER } from "./dev-reload-main-probe";
@@ -84,6 +89,50 @@ interface OrchestrationRuntimeToolTestInput {
   readonly toolCallId?: string;
   readonly sessionRef: SessionRef;
   readonly params: unknown;
+}
+
+interface ScheduledTaskRuntimeToolTestInput {
+  readonly toolName: string;
+  readonly toolCallId?: string;
+  readonly sessionRef: SessionRef;
+  readonly params: unknown;
+}
+
+function createStoreBackedScheduledTaskRuntimeBridge(): ScheduledTaskRuntimeBridge {
+  return {
+    createScheduledTask: async (ctx, input) => {
+      await store.initialize();
+      return store.createScheduledTaskToolResult(sessionRefFromExtensionContext(ctx), input);
+    },
+    listScheduledTasks: async () => {
+      await store.initialize();
+      return store.listScheduledTasksToolResult();
+    },
+    updateScheduledTask: async (_ctx, input) => {
+      await store.initialize();
+      return store.updateScheduledTaskToolResult(input);
+    },
+  };
+}
+
+async function runScheduledTaskRuntimeToolForTest(
+  bridge: ScheduledTaskRuntimeBridge,
+  input: ScheduledTaskRuntimeToolTestInput,
+): Promise<AgentToolResult<unknown>> {
+  await store.initialize();
+  const tool = createScheduledTaskRuntimeTools(bridge, () => input.sessionRef.workspaceId).find(
+    (entry) => entry.name === input.toolName,
+  );
+  if (!tool) {
+    throw new Error(`Unknown scheduled-task runtime tool: ${input.toolName}`);
+  }
+  return tool.execute(
+    input.toolCallId ?? `test-${input.toolName}`,
+    input.params,
+    undefined,
+    undefined,
+    createTestExtensionContext(input.sessionRef),
+  );
 }
 
 let stopNotifications: (() => void) | undefined;
@@ -670,12 +719,26 @@ app
         }
       | undefined;
     const orchestrationRuntimeBridge = createStoreBackedOrchestrationRuntimeBridge();
+    const scheduledTaskRuntimeBridge = createStoreBackedScheduledTaskRuntimeBridge();
     const driverOptions = {
-      extensionFactories: [createOrchestrationRuntimeExtension(orchestrationRuntimeBridge)],
+      extensionFactories: [
+        createOrchestrationRuntimeExtension(orchestrationRuntimeBridge),
+        createScheduledTaskRuntimeExtension(scheduledTaskRuntimeBridge, (ctx) => {
+          try {
+            return sessionRefFromExtensionContext(ctx).workspaceId;
+          } catch {
+            return undefined;
+          }
+        }),
+      ],
       inlineExtensionMetadata: [
         {
           displayName: "Thread orchestration",
           description: "Start child pi-gui threads from transcript tool calls",
+        },
+        {
+          displayName: "Scheduled tasks",
+          description: "Create and update local pi-gui scheduled tasks from transcript tool calls",
         },
       ],
     };
@@ -722,6 +785,10 @@ app
             promptForText(mainWindow, message, placeholder ?? "", allowEmpty ?? false),
           runOrchestrationRuntimeTool: (input: OrchestrationRuntimeToolTestInput) =>
             runOrchestrationRuntimeToolForTest(orchestrationRuntimeBridge, input),
+          runScheduledTaskRuntimeTool: (input: ScheduledTaskRuntimeToolTestInput) =>
+            runScheduledTaskRuntimeToolForTest(scheduledTaskRuntimeBridge, input),
+          fireDueScheduledTasks: (nowIso?: string) =>
+            store.fireDueScheduledTasks(nowIso ? new Date(nowIso) : undefined),
           setDeferredThreadTitleMode: () => {
             generateThreadTitleOverride = () =>
               new Promise<string | null>((resolve, reject) => {
@@ -779,6 +846,7 @@ app
         workspace: store,
         conversation: store,
         orchestration: store,
+        scheduledTasks: store,
         settings: store,
       },
       capabilities: {

@@ -39,6 +39,8 @@ import type {
   StartThreadInput,
   ThemePresetId,
   WorkspaceSessionTarget,
+  CreateScheduledTaskInput,
+  UpdateScheduledTaskInput,
 } from "../contracts/desktop-state";
 
 const devReloadMarkersEnabled = process.env.PI_APP_DEV_RELOAD_MARKERS === "1";
@@ -179,6 +181,14 @@ contextBridge.exposeInMainWorld("piApp", {
     ipcRenderer.invoke(desktopIpc.sendChildThreadFollowUp, input) as Promise<DesktopAppState>,
   setChildSupervisionLoop: (input: SetChildSupervisionLoopInput) =>
     ipcRenderer.invoke(desktopIpc.setChildSupervisionLoop, input) as Promise<DesktopAppState>,
+  createScheduledTask: (input: CreateScheduledTaskInput) =>
+    ipcRenderer.invoke(desktopIpc.createScheduledTask, input) as Promise<DesktopAppState>,
+  updateScheduledTask: (id: string, patch: UpdateScheduledTaskInput) =>
+    ipcRenderer.invoke(desktopIpc.updateScheduledTask, id, patch) as Promise<DesktopAppState>,
+  deleteScheduledTask: (id: string) =>
+    ipcRenderer.invoke(desktopIpc.deleteScheduledTask, id) as Promise<DesktopAppState>,
+  beginScheduledTaskInterview: () =>
+    ipcRenderer.invoke(desktopIpc.beginScheduledTaskInterview) as Promise<DesktopAppState>,
   cancelCurrentRun: () =>
     ipcRenderer.invoke(desktopIpc.cancelCurrentRun) as Promise<DesktopAppState>,
   setActiveView: (view: AppView) =>

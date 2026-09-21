@@ -9,8 +9,18 @@ export type { SessionSchemaInfo } from "@pi-gui/session-driver";
 export type SessionStatus = "idle" | "running" | "failed";
 export type { SessionRole, TimelineToolCall, TranscriptMessage } from "./timeline-types";
 import type { TranscriptMessage } from "./timeline-types";
+import type { ScheduledTaskRecord } from "./scheduled-tasks";
+export type {
+  CreateScheduledTaskInput,
+  ScheduledTaskFilter,
+  ScheduledTaskRecord,
+  ScheduledTaskSchedule,
+  ScheduledTaskStatus,
+  ScheduledTaskTarget,
+  UpdateScheduledTaskInput,
+} from "./scheduled-tasks";
 
-export type AppView = "threads" | "new-thread" | "skills" | "extensions" | "settings";
+export type AppView = "threads" | "new-thread" | "scheduled" | "skills" | "extensions" | "settings";
 export type WorkspaceKind = "primary" | "worktree";
 export type WorktreeStatus = "ready" | "missing" | "error";
 export type NewThreadEnvironment = "local" | "worktree";
@@ -320,6 +330,7 @@ export interface DesktopAppState {
     Record<string, readonly ExtensionCommandCompatibilityRecord[]>
   >;
   readonly orchestrationChildren: readonly OrchestrationChildThread[];
+  readonly scheduledTasks: readonly ScheduledTaskRecord[];
   readonly notificationPreferences: NotificationPreferences;
   readonly integratedTerminalShell: string;
   readonly lastViewedAtBySession: Readonly<Record<string, string>>;
@@ -364,6 +375,7 @@ export function createEmptyDesktopAppState(): DesktopAppState {
     sessionExtensionUiBySession: {},
     extensionCommandCompatibilityByWorkspace: {},
     orchestrationChildren: [],
+    scheduledTasks: [],
     notificationPreferences: {
       backgroundCompletion: true,
       backgroundFailure: true,

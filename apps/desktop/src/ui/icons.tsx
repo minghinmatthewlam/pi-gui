@@ -421,6 +421,21 @@ export function ExtensionIcon() {
   );
 }
 
+export function ClockIcon() {
+  return (
+    <Icon>
+      <circle cx="10" cy="10" r="6.6" stroke="currentColor" strokeWidth="1.35" />
+      <path
+        d="M10 6.4V10l2.4 1.6"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.35"
+      />
+    </Icon>
+  );
+}
+
 export function RefreshIcon() {
   return (
     <Icon>

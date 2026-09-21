@@ -62,6 +62,9 @@ import {
   type WorkspaceSessionTarget,
   isThemeMode,
   isThemePresetId,
+  type CreateScheduledTaskInput,
+  type ScheduledTaskRecord,
+  type UpdateScheduledTaskInput,
 } from "../../contracts/desktop-state";
 import {
   applyTimelineEvent,
@@ -122,6 +125,15 @@ import {
   createOrchestrationOwner,
   type OrchestrationOwner,
 } from "../orchestration/app-store-orchestration";
+import {
+  createScheduledTaskOwner,
+  type ScheduledTaskOwner,
+} from "../scheduled-tasks/app-store-scheduled-tasks";
+import { earliestScheduledWakeAt } from "../scheduled-tasks/scheduled-task-schedule";
+import {
+  readScheduledTasksFile,
+  writeScheduledTasksFile,
+} from "../scheduled-tasks/scheduled-task-store";
 import {
   isSessionActivelyViewed,
   isSessionVisibleInWindow,
@@ -206,6 +218,8 @@ export class DesktopAppStore {
   private readonly worktreeManager: GitWorktreeManager;
   private readonly worktreeRoot: string;
   private readonly uiStateFilePath: string;
+  private readonly scheduledTasksFilePath: string;
+  private scheduledTasksWritable = false;
   private readonly attachmentStore: AttachmentStore;
   private readonly sessionState = new SessionStateMap();
   private readonly runtimeByWorkspace = new Map<string, RuntimeSnapshot>();
@@ -227,6 +241,8 @@ export class DesktopAppStore {
   private persistenceReadiness: "pending" | "ready" | "blocked" = "pending";
   private orchestrationSupervisionTimer: NodeJS.Timeout | undefined;
   private scheduledOrchestrationSupervisionRunAt: string | undefined;
+  private scheduledTaskTimer: NodeJS.Timeout | undefined;
+  private scheduledTaskWakeAt: string | undefined;
   private readonly extensionDialogTimeoutTimers = new Map<string, NodeJS.Timeout>();
   private readonly restoredSelectedSessionKeysAwaitingSelection = new Set<string>();
   private initPromise: Promise<void> | undefined;
@@ -235,6 +251,7 @@ export class DesktopAppStore {
   private readonly conversationOwner: ConversationOwner;
   private readonly workspaceOwner: WorkspaceOwner;
   private readonly orchestrationOwner: OrchestrationOwner;
+  private readonly scheduledTaskOwner: ScheduledTaskOwner;
 
   constructor(options: DesktopAppStoreOptions) {
     const catalogFilePath = join(options.userDataDir, "catalogs.json");
@@ -251,6 +268,7 @@ export class DesktopAppStore {
     this.worktreeManager = new GitWorktreeManager({ catalogStorage: this.catalogStore });
     this.worktreeRoot = join(options.userDataDir, "worktrees");
     this.uiStateFilePath = join(options.userDataDir, "ui-state.json");
+    this.scheduledTasksFilePath = join(options.userDataDir, "scheduled-tasks.json");
     this.attachmentStore = new AttachmentStore(options.userDataDir);
     this.initialWorkspacePaths = options.initialWorkspacePaths;
     this.getWindow = options.getWindow ?? (() => null);
@@ -465,6 +483,48 @@ export class DesktopAppStore {
           submitOptions,
         ),
     });
+
+    this.scheduledTaskOwner = createScheduledTaskOwner({
+      driver: this.driver,
+      initialize: () => this.initialize(),
+      scheduledTasks: () => this.state.scheduledTasks,
+      replaceScheduledTasks: (tasks) => {
+        this.state = { ...this.state, scheduledTasks: [...tasks] };
+      },
+      persistScheduledTasks: () => this.persistScheduledTasks(),
+      canWriteScheduledTasks: () => this.scheduledTasksWritable,
+      emit: () => this.emit(),
+      refreshState: (refreshOptions) => this.refreshState(refreshOptions),
+      withError: (error) => this.withError(error),
+      selectedWorkspaceId: () => this.state.selectedWorkspaceId,
+      selectedSessionId: () => this.state.selectedSessionId,
+      workspaces: () => this.state.workspaces,
+      workspaceRefFromState: (workspaceId) => this.workspaceRefFromState(workspaceId),
+      sessionFromState: (sessionRef) => this.sessionFromState(sessionRef),
+      createForegroundSession: (input) => this.workspaceOwner.createSession(input),
+      seedSession: (snapshot) => {
+        const key = sessionKey(snapshot.ref);
+        this.sessionState.transcriptCache.set(key, []);
+        this.sessionState.loadedTranscriptKeys.add(key);
+        this.updateSessionConfig(snapshot.ref, snapshot.config);
+      },
+      ensureSessionSubscription: (sessionRef) => this.ensureSessionSubscription(sessionRef),
+      ensureSessionReady: (sessionRef) => this.ensureSessionReady(sessionRef),
+      buildCreateSessionOptions: (workspaceId) => this.buildCreateSessionOptions(workspaceId),
+      updateComposerDraft: (sessionRef, draft) =>
+        this.conversationOwner.updateComposerDraft(sessionRef, draft),
+      sendMessageToSession: (sessionRef, text, attachments, sendOptions) =>
+        this.conversationOwner.sendMessageToSession(sessionRef, text, attachments, sendOptions),
+      submitComposerToSession: (sessionRef, text, attachments, submitOptions) =>
+        this.conversationOwner.submitComposerToSession(
+          sessionRef,
+          text,
+          attachments,
+          submitOptions,
+        ),
+      transcriptFor: (sessionRef) =>
+        this.sessionState.transcriptCache.get(sessionKey(sessionRef)) ?? [],
+    });
   }
 
   /* ── Lifecycle ──────────────────────────────────────────── */
@@ -605,6 +665,7 @@ export class DesktopAppStore {
     }
 
     await this.persistUiState();
+    await this.persistScheduledTasks();
   }
 
   private scheduleOrchestrationSupervision(): void {
@@ -633,6 +694,46 @@ export class DesktopAppStore {
       });
     }, delayMs);
     this.orchestrationSupervisionTimer.unref?.();
+  }
+
+  private scheduleScheduledTasks(): void {
+    if (!this.scheduledTasksWritable) {
+      if (this.scheduledTaskTimer) {
+        clearTimeout(this.scheduledTaskTimer);
+        this.scheduledTaskTimer = undefined;
+      }
+      this.scheduledTaskWakeAt = undefined;
+      return;
+    }
+    const nextRunAt = earliestScheduledWakeAt(this.state.scheduledTasks);
+    if (nextRunAt && nextRunAt === this.scheduledTaskWakeAt && this.scheduledTaskTimer) {
+      return;
+    }
+    if (this.scheduledTaskTimer) {
+      clearTimeout(this.scheduledTaskTimer);
+      this.scheduledTaskTimer = undefined;
+    }
+    this.scheduledTaskWakeAt = nextRunAt;
+    if (!nextRunAt) {
+      return;
+    }
+    const delayMs = Math.min(Math.max(0, Date.parse(nextRunAt) - Date.now()), 2_147_483_647);
+    this.scheduledTaskTimer = setTimeout(() => {
+      this.scheduledTaskTimer = undefined;
+      this.scheduledTaskWakeAt = undefined;
+      void this.fireDueScheduledTasks().catch((error: unknown) => {
+        console.error("[app-store] fireDueScheduledTasks failed", error);
+        this.scheduleScheduledTasks();
+      });
+    }, delayMs);
+    this.scheduledTaskTimer.unref?.();
+  }
+
+  private async persistScheduledTasks(): Promise<void> {
+    if (!this.scheduledTasksWritable) {
+      return;
+    }
+    await writeScheduledTasksFile(this.scheduledTasksFilePath, this.state.scheduledTasks);
   }
 
   private async runOrchestrationSupervisionTick(): Promise<void> {
@@ -1036,6 +1137,54 @@ export class DesktopAppStore {
     const state = await this.orchestrationOwner.setChildSupervisionLoopGate(input);
     this.scheduleOrchestrationSupervision();
     return state;
+  }
+
+  async createScheduledTask(input: CreateScheduledTaskInput): Promise<DesktopAppState> {
+    const state = await this.scheduledTaskOwner.createScheduledTask(input);
+    this.scheduleScheduledTasks();
+    return state;
+  }
+
+  async updateScheduledTask(id: string, patch: UpdateScheduledTaskInput): Promise<DesktopAppState> {
+    const state = await this.scheduledTaskOwner.updateScheduledTask(id, patch);
+    this.scheduleScheduledTasks();
+    return state;
+  }
+
+  async deleteScheduledTask(id: string): Promise<DesktopAppState> {
+    const state = await this.scheduledTaskOwner.deleteScheduledTask(id);
+    this.scheduleScheduledTasks();
+    return state;
+  }
+
+  async beginScheduledTaskInterview(): Promise<DesktopAppState> {
+    return this.scheduledTaskOwner.beginScheduledTaskInterview();
+  }
+
+  async fireDueScheduledTasks(now?: Date): Promise<DesktopAppState> {
+    const state = await this.scheduledTaskOwner.fireDueScheduledTasks(now);
+    this.scheduleScheduledTasks();
+    return state;
+  }
+
+  async createScheduledTaskToolResult(parentRef: SessionRef, input: CreateScheduledTaskInput) {
+    const result = await this.scheduledTaskOwner.createScheduledTaskToolResult(parentRef, input);
+    this.scheduleScheduledTasks();
+    return result;
+  }
+
+  async listScheduledTasksToolResult() {
+    await this.initialize();
+    return this.scheduledTaskOwner.listScheduledTasksToolResult();
+  }
+
+  async updateScheduledTaskToolResult(input: {
+    readonly taskId: string;
+    readonly patch: UpdateScheduledTaskInput;
+  }) {
+    const result = await this.scheduledTaskOwner.updateScheduledTaskToolResult(input);
+    this.scheduleScheduledTasks();
+    return result;
   }
 
   /* ── View / UI state ───────────────────────────────────── */
@@ -1639,6 +1788,24 @@ export class DesktopAppStore {
     this.persistenceReadiness = "ready";
 
     try {
+      const loadedTasks = await readScheduledTasksFile(this.scheduledTasksFilePath);
+      this.state = {
+        ...this.state,
+        scheduledTasks: [...loadedTasks.tasks],
+      };
+      this.scheduledTasksWritable = true;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error("[app-store] scheduled-tasks.json is invalid; runner disabled", error);
+      this.scheduledTasksWritable = false;
+      this.state = { ...this.state, scheduledTasks: [] };
+      startupDiagnostics.push({
+        scope: "application",
+        message: `Scheduled tasks could not be loaded: ${message}`,
+      });
+    }
+
+    try {
       const initialWorkspacePaths = this.initialWorkspacePaths
         .map((path) => path.trim())
         .filter(Boolean);
@@ -1684,6 +1851,7 @@ export class DesktopAppStore {
       }
       this.startSelectedSessionHydration(restoredSessionRef, { markViewed: false });
       this.scheduleOrchestrationSupervision();
+      this.scheduleScheduledTasks();
       this.publishStartupDiagnostics(startupDiagnostics);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

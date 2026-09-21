@@ -21,6 +21,8 @@ import type {
   StartThreadInput,
   ThemePresetId,
   WorkspaceSessionTarget,
+  CreateScheduledTaskInput,
+  UpdateScheduledTaskInput,
 } from "./desktop-state";
 
 export type DesktopNotificationPermissionStatus =
@@ -79,6 +81,10 @@ export const desktopIpc = {
   forkThread: "pi-gui:fork-thread",
   sendChildThreadFollowUp: "pi-gui:send-child-thread-follow-up",
   setChildSupervisionLoop: "pi-gui:set-child-supervision-loop",
+  createScheduledTask: "pi-gui:create-scheduled-task",
+  updateScheduledTask: "pi-gui:update-scheduled-task",
+  deleteScheduledTask: "pi-gui:delete-scheduled-task",
+  beginScheduledTaskInterview: "pi-gui:begin-scheduled-task-interview",
   cancelCurrentRun: "pi-gui:cancel-current-run",
   setActiveView: "pi-gui:set-active-view",
   setSidebarCollapsed: "pi-gui:set-sidebar-collapsed",
@@ -319,6 +325,10 @@ export interface PiDesktopApi {
   forkThread(input: ForkThreadInput): Promise<DesktopAppState>;
   sendChildThreadFollowUp(input: SendChildThreadFollowUpInput): Promise<DesktopAppState>;
   setChildSupervisionLoop(input: SetChildSupervisionLoopInput): Promise<DesktopAppState>;
+  createScheduledTask(input: CreateScheduledTaskInput): Promise<DesktopAppState>;
+  updateScheduledTask(id: string, patch: UpdateScheduledTaskInput): Promise<DesktopAppState>;
+  deleteScheduledTask(id: string): Promise<DesktopAppState>;
+  beginScheduledTaskInterview(): Promise<DesktopAppState>;
   cancelCurrentRun(): Promise<DesktopAppState>;
   setActiveView(view: AppView): Promise<DesktopAppState>;
   setSidebarCollapsed(collapsed: boolean): Promise<DesktopAppState>;

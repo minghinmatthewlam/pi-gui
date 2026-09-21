@@ -10,19 +10,20 @@ Start tracing in [main](../apps/desktop/electron/main.ts), [window owner](../app
 
 ## Owners and boundaries
 
-| Owner               | Responsibility                                                                 | Enforced interface                                                                                                         |
-| ------------------- | ------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
-| Renderer features   | Interaction, presentation, and renderer-local view state                       | Depend on desktop contracts and the preload API; do not import Electron, Node, or host implementation.                     |
-| Desktop contracts   | Browser-safe requests, snapshots, and shared values                            | Depend on neither React nor host/runtime implementation.                                                                   |
-| IPC                 | Request validation and routing                                                 | Receives grouped state, workspace, conversation, orchestration, and settings operations plus narrow platform capabilities. |
-| Window owner        | Per-window selection, snapshot projection, and serialized actions              | Captures explicit session targets from the sender and never receives writable aggregate store state.                       |
-| Conversation owner  | Drafts, attachments, queued messages, session commands, and transcript updates | Receives only conversation maps, a runtime lookup, and conversation operations.                                            |
-| Workspace owner     | Workspace/session lifecycle and Git worktree use cases                         | Receives cloned workspace views, explicit session setup operations, and the catalog/worktree capabilities it needs.        |
-| Orchestration owner | Child-thread policy, supervision, transcript evidence, and orchestration tools | Receives cloned orchestration views and bounded transcript, error, conversation, and workspace operations.                 |
-| Persistence owners  | UI state, attachments, and catalog data                                        | Decode their own durable format before use or replacement.                                                                 |
-| Platform adapters   | Files, worktrees, terminal, dialogs, notifications, theme, and updates         | Stay in Electron main and expose only the required capability to IPC or an owner.                                          |
+| Owner                | Responsibility                                                                 | Enforced interface                                                                                                                         |
+| -------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Renderer features    | Interaction, presentation, and renderer-local view state                       | Depend on desktop contracts and the preload API; do not import Electron, Node, or host implementation.                                     |
+| Desktop contracts    | Browser-safe requests, snapshots, and shared values                            | Depend on neither React nor host/runtime implementation.                                                                                   |
+| IPC                  | Request validation and routing                                                 | Receives grouped state, workspace, conversation, orchestration, scheduled-task, and settings operations plus narrow platform capabilities. |
+| Window owner         | Per-window selection, snapshot projection, and serialized actions              | Captures explicit session targets from the sender and never receives writable aggregate store state.                                       |
+| Conversation owner   | Drafts, attachments, queued messages, session commands, and transcript updates | Receives only conversation maps, a runtime lookup, and conversation operations.                                                            |
+| Workspace owner      | Workspace/session lifecycle and Git worktree use cases                         | Receives cloned workspace views, explicit session setup operations, and the catalog/worktree capabilities it needs.                        |
+| Orchestration owner  | Child-thread policy, supervision, transcript evidence, and orchestration tools | Receives cloned orchestration views and bounded transcript, error, conversation, and workspace operations.                                 |
+| Scheduled-task owner | Local on-device schedules, fire, interview session, and agent tools            | Receives a bounded host for the task file, session lookup, selecting create, background create, and conversation send.                     |
+| Persistence owners   | UI state, attachments, catalog data, and scheduled tasks                       | Decode their own durable format before use or replacement.                                                                                 |
+| Platform adapters    | Files, worktrees, terminal, dialogs, notifications, theme, and updates         | Stay in Electron main and expose only the required capability to IPC or an owner.                                                          |
 
-`DesktopAppStore` is the composition point. Its aggregate state, driver, catalogs, session maps, runtime maps, worktree services, and attachment store are private. It constructs conversation, workspace, and orchestration owners through bounded capability factories. The removed `AppStoreInternals` whole-store interface is prohibited by [the state-owner guard](../scripts/state-owner-boundary.test.mjs), which also rejects direct owner access to `store.state`, `store.sessionState`, and `store.runtimeByWorkspace`.
+`DesktopAppStore` is the composition point. Its aggregate state, driver, catalogs, session maps, runtime maps, worktree services, and attachment store are private. It constructs conversation, workspace, orchestration, and scheduled-task owners through bounded capability factories. The removed `AppStoreInternals` whole-store interface is prohibited by [the state-owner guard](../scripts/state-owner-boundary.test.mjs), which also rejects direct owner access to `store.state`, `store.sessionState`, and `store.runtimeByWorkspace`.
 
 The window owner keeps a separate view for every Electron window. Draft, send, attachment, queue-editing, model, thinking, tree-navigation, and Stop requests use a session target captured from the IPC sender. Attachment picking captures the target before opening the native dialog. Opening New thread flushes the outgoing conversation's pending draft before navigation.
 
@@ -30,9 +31,9 @@ Window-scoped state actions remain serialized because the shared application pro
 
 ## Persistent data
 
-Catalog storage owns workspace, session, worktree, and session-file metadata. Desktop persistence owns UI state and composer attachments. The driver and worktree manager share the same catalog instance so their writes use one coordination boundary.
+Catalog storage owns workspace, session, worktree, and session-file metadata. Desktop persistence owns UI state, composer attachments, and scheduled tasks (`scheduled-tasks.json`). The driver and worktree manager share the same catalog instance so their writes use one coordination boundary.
 
-UI-state and attachment decoders reject malformed fields, unsupported fields, and unsupported versions instead of dropping unknown data. Startup stops with a visible diagnostic when UI-state read, restoration, or legacy attachment migration fails, before workspace sync, pruning, or another persistence write can replace the saved bytes.
+UI-state and attachment decoders reject malformed fields, unsupported fields, and unsupported versions instead of dropping unknown data. Startup stops with a visible diagnostic when UI-state read, restoration, or legacy attachment migration fails, before workspace sync, pruning, or another persistence write can replace the saved bytes. A corrupt scheduled-tasks file is isolated: the rest of the app still starts, the runner stays off, and the original bytes are not overwritten.
 
 Writes are serialized per path and use a synced temporary file followed by rename. The prior valid file becomes a `.bak`. If the primary JSON is corrupt and the backup is valid, reads recover from the backup and a later valid write retains the damaged primary as a `.corrupt.<id>` sibling. Invalid saved data without a usable backup is not overwritten or pruned.
 
@@ -60,11 +61,12 @@ apps/desktop/
     conversation/        session commands, drafts, transcript, visibility
     workspace/           workspace, session, and worktree use cases
     orchestration/       child-thread policy and supervision
-    persistence/         validated UI-state and attachment storage
+    scheduled-tasks/     local schedules, fire, and agent tools
+    persistence/         validated UI-state, attachment, and scheduled-task storage
     platform/            main-only platform adapters
   src/
     app/                 screen composition
-    features/            conversation, threads, workbench, settings, extensions
+    features/            conversation, threads, scheduled-tasks, workbench, settings, extensions
     ui/                  shared visual primitives
     lib/                 general renderer helpers
     styles/              global tokens and base styles

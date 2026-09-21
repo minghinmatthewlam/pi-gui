@@ -24,6 +24,12 @@ import type {
   CustomProviderProbeInput,
   TerminalSize,
 } from "../../contracts/ipc";
+import {
+  assertScheduledTaskSchedule,
+  assertScheduledTaskTarget,
+  type CreateScheduledTaskInput,
+  type UpdateScheduledTaskInput,
+} from "../../contracts/scheduled-tasks";
 import { assertComposerAttachmentsAccepted } from "../../contracts/composer-attachments";
 
 export function expectString(value: unknown, name: string): string {
@@ -96,6 +102,7 @@ export function expectAppView(value: unknown, name = "view"): AppView {
   if (
     value !== "threads" &&
     value !== "new-thread" &&
+    value !== "scheduled" &&
     value !== "skills" &&
     value !== "extensions" &&
     value !== "settings"
@@ -405,4 +412,39 @@ export function expectOptionalDeliverOptions(
     throw new TypeError("options.deliverAs must be steer or followUp");
   }
   return { deliverAs: record.deliverAs };
+}
+
+export function expectCreateScheduledTaskInput(value: unknown): CreateScheduledTaskInput {
+  const record = expectRecord(value, "input");
+  return {
+    title: expectNonEmptyString(record.title, "input.title"),
+    instruction: expectNonEmptyString(record.instruction, "input.instruction"),
+    schedule: assertScheduledTaskSchedule(record.schedule, "input.schedule"),
+    target: assertScheduledTaskTarget(record.target, "input.target"),
+    originSessionId: expectOptionalNonEmptyString(record.originSessionId, "input.originSessionId"),
+  };
+}
+
+export function expectUpdateScheduledTaskInput(value: unknown): UpdateScheduledTaskInput {
+  const record = expectRecord(value, "patch");
+  const status = record.status;
+  if (
+    status !== undefined &&
+    status !== "active" &&
+    status !== "paused" &&
+    status !== "completed"
+  ) {
+    throw new TypeError("patch.status must be active, paused, or completed");
+  }
+  return {
+    title: expectOptionalNonEmptyString(record.title, "patch.title"),
+    instruction: expectOptionalNonEmptyString(record.instruction, "patch.instruction"),
+    ...(record.schedule === undefined
+      ? {}
+      : { schedule: assertScheduledTaskSchedule(record.schedule, "patch.schedule") }),
+    ...(record.target === undefined
+      ? {}
+      : { target: assertScheduledTaskTarget(record.target, "patch.target") }),
+    ...(status ? { status } : {}),
+  };
 }

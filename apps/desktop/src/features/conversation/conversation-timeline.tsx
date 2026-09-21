@@ -9,6 +9,7 @@ import {
 } from "react";
 import type { TranscriptMessage } from "../../../contracts/desktop-state";
 import type { DisplayTimelineItem } from "../../../contracts/timeline-types";
+import type { ScheduledTaskOrigin } from "../../../contracts/scheduled-tasks";
 import type { TimelineViewport } from "./hooks/use-timeline-viewport";
 import { ThreadSearchBar } from "./thread-search";
 import { TimelineItem } from "./timeline-item";
@@ -34,6 +35,7 @@ interface ConversationTimelineProps {
   readonly onViewFileInDiff?: (path: string) => void;
   readonly onForkFromMessage?: (messageIndex: number, preview?: string) => void;
   readonly promptRailVisible?: boolean;
+  readonly scheduledOrigins?: ReadonlyMap<string, ScheduledTaskOrigin>;
 }
 export function ConversationTimeline({
   transcript,
@@ -45,6 +47,7 @@ export function ConversationTimeline({
   onViewFileInDiff,
   onForkFromMessage,
   promptRailVisible = true,
+  scheduledOrigins,
 }: ConversationTimelineProps) {
   const [expandedToolCallIds, setExpandedToolCallIds] = useState<Set<string>>(() => new Set());
   const toggleToolCall = useCallback(
@@ -139,6 +142,9 @@ export function ConversationTimeline({
                   onViewFileInDiff={onViewFileInDiff}
                   sourceMessageIndex={renderedMessageIndexById.get(item.id)}
                   onForkFromMessage={onForkFromMessage}
+                  scheduledOrigin={
+                    item.kind === "message" ? scheduledOrigins?.get(item.id) : undefined
+                  }
                 />
               ))}
             </div>
@@ -283,6 +289,7 @@ interface MeasuredTimelineItemProps {
   readonly onViewFileInDiff?: (path: string) => void;
   readonly sourceMessageIndex?: number;
   readonly onForkFromMessage?: (messageIndex: number, preview?: string) => void;
+  readonly scheduledOrigin?: ScheduledTaskOrigin;
 }
 
 function MeasuredTimelineItemBase({
@@ -296,6 +303,7 @@ function MeasuredTimelineItemBase({
   onViewFileInDiff,
   sourceMessageIndex,
   onForkFromMessage,
+  scheduledOrigin,
 }: MeasuredTimelineItemProps) {
   const rowRef = useRef<HTMLDivElement | null>(null);
 
@@ -334,6 +342,7 @@ function MeasuredTimelineItemBase({
         onViewFileInDiff={onViewFileInDiff}
         sourceMessageIndex={sourceMessageIndex}
         onForkFromMessage={onForkFromMessage}
+        scheduledOrigin={scheduledOrigin}
       />
     </div>
   );
@@ -395,7 +404,8 @@ function areMeasuredTimelineItemPropsEqual(
     prev.onToggleToolCall === next.onToggleToolCall &&
     prev.onViewFileInDiff === next.onViewFileInDiff &&
     prev.sourceMessageIndex === next.sourceMessageIndex &&
-    prev.onForkFromMessage === next.onForkFromMessage
+    prev.onForkFromMessage === next.onForkFromMessage &&
+    prev.scheduledOrigin?.taskId === next.scheduledOrigin?.taskId
   );
 }
 

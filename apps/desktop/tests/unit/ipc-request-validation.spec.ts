@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import {
   expectAppView,
+  expectCreateScheduledTaskInput,
   expectCustomProviderConfig,
   expectForkThreadInput,
   expectHostUiResponse,
@@ -50,6 +51,7 @@ test("IPC request validation allowlists composer delivery modes", () => {
 
 test("IPC request validation rejects unknown enum values", () => {
   expect(expectAppView("new-thread")).toBe("new-thread");
+  expect(expectAppView("scheduled")).toBe("scheduled");
   expect(expectThemeMode("dark")).toBe("dark");
   expect(expectThemePresetId("tokyo-night")).toBe("tokyo-night");
   expect(expectModelSettingsScopeMode("per-repo")).toBe("per-repo");
@@ -156,4 +158,40 @@ test("notification checkbox patches validate only provided fields", () => {
     );
   }
   expect(expectNotificationPreferences({})).toEqual({});
+});
+
+test("IPC request validation rejects malformed scheduled tasks", () => {
+  const target = { kind: "new-thread", workspaceId: "ws" };
+  expect(() =>
+    expectCreateScheduledTaskInput({
+      title: "",
+      instruction: "do it",
+      schedule: { kind: "once", at: "2026-09-21T12:00:00.000Z" },
+      target,
+    }),
+  ).toThrow("input.title must not be empty");
+  expect(() =>
+    expectCreateScheduledTaskInput({
+      title: "Ping",
+      instruction: "   ",
+      schedule: { kind: "once", at: "2026-09-21T12:00:00.000Z" },
+      target,
+    }),
+  ).toThrow("input.instruction must not be empty");
+  expect(() =>
+    expectCreateScheduledTaskInput({
+      title: "Ping",
+      instruction: "do it",
+      schedule: { kind: "interval", everyMs: 1_000 },
+      target,
+    }),
+  ).toThrow(/everyMs/);
+  expect(() =>
+    expectCreateScheduledTaskInput({
+      title: "Ping",
+      instruction: "do it",
+      schedule: { kind: "weekly", days: [], hour: 9, minute: 0, timeZone: "UTC" },
+      target,
+    }),
+  ).toThrow(/days/);
 });

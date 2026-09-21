@@ -10,6 +10,7 @@ const ownerFiles = [
   "apps/desktop/electron/workspace/app-store-workspace.ts",
   "apps/desktop/electron/workspace/app-store-worktree.ts",
   "apps/desktop/electron/orchestration/app-store-orchestration.ts",
+  "apps/desktop/electron/scheduled-tasks/app-store-scheduled-tasks.ts",
 ];
 
 function ownershipViolations(filePath, source) {
