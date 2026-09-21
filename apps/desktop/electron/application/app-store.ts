@@ -349,7 +349,7 @@ export class DesktopAppStore {
       persistComposerAttachments: (key, attachments) =>
         this.persistComposerAttachments(key, attachments),
       schedulePersistUiState: () => this.schedulePersistUiState(),
-      touchSessionInteraction: (sessionRef) => this.touchSessionInteraction(sessionRef),
+      recordUserMessageRecency: (sessionRef) => this.recordUserMessageRecency(sessionRef),
       getQueuedComposerMessages: (sessionRef) => this.getQueuedComposerMessages(sessionRef),
       setQueuedComposerEditState: (sessionRef, editState) =>
         this.setQueuedComposerEditState(sessionRef, editState),
@@ -380,7 +380,6 @@ export class DesktopAppStore {
           selectedWorkspaceId: sessionRef.workspaceId,
           selectedSessionId: sessionRef.sessionId,
         };
-        this.touchSessionInteraction(sessionRef);
       },
       seedSession: (snapshot) => {
         const key = sessionKey(snapshot.ref);
@@ -3584,7 +3583,6 @@ export class DesktopAppStore {
       revision: this.state.revision + 1,
     };
     this.markSessionViewed(sessionRef);
-    this.touchSessionInteraction(sessionRef);
     this.schedulePersistUiState();
     const snapshot = this.emit();
     if (this.sessionState.loadedTranscriptKeys.has(sessionKey(sessionRef))) {
@@ -3741,7 +3739,8 @@ export class DesktopAppStore {
     return true;
   }
 
-  touchSessionInteraction(sessionRef: SessionRef, at = new Date().toISOString()): boolean {
+  /** User-message inject only. Click, open, viewed, create, and focus must not call this. */
+  recordUserMessageRecency(sessionRef: SessionRef, at = new Date().toISOString()): boolean {
     const key = sessionKey(sessionRef);
     const current = this.sessionState.lastInteractedAtBySession.get(key);
     if (current && current >= at) {

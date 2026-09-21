@@ -7,9 +7,11 @@ import {
   createSessionViaIpc,
   desktopShortcut,
   getDesktopState,
+  getSelectedTranscript,
   launchDesktop,
   makeUserDataDir,
   makeWorkspace,
+  seedAgentDir,
   waitForWorkspaceByPath,
 } from "../helpers/electron-app";
 
@@ -49,7 +51,7 @@ test("shows every thread in recency buckets across folders without a five-thread
   }
 });
 
-test("bumps an opened thread to the top of Today", async () => {
+test("does not bump Today when a thread is opened", async () => {
   test.setTimeout(90_000);
   const userDataDir = await makeUserDataDir("pi-app-user-data-recency-open-");
   const workspacePath = await makeWorkspace("recency-open");
@@ -63,11 +65,48 @@ test("bumps an opened thread to the top of Today", async () => {
     const workspace = await waitForWorkspaceByPath(window, workspacePath);
     await createHistoryThreads(window, workspace.id, ["Older today", "Newest today"]);
 
-    const today = recencySection(window, "Today");
+    await expectTodayTitles(window, ["Newest today", "Older today"]);
+    const before = await recencyStamps(window, workspace.id, ["Older today", "Newest today"]);
+
+    await recencySection(window, "Today")
+      .locator(".session-row__select", { hasText: "Older today" })
+      .click();
+    await expect(window.locator(".topbar__session")).toHaveText("Older today");
     await expectTodayTitles(window, ["Newest today", "Older today"]);
 
-    await today.locator(".session-row__select", { hasText: "Older today" }).click();
+    const after = await recencyStamps(window, workspace.id, ["Older today", "Newest today"]);
+    expect(after).toEqual(before);
+    await captureSidebarProof(window, "click-does-not-bump.png");
+  } finally {
+    await harness.close();
+  }
+});
+
+test("bumps a sent thread to the top of Today", async () => {
+  test.setTimeout(90_000);
+  const userDataDir = await makeUserDataDir("pi-app-user-data-recency-send-");
+  const agentDir = join(userDataDir, "agent");
+  await seedAgentDir(agentDir);
+  const workspacePath = await makeWorkspace("recency-send");
+  const harness = await launchDesktop(userDataDir, {
+    agentDir,
+    initialWorkspaces: [workspacePath],
+    testMode: "background",
+  });
+
+  try {
+    const window = await harness.firstWindow();
+    const workspace = await waitForWorkspaceByPath(window, workspacePath);
+    await createHistoryThreads(window, workspace.id, ["Older today", "Newest today"]);
+    await expectTodayTitles(window, ["Newest today", "Older today"]);
+
+    await recencySection(window, "Today")
+      .locator(".session-row__select", { hasText: "Older today" })
+      .click();
     await expect(window.locator(".topbar__session")).toHaveText("Older today");
+    await expectTodayTitles(window, ["Newest today", "Older today"]);
+
+    await sendComposerPrompt(window, "Bump this thread by sending");
     await expectTodayTitles(window, ["Older today", "Newest today"]);
 
     const state = await getDesktopState(window);
@@ -75,9 +114,8 @@ test("bumps an opened thread to the top of Today", async () => {
     const older = sessions.find((session) => session.title === "Older today");
     const newest = sessions.find((session) => session.title === "Newest today");
     expect(older?.lastInteractedAt).toBeTruthy();
-    expect(newest?.lastInteractedAt).toBeTruthy();
-    expect(older!.lastInteractedAt! >= newest!.lastInteractedAt!).toBe(true);
-    await captureSidebarProof(window, "open-bumps-today.png");
+    expect(newest?.lastInteractedAt).toBeUndefined();
+    await captureSidebarProof(window, "send-bumps-today.png");
   } finally {
     await harness.close();
   }
@@ -120,7 +158,10 @@ test("groups seeded Last 7 Days, Last 30 Days, and Older threads", async () => {
   const userDataDir = await makeUserDataDir("pi-app-user-data-recency-buckets-");
   const workspaceAPath = await makeWorkspace("recency-buckets-a");
   const workspaceBPath = await makeWorkspace("recency-buckets-b");
+  const agentDir = join(userDataDir, "agent");
+  await seedAgentDir(agentDir);
   const firstRun = await launchDesktop(userDataDir, {
+    agentDir,
     initialWorkspaces: [workspaceAPath, workspaceBPath],
     testMode: "background",
   });
@@ -204,17 +245,66 @@ test("groups seeded Last 7 Days, Last 30 Days, and Older threads", async () => {
     ]);
     await captureSidebarProof(window, "seeded-buckets.png");
 
+    const weekStampBefore = findSession(await getDesktopState(window), "Week thread").session
+      .lastInteractedAt;
     await recencySection(window, "Last 7 Days")
       .locator(".session-row__select", { hasText: "Week thread" })
       .click();
     await expect(window.locator(".topbar__session")).toHaveText("Week thread");
+    await expect(recencySection(window, "Last 7 Days").locator(".session-row__title")).toHaveText([
+      "Week thread",
+    ]);
+    await expectTodayTitles(window, ["Today thread"]);
+    expect(findSession(await getDesktopState(window), "Week thread").session.lastInteractedAt).toBe(
+      weekStampBefore,
+    );
+    await captureSidebarProof(window, "click-keeps-week-bucket.png");
+
+    await sendComposerPrompt(window, "Send moves Week into Today");
     await expectTodayTitles(window, ["Week thread", "Today thread"]);
     await expect(window.getByRole("region", { name: "Last 7 Days" })).toHaveCount(0);
-    await captureSidebarProof(window, "week-bumped-to-today.png");
+    const weekAfterSend = findSession(await getDesktopState(window), "Week thread").session;
+    expect(weekAfterSend.lastInteractedAt).toBeTruthy();
+    expect(weekAfterSend.lastInteractedAt! > (weekStampBefore ?? "")).toBe(true);
+    await captureSidebarProof(window, "send-bumps-week-to-today.png");
   } finally {
     await secondRun.close();
   }
 });
+
+async function recencyStamps(
+  window: Page,
+  workspaceId: string,
+  titles: readonly string[],
+): Promise<Record<string, string | undefined>> {
+  const sessions = workspaceSessions(await getDesktopState(window), workspaceId);
+  return Object.fromEntries(
+    titles.map((title) => [
+      title,
+      sessions.find((session) => session.title === title)?.lastInteractedAt,
+    ]),
+  );
+}
+
+async function sendComposerPrompt(window: Page, text: string): Promise<void> {
+  const composer = window.getByTestId("composer");
+  await expect(composer).toBeVisible();
+  await composer.fill(text);
+  await window.getByRole("button", { name: "Send message" }).click();
+  await expect
+    .poll(
+      async () => {
+        const transcript = await getSelectedTranscript(window);
+        const userMessage = transcript?.transcript.find(
+          (entry): entry is Extract<typeof entry, { kind: "message" }> =>
+            entry.kind === "message" && entry.role === "user",
+        );
+        return userMessage?.text ?? "";
+      },
+      { timeout: 15_000 },
+    )
+    .toContain(text);
+}
 
 function recencySection(window: Page, label: string): Locator {
   return window.getByRole("region", { name: label, exact: true });

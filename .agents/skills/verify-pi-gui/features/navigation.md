@@ -5,7 +5,7 @@ Users switch folders and conversations in the sidebar and recover the selected t
 ## Sub-features
 
 - `navigation-sidebar`: select threads across folders.
-- `navigation-recency`: date buckets (Today / Last 7 Days / Last 30 Days / Older) across folders; open or send bumps Today; ⌘1…⌘9 follow recency, not pins or folder order.
+- `navigation-recency`: date buckets (Today / Last 7 Days / Last 30 Days / Older) across folders; send bumps Today; open/focus/viewed do not; ⌘1…⌘9 follow recency, not pins or folder order.
 - `navigation-restart`: preserve selected folder, thread, and composer draft.
 - `navigation-new-thread`: open the new-thread composer.
 - `navigation-pinning`: pin/unpin, reorder pinned threads, and preserve pin state across restart.
@@ -14,7 +14,7 @@ Users switch folders and conversations in the sidebar and recover the selected t
 ## How to get to it (user POV)
 
 - Select a folder/thread in the sidebar.
-- Open or send in a thread and confirm it moves to the top of Today. Empty date buckets stay hidden.
+- Send in a thread and confirm it moves to the top of Today. Opening the same thread must leave its bucket and ⌘1 unchanged. Empty date buckets stay hidden.
 - Hover a thread and click Pin; click its Unpin icon in the Pinned section.
 - Click New thread in the sidebar or use the new-thread keyboard shortcut (Meta+Shift+O on macOS; Control+Shift+O elsewhere).
 - Open a folder through the OS folder picker; this is a separate native entry.
@@ -27,7 +27,7 @@ Preconditions: isolated profile and two fixture folders for sidebar switching.
 - **New-thread entry:** run `pnpm --filter @pi-gui/desktop run test:e2e:runner -- apps/desktop/tests/core/composer-controls.spec.ts`; `new-thread-composer` must become visible and focused after the shortcut.
 - **Folder picker:** use `pnpm --filter @pi-gui/desktop run test:prod:open-folder-real` for the actual native dialog; reserve foreground input. Core `initialWorkspaces` is fixture setup, not picker proof.
 - **Pinning:** run `pnpm --filter @pi-gui/desktop run test:e2e:runner -- apps/desktop/tests/core/sidebar-ordering.spec.ts apps/desktop/tests/core/stop-running-prompt.spec.ts`. The first spec covers ordering, pin persistence after relaunch, unpinning and repinning. The second holds the real submit IPC open with a controlled driver, clicks Unpin and Pin, and requires each change while the row still reports running; Stop must still work afterward. This is fixture-backed Electron proof, not real-provider execution.
-- **Recency list:** run `pnpm --filter @pi-gui/desktop run test:e2e:runner -- apps/desktop/tests/core/sidebar-recency.spec.ts`. Threads from mixed folders share Today / Last 7 Days / Last 30 Days / Older. Open bumps Today. `Meta+1` / `Control+1` selects the most recently interacted thread even if another thread is pinned. This is fixture-backed Electron proof.
+- **Recency list:** run `pnpm --filter @pi-gui/desktop run test:e2e:runner -- apps/desktop/tests/core/sidebar-recency.spec.ts`. Threads from mixed folders share Today / Last 7 Days / Last 30 Days / Older. Click does not bump. Send bumps Today. `Meta+1` / `Control+1` selects the most recently sent thread even if another thread is pinned. This is fixture-backed Electron proof.
 - **Proof:** record the selected row, topbar title, draft before shutdown and after relaunch, with action traces. Cover sidebar and keyboard entries separately when claiming both.
 
 ## Gotchas
