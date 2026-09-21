@@ -98,6 +98,23 @@ export function SidebarToggleIcon() {
   );
 }
 
+export function SidePanelIcon() {
+  return (
+    <Icon>
+      <rect
+        x="3.2"
+        y="3.6"
+        width="13.6"
+        height="12.8"
+        rx="2"
+        stroke="currentColor"
+        strokeWidth="1.35"
+      />
+      <path d="M12.2 3.6v12.8" stroke="currentColor" strokeWidth="1.35" />
+    </Icon>
+  );
+}
+
 export function MaximizeIcon() {
   return (
     <Icon>

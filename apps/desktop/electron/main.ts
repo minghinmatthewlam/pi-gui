@@ -420,6 +420,7 @@ function createWindow(): BrowserWindow {
 
     const command = getDesktopCommandFromShortcut({
       modifier: process.platform === "darwin" ? input.meta : input.control,
+      alt: input.alt,
       shift: input.shift,
       key: input.key,
       code: input.code,

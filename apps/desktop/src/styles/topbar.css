@@ -139,6 +139,69 @@
   transform: translateX(-50%);
 }
 
+.side-panel-picker {
+  position: relative;
+}
+
+.side-panel-picker--open.shortcut-tooltip-wrap:hover .shortcut-tooltip,
+.side-panel-picker--open.shortcut-tooltip-wrap:focus-within .shortcut-tooltip {
+  opacity: 0;
+}
+
+.side-panel-picker__menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  min-width: 188px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-2xl);
+  background: var(--surface);
+  box-shadow: var(--shadow-xl);
+}
+
+.side-panel-picker__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: var(--radius-lg);
+  background: transparent;
+  color: var(--text-strong);
+  font-size: 13px;
+  text-align: left;
+}
+
+.side-panel-picker__item svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  color: var(--muted-strong);
+}
+
+.side-panel-picker__item span {
+  flex: 1;
+}
+
+.side-panel-picker__item kbd {
+  flex: none;
+  color: var(--muted);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 560;
+}
+
+.side-panel-picker__item:hover:not(:disabled),
+.side-panel-picker__item--active {
+  background: var(--theme-control-hover-bg, var(--surface-muted));
+}
+
 .sidebar-toggle {
   -webkit-app-region: no-drag;
   position: absolute;

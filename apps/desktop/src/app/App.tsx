@@ -43,6 +43,7 @@ import { NewThreadView } from "../features/threads/new-thread-view";
 import { buildThreadSidebarModel } from "../features/threads/thread-groups";
 import { Sidebar } from "../features/threads/sidebar";
 import { SidebarToggleButton } from "../features/threads/sidebar-toggle-button";
+import type { SidePanelPickerChoice } from "./side-panel-picker";
 import { Topbar } from "./topbar";
 import { TerminalPanel } from "../features/workbench/terminal-panel";
 import { ConversationTimeline } from "../features/conversation/conversation-timeline";
@@ -92,6 +93,7 @@ export default function App() {
     ReadonlySet<string>
   >(() => new Set());
   const [sidePanelMode, setSidePanelMode] = useState<SidePanelMode | null>(null);
+  const lastSidePanelModeRef = useRef<SidePanelMode>("files");
   const [openTerminalSessionKey, setOpenTerminalSessionKey] = useState("");
   const [takeoverTerminalSessionKey, setTakeoverTerminalSessionKey] = useState("");
   const [terminalHeight, setTerminalHeight] = useState(340);
@@ -329,6 +331,7 @@ export default function App() {
     setOpenTerminalSessionKey(selectedSessionKey);
   }, [openTerminalSessionKey, selectedSessionKey]);
   const handleViewFileInDiff = useCallback((path: string) => {
+    lastSidePanelModeRef.current = "changes";
     setSidePanelMode("changes");
     setDiffFileRequest({ path, nonce: Date.now() });
   }, []);
@@ -345,8 +348,38 @@ export default function App() {
   }, []);
 
   const toggleSidePanelMode = useCallback((mode: SidePanelMode) => {
-    setSidePanelMode((current) => (current === mode ? null : mode));
+    setSidePanelMode((current) => {
+      if (current === mode) {
+        return null;
+      }
+      lastSidePanelModeRef.current = mode;
+      return mode;
+    });
   }, []);
+
+  const toggleSidePanel = useCallback(() => {
+    if (snapshot?.activeView !== "threads" || !selectedWorkspace || !selectedSession) {
+      return;
+    }
+    setSidePanelMode((current) => (current ? null : lastSidePanelModeRef.current));
+  }, [selectedSession, selectedWorkspace, snapshot?.activeView]);
+
+  const selectSidePanel = useCallback(
+    (choice: SidePanelPickerChoice) => {
+      if (choice === "terminal") {
+        if (selectedSessionKey) {
+          setOpenTerminalSessionKey(selectedSessionKey);
+        }
+        return;
+      }
+      if (snapshot?.activeView !== "threads" || !selectedWorkspace || !selectedSession) {
+        return;
+      }
+      lastSidePanelModeRef.current = choice;
+      setSidePanelMode(choice);
+    },
+    [selectedSession, selectedSessionKey, selectedWorkspace, snapshot?.activeView],
+  );
 
   const toggleChangesPanel = useCallback(() => {
     toggleSidePanelMode("changes");
@@ -575,6 +608,9 @@ export default function App() {
       } else if (command === desktopCommands.toggleTerminal) {
         toggleTerminal();
         return true;
+      } else if (command === desktopCommands.toggleSidePanel) {
+        toggleSidePanel();
+        return true;
       } else if (command === desktopCommands.toggleSidebar) {
         return handleTogglePrimarySidebar();
       }
@@ -609,11 +645,15 @@ export default function App() {
       if (isEventInsideTerminal(event)) {
         const command = getDesktopCommandFromShortcut({
           modifier: event.metaKey || event.ctrlKey,
+          alt: event.altKey,
           shift: event.shiftKey,
           key: event.key,
           code: event.code,
         });
-        if (command === desktopCommands.toggleTerminal) {
+        if (
+          command === desktopCommands.toggleTerminal ||
+          command === desktopCommands.toggleSidePanel
+        ) {
           event.preventDefault();
           handleCommand(command);
         }
@@ -637,6 +677,7 @@ export default function App() {
       }
       const command = getDesktopCommandFromShortcut({
         modifier: event.metaKey || event.ctrlKey,
+        alt: event.altKey,
         shift: event.shiftKey,
         key: event.key,
         code: event.code,
@@ -658,6 +699,7 @@ export default function App() {
     threadSearch,
     api,
     toggleChangesPanel,
+    toggleSidePanel,
     toggleTerminal,
     handleTogglePrimarySidebar,
     newThread,
@@ -978,6 +1020,7 @@ export default function App() {
           onToggleChanges={toggleChangesPanel}
           filesVisible={sidePanelMode === "files"}
           onToggleFiles={toggleFilesPanel}
+          onSelectSidePanel={selectSidePanel}
           promptRailVisible={promptRailVisible}
           onTogglePromptRail={togglePromptRail}
         />

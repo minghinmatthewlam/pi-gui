@@ -160,6 +160,7 @@ export const desktopCommands = {
   openSettings: "open-settings",
   openNewThread: "open-new-thread",
   toggleTerminal: "toggle-terminal",
+  toggleSidePanel: "toggle-side-panel",
   toggleSidebar: "toggle-sidebar",
   selectRecentThread1: "select-recent-thread-1",
   selectRecentThread2: "select-recent-thread-2",
@@ -186,6 +187,10 @@ const RECENT_THREAD_COMMANDS = [
 
 export function getDesktopShortcutLabel(platform: NodeJS.Platform, key: string): string {
   return `${platform === "darwin" ? "⌘" : "Ctrl+"}${key.toUpperCase()}`;
+}
+
+export function getSidePanelToggleShortcutLabel(platform: NodeJS.Platform): string {
+  return platform === "darwin" ? "⌘⌥B" : "Ctrl+Alt+B";
 }
 
 export type PiDesktopStateListener = (state: DesktopAppState) => void;
@@ -281,6 +286,7 @@ export interface TerminalErrorEvent {
 
 export interface DesktopShortcutInput {
   readonly modifier: boolean;
+  readonly alt?: boolean;
   readonly shift: boolean;
   readonly key: string;
   readonly code?: string;
@@ -298,6 +304,13 @@ export function getDesktopCommandFromShortcut(
   const isB = lowerKey === "b" || input.code === "KeyB";
   const isJ = lowerKey === "j" || input.code === "KeyJ";
   const isShiftO = input.shift && (lowerKey === "o" || input.code === "KeyO");
+
+  if (input.alt) {
+    if (!input.shift && isB) {
+      return desktopCommands.toggleSidePanel;
+    }
+    return undefined;
+  }
 
   if (!input.shift && isComma) {
     return desktopCommands.openSettings;

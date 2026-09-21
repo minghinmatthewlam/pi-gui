@@ -8,6 +8,7 @@ import type {
 import { DiffIcon, FileIcon, PromptRailIcon, TerminalIcon } from "../ui/icons";
 import { getDesktopShortcutLabel, type PiDesktopApi } from "../../contracts/ipc";
 import type { WorkspaceMenuState } from "../features/threads/hooks/use-workspace-menu";
+import { SidePanelPicker, type SidePanelPickerChoice } from "./side-panel-picker";
 
 interface TopbarProps {
   readonly activeView: AppView;
@@ -28,6 +29,7 @@ interface TopbarProps {
   readonly onToggleChanges: () => void;
   readonly filesVisible: boolean;
   readonly onToggleFiles: () => void;
+  readonly onSelectSidePanel: (choice: SidePanelPickerChoice) => void;
   readonly promptRailVisible: boolean;
   readonly onTogglePromptRail: () => void;
 }
@@ -52,6 +54,7 @@ export function Topbar(props: TopbarProps) {
     onToggleChanges,
     filesVisible,
     onToggleFiles,
+    onSelectSidePanel,
     promptRailVisible,
     onTogglePromptRail,
   } = props;
@@ -147,6 +150,16 @@ export function Topbar(props: TopbarProps) {
       </div>
 
       <div className="topbar__actions">
+        <SidePanelPicker
+          changesEnabled={panelAvailable}
+          changesVisible={changesVisible}
+          filesEnabled={panelAvailable}
+          filesVisible={filesVisible}
+          platform={api.platform}
+          terminalEnabled={terminalAvailable}
+          terminalVisible={terminalVisible}
+          onSelect={onSelectSidePanel}
+        />
         <TopbarActionButton
           active={terminalVisible}
           disabled={!terminalAvailable}
