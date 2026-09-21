@@ -187,7 +187,7 @@ test("renders extension dialogs in the Electron surface and routes responses bac
     await expect(dialog).toContainText("Edit note");
     const editor = dialog.locator("textarea");
     await editor.click();
-    await editor.press("Meta+A");
+    await editor.press("ControlOrMeta+A");
     await editor.press("Backspace");
     await editor.type("Line 1");
     await editor.press("Enter");
