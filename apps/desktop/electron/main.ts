@@ -678,7 +678,9 @@ app.setPath("userData", configuredUserDataDir);
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 if (!hasSingleInstanceLock) {
-  app.quit();
+  // app.quit() before ready can leave a windowless macOS process alive.
+  // Duplicate instances have no store or windows, so exit immediately.
+  app.exit(0);
 }
 
 app.on("second-instance", () => {

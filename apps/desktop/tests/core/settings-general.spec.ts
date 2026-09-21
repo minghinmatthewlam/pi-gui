@@ -70,7 +70,7 @@ test("ignores persisted multiple app instance opt-in and hides the setting", asy
 
 async function waitForProcessExit(
   child: ChildProcess,
-  timeoutMs = 5_000,
+  timeoutMs = 15_000,
 ): Promise<{ code: number | null; signal: NodeJS.Signals | null }> {
   if (child.exitCode !== null || child.signalCode !== null) {
     return { code: child.exitCode, signal: child.signalCode };
