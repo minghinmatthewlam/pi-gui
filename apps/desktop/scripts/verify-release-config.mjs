@@ -8,7 +8,7 @@ import { assertWorkflowActionPolicy, isAction } from "../../../scripts/workflow-
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoDir = path.resolve(scriptDir, "..", "..", "..");
-const linuxPackageCommand = "electron-builder --linux --publish never";
+const linuxPackageCommand = "node scripts/run-electron-builder.mjs --linux --publish never";
 const linuxDependencies = [
   "libgtk-3-0 | libgtk-3-0t64",
   "libnotify4",
@@ -95,6 +95,13 @@ function validateCiWorkflow(workflow) {
     "Linux CI candidate upload must fail if staging produced no files",
   );
 
+  const windowsJob = workflow.jobs?.["desktop-package-windows"];
+  assert(windowsJob?.["runs-on"] === "windows-latest", "Windows package CI must run on Windows");
+  assert(
+    runText(stepNamed(windowsJob, "Package Windows directory")).includes("run package:win:dir"),
+    "Windows package CI must use the retrying Windows packager",
+  );
+
   const proofUpload = stepNamed(linuxJob, "Upload Linux package proof");
   assert(
     isAction(proofUpload.uses, "actions/upload-artifact") &&
@@ -148,6 +155,17 @@ function validateBuilderConfig(config, desktopPackage, afterRemoveSource) {
     desktopPackage.scripts?.["package:linux"]?.includes(linuxPackageCommand),
     "pnpm Linux packaging must build AppImage and deb for x64",
   );
+  assert(
+    desktopPackage.scripts?.["package:linux:dir"]?.includes(
+      "node scripts/run-electron-builder.mjs --linux --dir --publish never",
+    ),
+    "pnpm Linux directory packaging must retry GitHub binary downloads",
+  );
+  assert(
+    desktopPackage.scripts?.["package:win"]?.includes("package-windows.mjs") &&
+      desktopPackage.scripts?.["package:win:dir"]?.includes("package-windows.mjs"),
+    "pnpm Windows packaging must keep the canonical Windows packager",
+  );
 
   assert(config.linux?.executableName === "pi-gui", "Linux executable name must remain pi-gui");
   assert(
@@ -190,6 +208,25 @@ function validateBuilderConfig(config, desktopPackage, afterRemoveSource) {
         "update-alternatives --remove '${executable}' '/usr/bin/${executable}'",
       ),
     "Debian removal must unregister the alternatives target, not the link",
+  );
+}
+
+function validateGithubDownloadRetry(retrySource, packageWindowsSource, runElectronBuilderSource) {
+  assert(
+    retrySource.includes("cannot resolve https:") &&
+      retrySource.includes("github") &&
+      retrySource.includes("50[234]"),
+    "GitHub download retry must match electron-builder 502/503/504 errors",
+  );
+  assert(
+    runElectronBuilderSource.includes("withGithubDownloadRetry") &&
+      runElectronBuilderSource.includes("ELECTRON_BUILDER_CACHE"),
+    "electron-builder runner must retry GitHub downloads and keep a local binary cache",
+  );
+  assert(
+    packageWindowsSource.includes('from "./run-electron-builder.mjs"') &&
+      packageWindowsSource.includes("runElectronBuilder"),
+    "Windows packaging must use the retrying electron-builder runner",
   );
 }
 
@@ -272,7 +309,8 @@ function validateWorkflow(workflow, finalizerSource, linuxVerifierSource, window
   const linuxJob = jobs["build-linux"];
   const linuxPackage = stepNamed(linuxJob, "Package Linux AppImage and deb");
   assert(
-    runText(linuxPackage).includes("electron-builder --linux") &&
+    runText(linuxPackage).includes("run-electron-builder.mjs") &&
+      runText(linuxPackage).includes("--linux") &&
       !runText(linuxPackage).includes("--linux AppImage") &&
       !runText(linuxPackage).includes("--x64"),
     "Linux release packaging must use the validated target and architecture configuration",
@@ -549,6 +587,9 @@ const [
   windowsVerifierSource,
   desktopPackageSource,
   afterRemoveSource,
+  retrySource,
+  packageWindowsSource,
+  runElectronBuilderSource,
 ] = await Promise.all([
   parseYaml("apps/desktop/electron-builder.yml"),
   parseYaml(".github/workflows/ci.yml"),
@@ -558,6 +599,9 @@ const [
   readFile(path.join(scriptDir, "verify-windows-release.ps1"), "utf8"),
   readFile(path.join(scriptDir, "..", "package.json"), "utf8"),
   readFile(path.join(scriptDir, "..", "resources", "linux", "after-remove.sh"), "utf8"),
+  readFile(path.join(scriptDir, "github-download-retry.mjs"), "utf8"),
+  readFile(path.join(scriptDir, "package-windows.mjs"), "utf8"),
+  readFile(path.join(scriptDir, "run-electron-builder.mjs"), "utf8"),
 ]);
 
 await assertWorkflowActionPolicy(repoDir);
@@ -565,4 +609,5 @@ await validateConfiguration(builderConfig, new DebugLogger(false));
 validateBuilderConfig(builderConfig, JSON.parse(desktopPackageSource), afterRemoveSource);
 validateCiWorkflow(ciWorkflow);
 validateWorkflow(workflow, finalizerSource, linuxVerifierSource, windowsVerifierSource);
+validateGithubDownloadRetry(retrySource, packageWindowsSource, runElectronBuilderSource);
 console.log("Release package and workflow configuration are valid.");

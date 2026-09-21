@@ -157,7 +157,7 @@ jobs:
         run: |
           cd apps/desktop
           pnpm run build
-          pnpm exec electron-builder --linux \
+          node scripts/run-electron-builder.mjs --linux \
             --publish never \
             "-c.extraMetadata.version=${GITHUB_REF_NAME#v}"
 

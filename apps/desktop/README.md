@@ -51,7 +51,7 @@ Unpacked Windows build (faster iteration):
 pnpm --filter @pi-gui/desktop run package:win:dir
 ```
 
-On Windows, `package:win*` routes through `scripts/package-windows.mjs`, which prefers the ASCII repo-local `tools/pnpm.cmd` shim and redirects `ELECTRON_BUILDER_CACHE` / `LOCALAPPDATA` into `.cache/` under the repo. This avoids electron-builder failures when `pnpm` lives under a non-ASCII `%USERPROFILE%` or when Developer Mode / elevation is unavailable for winCodeSign symlink extraction. Set `ELECTRON_MIRROR` if Electron downloads are flaky in your region.
+On Windows, `package:win*` routes through `scripts/package-windows.mjs`, which prefers the ASCII repo-local `tools/pnpm.cmd` shim and redirects `ELECTRON_BUILDER_CACHE` / `LOCALAPPDATA` into `.cache/` under the repo. This avoids electron-builder failures when `pnpm` lives under a non-ASCII `%USERPROFILE%` or when Developer Mode / elevation is unavailable for winCodeSign symlink extraction. Linux and Windows packaging retry GitHub 502/503/504 downloads of Electron and electron-builder binaries (including winCodeSign) up to three times. Cached binaries stay in `ELECTRON_BUILDER_CACHE` (default `.cache/electron-builder` in the repo). CI runners do not keep that cache across jobs, so the retry covers a 504 on a cold runner. Set `ELECTRON_MIRROR` if Electron downloads are flaky in your region.
 
 The `live` lane mixes deterministic runtime integration with opt-in real-provider tests. Real-provider tests require usable provider authentication; deterministic extension tests can run without it.
 
