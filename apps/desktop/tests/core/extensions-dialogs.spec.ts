@@ -23,7 +23,10 @@ export default function dialogExtension(pi) {
   pi.registerCommand("dialog-confirm-timeout", {
     description: "Open a confirmation dialog that times out",
     handler: async (_args, ctx) => {
-      const confirmed = await ctx.ui.confirm("Timeout confirm?", "This should close itself.", { timeout: 100 });
+      // 100ms races hidden-window paint and Playwright's first poll on macOS CI.
+      const confirmed = await ctx.ui.confirm("Timeout confirm?", "This should close itself.", {
+        timeout: 2_000,
+      });
       ctx.ui.notify(confirmed ? "Timeout accepted" : "Timeout rejected", "info");
     },
   });
@@ -148,10 +151,11 @@ test("renders extension dialogs in the Electron surface and routes responses bac
     await expect(window.locator(".timeline")).toContainText("Confirm accepted");
 
     await composer.fill("/dialog-confirm-timeout ");
+    await expect(composer).toHaveValue("/dialog-confirm-timeout ");
     await composer.press("Enter");
     await expect(window.getByRole("dialog", { name: "Timeout confirm?" })).toBeVisible();
     await expect(dialog).toContainText("This should close itself.");
-    await expect(dialog).toHaveCount(0, { timeout: 5_000 });
+    await expect(dialog).toHaveCount(0, { timeout: 8_000 });
     await expect(window.locator(".timeline")).toContainText("Timeout rejected");
 
     await composer.fill("/dialog-select ");
@@ -183,7 +187,7 @@ test("renders extension dialogs in the Electron surface and routes responses bac
     await expect(dialog).toContainText("Edit note");
     const editor = dialog.locator("textarea");
     await editor.click();
-    await editor.press("Meta+A");
+    await editor.press("ControlOrMeta+A");
     await editor.press("Backspace");
     await editor.type("Line 1");
     await editor.press("Enter");

@@ -186,16 +186,28 @@ test("Files mode shows a file browser and reader instead of the changes reviewer
     await expect(diffPanel.locator(".diff-inline")).toBeVisible();
 
     await window.locator(".topbar__actions").getByLabel("Toggle files").click();
-    await expect(diffPanel.locator(".diff-panel__title")).toHaveText("Files");
-    await expect(diffPanel.getByTestId("diff-panel-counter")).toHaveCount(0);
-    await expect(diffPanel.locator(".file-workbench__section--changes")).toHaveCount(0);
-    await expect(diffPanel.getByTestId("file-workbench-tree")).toBeVisible();
-    await expect(diffPanel.locator(".file-workbench__context-strip")).toHaveCount(0);
+    const workbench = window.getByTestId("file-workbench");
+    await expect(workbench).toBeVisible();
+    await expect(window.locator(".diff-panel")).toHaveCount(0);
+    await expect(workbench.getByTestId("diff-panel-counter")).toHaveCount(0);
+    await expect(workbench.locator(".file-workbench__section--changes")).toHaveCount(0);
+    await expect(workbench.getByTestId("file-workbench-tree")).toBeVisible();
+    await expect(workbench.locator(".file-workbench__context-strip")).toHaveCount(0);
+    await expect(window.getByTestId("file-workbench-filter")).toBeVisible();
 
-    await diffPanel.locator('.file-workbench__tree-row--file[data-file-path="notes.md"]').click();
-    await expect(diffPanel.getByTestId("file-workbench-preview")).toContainText("# notes");
-    await expect(diffPanel.locator(".diff-inline")).toHaveCount(0);
-    await expect(diffPanel.getByRole("group", { name: "Viewer mode" })).toHaveCount(0);
+    await workbench.locator('.file-workbench__tree-row--file[data-file-path="notes.md"]').click();
+    await expect(
+      window.getByTestId("file-editor").getByTestId("file-workbench-preview"),
+    ).toContainText("notes");
+    await expect(window.getByTestId("file-editor").locator(".diff-inline")).toHaveCount(0);
+    await expect(
+      window.getByTestId("file-editor").getByRole("button", { name: "View source" }),
+    ).toBeVisible();
+    await window.getByTestId("file-editor").getByRole("button", { name: "View source" }).click();
+    await expect(window.getByTestId("file-workbench-preview")).toContainText("# notes");
+    await expect(
+      window.getByTestId("file-editor").getByRole("button", { name: "Open" }),
+    ).toBeVisible();
   } finally {
     await harness.close();
   }

@@ -149,7 +149,10 @@ export async function launchDesktop(
     args: electronCliArgs(desktopDir),
     cwd: desktopDir,
     env,
-    ...(normalized.recordVideoDir
+    // Playwright's Electron recordVideo leaves loadURL hanging on Linux:
+    // the BrowserWindow stays hidden, webContents.isLoading stays true, and
+    // the page URL never leaves empty. Screenshots and traces still work.
+    ...(normalized.recordVideoDir && process.platform !== "linux"
       ? {
           recordVideo: {
             dir: normalized.recordVideoDir,

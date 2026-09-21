@@ -134,6 +134,7 @@ export const desktopIpc = {
   toggleWindowMaximize: "pi-gui:toggle-window-maximize",
   listWorkspaceFiles: "pi-gui:list-workspace-files",
   readWorkspaceFile: "pi-gui:read-workspace-file",
+  revealWorkspaceFile: "pi-gui:reveal-workspace-file",
   getChangedFiles: "pi-gui:get-changed-files",
   getFileDiff: "pi-gui:get-file-diff",
   stageFile: "pi-gui:stage-file",
@@ -472,6 +473,7 @@ export interface PiDesktopApi {
     options?: { readonly force?: boolean },
   ): Promise<string[]>;
   readWorkspaceFile(workspaceId: string, filePath: string): Promise<WorkspaceFilePreview>;
+  revealWorkspaceFile(workspaceId: string, filePath: string): Promise<void>;
   getChangedFiles(workspaceId: string): Promise<ChangedFilesResult>;
   getFileDiff(workspaceId: string, filePath: string): Promise<string>;
   stageFile(workspaceId: string, filePath: string, stagingSourcePath?: string): Promise<void>;

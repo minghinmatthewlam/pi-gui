@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import {
   createNamedThread,
   launchDesktop,
@@ -8,7 +8,31 @@ import {
   makeWorkspace,
 } from "../helpers/electron-app";
 
-test("Files panel lists a normal folder workspace that is not a git repo", async () => {
+async function expectConversationFileExplorerSplit(window: Page): Promise<void> {
+  const conversation = window.locator(".canvas--thread");
+  const editor = window.getByTestId("file-editor");
+  const explorer = window.getByTestId("file-explorer");
+  await expect(conversation).toBeVisible();
+  await expect(editor).toBeVisible();
+  await expect(explorer).toBeVisible();
+
+  const conversationBox = await conversation.boundingBox();
+  const editorBox = await editor.boundingBox();
+  const explorerBox = await explorer.boundingBox();
+  expect(conversationBox).not.toBeNull();
+  expect(editorBox).not.toBeNull();
+  expect(explorerBox).not.toBeNull();
+  if (!conversationBox || !editorBox || !explorerBox) {
+    throw new Error("Expected conversation, editor, and explorer boxes");
+  }
+
+  expect(conversationBox.x + conversationBox.width).toBeLessThanOrEqual(editorBox.x + 2);
+  expect(editorBox.x + editorBox.width).toBeLessThanOrEqual(explorerBox.x + 2);
+  expect(Math.abs(editorBox.y - explorerBox.y)).toBeLessThan(8);
+  await expect(window.locator(".diff-panel")).toHaveCount(0);
+}
+
+test("Files workbench puts the explorer to the right of an open file pane", async () => {
   test.setTimeout(45_000);
   const userDataDir = await makeUserDataDir();
   const workspacePath = await makeWorkspace("plain-files-workspace");
@@ -24,24 +48,87 @@ test("Files panel lists a normal folder workspace that is not a git repo", async
     await createNamedThread(window, "Plain folder files");
     await window.locator(".topbar__actions").getByLabel("Toggle files").click();
 
-    const diffPanel = window.locator(".diff-panel");
-    await expect(diffPanel.locator(".diff-panel__title")).toHaveText("Files");
-    await expect(diffPanel.getByTestId("file-workbench-tree")).toBeVisible();
-    await expect(diffPanel.locator(".file-workbench__section-header")).toContainText("2");
+    const workbench = window.getByTestId("file-workbench");
+    await expect(workbench).toBeVisible();
+    await expect(window.locator(".diff-panel")).toHaveCount(0);
+    await expect(window.getByTestId("file-workbench-filter")).toHaveAttribute(
+      "placeholder",
+      "Filter files…",
+    );
+    await expectConversationFileExplorerSplit(window);
+
+    const tree = window.getByTestId("file-workbench-tree");
     await expect(
-      diffPanel.locator('.file-workbench__tree-row--file[data-file-path="README.md"]'),
+      tree.locator('.file-workbench__tree-row--file[data-file-path="README.md"]'),
     ).toBeVisible();
     await expect(
-      diffPanel.locator('.file-workbench__tree-row--file[data-file-path="src/app.ts"]'),
-    ).toBeVisible();
-    await expect(
-      diffPanel.locator(".file-workbench__section--tree .diff-panel__empty"),
+      tree.locator('.file-workbench__tree-row--file[data-file-path="src/app.ts"]'),
     ).toHaveCount(0);
 
-    await diffPanel.locator('.file-workbench__tree-row--file[data-file-path="src/app.ts"]').click();
-    await expect(diffPanel.getByTestId("file-workbench-preview")).toContainText(
-      "export const ready",
-    );
+    await tree.locator(".file-workbench__tree-row--dir", { hasText: "src" }).click();
+    await expect(
+      tree.locator('.file-workbench__tree-row--file[data-file-path="src/app.ts"]'),
+    ).toBeVisible();
+    await tree.locator('.file-workbench__tree-row--file[data-file-path="src/app.ts"]').click();
+
+    const editor = window.getByTestId("file-editor");
+    await expect(editor.getByTestId("file-workbench-tab")).toContainText("app.ts");
+    await expect(editor.getByTestId("file-editor-breadcrumb")).toContainText("src");
+    await expect(editor.getByTestId("file-workbench-preview")).toContainText("export const ready");
+    await expect(
+      window.getByTestId("file-explorer").getByTestId("file-workbench-preview"),
+    ).toHaveCount(0);
+
+    await window.getByTestId("file-workbench-filter").fill("app.ts");
+    await expect(
+      tree.locator('.file-workbench__tree-row--file[data-file-path="README.md"]'),
+    ).toHaveCount(0);
+    await expect(
+      tree.locator('.file-workbench__tree-row--file[data-file-path="src/app.ts"]'),
+    ).toBeVisible();
+  } finally {
+    await harness.close();
+  }
+});
+
+test("Files explorer drops the previous workspace tree after a folder switch", async () => {
+  test.setTimeout(45_000);
+  const userDataDir = await makeUserDataDir();
+  const alphaPath = await makeWorkspace("alpha-files-workspace");
+  const bravoPath = await makeWorkspace("bravo-files-workspace");
+  await writeFile(join(alphaPath, "alpha-only.md"), "# alpha\n", "utf8");
+  await writeFile(join(bravoPath, "bravo-only.md"), "# bravo\n", "utf8");
+
+  const harness = await launchDesktop(userDataDir, {
+    initialWorkspaces: [alphaPath, bravoPath],
+    testMode: "background",
+  });
+  try {
+    const window = await harness.firstWindow();
+    await createNamedThread(window, "Alpha files", { workspaceName: "alpha-files-workspace" });
+    await createNamedThread(window, "Bravo files", { workspaceName: "bravo-files-workspace" });
+    await window.locator(".session-row__select", { hasText: "Alpha files" }).click();
+    await window.locator(".topbar__actions").getByLabel("Toggle files").click();
+    const tree = window.getByTestId("file-workbench-tree");
+    await expect(
+      tree.locator('.file-workbench__tree-row--file[data-file-path="alpha-only.md"]'),
+    ).toBeVisible();
+    await expect(
+      tree.locator('.file-workbench__tree-row--file[data-file-path="bravo-only.md"]'),
+    ).toHaveCount(0);
+
+    await window.locator(".session-row__select", { hasText: "Bravo files" }).click();
+    const workbench = window.getByTestId("file-workbench");
+    if ((await workbench.count()) === 0) {
+      await window.locator(".topbar__actions").getByLabel("Toggle files").click();
+    }
+    await expect(workbench).toBeVisible();
+    await expect(
+      workbench.locator('.file-workbench__tree-row--file[data-file-path="bravo-only.md"]'),
+    ).toBeVisible();
+    await expect(
+      workbench.locator('.file-workbench__tree-row--file[data-file-path="alpha-only.md"]'),
+    ).toHaveCount(0);
   } finally {
     await harness.close();
   }

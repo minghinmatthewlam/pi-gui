@@ -1,6 +1,17 @@
 import { useCallback, useEffect, useRef, useState, type SetStateAction } from "react";
-import type { DesktopAppState } from "../../../../contracts/desktop-state";
+import type { ComposerDraftSyncSource, DesktopAppState } from "../../../../contracts/desktop-state";
 import type { PiDesktopApi } from "../../../../contracts/ipc";
+
+/** Persist/state/command restore saved or submitted text. They must not overwrite a newer local edit. */
+export function shouldAdoptComposerSnapshot(
+  source: ComposerDraftSyncSource | undefined,
+  localEditPending: boolean,
+): boolean {
+  if (!localEditPending) {
+    return true;
+  }
+  return source !== "persist" && source !== "state" && source !== "command";
+}
 
 interface UseComposerDraftSyncParams {
   readonly api: PiDesktopApi | undefined;
@@ -65,11 +76,9 @@ export function useComposerDraftSync(params: UseComposerDraftSyncParams) {
     }
 
     handledComposerSyncNonceRef.current = snapshot.composerDraftSyncNonce;
-    if (
-      localEditGenerationRef.current > acknowledgedLocalEditGenerationRef.current &&
-      (snapshot.composerDraftSyncSource === "persist" ||
-        snapshot.composerDraftSyncSource === "state")
-    ) {
+    const localEditPending =
+      localEditGenerationRef.current > acknowledgedLocalEditGenerationRef.current;
+    if (!shouldAdoptComposerSnapshot(snapshot.composerDraftSyncSource, localEditPending)) {
       return;
     }
 

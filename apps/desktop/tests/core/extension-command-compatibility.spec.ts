@@ -119,8 +119,9 @@ test("fails fast for unsupported handoff-like commands and learns terminal-only 
       .toBe(transcriptCountBeforeSecondAttempt);
 
     await composer.fill("/prefill-safe ");
+    await expect(composer).toHaveValue("/prefill-safe ");
     await composer.press("Enter");
-    await expect(composer).toHaveValue("Safe draft");
+    await expect.poll(async () => composer.inputValue()).toBe("Safe draft");
     await expect(window.locator(".timeline")).toContainText("Safe command ran");
 
     await window.getByRole("button", { name: "Extensions", exact: true }).click();
