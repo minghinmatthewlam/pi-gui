@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { WorkspaceRecord, WorktreeRecord } from "../../../contracts/desktop-state";
 import type { PiDesktopApi, WorkspaceFilePreview } from "../../../contracts/ipc";
 import ReactMarkdown from "react-markdown";
@@ -14,6 +14,7 @@ import {
   breadcrumbSegments,
   fileNameFromPath,
   isMarkdownPath,
+  type FileLineMark,
   type FileWorkbenchTabs,
 } from "./file-workbench-state";
 
@@ -57,19 +58,22 @@ export function FileEditorPane({
   onClose,
 }: FileEditorPaneProps) {
   const activePath = tabs.active;
+  const lineMark = tabs.line;
   const [preview, setPreview] = useState<WorkspaceFilePreview | null>(null);
   const [viewerError, setViewerError] = useState<string | null>(null);
   const [viewerLoading, setViewerLoading] = useState(false);
-  const [sourceMode, setSourceMode] = useState(false);
+  const [sourceMode, setSourceMode] = useState(() => tabs.line !== null);
+  const [sourceKey, setSourceKey] = useState(() => `${tabs.active ?? ""}:${tabs.lineNonce}`);
+  const nextSourceKey = `${activePath ?? ""}:${tabs.lineNonce}`;
+  if (sourceKey !== nextSourceKey) {
+    setSourceKey(nextSourceKey);
+    setSourceMode(lineMark !== null);
+  }
   const markdown = activePath ? isMarkdownPath(activePath) : false;
   const worktreeLabel =
     workspace.kind === "worktree"
       ? (worktree?.name ?? workspace.branchName ?? workspace.name)
       : null;
-
-  useEffect(() => {
-    setSourceMode(false);
-  }, [activePath]);
 
   useEffect(() => {
     let cancelled = false;
@@ -209,6 +213,7 @@ export function FileEditorPane({
       <div className="file-editor__body">
         {renderEditorBody({
           activePath,
+          lineMark: showSource ? lineMark : null,
           markdown,
           preview,
           showSource,
@@ -222,6 +227,7 @@ export function FileEditorPane({
 
 function renderEditorBody({
   activePath,
+  lineMark,
   markdown,
   preview,
   showSource,
@@ -229,6 +235,7 @@ function renderEditorBody({
   viewerLoading,
 }: {
   readonly activePath: string | null;
+  readonly lineMark: FileLineMark | null;
   readonly markdown: boolean;
   readonly preview: WorkspaceFilePreview | null;
   readonly showSource: boolean;
@@ -255,7 +262,7 @@ function renderEditorBody({
       {markdown && !showSource ? (
         <FileMarkdown text={preview.content} />
       ) : (
-        <SourceView path={activePath} content={preview.content} />
+        <SourceView content={preview.content} lineMark={lineMark} path={activePath} />
       )}
       {preview.truncated ? (
         <div className="file-editor__truncated" role="status">
@@ -276,22 +283,66 @@ function FileMarkdown({ text }: { readonly text: string }) {
   );
 }
 
-function SourceView({ path, content }: { readonly path: string; readonly content: string }) {
+function SourceView({
+  path,
+  content,
+  lineMark,
+}: {
+  readonly path: string;
+  readonly content: string;
+  readonly lineMark: FileLineMark | null;
+}) {
   const language = extensionToLanguage(path);
   const lines = content.split("\n");
   const highlightActive = language !== undefined && lines.length <= MAX_HIGHLIGHTED_LINES;
+  const firstMarkedRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const line = firstMarkedRef.current;
+    if (line) {
+      scrollIntoContainer(line, ".file-editor__body");
+    }
+  }, [content, lineMark, path]);
   return (
     <pre
       className="file-editor__source file-workbench__preview"
       data-testid="file-workbench-preview"
     >
-      {lines.map((line, index) => (
-        <div className="file-editor__line" key={index}>
-          {highlightActive ? <HighlightedLine content={line} language={language} /> : line || " "}
-        </div>
-      ))}
+      {lines.map((line, index) => {
+        const lineNumber = index + 1;
+        const marked =
+          lineMark !== null && lineNumber >= lineMark.start && lineNumber <= lineMark.end;
+        return (
+          <div
+            className={marked ? "file-editor__line file-editor__line--marked" : "file-editor__line"}
+            data-line={lineNumber}
+            data-testid={marked ? "file-line-mark" : undefined}
+            key={lineNumber}
+            ref={marked && lineNumber === lineMark?.start ? firstMarkedRef : undefined}
+          >
+            {highlightActive ? <HighlightedLine content={line} language={language} /> : line || " "}
+          </div>
+        );
+      })}
     </pre>
   );
+}
+
+function scrollIntoContainer(element: HTMLElement, containerSelector: string): void {
+  const container = element.closest(containerSelector);
+  if (!(container instanceof HTMLElement)) {
+    return;
+  }
+  const elementRect = element.getBoundingClientRect();
+  const containerRect = container.getBoundingClientRect();
+  if (elementRect.top >= containerRect.top && elementRect.bottom <= containerRect.bottom) {
+    return;
+  }
+  const top =
+    container.scrollTop +
+    (elementRect.top - containerRect.top) -
+    container.clientHeight / 2 +
+    elementRect.height / 2;
+  container.scrollTop = Math.max(0, top);
 }
 
 function HighlightedLine({

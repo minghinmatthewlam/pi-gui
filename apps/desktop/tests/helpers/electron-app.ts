@@ -681,6 +681,57 @@ export async function seedExternalLinkSessionFixture(
   });
 }
 
+export async function seedNamedTextSessionFixture(
+  agentDir: string,
+  workspacePath: string,
+  session: {
+    readonly title: string;
+    readonly userText: string;
+    readonly assistantText: string;
+  },
+): Promise<{
+  readonly sessionId: string;
+  readonly title: string;
+}> {
+  const { SessionManager } = (await import("@earendil-works/pi-coding-agent")) as {
+    SessionManager: {
+      create(cwd: string): {
+        appendMessage(message: {
+          role: "user" | "assistant";
+          content: string;
+          timestamp: number;
+        }): string;
+        appendSessionInfo(name: string): string;
+        getSessionId(): string;
+      };
+    };
+  };
+
+  return withAgentDirEnv(agentDir, async () => {
+    const sessionManager = SessionManager.create(workspacePath);
+    let timestamp = Date.now();
+    const nextTimestamp = () => {
+      timestamp += 1_000;
+      return timestamp;
+    };
+    sessionManager.appendMessage({
+      role: "user",
+      content: session.userText,
+      timestamp: nextTimestamp(),
+    });
+    sessionManager.appendMessage({
+      role: "assistant",
+      content: session.assistantText,
+      timestamp: nextTimestamp(),
+    });
+    sessionManager.appendSessionInfo(session.title);
+    return {
+      sessionId: sessionManager.getSessionId(),
+      title: session.title,
+    };
+  });
+}
+
 export async function seedToolResultTreeSessionFixture(
   agentDir: string,
   workspacePath: string,

@@ -13,6 +13,7 @@ import type { ScheduledTaskOrigin } from "../../../contracts/scheduled-tasks";
 import type { TimelineViewport } from "./hooks/use-timeline-viewport";
 import { ThreadSearchBar } from "./thread-search";
 import { TimelineItem } from "./timeline-item";
+import type { WorkspaceFileLine } from "./workspace-file-line";
 import { SparkIcon } from "../../ui/icons";
 
 interface ThreadSearchModel {
@@ -34,7 +35,9 @@ interface ConversationTimelineProps {
   readonly threadSearch: ThreadSearchModel;
   readonly onViewFileInDiff?: (path: string) => void;
   readonly onForkFromMessage?: (messageIndex: number, preview?: string) => void;
+  readonly onOpenWorkspaceFileLine?: (target: WorkspaceFileLine) => void;
   readonly scheduledOrigins?: ReadonlyMap<string, ScheduledTaskOrigin>;
+  readonly workspacePath?: string;
 }
 export function ConversationTimeline({
   transcript,
@@ -45,7 +48,9 @@ export function ConversationTimeline({
   threadSearch,
   onViewFileInDiff,
   onForkFromMessage,
+  onOpenWorkspaceFileLine,
   scheduledOrigins,
+  workspacePath,
 }: ConversationTimelineProps) {
   const [expandedToolCallIds, setExpandedToolCallIds] = useState<Set<string>>(() => new Set());
   const toggleToolCall = useCallback(
@@ -128,6 +133,8 @@ export function ConversationTimeline({
                   onViewFileInDiff={onViewFileInDiff}
                   sourceMessageIndex={renderedMessageIndexById.get(item.id)}
                   onForkFromMessage={onForkFromMessage}
+                  onOpenWorkspaceFileLine={onOpenWorkspaceFileLine}
+                  workspacePath={workspacePath}
                   scheduledOrigin={
                     item.kind === "message" ? scheduledOrigins?.get(item.id) : undefined
                   }
@@ -223,7 +230,9 @@ interface MeasuredTimelineItemProps {
   readonly onViewFileInDiff?: (path: string) => void;
   readonly sourceMessageIndex?: number;
   readonly onForkFromMessage?: (messageIndex: number, preview?: string) => void;
+  readonly onOpenWorkspaceFileLine?: (target: WorkspaceFileLine) => void;
   readonly scheduledOrigin?: ScheduledTaskOrigin;
+  readonly workspacePath?: string;
 }
 
 function MeasuredTimelineItemBase({
@@ -237,7 +246,9 @@ function MeasuredTimelineItemBase({
   onViewFileInDiff,
   sourceMessageIndex,
   onForkFromMessage,
+  onOpenWorkspaceFileLine,
   scheduledOrigin,
+  workspacePath,
 }: MeasuredTimelineItemProps) {
   const rowRef = useRef<HTMLDivElement | null>(null);
 
@@ -276,7 +287,9 @@ function MeasuredTimelineItemBase({
         onViewFileInDiff={onViewFileInDiff}
         sourceMessageIndex={sourceMessageIndex}
         onForkFromMessage={onForkFromMessage}
+        onOpenWorkspaceFileLine={onOpenWorkspaceFileLine}
         scheduledOrigin={scheduledOrigin}
+        workspacePath={workspacePath}
       />
     </div>
   );
@@ -339,6 +352,8 @@ function areMeasuredTimelineItemPropsEqual(
     prev.onViewFileInDiff === next.onViewFileInDiff &&
     prev.sourceMessageIndex === next.sourceMessageIndex &&
     prev.onForkFromMessage === next.onForkFromMessage &&
+    prev.onOpenWorkspaceFileLine === next.onOpenWorkspaceFileLine &&
+    prev.workspacePath === next.workspacePath &&
     prev.scheduledOrigin?.taskId === next.scheduledOrigin?.taskId
   );
 }

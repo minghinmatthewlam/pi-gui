@@ -30,8 +30,10 @@ import type { DiffPanelFileRequest } from "../features/workbench/diff-panel-type
 import { FileWorkbench } from "../features/workbench/file-workbench";
 import {
   EMPTY_FILE_TABS,
+  openFileAtLine,
   type FileWorkbenchTabs,
 } from "../features/workbench/file-workbench-state";
+import type { WorkspaceFileLine } from "../features/conversation/workspace-file-line";
 import { buildModelOptions } from "../features/conversation/composer-commands";
 import {
   createChordToggleGate,
@@ -356,6 +358,32 @@ export default function App() {
     setSidePanelMode("changes");
     setDiffFileRequest({ path, nonce: Date.now() });
   }, []);
+  const selectedSessionKeyRef = useRef(selectedSessionKey);
+  selectedSessionKeyRef.current = selectedSessionKey;
+  const handleOpenWorkspaceFileLine = useCallback(
+    (target: WorkspaceFileLine) => {
+      if (!api || !selectedWorkspace) {
+        return;
+      }
+      const workspaceId = selectedWorkspace.id;
+      const sessionKey = selectedSessionKey;
+      void api
+        .readWorkspaceFile(workspaceId, target.path)
+        .then(() => {
+          if (selectedSessionKeyRef.current !== sessionKey) {
+            return;
+          }
+          setSidePanelMode("files");
+          setFileTabs((current) =>
+            openFileAtLine(current, target.path, target.line, target.endLine),
+          );
+        })
+        .catch(() => {
+          // Missing, unreadable, or outside the workspace: leave the panel unchanged.
+        });
+    },
+    [api, selectedSessionKey, selectedWorkspace],
+  );
 
   const dismissSchemaSkewNotice = useCallback((sessionKey: string) => {
     setDismissedSchemaSkewSessionKeys((current) => {
@@ -1287,6 +1315,8 @@ export default function App() {
                       viewport={viewport}
                       threadSearch={threadSearch}
                       onViewFileInDiff={handleViewFileInDiff}
+                      onOpenWorkspaceFileLine={handleOpenWorkspaceFileLine}
+                      workspacePath={selectedWorkspace.path}
                       onForkFromMessage={
                         selectedSession.status === "running" ? undefined : openForkModal
                       }

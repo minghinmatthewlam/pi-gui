@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
   ChevronDownIcon,
   ChevronRightIcon,
@@ -166,23 +166,68 @@ function FileTreeRow({
     );
   }
 
-  const isSelected = selectedPath === node.path;
+  return (
+    <FileTreeFileRow
+      name={node.name}
+      path={node.path}
+      selected={selectedPath === node.path}
+      onSelect={onSelect}
+    />
+  );
+}
+
+function FileTreeFileRow({
+  name,
+  path,
+  selected,
+  onSelect,
+}: {
+  readonly name: string;
+  readonly path: string;
+  readonly selected: boolean;
+  readonly onSelect: (path: string) => void;
+}) {
+  const rowRef = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => {
+    if (selected && rowRef.current) {
+      scrollIntoContainer(rowRef.current, ".file-workbench__tree");
+    }
+  }, [selected]);
   return (
     <button
-      className={`file-workbench__tree-row file-workbench__tree-row--file ${isSelected ? "file-workbench__tree-row--selected" : ""}`}
-      data-file-path={node.path}
-      style={{ "--depth": depthFromPath(node.path) } as CSSProperties}
+      className={`file-workbench__tree-row file-workbench__tree-row--file ${selected ? "file-workbench__tree-row--selected" : ""}`}
+      data-file-path={path}
+      ref={rowRef}
+      style={{ "--depth": depthFromPath(path) } as CSSProperties}
       type="button"
-      onClick={() => onSelect(node.path)}
+      onClick={() => onSelect(path)}
     >
       <span className="file-workbench__tree-icon">
         <FileIcon />
       </span>
-      <span>{node.name}</span>
+      <span>{name}</span>
     </button>
   );
 }
 
 function depthFromPath(path: string): number {
   return path.split("/").filter(Boolean).length - 1;
+}
+
+function scrollIntoContainer(element: HTMLElement, containerSelector: string): void {
+  const container = element.closest(containerSelector);
+  if (!(container instanceof HTMLElement)) {
+    return;
+  }
+  const elementRect = element.getBoundingClientRect();
+  const containerRect = container.getBoundingClientRect();
+  if (elementRect.top >= containerRect.top && elementRect.bottom <= containerRect.bottom) {
+    return;
+  }
+  const top =
+    container.scrollTop +
+    (elementRect.top - containerRect.top) -
+    container.clientHeight / 2 +
+    elementRect.height / 2;
+  container.scrollTop = Math.max(0, top);
 }

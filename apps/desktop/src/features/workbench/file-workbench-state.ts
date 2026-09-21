@@ -1,15 +1,62 @@
+export interface FileLineMark {
+  readonly start: number;
+  readonly end: number;
+}
+
 export interface FileWorkbenchTabs {
   readonly tabs: readonly string[];
   readonly active: string | null;
+  readonly line: FileLineMark | null;
+  readonly lineNonce: number;
+  /** Readable paths opened from a link that may be absent from the file list. */
+  readonly retained: readonly string[];
 }
 
-export const EMPTY_FILE_TABS: FileWorkbenchTabs = { tabs: [], active: null };
+export const EMPTY_FILE_TABS: FileWorkbenchTabs = {
+  tabs: [],
+  active: null,
+  line: null,
+  lineNonce: 0,
+  retained: [],
+};
 
 export function openFile(state: FileWorkbenchTabs, path: string): FileWorkbenchTabs {
   if (state.tabs.includes(path)) {
-    return { tabs: state.tabs, active: path };
+    if (state.active === path && state.line === null) {
+      return state;
+    }
+    return {
+      tabs: state.tabs,
+      active: path,
+      line: null,
+      lineNonce: state.lineNonce,
+      retained: state.retained,
+    };
   }
-  return { tabs: [...state.tabs, path], active: path };
+  return {
+    tabs: [...state.tabs, path],
+    active: path,
+    line: null,
+    lineNonce: state.lineNonce,
+    retained: state.retained,
+  };
+}
+
+export function openFileAtLine(
+  state: FileWorkbenchTabs,
+  path: string,
+  line: number,
+  endLine = line,
+): FileWorkbenchTabs {
+  const tabs = state.tabs.includes(path) ? state.tabs : [...state.tabs, path];
+  const retained = state.retained.includes(path) ? state.retained : [...state.retained, path];
+  return {
+    tabs,
+    active: path,
+    line: { start: line, end: endLine },
+    lineNonce: state.lineNonce + 1,
+    retained,
+  };
 }
 
 export function closeFile(state: FileWorkbenchTabs, path: string): FileWorkbenchTabs {
@@ -18,20 +65,42 @@ export function closeFile(state: FileWorkbenchTabs, path: string): FileWorkbench
     return state;
   }
   const tabs = state.tabs.filter((tab) => tab !== path);
+  const retained = state.retained.filter((item) => item !== path && tabs.includes(item));
   if (tabs.length === 0) {
     return EMPTY_FILE_TABS;
   }
   if (state.active !== path) {
-    return { tabs, active: state.active };
+    return {
+      tabs,
+      active: state.active,
+      line: state.line,
+      lineNonce: state.lineNonce,
+      retained,
+    };
   }
-  return { tabs, active: tabs[Math.min(index, tabs.length - 1)] ?? null };
+  return {
+    tabs,
+    active: tabs[Math.min(index, tabs.length - 1)] ?? null,
+    line: null,
+    lineNonce: state.lineNonce,
+    retained,
+  };
 }
 
 export function activateFile(state: FileWorkbenchTabs, path: string): FileWorkbenchTabs {
   if (!state.tabs.includes(path)) {
     return state;
   }
-  return { tabs: state.tabs, active: path };
+  if (state.active === path && state.line === null) {
+    return state;
+  }
+  return {
+    tabs: state.tabs,
+    active: path,
+    line: null,
+    lineNonce: state.lineNonce,
+    retained: state.retained,
+  };
 }
 
 export function pruneFiles(
@@ -39,14 +108,21 @@ export function pruneFiles(
   availablePaths: readonly string[],
 ): FileWorkbenchTabs {
   const allowed = new Set(availablePaths);
-  const tabs = state.tabs.filter((tab) => allowed.has(tab));
+  const retained = state.retained.filter((path) => state.tabs.includes(path) && !allowed.has(path));
+  const keep = new Set<string>([...allowed, ...retained]);
+  const tabs = state.tabs.filter((tab) => keep.has(tab));
   if (tabs.length === 0) {
     return EMPTY_FILE_TABS;
   }
-  if (state.active && allowed.has(state.active)) {
-    return { tabs, active: state.active };
-  }
-  return { tabs, active: tabs[tabs.length - 1] ?? null };
+  const active =
+    state.active && tabs.includes(state.active) ? state.active : (tabs[tabs.length - 1] ?? null);
+  return {
+    tabs,
+    active,
+    line: active === state.active ? state.line : null,
+    lineNonce: state.lineNonce,
+    retained: retained.filter((path) => tabs.includes(path)),
+  };
 }
 
 export function isMarkdownPath(path: string): boolean {

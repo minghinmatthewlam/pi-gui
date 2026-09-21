@@ -371,6 +371,11 @@
   white-space: pre-wrap;
 }
 
+.file-editor__line--marked {
+  background: var(--accent-tint-bg);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
 .file-editor__truncated {
   padding: 8px 12px 16px;
   color: var(--muted-soft);

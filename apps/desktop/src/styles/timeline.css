@@ -794,6 +794,24 @@
   text-decoration: underline;
 }
 
+.message__content .message__file-link {
+  display: inline;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  line-height: inherit;
+  text-align: inherit;
+  cursor: pointer;
+}
+
+.message__content .message__file-link:hover,
+.message__content .message__file-link:focus-visible {
+  text-decoration: underline;
+}
+
 .message__table-scroll {
   width: max-content;
   max-width: 100%;

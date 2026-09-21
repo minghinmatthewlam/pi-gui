@@ -8,6 +8,7 @@ import type {
 } from "../../../contracts/timeline-types";
 import type { ScheduledTaskOrigin } from "../../../contracts/scheduled-tasks";
 import { MessageMarkdown } from "./message-markdown";
+import type { WorkspaceFileLine } from "./workspace-file-line";
 import { InlineDiff, extractDiffFromOutput } from "../../ui/diff-inline";
 import {
   ChevronRightIcon,
@@ -28,6 +29,8 @@ export function TimelineItem({
   sourceMessageIndex,
   onForkFromMessage,
   scheduledOrigin,
+  workspacePath,
+  onOpenWorkspaceFileLine,
 }: {
   readonly item: DisplayTimelineItem;
   readonly expandedToolCallIds?: ReadonlySet<string>;
@@ -36,6 +39,8 @@ export function TimelineItem({
   readonly sourceMessageIndex?: number;
   readonly onForkFromMessage?: (messageIndex: number, preview?: string) => void;
   readonly scheduledOrigin?: ScheduledTaskOrigin;
+  readonly workspacePath?: string;
+  readonly onOpenWorkspaceFileLine?: (target: WorkspaceFileLine) => void;
 }) {
   switch (item.kind) {
     case "turn-marker":
@@ -46,7 +51,9 @@ export function TimelineItem({
           item={item}
           sourceMessageIndex={sourceMessageIndex}
           onForkFromMessage={onForkFromMessage}
+          onOpenWorkspaceFileLine={onOpenWorkspaceFileLine}
           scheduledOrigin={scheduledOrigin}
+          workspacePath={workspacePath}
         />
       );
     case "activity":
@@ -72,11 +79,15 @@ function TimelineMessage({
   sourceMessageIndex,
   onForkFromMessage,
   scheduledOrigin,
+  workspacePath,
+  onOpenWorkspaceFileLine,
 }: {
   readonly item: SessionTranscriptMessage;
   readonly sourceMessageIndex?: number;
   readonly onForkFromMessage?: (messageIndex: number, preview?: string) => void;
   readonly scheduledOrigin?: ScheduledTaskOrigin;
+  readonly workspacePath?: string;
+  readonly onOpenWorkspaceFileLine?: (target: WorkspaceFileLine) => void;
 }) {
   if (item.role === "user") {
     return (
@@ -134,7 +145,11 @@ function TimelineMessage({
   const canFork = onForkFromMessage != null && sourceMessageIndex !== undefined;
   return (
     <article className="timeline-item timeline-item--assistant">
-      <MessageMarkdown text={item.text} />
+      <MessageMarkdown
+        onOpenWorkspaceFileLine={onOpenWorkspaceFileLine}
+        text={item.text}
+        workspacePath={workspacePath}
+      />
       {canFork ? (
         <div className="timeline-item__actions">
           <button
