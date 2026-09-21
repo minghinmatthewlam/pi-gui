@@ -23,13 +23,14 @@ import {
   desktopCommands,
   getDesktopCommandFromShortcut,
   getDesktopShortcutLabel,
+  recentThreadShortcutIndex,
   type PiDesktopCommand,
 } from "../../contracts/ipc";
 import { deriveModelOnboardingState } from "../features/settings/model-onboarding";
 import type { SettingsSection } from "../features/settings/settings-view";
 import { SecondarySurfaces } from "./secondary-surfaces";
 import { NewThreadView } from "../features/threads/new-thread-view";
-import { buildThreadGroups } from "../features/threads/thread-groups";
+import { buildThreadSidebarModel } from "../features/threads/thread-groups";
 import { Sidebar } from "../features/threads/sidebar";
 import { SidebarToggleButton } from "../features/threads/sidebar-toggle-button";
 import { Topbar } from "./topbar";
@@ -267,10 +268,12 @@ export default function App() {
   const isSelectedExtensionDockExpanded =
     selectedExtensionUiInstance !== undefined &&
     dockExpandedBySession[selectedSessionKey] === selectedExtensionUiInstance;
-  const threadGroups = useMemo(
-    () => (snapshot ? buildThreadGroups(snapshot) : []),
-    [snapshot?.workspaces, snapshot?.worktreesByWorkspace, snapshot?.workspaceOrder],
+  const threadSidebarModel = useMemo(
+    () => (snapshot ? buildThreadSidebarModel(snapshot) : undefined),
+    [snapshot],
   );
+  const threadSidebarModelRef = useRef(threadSidebarModel);
+  threadSidebarModelRef.current = threadSidebarModel;
   const focusComposer = () => {
     window.requestAnimationFrame(() => {
       if (restoreTopmostDialogFocus()) {
@@ -426,7 +429,6 @@ export default function App() {
     rootWorkspaceOptions,
     visibleWorkspaces,
     selectedWorkspace,
-    expandWorkspace: wsMenu.expandWorkspace,
     openSettings,
     flushComposerDraft,
   });
@@ -540,6 +542,22 @@ export default function App() {
         return true;
       } else if (command === desktopCommands.toggleSidebar) {
         return handleTogglePrimarySidebar();
+      }
+      const recentIndex = recentThreadShortcutIndex(command);
+      if (recentIndex !== undefined) {
+        const thread = threadSidebarModelRef.current?.recencyOrder[recentIndex];
+        if (!thread || !api) {
+          return true;
+        }
+        void updateSnapshot(setSnapshot, () =>
+          api.selectSession({
+            workspaceId: thread.workspaceId,
+            sessionId: thread.session.id,
+          }),
+        ).catch((error: unknown) => {
+          console.error("[renderer] selectSession failed", error);
+        });
+        return true;
       }
       return false;
     };
@@ -855,8 +873,7 @@ export default function App() {
           selectedWorkspace={selectedWorkspace}
           selectedSession={selectedSession}
           visibleWorkspaces={visibleWorkspaces}
-          threadGroups={threadGroups}
-          pinnedSessionOrder={snapshot.pinnedSessionOrder}
+          threadSidebarModel={threadSidebarModel ?? buildThreadSidebarModel(snapshot)}
           linkedWorktreeByWorkspaceId={linkedWorktreeByWorkspaceId}
           wsMenu={wsMenu}
           api={api}

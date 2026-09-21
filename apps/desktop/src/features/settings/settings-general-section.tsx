@@ -99,6 +99,7 @@ export function SettingsGeneralSection({
 
       <SettingsGroup title="Shortcuts">
         <SettingsInfoRow label="New thread" value="Cmd+Shift+O" />
+        <SettingsInfoRow label="Recent threads" value="Cmd+1…9" />
         <SettingsInfoRow label="Open settings" value="Cmd+," />
         <SettingsInfoRow label="Toggle terminal" value="Cmd+J" />
         <SettingsInfoRow label="New terminal tab" value="Cmd+T" />

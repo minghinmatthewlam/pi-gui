@@ -349,6 +349,7 @@ export class DesktopAppStore {
       persistComposerAttachments: (key, attachments) =>
         this.persistComposerAttachments(key, attachments),
       schedulePersistUiState: () => this.schedulePersistUiState(),
+      touchSessionInteraction: (sessionRef) => this.touchSessionInteraction(sessionRef),
       getQueuedComposerMessages: (sessionRef) => this.getQueuedComposerMessages(sessionRef),
       setQueuedComposerEditState: (sessionRef, editState) =>
         this.setQueuedComposerEditState(sessionRef, editState),
@@ -379,6 +380,7 @@ export class DesktopAppStore {
           selectedWorkspaceId: sessionRef.workspaceId,
           selectedSessionId: sessionRef.sessionId,
         };
+        this.touchSessionInteraction(sessionRef);
       },
       seedSession: (snapshot) => {
         const key = sessionKey(snapshot.ref);
@@ -1718,6 +1720,7 @@ export class DesktopAppStore {
       integratedTerminalShell:
         persisted.integratedTerminalShell ?? this.state.integratedTerminalShell,
       lastViewedAtBySession: persisted.lastViewedAtBySession ?? {},
+      lastInteractedAtBySession: persisted.lastInteractedAtBySession ?? {},
       pinnedAtBySession: persisted.pinnedAtBySession ?? {},
       pinnedSessionOrder: persisted.pinnedSessionOrder ?? [],
       workspaceOrder: persisted.workspaceOrder ?? [],
@@ -1732,6 +1735,12 @@ export class DesktopAppStore {
     for (const [key, viewedAt] of Object.entries(persisted.lastViewedAtBySession ?? {})) {
       if (viewedAt) {
         this.sessionState.lastViewedAtBySession.set(key, viewedAt);
+      }
+    }
+    this.sessionState.lastInteractedAtBySession.clear();
+    for (const [key, interactedAt] of Object.entries(persisted.lastInteractedAtBySession ?? {})) {
+      if (interactedAt) {
+        this.sessionState.lastInteractedAtBySession.set(key, interactedAt);
       }
     }
     this.sessionState.pinnedAtBySession.clear();
@@ -1878,6 +1887,7 @@ export class DesktopAppStore {
         this.sessionState.runningSinceBySession,
         this.sessionState.sessionConfigBySession,
         this.sessionState.lastViewedAtBySession,
+        this.sessionState.lastInteractedAtBySession,
         this.sessionState.pinnedAtBySession,
       );
       const worktreesByWorkspace = buildWorktreeRecords(
@@ -1983,6 +1993,7 @@ export class DesktopAppStore {
         ),
         orchestrationChildren: this.state.orchestrationChildren,
         lastViewedAtBySession: mapToRecord(this.sessionState.lastViewedAtBySession),
+        lastInteractedAtBySession: mapToRecord(this.sessionState.lastInteractedAtBySession),
         pinnedAtBySession: mapToRecord(this.sessionState.pinnedAtBySession),
         pinnedSessionOrder,
         workspaceOrder: this.state.workspaceOrder,
@@ -3139,6 +3150,11 @@ export class DesktopAppStore {
         key,
         this.sessionState.lastViewedAtBySession.get(key),
       ),
+      lastInteractedAtBySession: updateRecordValue(
+        state.lastInteractedAtBySession,
+        key,
+        this.sessionState.lastInteractedAtBySession.get(key),
+      ),
       queuedComposerMessages: this.resolveQueuedComposerMessages(
         state.selectedWorkspaceId,
         state.selectedSessionId,
@@ -3333,6 +3349,7 @@ export class DesktopAppStore {
       notificationPreferences: this.state.notificationPreferences,
       integratedTerminalShell: this.state.integratedTerminalShell || undefined,
       lastViewedAtBySession: mapToRecord(this.sessionState.lastViewedAtBySession),
+      lastInteractedAtBySession: mapToRecord(this.sessionState.lastInteractedAtBySession),
       pinnedAtBySession: mapToRecord(this.sessionState.pinnedAtBySession),
       pinnedSessionOrder:
         this.sessionState.pinnedSessionOrder.length > 0
@@ -3567,6 +3584,7 @@ export class DesktopAppStore {
       revision: this.state.revision + 1,
     };
     this.markSessionViewed(sessionRef);
+    this.touchSessionInteraction(sessionRef);
     this.schedulePersistUiState();
     const snapshot = this.emit();
     if (this.sessionState.loadedTranscriptKeys.has(sessionKey(sessionRef))) {
@@ -3720,6 +3738,34 @@ export class DesktopAppStore {
       ),
       lastViewedAtBySession: mapToRecord(this.sessionState.lastViewedAtBySession),
     };
+    return true;
+  }
+
+  touchSessionInteraction(sessionRef: SessionRef, at = new Date().toISOString()): boolean {
+    const key = sessionKey(sessionRef);
+    const current = this.sessionState.lastInteractedAtBySession.get(key);
+    if (current && current >= at) {
+      return false;
+    }
+
+    this.sessionState.lastInteractedAtBySession.set(key, at);
+    this.state = {
+      ...this.state,
+      workspaces: this.state.workspaces.map((workspace) =>
+        workspace.id === sessionRef.workspaceId
+          ? {
+              ...workspace,
+              sessions: workspace.sessions.map((session) =>
+                session.id === sessionRef.sessionId
+                  ? { ...session, lastInteractedAt: at }
+                  : session,
+              ),
+            }
+          : workspace,
+      ),
+      lastInteractedAtBySession: mapToRecord(this.sessionState.lastInteractedAtBySession),
+    };
+    this.schedulePersistUiState();
     return true;
   }
 

@@ -271,33 +271,9 @@
   height: 18px;
 }
 
-/* Expanded: always show chevron, hide folder */
-.workspace-row__icon-chevron {
-  display: grid;
-  place-items: center;
-}
-
 .workspace-row__icon-folder {
-  display: none;
-}
-
-/* Collapsed: show folder, hide chevron */
-.workspace-row__icon[data-collapsed] .workspace-row__icon-folder {
   display: grid;
   place-items: center;
-}
-
-.workspace-row__icon[data-collapsed] .workspace-row__icon-chevron {
-  display: none;
-}
-
-/* Collapsed + hover on workspace row: swap folder → chevron */
-.workspace-row:hover .workspace-row__icon[data-collapsed] .workspace-row__icon-chevron {
-  display: grid;
-}
-
-.workspace-row:hover .workspace-row__icon[data-collapsed] .workspace-row__icon-folder {
-  display: none;
 }
 
 .workspace-row__name,
@@ -455,38 +431,27 @@
   gap: 2px;
 }
 
-.workspace-history-toggle {
-  min-height: 28px;
-  padding: 4px 8px 4px 26px;
-  width: 100%;
-  display: flex;
-  align-items: center;
-  border-radius: var(--radius-md);
-  color: var(--muted-soft);
-  font-size: 13px;
-  font-weight: 500;
-  text-align: left;
-}
-
-.workspace-history-toggle:hover {
-  background: var(--theme-control-hover-bg, var(--overlay-hover));
-  color: var(--muted-strong);
-}
-
-.workspace-history-toggle:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: -2px;
-}
-
-.session-list--nested {
-  padding-left: 16px;
-}
-
 .pinned-thread-group {
   display: grid;
   gap: 4px;
   padding-bottom: 4px;
   border-bottom: 1px solid var(--line);
+}
+
+.recency-thread-group {
+  display: grid;
+  gap: 2px;
+  padding-top: 8px;
+}
+
+.recency-thread-group__head {
+  height: 24px;
+  padding: 0 4px;
+  display: flex;
+  align-items: center;
+  color: var(--muted-subtle);
+  font-size: 11px;
+  font-weight: 620;
 }
 
 .pinned-thread-group__head {
