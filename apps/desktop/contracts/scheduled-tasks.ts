@@ -116,8 +116,58 @@ const WEEKDAY_ALIASES: Readonly<Record<string, Weekday>> = {
   "6": 6,
 };
 
+export function isIanaTimeZone(value: string): boolean {
+  if (!value) {
+    return false;
+  }
+  try {
+    Intl.DateTimeFormat("en-US", { timeZone: value }).format(new Date(0));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function assertIanaTimeZone(value: string, name = "timeZone"): string {
+  if (!isIanaTimeZone(value)) {
+    throw new TypeError(`${name} must be an IANA time zone`);
+  }
+  return value;
+}
+
 export function hostTimeZone(): string {
-  return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  return isIanaTimeZone(timeZone) ? timeZone : "UTC";
+}
+
+export function scheduledTaskSchedulesEqual(
+  left: ScheduledTaskSchedule,
+  right: ScheduledTaskSchedule,
+): boolean {
+  if (left.kind !== right.kind) {
+    return false;
+  }
+  if (left.kind === "once" && right.kind === "once") {
+    return left.at === right.at;
+  }
+  if (left.kind === "interval" && right.kind === "interval") {
+    return left.everyMs === right.everyMs;
+  }
+  if (left.kind === "daily" && right.kind === "daily") {
+    return (
+      left.hour === right.hour && left.minute === right.minute && left.timeZone === right.timeZone
+    );
+  }
+  if (left.kind === "weekly" && right.kind === "weekly") {
+    return (
+      left.hour === right.hour &&
+      left.minute === right.minute &&
+      left.timeZone === right.timeZone &&
+      left.days.length === right.days.length &&
+      left.days.every((day, index) => day === right.days[index])
+    );
+  }
+  return false;
 }
 
 export function onceActivationNeedsNewTime(
@@ -190,7 +240,7 @@ export function assertScheduledTaskSchedule(
     const minute = record.minute;
     const timeZone =
       typeof record.timeZone === "string" && record.timeZone.trim()
-        ? record.timeZone.trim()
+        ? assertIanaTimeZone(record.timeZone.trim(), `${name}.timeZone`)
         : hostTimeZone();
     if (typeof hour !== "number" || !Number.isInteger(hour) || hour < 0 || hour > 23) {
       throw new TypeError(`${name}.hour must be an integer 0-23`);

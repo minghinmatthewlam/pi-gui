@@ -180,6 +180,7 @@ export interface ConversationOwner {
     attachments: readonly ComposerAttachment[],
     options?: { readonly rollbackOptimisticMessageOnError?: boolean },
   ): Promise<void>;
+  deliverBackgroundInstruction(sessionRef: SessionRef, text: string): Promise<string | undefined>;
 }
 
 export function createConversationOwner(store: ConversationOwnerHost): ConversationOwner {
@@ -206,6 +207,8 @@ export function createConversationOwner(store: ConversationOwnerHost): Conversat
     cancelCurrentRun: (sessionRef) => cancelCurrentRun(store, sessionRef),
     sendMessageToSession: (sessionRef, text, attachments, options) =>
       sendMessageToSession(store, sessionRef, text, attachments, options),
+    deliverBackgroundInstruction: (sessionRef, text) =>
+      deliverBackgroundInstruction(store, sessionRef, text),
   };
 }
 
@@ -642,6 +645,58 @@ async function cancelCurrentRun(
 }
 
 /* ── Internal helpers ───────────────────────────────────── */
+
+async function deliverBackgroundInstruction(
+  store: ComposerStore,
+  sessionRef: SessionRef,
+  text: string,
+): Promise<string | undefined> {
+  const instruction = text.trim();
+  if (!instruction) {
+    throw new Error("Scheduled task instruction is empty.");
+  }
+  await store.ensureSessionReady(sessionRef);
+  const session = store.sessionFromState(sessionRef);
+  if (!session) {
+    throw new Error(`Unknown session: ${sessionRef.workspaceId}:${sessionRef.sessionId}`);
+  }
+  if (session.archivedAt) {
+    throw new Error("Scheduled task target thread is archived.");
+  }
+
+  if (session.status === "running") {
+    const nextMessage = buildQueuedComposerMessage({
+      text: instruction,
+      attachments: [],
+      mode: "followUp",
+    });
+    const nextQueuedMessages = [...store.getQueuedComposerMessages(sessionRef), nextMessage];
+    await store.driver.replaceQueuedMessages(
+      sessionRef,
+      toSessionQueuedMessages(nextQueuedMessages),
+    );
+    await store.refreshState({
+      clearLastError: true,
+      markSelectedSessionViewed: false,
+    });
+    return undefined;
+  }
+
+  const key = sessionKey(sessionRef);
+  const optimisticMessageId = appendUserMessage(
+    store.conversationState.transcriptCache,
+    sessionRef,
+    instruction,
+  );
+  store.publishSelectedTranscriptFor(sessionRef);
+  clearActiveAssistantMessage(store.conversationState.activeAssistantMessageBySession, sessionRef);
+  store.conversationState.sessionErrorsBySession.delete(key);
+  await store.driver.sendUserMessage(sessionRef, {
+    text: instruction,
+    attachments: [],
+  });
+  return optimisticMessageId;
+}
 
 async function sendMessageToSession(
   store: ComposerStore,

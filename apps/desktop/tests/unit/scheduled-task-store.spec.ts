@@ -52,6 +52,23 @@ test("active tasks without nextRunAt fail decode", () => {
   ).toThrow(/nextRunAt/);
 });
 
+test("invalid IANA time zones fail decode and do not overwrite the file", async () => {
+  const path = await tempPath();
+  const invalid = {
+    version: 1,
+    tasks: [
+      {
+        ...validTask,
+        schedule: { kind: "daily", hour: 9, minute: 0, timeZone: "Not/A_Zone" },
+      },
+    ],
+  };
+  const original = `${JSON.stringify(invalid)}\n`;
+  await writeFile(path, original);
+  await expect(readScheduledTasksFile(path)).rejects.toThrow(/Invalid scheduled-tasks/);
+  expect(await readFile(path, "utf8")).toBe(original);
+});
+
 test("round-trips a valid scheduled-tasks file", async () => {
   const path = await tempPath();
   await writeScheduledTasksFile(path, [validTask]);

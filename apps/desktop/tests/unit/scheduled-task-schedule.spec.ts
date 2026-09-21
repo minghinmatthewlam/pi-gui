@@ -6,8 +6,10 @@ import {
 import {
   formatScheduledTaskRecurrence,
   formatScheduledTaskNextRun,
+  isIanaTimeZone,
   onceActivationNeedsNewTime,
   scheduledOriginsByMessageId,
+  scheduledTaskSchedulesEqual,
   type ScheduledTaskRecord,
 } from "../../contracts/scheduled-tasks";
 
@@ -152,4 +154,25 @@ test("onceActivationNeedsNewTime blocks resume of a claimed past once", () => {
       new Date("2026-09-21T12:05:00.000Z"),
     ),
   ).toBe(false);
+});
+
+test("IANA time zones are accepted and junk zones are rejected", () => {
+  expect(isIanaTimeZone("UTC")).toBe(true);
+  expect(isIanaTimeZone("America/Los_Angeles")).toBe(true);
+  expect(isIanaTimeZone("Not/A_Zone")).toBe(false);
+  expect(isIanaTimeZone("")).toBe(false);
+  expect(() =>
+    nextRunAt({ kind: "daily", hour: 9, minute: 0, timeZone: "Not/A_Zone" }, new Date()),
+  ).toThrow();
+});
+
+test("scheduledTaskSchedulesEqual ignores title-only identity and catches zone changes", () => {
+  const daily = {
+    kind: "daily" as const,
+    hour: 9,
+    minute: 0,
+    timeZone: "America/Los_Angeles",
+  };
+  expect(scheduledTaskSchedulesEqual(daily, { ...daily })).toBe(true);
+  expect(scheduledTaskSchedulesEqual(daily, { ...daily, timeZone: "UTC" })).toBe(false);
 });

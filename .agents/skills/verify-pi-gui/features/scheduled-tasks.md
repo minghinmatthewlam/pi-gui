@@ -31,4 +31,5 @@ This is fixture-backed Electron proof, not real-provider interview execution. A 
 
 - Tasks run only while pi-gui is open on this device.
 - Fire of `new-thread` must not steal the selected session.
+- Fire must not clear composer drafts, attachments, or queued follow-up edits.
 - Corrupt `scheduled-tasks.json` must not block the rest of the app.

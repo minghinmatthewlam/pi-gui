@@ -194,4 +194,12 @@ test("IPC request validation rejects malformed scheduled tasks", () => {
       target,
     }),
   ).toThrow(/days/);
+  expect(() =>
+    expectCreateScheduledTaskInput({
+      title: "Ping",
+      instruction: "do it",
+      schedule: { kind: "daily", hour: 9, minute: 0, timeZone: "Not/A_Zone" },
+      target,
+    }),
+  ).toThrow(/timeZone/);
 });

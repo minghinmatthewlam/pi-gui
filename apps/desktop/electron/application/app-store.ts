@@ -513,15 +513,8 @@ export class DesktopAppStore {
       buildCreateSessionOptions: (workspaceId) => this.buildCreateSessionOptions(workspaceId),
       updateComposerDraft: (sessionRef, draft) =>
         this.conversationOwner.updateComposerDraft(sessionRef, draft),
-      sendMessageToSession: (sessionRef, text, attachments, sendOptions) =>
-        this.conversationOwner.sendMessageToSession(sessionRef, text, attachments, sendOptions),
-      submitComposerToSession: (sessionRef, text, attachments, submitOptions) =>
-        this.conversationOwner.submitComposerToSession(
-          sessionRef,
-          text,
-          attachments,
-          submitOptions,
-        ),
+      deliverBackgroundInstruction: (sessionRef, text) =>
+        this.conversationOwner.deliverBackgroundInstruction(sessionRef, text),
       transcriptFor: (sessionRef) =>
         this.sessionState.transcriptCache.get(sessionKey(sessionRef)) ?? [],
     });

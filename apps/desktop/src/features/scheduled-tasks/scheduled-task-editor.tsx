@@ -107,6 +107,14 @@ export function ScheduledTaskEditor({
         ? [...prefill.schedule.days]
         : [1],
   );
+  const [timeZone] = useState(
+    source?.schedule.kind === "daily" || source?.schedule.kind === "weekly"
+      ? source.schedule.timeZone
+      : prefill?.schedule &&
+          (prefill.schedule.kind === "daily" || prefill.schedule.kind === "weekly")
+        ? prefill.schedule.timeZone
+        : hostTimeZone(),
+  );
   const [intervalMinutes, setIntervalMinutes] = useState(
     source?.schedule.kind === "interval"
       ? Math.round(source.schedule.everyMs / 60_000)
@@ -170,7 +178,7 @@ export function ScheduledTaskEditor({
         kind: "daily",
         hour: parsed.hour,
         minute: parsed.minute,
-        timeZone: hostTimeZone(),
+        timeZone,
       };
     }
     if (frequency === "weekly") {
@@ -179,7 +187,7 @@ export function ScheduledTaskEditor({
         days: days.length > 0 ? days : [1],
         hour: parsed.hour,
         minute: parsed.minute,
-        timeZone: hostTimeZone(),
+        timeZone,
       };
     }
     const everyMs = Math.round(intervalMinutes) * 60_000;

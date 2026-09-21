@@ -13,14 +13,14 @@ import {
   assertScheduledTaskSchedule,
   assertScheduledTaskTarget,
   onceActivationNeedsNewTime,
+  scheduledTaskSchedulesEqual,
   type CreateScheduledTaskInput,
   type ScheduledTaskRecord,
   type ScheduledTaskRun,
-  type ScheduledTaskStatus,
+  type ScheduledTaskSchedule,
   type UpdateScheduledTaskInput,
 } from "../../contracts/scheduled-tasks";
 import type {
-  ComposerAttachment,
   CreateSessionInput,
   DesktopAppState,
   SessionRecord,
@@ -58,18 +58,7 @@ export interface ScheduledTaskOwnerHost {
   ensureSessionReady(sessionRef: SessionRef): Promise<SessionSnapshot | undefined>;
   buildCreateSessionOptions(workspaceId: string): Promise<CreateSessionOptions | undefined>;
   updateComposerDraft(sessionRef: SessionRef, draft: string): Promise<DesktopAppState>;
-  sendMessageToSession(
-    sessionRef: SessionRef,
-    text: string,
-    attachments: readonly ComposerAttachment[],
-    options?: { readonly rollbackOptimisticMessageOnError?: boolean },
-  ): Promise<void>;
-  submitComposerToSession(
-    sessionRef: SessionRef,
-    textInput: string,
-    attachments: readonly ComposerAttachment[],
-    options?: { readonly deliverAs?: "steer" | "followUp"; readonly allowCommands?: boolean },
-  ): Promise<DesktopAppState>;
+  deliverBackgroundInstruction(sessionRef: SessionRef, text: string): Promise<string | undefined>;
   transcriptFor(sessionRef: SessionRef): readonly TranscriptMessage[];
 }
 
@@ -142,14 +131,18 @@ function bindingConflict(
   );
 }
 
-function resolveNextRunAt(
-  schedule: CreateScheduledTaskInput["schedule"],
-  from: Date,
-): string | undefined {
-  if (schedule.kind === "once") {
-    return schedule.at;
+function nextRunOrUndefined(schedule: ScheduledTaskSchedule, from: Date): string | undefined {
+  try {
+    return nextRunAt(schedule, from);
+  } catch {
+    return undefined;
   }
-  return nextRunAt(schedule, from);
+}
+
+function missingNextRunError(schedule: ScheduledTaskSchedule): string {
+  return schedule.kind === "once"
+    ? "One-time tasks must be scheduled in the future."
+    : "Scheduled task has no next run.";
 }
 
 function isClaimable(task: ScheduledTaskRecord, now: Date): boolean {
@@ -313,9 +306,9 @@ async function createScheduledTask(
     return store.withError("This thread already has a scheduled task.");
   }
   const now = new Date();
-  const next = resolveNextRunAt(schedule, now);
+  const next = nextRunOrUndefined(schedule, now);
   if (!next) {
-    return store.withError("Scheduled task has no next run.");
+    return store.withError(missingNextRunError(schedule));
   }
   const created: ScheduledTaskRecord = {
     id: randomUUID(),
@@ -371,7 +364,8 @@ async function updateScheduledTask(
   }
   const now = new Date();
   const status = patch.status ?? existing.status;
-  const scheduleChanged = patch.schedule !== undefined;
+  const scheduleChanged =
+    patch.schedule !== undefined && !scheduledTaskSchedulesEqual(existing.schedule, schedule);
   let nextRunAtValue = existing.nextRunAt;
   let lastRunAt = scheduleChanged ? undefined : existing.lastRunAt;
   let completedAt = existing.completedAt;
@@ -382,9 +376,13 @@ async function updateScheduledTask(
   }
   if (status === "active") {
     completedAt = undefined;
-    nextRunAtValue = resolveNextRunAt(schedule, now);
-    if (!nextRunAtValue) {
-      return store.withError("Scheduled task has no next run.");
+    if (!scheduleChanged && existing.status === "active" && existing.nextRunAt) {
+      nextRunAtValue = existing.nextRunAt;
+    } else {
+      nextRunAtValue = nextRunOrUndefined(schedule, now);
+      if (!nextRunAtValue) {
+        return store.withError(missingNextRunError(schedule));
+      }
     }
   } else {
     nextRunAtValue = undefined;
@@ -482,25 +480,8 @@ async function deliverInstruction(
   instruction: string,
   firedAt?: string,
 ): Promise<string | undefined> {
-  await store.ensureSessionReady(sessionRef);
-  const session = store.sessionFromState(sessionRef);
-  if (!session) {
-    throw new Error(`Unknown session: ${sessionRef.workspaceId}:${sessionRef.sessionId}`);
-  }
-  if (session.archivedAt) {
-    throw new Error("Scheduled task target thread is archived.");
-  }
-  if (session.status === "running") {
-    await store.submitComposerToSession(sessionRef, instruction, [], {
-      deliverAs: "followUp",
-      allowCommands: false,
-    });
-  } else {
-    await store.sendMessageToSession(sessionRef, instruction, [], {
-      rollbackOptimisticMessageOnError: false,
-    });
-  }
-  return lastUserMessageId(store.transcriptFor(sessionRef), instruction, firedAt);
+  const deliveredId = await store.deliverBackgroundInstruction(sessionRef, instruction);
+  return lastUserMessageId(store.transcriptFor(sessionRef), instruction, firedAt) ?? deliveredId;
 }
 
 async function fireDueScheduledTasks(
@@ -528,29 +509,33 @@ async function fireDueScheduledTasks(
       if (!claimed || !isClaimable(claimed, now)) {
         continue;
       }
-      const advancedNext =
-        claimed.schedule.kind === "once" ? claimed.nextRunAt : nextRunAt(claimed.schedule, now);
-      const claimedTask: ScheduledTaskRecord = {
-        ...claimed,
-        lastRunAt: nowIso(now),
-        updatedAt: nowIso(now),
-        ...(advancedNext ? { nextRunAt: advancedNext } : { nextRunAt: claimed.nextRunAt }),
-      };
-      await writeTask(store, claimedTask);
+      let advancedNext: string | undefined;
+      try {
+        advancedNext =
+          claimed.schedule.kind === "once" ? claimed.nextRunAt : nextRunAt(claimed.schedule, now);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        await writeTask(store, pauseWithError(claimed, now, message));
+        continue;
+      }
+      if (claimed.schedule.kind !== "once" && !advancedNext) {
+        await writeTask(store, pauseWithError(claimed, now, "Scheduled task has no next run."));
+        continue;
+      }
 
       const firedAt = nowIso(new Date());
       let sessionRef: SessionRef | undefined;
       try {
-        if (claimedTask.target.kind === "new-thread") {
+        if (claimed.target.kind === "new-thread") {
           sessionRef = await createBackgroundSession(
             store,
-            claimedTask.target.workspaceId,
-            claimedTask.title,
+            claimed.target.workspaceId,
+            claimed.title,
           );
         } else {
           sessionRef = {
-            workspaceId: claimedTask.target.workspaceId,
-            sessionId: claimedTask.target.sessionId,
+            workspaceId: claimed.target.workspaceId,
+            sessionId: claimed.target.sessionId,
           };
           const session = store.sessionFromState(sessionRef);
           if (!session || session.archivedAt) {
@@ -560,7 +545,7 @@ async function fireDueScheduledTasks(
         const userMessageId = await deliverInstruction(
           store,
           sessionRef,
-          claimedTask.instruction,
+          claimed.instruction,
           firedAt,
         );
         const run: ScheduledTaskRun = {
@@ -568,22 +553,25 @@ async function fireDueScheduledTasks(
           sessionId: sessionRef.sessionId,
           workspaceId: sessionRef.workspaceId,
           firedAt,
-          instruction: claimedTask.instruction,
+          instruction: claimed.instruction,
           ...(userMessageId ? { userMessageId } : {}),
           outcome: "started",
         };
         const afterSend: ScheduledTaskRecord =
-          claimedTask.schedule.kind === "once"
+          claimed.schedule.kind === "once"
             ? {
-                ...appendRun(claimedTask, run),
+                ...appendRun(claimed, run),
                 status: "completed",
+                lastRunAt: nowIso(now),
                 completedAt: nowIso(now),
                 nextRunAt: undefined,
                 lastError: undefined,
                 updatedAt: nowIso(now),
               }
             : {
-                ...appendRun(claimedTask, run),
+                ...appendRun(claimed, run),
+                lastRunAt: nowIso(now),
+                nextRunAt: advancedNext,
                 lastError: undefined,
                 updatedAt: nowIso(now),
               };
@@ -591,7 +579,7 @@ async function fireDueScheduledTasks(
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         const failedMessageId = sessionRef
-          ? lastUserMessageId(store.transcriptFor(sessionRef), claimedTask.instruction, firedAt)
+          ? lastUserMessageId(store.transcriptFor(sessionRef), claimed.instruction, firedAt)
           : undefined;
         const failedRun: ScheduledTaskRun | undefined = sessionRef
           ? {
@@ -599,14 +587,14 @@ async function fireDueScheduledTasks(
               sessionId: sessionRef.sessionId,
               workspaceId: sessionRef.workspaceId,
               firedAt,
-              instruction: claimedTask.instruction,
+              instruction: claimed.instruction,
               ...(failedMessageId ? { userMessageId: failedMessageId } : {}),
               outcome: "failed",
               error: message,
             }
           : undefined;
         const failed = pauseWithError(
-          failedRun ? appendRun(claimedTask, failedRun) : claimedTask,
+          failedRun ? appendRun(claimed, failedRun) : claimed,
           now,
           message,
         );
