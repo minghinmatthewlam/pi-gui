@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, open, readFile, rename, unlink } from "node:fs/promises";
+import { copyFile, mkdir, open, readFile, rename, unlink } from "node:fs/promises";
 import { dirname } from "node:path";
 
 const writeQueueByPath = new Map<string, Promise<void>>();
@@ -113,13 +113,24 @@ async function promoteToTarget(
   // Preserve the current good file as a `.bak` before overwriting so a truncated
   // or corrupt target can be recovered on read. On the first write there is no
   // target yet, so a missing-file error here is expected and ignored.
+  if (!preserveCorrupt) {
+    // Copy the current file aside, then replace it in one rename. Moving the
+    // primary to `.bak` first leaves a window where readers see ENOENT.
+    try {
+      await copyFile(filePath, `${filePath}.bak`);
+    } catch (error) {
+      if (!isMissingFileError(error)) {
+        throw error;
+      }
+    }
+    await renameReplace(tmpPath, filePath);
+    return;
+  }
+
   try {
     // Recovery never replaces the good backup with corrupt bytes. Retain the
     // damaged primary separately before installing the recovered state.
-    await renameReplace(
-      filePath,
-      preserveCorrupt ? `${filePath}.corrupt.${randomUUID()}` : `${filePath}.bak`,
-    );
+    await renameReplace(filePath, `${filePath}.corrupt.${randomUUID()}`);
   } catch (error) {
     if (!isMissingFileError(error)) {
       throw error;

@@ -254,7 +254,7 @@ test("rejects malformed nested state without overwriting it and resumes after re
     await selectSession(window, "Malformed nested state session");
     await window.getByTestId("composer").fill("valid draft survives malformed nested state");
     await expect
-      .poll(async () => readFile(uiStatePath, "utf8"))
+      .poll(async () => readPresentText(uiStatePath))
       .toContain("valid draft survives malformed nested state");
   } finally {
     await firstRun.close();
@@ -696,3 +696,14 @@ test("migrates legacy inline attachment persistence and drops legacy inline tran
     await secondRun.close();
   }
 });
+
+async function readPresentText(filePath: string): Promise<string> {
+  try {
+    return await readFile(filePath, "utf8");
+  } catch (error) {
+    if (typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT") {
+      return "";
+    }
+    throw error;
+  }
+}
