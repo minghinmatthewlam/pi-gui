@@ -30,7 +30,7 @@ export function initialWorkbenchView(workspaceId: string, isUnsent = false): Tas
     tools: [{ kind: "changes" }],
     selection: { kind: "tool", toolId: "changes" },
     files: { workspaceId, tabs: EMPTY_FILE_TABS },
-    changes: { workspaceId, selectedPath: null },
+    changes: { workspaceId, selectedPath: null, scope: { kind: "uncommitted" } },
   };
 }
 

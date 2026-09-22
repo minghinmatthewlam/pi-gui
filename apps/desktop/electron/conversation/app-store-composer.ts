@@ -633,10 +633,8 @@ async function cancelCurrentRun(
 
   try {
     await store.driver.cancelCurrentRun(sessionRef);
-    clearActiveAssistantMessage(
-      store.conversationState.activeAssistantMessageBySession,
-      sessionRef,
-    );
+    // The queued message-end event owns this clear, so a delayed host event queue
+    // can still associate the partial live row with its persisted Pi entry.
     store.conversationState.sessionErrorsBySession.delete(sessionKey(sessionRef));
     store.clearConversationError();
     store.schedulePersistUiState();

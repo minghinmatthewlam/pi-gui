@@ -19,7 +19,7 @@ function template(kind: "files" | "changes" | "terminal" = "changes"): TaskWorkb
       workspaceId: "repo",
       tabs: { tabs: [], active: null, line: null, lineNonce: 0, retained: [] },
     },
-    changes: { workspaceId: "repo", selectedPath: null },
+    changes: { scope: { kind: "uncommitted" }, workspaceId: "repo", selectedPath: null },
   };
 }
 
@@ -179,7 +179,11 @@ test("workbench boundary accepts unavailable extension references but rejects co
   expect(() =>
     decodeTaskWorkbenchTemplate({
       ...template(),
-      changes: { workspaceId: "repo", selectedPath: "x".repeat(4097) },
+      changes: {
+        scope: { kind: "uncommitted" },
+        workspaceId: "repo",
+        selectedPath: "x".repeat(4097),
+      },
     }),
   ).toThrow(/oversized reference/);
   expect(await requests.get(firstTask)).toBeNull();

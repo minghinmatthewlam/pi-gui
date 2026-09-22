@@ -4,27 +4,19 @@ import type {
   DiffPanelSelection,
   FileWorkbenchContext,
 } from "./diff-panel-types";
+import type { PiDesktopApi } from "../../../contracts/ipc";
 import type {
-  ChangedFileEntry,
-  ChangedFilesResult,
-  PiDesktopApi,
-  WorkspaceFilePreview,
-} from "../../../contracts/ipc";
+  AvailableReview,
+  ReviewCoverage,
+  ReviewFileEntry,
+  ReviewFileResult,
+  ReviewIssue,
+  ReviewResult,
+  ReviewScope,
+} from "../../../contracts/review";
 import { InlineDiff } from "../../ui/diff-inline";
 import { RefreshIcon } from "../../ui/icons";
 import { extensionToLanguage } from "../../ui/syntax-highlight";
-import { loadReviewed, pruneReviewed, saveReviewed } from "./reviewed-files-store";
-
-interface WorkbenchChangedFile extends ChangedFileEntry {
-  readonly workspaceId: string;
-  readonly workspaceName: string;
-  readonly branchName?: string;
-}
-
-interface FileSelection {
-  readonly workspaceId: string;
-  readonly path: string;
-}
 
 interface DiffPanelProps {
   readonly workspaceId: string;
@@ -35,6 +27,10 @@ interface DiffPanelProps {
   readonly contexts: readonly FileWorkbenchContext[];
   readonly selection: DiffPanelSelection;
   readonly onSelectionChange: (selection: DiffPanelSelection) => void;
+  readonly onOpenFile: (file: {
+    readonly workspaceId: string;
+    readonly path: string;
+  }) => void | Promise<void>;
 }
 
 export function DiffPanel({
@@ -46,326 +42,286 @@ export function DiffPanel({
   contexts,
   selection,
   onSelectionChange,
+  onOpenFile,
 }: DiffPanelProps) {
-  const [changedByWorkspace, setChangedByWorkspace] = useState<
-    Readonly<Record<string, ChangedFilesResult>>
-  >({});
-  const selectedFile = useMemo<FileSelection | null>(
-    () =>
-      selection.selectedPath === null
-        ? null
-        : { workspaceId: selection.workspaceId, path: selection.selectedPath },
-    [selection.selectedPath, selection.workspaceId],
-  );
-  const [viewerMode, setViewerMode] = useState<"preview" | "diff">("diff");
-  const [diffText, setDiffText] = useState("");
-  const [preview, setPreview] = useState<WorkspaceFilePreview | null>(null);
-  const [viewerError, setViewerError] = useState<string | null>(null);
+  const scopeKey = JSON.stringify(selection.scope);
+  const requestedScope = useMemo(() => selection.scope, [scopeKey]);
+  const queryKey = JSON.stringify([workspaceId, sessionId, selection.workspaceId, scopeKey]);
+  const activeQueryKey = useRef(queryKey);
+  activeQueryKey.current = queryKey;
+  const [loaded, setLoaded] = useState<{
+    readonly queryKey: string;
+    readonly result: ReviewResult;
+  } | null>(null);
   const [loading, setLoading] = useState(false);
-  const [refreshError, setRefreshError] = useState<string | null>(null);
-  const [viewerLoading, setViewerLoading] = useState(false);
-  const [reviewed, setReviewed] = useState<ReadonlySet<string>>(() =>
-    loadReviewed(workspaceId, sessionId),
+  const [fileResult, setFileResult] = useState<ReviewFileResult | null>(null);
+  const [fileLoading, setFileLoading] = useState(false);
+  const [actionIssue, setActionIssue] = useState<ReviewIssue | null>(null);
+  const [busyFiles, setBusyFiles] = useState<ReadonlySet<string>>(new Set());
+  const [baseDraft, setBaseDraft] = useState(
+    selection.scope.kind === "branch" ? (selection.scope.baseRef ?? "") : "",
   );
-  const contextsRef = useRef(contexts);
-  const viewerRequestNonceRef = useRef(0);
-  const refreshRequestNonceRef = useRef(0);
-
-  const contextIdsKey = useMemo(
-    () => contexts.map((context) => context.workspace.id).join("\n"),
-    [contexts],
+  const requestNonce = useRef(0);
+  const fileNonce = useRef(0);
+  const fileListRef = useRef<HTMLDivElement | null>(null);
+  const selectedCheckout = contexts.find(
+    (context) => context.workspace.id === selection.workspaceId,
   );
-  const knownContextIds = useMemo(
-    () => new Set(contextIdsKey ? contextIdsKey.split("\n") : []),
-    [contextIdsKey],
-  );
-  const activeContext = contexts.find((context) => context.workspace.id === selection.workspaceId);
-  const changedGroups = useMemo(
-    () =>
-      contexts.map((context) => {
-        const result = changedByWorkspace[context.workspace.id];
-        return {
-          context,
-          error: result?.state === "unavailable" ? result.error : undefined,
-          pending: result === undefined,
-          files:
-            result?.state === "available"
-              ? result.files.map((file) => toWorkbenchChangedFile(context, file))
-              : [],
-        };
-      }),
-    [changedByWorkspace, contexts],
-  );
-  const changedRows = useMemo(() => changedGroups.flatMap((group) => group.files), [changedGroups]);
-  const unavailableChangedGroupCount = useMemo(
-    () => changedGroups.reduce((count, group) => count + (group.error ? 1 : 0), 0),
-    [changedGroups],
-  );
-  const pendingChangedGroupCount = useMemo(
-    () => changedGroups.reduce((count, group) => count + (group.pending ? 1 : 0), 0),
-    [changedGroups],
-  );
-  const changedFilesSummary = buildChangedFilesSummary(
-    changedRows.length,
-    unavailableChangedGroupCount,
-    pendingChangedGroupCount,
-  );
-  const selectedChangedResult = changedByWorkspace[selection.workspaceId];
+  const checkoutAvailable = selectedCheckout !== undefined;
+  const result = loaded?.queryKey === queryKey ? loaded.result : null;
+  const review = result?.state === "available" ? result : null;
+  const reviewRef = useRef(review);
+  reviewRef.current = review;
+  const selectedFile = review?.files.find((file) => file.path === selection.selectedPath);
+  const stale = actionIssue?.state === "stale" || fileResult?.state === "stale";
 
   useEffect(() => {
-    setReviewed(loadReviewed(workspaceId, sessionId));
-  }, [workspaceId, sessionId]);
-
-  useEffect(() => {
-    contextsRef.current = contexts;
-  }, [contexts]);
+    setBaseDraft(requestedScope.kind === "branch" ? (requestedScope.baseRef ?? "") : "");
+  }, [requestedScope]);
 
   const refresh = useCallback(() => {
-    const refreshContexts = contextsRef.current;
-    // Latest-request-wins: overlapping refreshes (e.g. running→idle firing alongside a
-    // context/mount refresh) must not let a slower earlier request overwrite newer state.
-    refreshRequestNonceRef.current += 1;
-    const requestNonce = refreshRequestNonceRef.current;
-    setRefreshError(null);
-    if (refreshContexts.length === 0) {
-      setChangedByWorkspace({});
+    const nonce = ++requestNonce.current;
+    fileNonce.current += 1;
+    setLoading(true);
+    setFileResult(null);
+    setFileLoading(false);
+    setActionIssue(null);
+    setBusyFiles(new Set());
+    if (!checkoutAvailable) {
+      setLoaded({
+        queryKey,
+        result: {
+          state: "unavailable",
+          code: "checkout-unavailable",
+          message: "The selected checkout is unavailable.",
+        },
+      });
       setLoading(false);
       return;
     }
-
-    setLoading(true);
-    void Promise.all(
-      refreshContexts.map(async (context) => {
-        const changedFiles = await api.getChangedFiles(context.workspace.id);
-        return { workspaceId: context.workspace.id, changedFiles };
-      }),
-    )
-      .then((results) => {
-        if (refreshRequestNonceRef.current !== requestNonce) {
-          return;
-        }
-        const nextChangedByWorkspace: Record<string, ChangedFilesResult> = {};
-        for (const result of results) {
-          nextChangedByWorkspace[result.workspaceId] = result.changedFiles;
-        }
-        setChangedByWorkspace(nextChangedByWorkspace);
-        setReviewed((current) => {
-          const unavailableWorkspaceIds = new Set(
-            results
-              .filter((result) => result.changedFiles.state === "unavailable")
-              .map((result) => result.workspaceId),
-          );
-          const retainedUnavailableKeys = [...current].filter((key) => {
-            const reviewedWorkspaceId = workspaceIdFromReviewedFileKey(key);
-            return (
-              reviewedWorkspaceId !== undefined && unavailableWorkspaceIds.has(reviewedWorkspaceId)
-            );
-          });
-          const pruned = pruneReviewed(current, [
-            ...results.flatMap((result) =>
-              result.changedFiles.state === "available"
-                ? result.changedFiles.files.map((file) =>
-                    reviewedFileKey(result.workspaceId, file.path),
-                  )
-                : [],
-            ),
-            ...retainedUnavailableKeys,
-          ]);
-          if (pruned !== current) {
-            saveReviewed(workspaceId, sessionId, pruned);
-          }
-          return pruned;
-        });
+    void api
+      .getReview({
+        target: { workspaceId, sessionId },
+        checkoutId: selection.workspaceId,
+        scope: requestedScope,
       })
-      .finally(() => {
-        if (refreshRequestNonceRef.current === requestNonce) {
+      .then(
+        (next) => {
+          if (requestNonce.current !== nonce || activeQueryKey.current !== queryKey) return;
+          setLoaded({ queryKey, result: next });
           setLoading(false);
-        }
-      })
-      .catch((error: unknown) => {
-        if (refreshRequestNonceRef.current === requestNonce) {
-          setRefreshError(error instanceof Error ? error.message : String(error));
-        }
-        console.error("[renderer] Promise.all failed", error);
-      });
-  }, [api, contextIdsKey, sessionId, workspaceId]);
-
-  const prevStatusRef = useRef(sessionStatus);
-  useEffect(() => {
-    const prev = prevStatusRef.current;
-    prevStatusRef.current = sessionStatus;
-    if (prev === "running" && sessionStatus !== "running") {
-      refresh();
-    }
-  }, [sessionStatus, refresh]);
+        },
+        (error: unknown) => {
+          if (requestNonce.current !== nonce || activeQueryKey.current !== queryKey) return;
+          setLoaded({
+            queryKey,
+            result: { state: "failed", code: "review-read-failed", message: errorMessage(error) },
+          });
+          setLoading(false);
+        },
+      );
+  }, [
+    api,
+    checkoutAvailable,
+    queryKey,
+    requestedScope,
+    selection.workspaceId,
+    sessionId,
+    workspaceId,
+  ]);
 
   useEffect(() => {
     refresh();
     return () => {
-      refreshRequestNonceRef.current += 1;
+      requestNonce.current += 1;
+      fileNonce.current += 1;
     };
   }, [refresh]);
 
+  const previousRunStatus = useRef(sessionStatus);
   useEffect(() => {
+    const previous = previousRunStatus.current;
+    previousRunStatus.current = sessionStatus;
     if (
-      !fileRequest ||
-      fileRequest.workspaceId !== selection.workspaceId ||
-      fileRequest.path !== selection.selectedPath
-    ) {
-      return;
-    }
-    // The workbench handles the deliberate navigation. This request only chooses the viewer
-    // mode, so a saved request cannot overwrite a later selection when the tool remounts.
-    setViewerMode("diff");
-  }, [fileRequest, selection.selectedPath, selection.workspaceId]);
+      previous === "running" &&
+      sessionStatus !== "running" &&
+      (requestedScope.kind === "uncommitted" ||
+        (requestedScope.kind === "turn" && !requestedScope.checkpointId))
+    )
+      refresh();
+  }, [refresh, requestedScope, sessionStatus]);
 
   useEffect(() => {
-    viewerRequestNonceRef.current += 1;
-    const requestNonce = viewerRequestNonceRef.current;
-    if (!selectedFile) {
-      setDiffText("");
-      setPreview(null);
-      setViewerError(null);
-      setViewerLoading(false);
-      return;
-    }
+    const nonce = ++fileNonce.current;
+    setFileResult(null);
+    setFileLoading(false);
+    if (!review || !selectedFile || loading) return;
+    setFileLoading(true);
+    void api.getReviewFile({ reviewId: review.reviewId, fileId: selectedFile.id }).then(
+      (next) => {
+        if (fileNonce.current !== nonce || activeQueryKey.current !== queryKey) return;
+        setFileResult(next);
+        if (next.state === "stale") setActionIssue(next);
+        setFileLoading(false);
+      },
+      (error: unknown) => {
+        if (fileNonce.current !== nonce || activeQueryKey.current !== queryKey) return;
+        setFileResult({
+          state: "failed",
+          code: "review-file-read-failed",
+          message: errorMessage(error),
+        });
+        setFileLoading(false);
+      },
+    );
+    return () => {
+      fileNonce.current += 1;
+    };
+  }, [api, loading, queryKey, review?.reviewId, selectedFile?.id, fileRequest?.nonce]);
 
-    setViewerLoading(true);
-    setViewerError(null);
-    setDiffText("");
-    setPreview(null);
-    let unavailableReason = refreshError;
-    if (!knownContextIds.has(selectedFile.workspaceId)) {
-      unavailableReason = "The selected checkout is unavailable.";
-    } else if (viewerMode === "diff" && selectedChangedResult?.state === "unavailable") {
-      unavailableReason = selectedChangedResult.error.message;
-    }
-    if (unavailableReason) {
-      setViewerError(unavailableReason);
-      setViewerLoading(false);
-      return;
-    }
-    if (selectedChangedResult === undefined) {
-      return;
-    }
-    if (viewerMode === "diff") {
-      void api
-        .getFileDiff(selectedFile.workspaceId, selectedFile.path)
-        .then(async (result) => {
-          if (viewerRequestNonceRef.current !== requestNonce) {
+  useEffect(() => {
+    if (!selection.selectedPath) return;
+    fileListRef.current
+      ?.querySelector<HTMLElement>(`[data-file-path="${CSS.escape(selection.selectedPath)}"]`)
+      ?.scrollIntoView({ block: "nearest", behavior: "auto" });
+  }, [review?.reviewId, selection.selectedPath]);
+
+  const setBusy = (fileId: string, busy: boolean) => {
+    setBusyFiles((previous) => {
+      const next = new Set(previous);
+      if (busy) next.add(fileId);
+      else next.delete(fileId);
+      return next;
+    });
+  };
+  const stillShowing = (comparison: AvailableReview, nonce: number) =>
+    requestNonce.current === nonce &&
+    activeQueryKey.current === queryKey &&
+    reviewRef.current?.reviewId === comparison.reviewId;
+
+  const markReviewed = (comparison: AvailableReview, file: ReviewFileEntry) => {
+    const nonce = requestNonce.current;
+    setBusy(file.id, true);
+    void api
+      .setReviewFileReviewed({
+        reviewId: comparison.reviewId,
+        fileId: file.id,
+        reviewed: !file.reviewed,
+      })
+      .then(
+        (next) => {
+          if (!stillShowing(comparison, nonce)) return;
+          if (next.state !== "available") {
+            setActionIssue(next);
             return;
           }
-          // The legacy diff API also returns an empty string for a missing path. Check the
-          // exact file before displaying an empty diff; directory listings may be truncated.
-          if (!result.trim()) {
-            await api.readWorkspaceFile(selectedFile.workspaceId, selectedFile.path);
-          }
-          if (viewerRequestNonceRef.current === requestNonce) {
-            setDiffText(result);
-          }
-        })
-        .catch((error) => {
-          if (viewerRequestNonceRef.current === requestNonce) {
-            setDiffText("");
-            setViewerError(error instanceof Error ? error.message : String(error));
-          }
-        })
-        .finally(() => {
-          if (viewerRequestNonceRef.current === requestNonce) {
-            setViewerLoading(false);
-          }
-        });
-      return;
-    }
-
-    void api
-      .readWorkspaceFile(selectedFile.workspaceId, selectedFile.path)
-      .then((result) => {
-        if (viewerRequestNonceRef.current === requestNonce) {
-          setPreview(result);
-        }
-      })
-      .catch((error) => {
-        if (viewerRequestNonceRef.current === requestNonce) {
-          setPreview(null);
-          setViewerError(error instanceof Error ? error.message : String(error));
-        }
-      })
+          setLoaded((current) =>
+            current?.result.state === "available" && current.result.reviewId === next.reviewId
+              ? {
+                  ...current,
+                  result: {
+                    ...current.result,
+                    files: current.result.files.map((entry) =>
+                      entry.id === next.fileId ? { ...entry, reviewed: next.reviewed } : entry,
+                    ),
+                  },
+                }
+              : current,
+          );
+        },
+        (error: unknown) => {
+          if (stillShowing(comparison, nonce))
+            setActionIssue({
+              state: "failed",
+              code: "review-mark-failed",
+              message: errorMessage(error),
+            });
+        },
+      )
       .finally(() => {
-        if (viewerRequestNonceRef.current === requestNonce) {
-          setViewerLoading(false);
-        }
-      });
-  }, [
-    api,
-    fileRequest?.nonce,
-    knownContextIds,
-    refreshError,
-    selectedChangedResult,
-    selectedFile,
-    viewerMode,
-  ]);
-
-  const fileListRef = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    if (!selectedFile) {
-      return;
-    }
-    const row = fileListRef.current?.querySelector<HTMLElement>(
-      `[data-workspace-id="${CSS.escape(selectedFile.workspaceId)}"][data-file-path="${CSS.escape(selectedFile.path)}"]`,
-    );
-    row?.scrollIntoView({ block: "nearest", behavior: "auto" });
-  }, [selectedFile, changedRows]);
-
-  const handleStage = (file: WorkbenchChangedFile) => {
-    void api
-      .stageFile(file.workspaceId, file.path, file.stagingSourcePath)
-      .then(() => refresh())
-      .catch((error: unknown) => {
-        setViewerError(error instanceof Error ? error.message : String(error));
+        if (stillShowing(comparison, nonce)) setBusy(file.id, false);
       });
   };
 
-  const toggleReviewed = useCallback(
-    (file: WorkbenchChangedFile) => {
-      setReviewed((current) => {
-        const key = reviewedFileKey(file.workspaceId, file.path);
-        const next = new Set(current);
-        if (next.has(key)) {
-          next.delete(key);
-        } else {
-          next.add(key);
-        }
-        saveReviewed(workspaceId, sessionId, next);
-        return next;
+  const stageFile = (
+    comparison: AvailableReview,
+    file: ReviewFileEntry,
+    action: "stage" | "unstage",
+  ) => {
+    const nonce = requestNonce.current;
+    setBusy(file.id, true);
+    void api
+      .changeReviewFileStage({ reviewId: comparison.reviewId, fileId: file.id, action })
+      .then(
+        (next) => {
+          if (!stillShowing(comparison, nonce)) return;
+          if (next.state === "applied") refresh();
+          else setActionIssue(next);
+        },
+        (error: unknown) => {
+          if (stillShowing(comparison, nonce))
+            setActionIssue({
+              state: "failed",
+              code: "review-stage-failed",
+              message: errorMessage(error),
+            });
+        },
+      )
+      .finally(() => {
+        if (stillShowing(comparison, nonce)) setBusy(file.id, false);
       });
-    },
-    [workspaceId, sessionId],
-  );
+  };
 
-  const reviewedCount = useMemo(
-    () =>
-      changedRows.reduce(
-        (acc, file) => acc + (reviewed.has(reviewedFileKey(file.workspaceId, file.path)) ? 1 : 0),
-        0,
-      ),
-    [changedRows, reviewed],
-  );
-  const showContextStrip = contexts.length > 1;
-  const showReviewCounter = changedRows.length > 0;
+  const chooseScope = (kind: string) => {
+    const scope: ReviewScope =
+      kind === "branch"
+        ? { kind: "branch" }
+        : kind === "turn"
+          ? { kind: "turn" }
+          : { kind: "uncommitted" };
+    onSelectionChange({ ...selection, selectedPath: null, scope });
+  };
+  const openCurrentFile = (comparison: AvailableReview, file: ReviewFileEntry) => {
+    const nonce = requestNonce.current;
+    const reportError = (error: unknown) => {
+      if (stillShowing(comparison, nonce))
+        setActionIssue({
+          state: "failed",
+          code: "review-open-file-failed",
+          message: errorMessage(error),
+        });
+    };
+    try {
+      void Promise.resolve(
+        onOpenFile({ workspaceId: comparison.checkoutId, path: file.path }),
+      ).catch(reportError);
+    } catch (error: unknown) {
+      reportError(error);
+    }
+  };
+  const selectedScope =
+    requestedScope.kind === "turn" && requestedScope.checkpointId
+      ? "selected-turn"
+      : requestedScope.kind;
+  const reviewedCount = review?.files.filter((file) => file.reviewed).length ?? 0;
+  const displayedFileResult =
+    fileResult?.state === "available" &&
+    (fileResult.reviewId !== review?.reviewId || fileResult.fileId !== selectedFile?.id)
+      ? null
+      : fileResult;
 
   return (
-    <section className="side-panel diff-panel file-workbench file-workbench--changes">
+    <section
+      className="side-panel diff-panel file-workbench file-workbench--changes review-panel"
+      aria-label="Changes review"
+    >
       <div className="diff-panel__header file-workbench__header">
         <div className="file-workbench__heading">
           <h2 className="diff-panel__title">Changes</h2>
-          <span className="file-workbench__subtitle">
-            {activeContext ? buildSubtitle(activeContext) : "Selected checkout unavailable"}
-          </span>
         </div>
-        {showReviewCounter ? (
+        {review && review.files.length > 0 ? (
           <span className="diff-panel__counter" data-testid="diff-panel-counter">
-            {`Reviewed ${reviewedCount} of ${changedRows.length}`}
+            Reviewed {reviewedCount} of {review.files.length}
           </span>
         ) : null}
         <button
@@ -373,42 +329,97 @@ export function DiffPanel({
           type="button"
           onClick={refresh}
           aria-label="Refresh"
+          title="Refresh comparison"
           disabled={loading}
         >
           <RefreshIcon />
         </button>
       </div>
-
-      {showContextStrip ? (
-        <div className="file-workbench__context-strip" aria-label="File scopes">
-          {contexts.map((context) => {
-            const isActive = activeContext?.workspace.id === context.workspace.id;
-            const changedResult = changedByWorkspace[context.workspace.id];
-            const changeCount =
-              changedResult?.state === "available" ? changedResult.files.length : 0;
-            return (
-              <button
-                className={`file-workbench__context ${isActive ? "file-workbench__context--active" : ""}`}
-                key={context.workspace.id}
-                type="button"
-                onClick={() =>
-                  onSelectionChange({ workspaceId: context.workspace.id, selectedPath: null })
-                }
-              >
-                <span>{contextLabel(context)}</span>
-                <strong>
-                  {changedResult === undefined
-                    ? "Loading"
-                    : changedResult.state === "unavailable"
-                      ? "Unavailable"
-                      : changeCount}
-                </strong>
-              </button>
-            );
-          })}
+      <div className="review-panel__controls">
+        <label>
+          Checkout
+          <select
+            aria-label="Review checkout"
+            value={selection.workspaceId}
+            onChange={(event) =>
+              onSelectionChange({
+                workspaceId: event.target.value,
+                selectedPath: null,
+                scope: requestedScope.kind === "turn" ? { kind: "uncommitted" } : requestedScope,
+              })
+            }
+          >
+            {!selectedCheckout ? (
+              <option value={selection.workspaceId}>Unavailable checkout</option>
+            ) : null}
+            {contexts.map((context) => (
+              <option value={context.workspace.id} key={context.workspace.id}>
+                {context.role === "thread" ? "Current task · " : ""}
+                {context.worktree?.branchName ??
+                  context.workspace.branchName ??
+                  context.workspace.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Compare
+          <select
+            aria-label="Review scope"
+            value={selectedScope}
+            onChange={(event) => chooseScope(event.target.value)}
+          >
+            <option value="uncommitted">Uncommitted</option>
+            <option value="branch">Branch</option>
+            <option value="turn">Last turn</option>
+            {selectedScope === "selected-turn" ? (
+              <option value="selected-turn">Selected turn</option>
+            ) : null}
+          </select>
+        </label>
+      </div>
+      {requestedScope.kind === "branch" ? (
+        <form
+          className="review-panel__base"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const baseRef = baseDraft.trim();
+            if (baseRef === (requestedScope.baseRef ?? "")) refresh();
+            else
+              onSelectionChange({
+                ...selection,
+                selectedPath: null,
+                scope: baseRef ? { kind: "branch", baseRef } : { kind: "branch" },
+              });
+          }}
+        >
+          <label htmlFor="review-base-ref">Base branch</label>
+          <input
+            id="review-base-ref"
+            aria-label="Base branch"
+            value={baseDraft}
+            onChange={(event) => setBaseDraft(event.target.value)}
+            placeholder={
+              review?.scope.kind === "branch"
+                ? (review.scope.baseRef ?? "Repository default")
+                : "Repository default"
+            }
+          />
+          <button type="submit" className="button" disabled={loading}>
+            Compare
+          </button>
+        </form>
+      ) : null}
+      <p className="review-panel__scope-note">{scopeDescription(requestedScope)}</p>
+      {review && !loading ? (
+        <div className="review-panel__identity" data-testid="review-comparison-identity">
+          <span>{review.baseLabel}</span>
+          {review.headOid ? <code title={review.headOid}>{review.headOid.slice(0, 8)}</code> : null}
+          {review.capturedAt ? <span>Captured {formatCaptureTime(review.capturedAt)}</span> : null}
         </div>
       ) : null}
-
+      {actionIssue ? <ReviewIssueBanner issue={actionIssue} onRefresh={refresh} /> : null}
+      {review && !loading ? <CoverageNotice coverage={review.coverage} /> : null}
       <div className="file-workbench__body">
         <section
           className="file-workbench__section file-workbench__section--changes"
@@ -416,263 +427,235 @@ export function DiffPanel({
         >
           <div className="file-workbench__section-header">
             <span>Changed files</span>
-            <span>{changedFilesSummary}</span>
+            <span>
+              {loading
+                ? "Loading"
+                : review
+                  ? review.files.length
+                  : result
+                    ? "Unavailable"
+                    : "Loading"}
+            </span>
           </div>
-          {refreshError ? (
-            <div className="diff-panel__empty diff-panel__unavailable" role="status">
-              {refreshError}
+          {loading || !result ? (
+            <div className="diff-panel__empty" role="status">
+              Loading comparison…
             </div>
-          ) : null}
-          {changedRows.length === 0 && unavailableChangedGroupCount === 0 && !refreshError ? (
+          ) : result.state !== "available" ? (
+            <div
+              className="diff-panel__empty diff-panel__unavailable"
+              data-testid="changed-files-unavailable"
+              role="status"
+            >
+              <p>{result.message}</p>
+              <button className="button" type="button" onClick={refresh}>
+                Retry
+              </button>
+            </div>
+          ) : result.files.length === 0 ? (
             <div className="diff-panel__empty">
-              {pendingChangedGroupCount > 0 ? "Loading changes..." : "No changes"}
+              {result.coverage.state === "partial"
+                ? "No changes in the captured files."
+                : "No changes"}
             </div>
           ) : (
             <div className="diff-panel__file-list" ref={fileListRef}>
-              {changedGroups.map((group) =>
-                group.files.length === 0 && !group.error ? null : (
-                  <div className="file-workbench__change-group" key={group.context.workspace.id}>
-                    {showContextStrip ? (
-                      <div className="file-workbench__change-heading">
-                        <span>{contextLabel(group.context)}</span>
-                        <span>{group.error ? "Unavailable" : group.files.length}</span>
-                      </div>
-                    ) : null}
-                    {group.error ? (
-                      <div
-                        className="diff-panel__empty diff-panel__unavailable"
-                        data-testid="changed-files-unavailable"
-                        role="status"
-                      >
-                        {group.error.message}
-                      </div>
-                    ) : (
-                      group.files.map((file) => {
-                        const isReviewed = reviewed.has(
-                          reviewedFileKey(file.workspaceId, file.path),
-                        );
-                        const isSelected =
-                          viewerMode === "diff" &&
-                          selectedFile?.workspaceId === file.workspaceId &&
-                          selectedFile.path === file.path;
-                        const className = [
-                          "diff-panel__file",
-                          isSelected ? "diff-panel__file--selected" : "",
-                          isReviewed ? "diff-panel__file--reviewed" : "",
-                        ]
-                          .filter(Boolean)
-                          .join(" ");
-                        return (
-                          <div
-                            className={className}
-                            key={`${file.workspaceId}:${file.path}`}
-                            data-workspace-id={file.workspaceId}
-                            data-file-path={file.path}
+              {result.files.map((file) => {
+                const selected = file.path === selection.selectedPath;
+                const busy = busyFiles.has(file.id);
+                return (
+                  <div
+                    className={`diff-panel__file${selected ? " diff-panel__file--selected" : ""}${file.reviewed ? " diff-panel__file--reviewed" : ""}`}
+                    key={file.id}
+                    data-workspace-id={result.checkoutId}
+                    data-file-path={file.path}
+                  >
+                    <input
+                      aria-label={`Mark ${file.path} reviewed`}
+                      className="diff-panel__reviewed-checkbox"
+                      data-testid={`diff-panel-reviewed-${file.path}`}
+                      type="checkbox"
+                      checked={file.reviewed}
+                      disabled={busy || stale}
+                      onChange={() => markReviewed(result, file)}
+                    />
+                    <button
+                      className="diff-panel__file-name"
+                      type="button"
+                      onClick={() =>
+                        onSelectionChange({
+                          ...selection,
+                          selectedPath: selected ? null : file.path,
+                        })
+                      }
+                    >
+                      <span
+                        className={`diff-panel__status-dot diff-panel__status-dot--${file.status}`}
+                      />
+                      <span className="diff-panel__file-path">{JSON.stringify(file.path)}</span>
+                      <span className="file-workbench__status-label">
+                        {file.conflicted ? "Conflicted" : file.status}
+                      </span>
+                    </button>
+                    {result.scope.kind === "uncommitted" ? (
+                      <span className="review-panel__stage-actions">
+                        <button
+                          className="diff-panel__stage-btn"
+                          type="button"
+                          disabled={busy || stale || file.conflicted || !file.hasUnstagedChanges}
+                          onClick={() => stageFile(result, file, "stage")}
+                        >
+                          {file.hasUnstagedChanges ? "Stage" : "Staged"}
+                        </button>
+                        {file.hasStagedChanges ? (
+                          <button
+                            className="diff-panel__stage-btn"
+                            type="button"
+                            disabled={busy || stale || file.conflicted}
+                            onClick={() => stageFile(result, file, "unstage")}
                           >
-                            <input
-                              aria-label={`Mark ${file.path} reviewed`}
-                              className="diff-panel__reviewed-checkbox"
-                              data-testid={`diff-panel-reviewed-${file.path}`}
-                              type="checkbox"
-                              checked={isReviewed}
-                              onChange={() => toggleReviewed(file)}
-                            />
-                            <button
-                              className="diff-panel__file-name"
-                              type="button"
-                              onClick={() => {
-                                setViewerMode("diff");
-                                onSelectionChange({
-                                  workspaceId: file.workspaceId,
-                                  selectedPath: isSelected ? null : file.path,
-                                });
-                              }}
-                            >
-                              <span
-                                className={`diff-panel__status-dot diff-panel__status-dot--${file.status}`}
-                              />
-                              <span className="diff-panel__file-path">
-                                {formatPathForDisplay(file.path)}
-                              </span>
-                              <span className="file-workbench__status-label">
-                                {statusLabel(file)}
-                              </span>
-                            </button>
-                            <button
-                              className="diff-panel__stage-btn"
-                              type="button"
-                              onClick={() => handleStage(file)}
-                              disabled={file.staged}
-                            >
-                              {file.staged ? "Staged" : "Stage"}
-                            </button>
-                          </div>
-                        );
-                      })
-                    )}
+                            Unstage
+                          </button>
+                        ) : null}
+                      </span>
+                    ) : null}
                   </div>
-                ),
-              )}
+                );
+              })}
             </div>
           )}
         </section>
       </div>
-
       <div className="diff-panel__viewer file-workbench__viewer">
         <div className="diff-panel__viewer-header file-workbench__viewer-header">
           <span className="file-workbench__viewer-path">
-            {selectedFile ? formatPathForDisplay(selectedFile.path) : "Select a file"}
+            {selection.selectedPath ? JSON.stringify(selection.selectedPath) : "Select a file"}
           </span>
-          {selectedFile ? (
-            <span className="file-workbench__viewer-modes" role="group" aria-label="Viewer mode">
-              <button
-                className={
-                  viewerMode === "preview"
-                    ? "file-workbench__mode file-workbench__mode--active"
-                    : "file-workbench__mode"
-                }
-                type="button"
-                onClick={() => setViewerMode("preview")}
-              >
-                File
-              </button>
-              <button
-                className={
-                  viewerMode === "diff"
-                    ? "file-workbench__mode file-workbench__mode--active"
-                    : "file-workbench__mode"
-                }
-                type="button"
-                onClick={() => setViewerMode("diff")}
-              >
-                Diff
-              </button>
-            </span>
+          {review && selectedFile && selectedFile.status !== "deleted" ? (
+            <button
+              className="button review-panel__open-file"
+              type="button"
+              title="Open the current checkout file"
+              onClick={() => openCurrentFile(review, selectedFile)}
+            >
+              Open in Files
+            </button>
           ) : null}
         </div>
-        {renderViewer({
-          selectedFile,
-          viewerMode,
-          viewerLoading,
-          viewerError,
-          preview,
-          diffText,
-        })}
+        {selectedFile?.previousPath ? (
+          <div className="review-panel__rename">
+            Renamed from {JSON.stringify(selectedFile.previousPath)}
+          </div>
+        ) : null}
+        <div className="review-panel__patches">
+          {loading ? (
+            <div className="diff-panel__empty">Refreshing comparison…</div>
+          ) : !review ? (
+            <div className="diff-panel__empty">Choose an available comparison to review files.</div>
+          ) : selection.selectedPath === null ? (
+            <div className="diff-panel__empty">Select a file from the changed files.</div>
+          ) : !selectedFile ? (
+            <div className="diff-panel__empty">
+              This file is not part of the selected comparison.
+            </div>
+          ) : fileLoading ? (
+            <div className="diff-panel__empty">Loading diff…</div>
+          ) : displayedFileResult?.state === "available" ? (
+            <>
+              <CoverageNotice coverage={displayedFileResult.coverage} />
+              {displayedFileResult.summary ? (
+                <p className="review-panel__summary">{displayedFileResult.summary}</p>
+              ) : null}
+              {displayedFileResult.sections.map((section) => (
+                <section
+                  className="review-panel__patch-section"
+                  aria-label={sectionLabel(section.kind)}
+                  key={section.kind}
+                >
+                  <h3>{sectionLabel(section.kind)}</h3>
+                  <CoverageNotice coverage={section.coverage} />
+                  {section.patch ? (
+                    <InlineDiff
+                      diff={section.patch}
+                      language={extensionToLanguage(selectedFile.path)}
+                    />
+                  ) : (
+                    <p className="diff-panel__empty">No textual changes in this portion.</p>
+                  )}
+                </section>
+              ))}
+              {displayedFileResult.sections.length === 0 && !displayedFileResult.summary ? (
+                <p className="diff-panel__empty">No text diff is available for this file.</p>
+              ) : null}
+            </>
+          ) : displayedFileResult ? (
+            <ReviewIssueBanner issue={displayedFileResult} onRefresh={refresh} />
+          ) : (
+            <div className="diff-panel__empty">Loading diff…</div>
+          )}
+        </div>
       </div>
     </section>
   );
 }
 
-function renderViewer({
-  selectedFile,
-  viewerMode,
-  viewerLoading,
-  viewerError,
-  preview,
-  diffText,
+function ReviewIssueBanner({
+  issue,
+  onRefresh,
 }: {
-  readonly selectedFile: FileSelection | null;
-  readonly viewerMode: "preview" | "diff";
-  readonly viewerLoading: boolean;
-  readonly viewerError: string | null;
-  readonly preview: WorkspaceFilePreview | null;
-  readonly diffText: string;
+  readonly issue: ReviewIssue;
+  readonly onRefresh: () => void;
 }) {
-  if (!selectedFile) {
-    return <div className="diff-panel__empty">Select a file from the changed files.</div>;
-  }
-  if (viewerLoading) {
-    return <div className="diff-panel__empty">Loading {viewerMode}...</div>;
-  }
-  if (viewerError) {
-    return <div className="diff-panel__empty">{viewerError}</div>;
-  }
-  if (viewerMode === "diff") {
-    return diffText ? (
-      <InlineDiff diff={diffText} language={extensionToLanguage(selectedFile.path)} />
-    ) : (
-      <div className="diff-panel__empty">No diff available for this file.</div>
-    );
-  }
-  if (!preview) {
-    return <div className="diff-panel__empty">No preview available.</div>;
-  }
-  if (preview.binary) {
-    return <div className="diff-panel__empty">Binary or directory preview is not available.</div>;
-  }
   return (
-    <pre className="file-workbench__preview" data-testid="file-workbench-preview">
-      {preview.content}
-      {preview.truncated ? "\n\n[Preview truncated]" : ""}
-    </pre>
+    <div
+      className="review-panel__issue"
+      data-testid={issue.state === "stale" ? "review-stale" : "review-issue"}
+      role="status"
+    >
+      <p>{issue.message}</p>
+      <button className="button" type="button" onClick={onRefresh}>
+        {issue.state === "stale" ? "Refresh comparison" : "Retry"}
+      </button>
+    </div>
   );
 }
 
-function toWorkbenchChangedFile(
-  context: FileWorkbenchContext,
-  file: ChangedFileEntry,
-): WorkbenchChangedFile {
-  return {
-    ...file,
-    workspaceId: context.workspace.id,
-    workspaceName: context.workspace.name,
-    branchName: context.worktree?.branchName ?? context.workspace.branchName,
-  };
+function CoverageNotice({ coverage }: { readonly coverage: ReviewCoverage }) {
+  if (coverage.state === "complete" && coverage.notes.length === 0) return null;
+  return (
+    <div className="review-panel__coverage" data-testid="review-coverage" role="status">
+      {coverage.state === "partial" ? <strong>Partial comparison</strong> : null}
+      {coverage.notes.length ? (
+        <ul>
+          {coverage.notes.map((note, index) => (
+            <li key={index}>{note}</li>
+          ))}
+        </ul>
+      ) : (
+        <p>Some changes could not be included.</p>
+      )}
+    </div>
+  );
 }
 
-function reviewedFileKey(workspaceId: string, filePath: string): string {
-  return JSON.stringify([workspaceId, filePath]);
+function sectionLabel(kind: "combined" | "staged" | "unstaged"): string {
+  return kind === "staged" ? "Staged" : kind === "unstaged" ? "Unstaged" : "Combined changes";
 }
 
-function workspaceIdFromReviewedFileKey(key: string): string | undefined {
-  try {
-    const value: unknown = JSON.parse(key);
-    return Array.isArray(value) && value.length === 2 && typeof value[0] === "string"
-      ? value[0]
-      : undefined;
-  } catch {
-    return undefined;
-  }
+function scopeDescription(scope: ReviewScope): string {
+  if (scope.kind === "uncommitted")
+    return "Current checkout changes, including staged, unstaged, and untracked files.";
+  if (scope.kind === "branch") return "Committed branch changes. Uncommitted edits are excluded.";
+  return scope.checkpointId
+    ? "Changes captured during this selected turn. Other edits made during that interval may be included."
+    : "Changes captured during the latest completed turn. Other edits made during that interval may be included.";
 }
 
-function formatPathForDisplay(path: string): string {
-  return JSON.stringify(path);
+function formatCaptureTime(value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
 
-function contextLabel(context: FileWorkbenchContext): string {
-  if (context.role === "thread") {
-    return "Current thread";
-  }
-  if (context.role === "worktree") {
-    return context.worktree?.branchName ?? context.workspace.branchName ?? context.workspace.name;
-  }
-  return context.workspace.name;
-}
-
-function buildSubtitle(context: FileWorkbenchContext | undefined): string {
-  if (!context) {
-    return "No workspace selected";
-  }
-  if (context.role === "worktree") {
-    return `Worktree ${context.worktree?.branchName ?? context.workspace.name}`;
-  }
-  return context.workspace.path;
-}
-
-function statusLabel(file: WorkbenchChangedFile): string {
-  const branch = file.branchName ? ` · ${file.branchName}` : "";
-  return `${file.status}${branch}`;
-}
-
-function buildChangedFilesSummary(
-  changedCount: number,
-  unavailableCount: number,
-  pendingCount: number,
-): string {
-  const parts = [
-    changedCount > 0 ? String(changedCount) : "",
-    unavailableCount > 0 ? `${unavailableCount} unavailable` : "",
-    pendingCount > 0 ? `${pendingCount} loading` : "",
-  ].filter(Boolean);
-  return parts.length > 0 ? parts.join(" · ") : "0";
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }

@@ -65,6 +65,13 @@ export function useSessionComposer(params: UseSessionComposerParams) {
     ? []
     : (snapshot?.composerAttachments ?? []);
 
+  const stopCurrentRun = () => {
+    if (!api || selectedSession?.status !== "running") return;
+    void updateSnapshot(setSnapshot, () => api.cancelCurrentRun()).catch((error: unknown) => {
+      console.error("[renderer] cancelCurrentRun failed", error);
+    });
+  };
+
   const submitComposerDraft = (options: { readonly deliverAs?: "steer" | "followUp" } = {}) => {
     if (!api || !selectedSession) {
       return;
@@ -72,9 +79,7 @@ export function useSessionComposer(params: UseSessionComposerParams) {
 
     const hasComposerInput = composerDraft.trim().length > 0 || composerAttachments.length > 0;
     if (selectedSession.status === "running" && !hasComposerInput) {
-      void updateSnapshot(setSnapshot, () => api.cancelCurrentRun()).catch((error: unknown) => {
-        console.error("[renderer] cancelCurrentRun failed", error);
-      });
+      stopCurrentRun();
       return;
     }
 
@@ -351,6 +356,7 @@ export function useSessionComposer(params: UseSessionComposerParams) {
   return {
     composerAttachments,
     submitComposerDraft,
+    stopCurrentRun,
     handlePickAttachments,
     handleRemoveAttachment,
     handleEditQueuedMessage,

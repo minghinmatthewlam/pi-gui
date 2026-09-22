@@ -3,11 +3,9 @@ import { mkdir, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { expect, test, type Page } from "@playwright/test";
-import { reviewedFilesKey } from "../../src/features/workbench/reviewed-files-store";
 import {
   commitAllInGitRepo,
   createNamedThread,
-  getDesktopState,
   initGitRepo,
   launchDesktop,
   makeUserDataDir,
@@ -55,7 +53,11 @@ test("preserves an exact changed-file path through diff and stage actions", asyn
     );
 
     await changedRow.locator(".diff-panel__file-name").click();
-    await expect(diffPanel.locator(".diff-inline")).toContainText("exact path contents");
+    await expect(
+      diffPanel
+        .getByRole("region", { name: "Combined changes", exact: true })
+        .locator(".diff-inline"),
+    ).toContainText("exact path contents");
 
     await changedRow.getByRole("button", { name: "Stage", exact: true }).click();
     await expect(changedRow.getByRole("button", { name: "Staged", exact: true })).toBeDisabled();
@@ -93,35 +95,30 @@ test("shows Git status as unavailable without losing reviewed files", async () =
   try {
     const window = await harness.firstWindow();
     await createNamedThread(window, "Reviewed unavailable status test");
-    const state = await getDesktopState(window);
-    if (!state.selectedWorkspaceId || !state.selectedSessionId) {
-      throw new Error("Expected a selected session");
-    }
-    const storageKey = reviewedFilesKey(state.selectedWorkspaceId, state.selectedSessionId);
-
     await selectSidePanel(window, "Changes");
     const diffPanel = window.locator(".diff-panel");
-    await diffPanel.getByTestId(`diff-panel-reviewed-${filePath}`).check();
-    const reviewedBeforeFailure = await window.evaluate(
-      (key) => globalThis.localStorage.getItem(key),
-      storageKey,
-    );
-    expect(reviewedBeforeFailure).not.toBeNull();
+    await diffPanel.getByTestId(`diff-panel-reviewed-${filePath}`).click();
+    await expect(diffPanel.getByTestId(`diff-panel-reviewed-${filePath}`)).toBeChecked();
 
     await rename(gitPath, unavailableGitPath);
     gitMoved = true;
     await diffPanel.locator('button[aria-label="Refresh"]').click();
-    await expect(diffPanel.getByTestId("changed-files-unavailable")).toHaveText(
-      "Git status is unavailable for this workspace.",
+    await expect(diffPanel.getByTestId("changed-files-unavailable")).toContainText(
+      /not a git repository|unavailable/i,
     );
     await expect(diffPanel.locator(".file-workbench__section-header")).toContainText(
       /unavailable/i,
     );
     await expect(diffPanel.getByText("No changes", { exact: true })).toHaveCount(0);
-    await expect
-      .poll(() => window.evaluate((key) => globalThis.localStorage.getItem(key), storageKey))
-      .toBe(reviewedBeforeFailure);
     await saveProof(window, "git-status-unavailable.png");
+    await rename(unavailableGitPath, gitPath);
+    gitMoved = false;
+    await diffPanel
+      .getByTestId("changed-files-unavailable")
+      .getByRole("button", { name: "Retry", exact: true })
+      .click();
+    await expect(diffPanel.getByTestId(`diff-panel-reviewed-${filePath}`)).toBeChecked();
+    await expect(diffPanel.getByTestId("diff-panel-counter")).toHaveText("Reviewed 1 of 1");
   } finally {
     await harness.close();
     if (gitMoved) {

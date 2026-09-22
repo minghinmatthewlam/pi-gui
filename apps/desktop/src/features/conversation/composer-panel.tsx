@@ -30,6 +30,7 @@ import { ModelSelector } from "./model-selector";
 import type { ExtensionDockModel } from "../extensions/extension-session-ui";
 
 interface ComposerPanelProps {
+  readonly preparingTaskDraft?: boolean;
   readonly selectedSession: SessionRecord;
   readonly lastError?: string;
   readonly runtime?: RuntimeSnapshot;
@@ -69,6 +70,7 @@ interface ComposerPanelProps {
   readonly modelOnboarding: ModelOnboardingState;
   readonly onOpenModelSettings: (section: ModelOnboardingSettingsSection) => void;
   readonly onSubmit: () => void;
+  readonly onStop: () => void;
   readonly showMentionMenu: boolean;
   readonly mentionOptions: readonly MentionOption[];
   readonly selectedMentionIndex: number;
@@ -82,6 +84,7 @@ interface ComposerPanelProps {
 }
 
 export function ComposerPanel({
+  preparingTaskDraft = false,
   selectedSession,
   lastError,
   runtime,
@@ -121,6 +124,7 @@ export function ComposerPanel({
   modelOnboarding,
   onOpenModelSettings,
   onSubmit,
+  onStop,
   showMentionMenu,
   mentionOptions,
   selectedMentionIndex,
@@ -134,8 +138,8 @@ export function ComposerPanel({
   const primaryActionIsStop = selectedSession.status === "running" && !hasComposerInput;
 
   return (
-    <footer className="composer">
-      <div className="conversation conversation--composer">
+    <footer className="composer" aria-busy={preparingTaskDraft}>
+      <div className="conversation conversation--composer" inert={preparingTaskDraft}>
         <ComposerSurface
           lastError={lastError}
           activeSlashCommand={activeSlashCommand}
@@ -231,6 +235,24 @@ export function ComposerPanel({
           }
         />
       </div>
+      {preparingTaskDraft ? (
+        <div className="composer__footer-row">
+          <p className="composer__hint" role="status" data-testid="composer-prepare-task-status">
+            Preparing task… Your current draft is saved before opening it.
+          </p>
+          {selectedSession.status === "running" ? (
+            <button
+              aria-label="Stop run"
+              className="button button--primary button--cta-icon"
+              data-testid="stop-while-preparing-task"
+              onClick={onStop}
+              type="button"
+            >
+              <StopSquareIcon />
+            </button>
+          ) : null}
+        </div>
+      ) : null}
     </footer>
   );
 }

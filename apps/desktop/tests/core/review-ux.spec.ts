@@ -4,7 +4,6 @@ import { promisify } from "node:util";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import type { SessionDriverEvent, SessionRef } from "@pi-gui/session-driver";
-import { reviewedFilesKey } from "../../src/features/workbench/reviewed-files-store";
 import {
   commitAllInGitRepo,
   createNamedThread,
@@ -83,18 +82,31 @@ test("syntax-highlights known languages and leaves unknown extensions plain", as
     const tsRow = diffPanel.locator('.diff-panel__file[data-file-path="src/foo.ts"]');
     await expect(tsRow).toBeVisible();
     await tsRow.locator(".diff-panel__file-name").click();
-    const tsDiff = diffPanel.locator(".diff-inline");
+    const tsDiff = diffPanel
+      .getByRole("region", { name: "Combined changes", exact: true })
+      .locator(".diff-inline");
     await expect(tsDiff).toHaveAttribute("data-language", "typescript");
     await expect(tsDiff.locator('[class*="hljs-"]').first()).toBeVisible();
 
     const pyRow = diffPanel.locator('.diff-panel__file[data-file-path="script.py"]');
     await pyRow.locator(".diff-panel__file-name").click();
-    await expect(diffPanel.locator(".diff-inline")).toHaveAttribute("data-language", "python");
-    await expect(diffPanel.locator('.diff-inline [class*="hljs-"]').first()).toBeVisible();
+    await expect(
+      diffPanel
+        .getByRole("region", { name: "Combined changes", exact: true })
+        .locator(".diff-inline"),
+    ).toHaveAttribute("data-language", "python");
+    await expect(
+      diffPanel
+        .getByRole("region", { name: "Combined changes", exact: true })
+        .locator('.diff-inline [class*="hljs-"]')
+        .first(),
+    ).toBeVisible();
 
     const mdRow = diffPanel.locator('.diff-panel__file[data-file-path="notes.md"]');
     await mdRow.locator(".diff-panel__file-name").click();
-    const mdDiff = diffPanel.locator(".diff-inline");
+    const mdDiff = diffPanel
+      .getByRole("region", { name: "Combined changes", exact: true })
+      .locator(".diff-inline");
     await expect(mdDiff).not.toHaveAttribute("data-language", /.*/);
     await expect(mdDiff.locator('[class*="hljs-"]')).toHaveCount(0);
   } finally {
@@ -102,7 +114,7 @@ test("syntax-highlights known languages and leaves unknown extensions plain", as
   }
 });
 
-test("reviewed checkboxes update counter, prune on changes, and survive relaunch", async () => {
+test("reviewed marks survive relaunch and apply only to the reviewed file revision", async () => {
   test.setTimeout(60_000);
   const {
     harness,
@@ -111,40 +123,42 @@ test("reviewed checkboxes update counter, prune on changes, and survive relaunch
     workspacePath,
   } = await launchSeeded("Review UX checkboxes");
   const sessionRef = await selectedSessionRef(firstWindow);
-  const storageKey = reviewedFilesKey(sessionRef.workspaceId, sessionRef.sessionId);
+  // Legacy renderer marks are fixture state: they must not become authoritative,
+  // and replacing the store must not delete the user's old bytes.
+  const storageKey = `pi-gui:reviewed-files:v1:${sessionRef.workspaceId}:${sessionRef.sessionId}`;
+  const legacyValue = JSON.stringify([JSON.stringify([sessionRef.workspaceId, "notes.md"])]);
+  try {
+    await firstWindow.evaluate(({ key, value }) => globalThis.localStorage.setItem(key, value), {
+      key: storageKey,
+      value: legacyValue,
+    });
 
-  await selectSidePanel(firstWindow, "Changes");
-  const diffPanel = firstWindow.locator(".diff-panel");
-  await expect(diffPanel).toBeVisible();
-  await expect(diffPanel.locator(".diff-panel__file")).toHaveCount(3);
+    await selectSidePanel(firstWindow, "Changes");
+    const diffPanel = firstWindow.locator(".diff-panel");
+    await expect(diffPanel).toBeVisible();
+    await expect(diffPanel.locator(".diff-panel__file")).toHaveCount(3);
 
-  const counter = diffPanel.getByTestId("diff-panel-counter");
-  await expect(counter).toHaveText("Reviewed 0 of 3");
+    const counter = diffPanel.getByTestId("diff-panel-counter");
+    await expect(counter).toHaveText("Reviewed 0 of 3");
 
-  await diffPanel.getByTestId("diff-panel-reviewed-src/foo.ts").check();
-  await expect(counter).toHaveText("Reviewed 1 of 3");
-  await expect(diffPanel.locator('.diff-panel__file[data-file-path="src/foo.ts"]')).toHaveClass(
-    /diff-panel__file--reviewed/,
-  );
+    await diffPanel.getByTestId("diff-panel-reviewed-src/foo.ts").click();
+    await expect(counter).toHaveText("Reviewed 1 of 3");
+    await expect(diffPanel.locator('.diff-panel__file[data-file-path="src/foo.ts"]')).toHaveClass(
+      /diff-panel__file--reviewed/,
+    );
 
-  expect(
-    await firstWindow.evaluate((key) => globalThis.localStorage.getItem(key), storageKey),
-  ).toBe(JSON.stringify([JSON.stringify([sessionRef.workspaceId, "src/foo.ts"])]));
+    await diffPanel.getByTestId("diff-panel-reviewed-src/foo.ts").click();
+    await expect(counter).toHaveText("Reviewed 0 of 3");
+    await expect(
+      diffPanel.locator('.diff-panel__file[data-file-path="src/foo.ts"]'),
+    ).not.toHaveClass(/diff-panel__file--reviewed/);
 
-  await diffPanel.getByTestId("diff-panel-reviewed-src/foo.ts").uncheck();
-  await expect(counter).toHaveText("Reviewed 0 of 3");
-  await expect(diffPanel.locator('.diff-panel__file[data-file-path="src/foo.ts"]')).not.toHaveClass(
-    /diff-panel__file--reviewed/,
-  );
-  expect(
-    await firstWindow.evaluate((key) => globalThis.localStorage.getItem(key), storageKey),
-  ).toBeNull();
-
-  await diffPanel.getByTestId("diff-panel-reviewed-src/foo.ts").check();
-  await diffPanel.getByTestId("diff-panel-reviewed-script.py").check();
-  await expect(counter).toHaveText("Reviewed 2 of 3");
-
-  await harness.close();
+    await diffPanel.getByTestId("diff-panel-reviewed-src/foo.ts").click();
+    await diffPanel.getByTestId("diff-panel-reviewed-script.py").click();
+    await expect(counter).toHaveText("Reviewed 2 of 3");
+  } finally {
+    await harness.close();
+  }
 
   const reopened = await launchDesktop(userDataDir, { testMode: "background" });
   const window = await reopened.firstWindow();
@@ -163,8 +177,17 @@ test("reviewed checkboxes update counter, prune on changes, and survive relaunch
     await expect(reopenedPanel.locator(".diff-panel__file")).toHaveCount(2);
     await expect(reopenedPanel.getByTestId("diff-panel-counter")).toHaveText("Reviewed 1 of 2");
 
+    await expect(reopenedPanel.getByTestId("diff-panel-reviewed-script.py")).toBeChecked();
+    await writeFile(
+      join(workspacePath, "script.py"),
+      "def hello():\n    return 'a new revision'\n",
+      "utf8",
+    );
+    await reopenedPanel.getByRole("button", { name: "Refresh", exact: true }).click();
+    await expect(reopenedPanel.getByTestId("diff-panel-reviewed-script.py")).not.toBeChecked();
+    await expect(reopenedPanel.getByTestId("diff-panel-counter")).toHaveText("Reviewed 0 of 2");
     expect(await window.evaluate((key) => globalThis.localStorage.getItem(key), storageKey)).toBe(
-      JSON.stringify([JSON.stringify([sessionRef.workspaceId, "script.py"])]),
+      legacyValue,
     );
   } finally {
     await reopened.close();
@@ -184,7 +207,11 @@ test("Files mode shows a file browser and reader instead of the changes reviewer
     await diffPanel
       .locator('.diff-panel__file[data-file-path="src/foo.ts"] .diff-panel__file-name')
       .click();
-    await expect(diffPanel.locator(".diff-inline")).toBeVisible();
+    await expect(
+      diffPanel
+        .getByRole("region", { name: "Combined changes", exact: true })
+        .locator(".diff-inline"),
+    ).toBeVisible();
 
     await selectSidePanel(window, "Files");
     const workbench = window.getByTestId("file-workbench");
@@ -256,7 +283,11 @@ test("view-in-changes button on a write tool row opens the diff panel without to
 
     const selectedRow = diffPanel.locator('.diff-panel__file[data-file-path="src/foo.ts"]');
     await expect(selectedRow).toHaveClass(/diff-panel__file--selected/);
-    await expect(diffPanel.locator(".diff-inline")).toHaveAttribute("data-language", "typescript");
+    await expect(
+      diffPanel
+        .getByRole("region", { name: "Combined changes", exact: true })
+        .locator(".diff-inline"),
+    ).toHaveAttribute("data-language", "typescript");
 
     await toolHeader.click();
     await expect(toolHeader).toHaveAttribute("aria-expanded", "true");
@@ -275,7 +306,10 @@ test("highlighting tokens swap palettes when the dark class flips", async () => 
     await diffPanel
       .locator('.diff-panel__file[data-file-path="src/foo.ts"] .diff-panel__file-name')
       .click();
-    const token = diffPanel.locator('.diff-inline [class*="hljs-"]').first();
+    const token = diffPanel
+      .getByRole("region", { name: "Combined changes", exact: true })
+      .locator('.diff-inline [class*="hljs-"]')
+      .first();
     await expect(token).toBeVisible();
 
     const initiallyDark = await window.evaluate(() =>

@@ -109,8 +109,9 @@ test("toggles the diff panel from the keyboard shortcut and renders changed file
     expect(panelBox?.x ?? 0).toBeGreaterThan((mainBox?.x ?? 0) + (mainBox?.width ?? 0) / 2);
 
     await diffPanel.locator(".diff-panel__file-name").click();
-    await expect(diffPanel.locator(".diff-inline")).toBeVisible();
-    await expect(diffPanel.locator(".diff-line--added")).toHaveCount(1);
+    const combined = diffPanel.getByRole("region", { name: "Combined changes", exact: true });
+    await expect(combined.locator(".diff-inline")).toBeVisible();
+    await expect(combined.locator(".diff-line--added")).toHaveCount(1);
 
     await window.getByTestId("toggle-side-panel").click();
     await expect(diffPanel).toHaveCount(0);

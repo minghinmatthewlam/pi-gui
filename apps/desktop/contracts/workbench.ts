@@ -1,4 +1,5 @@
 import type { SessionRef } from "@pi-gui/session-driver/types";
+import { decodeReviewScope, type ReviewScope } from "./review";
 
 export const MAX_WORKBENCH_FILE_TABS = 100;
 export const MAX_WORKBENCH_TOOLS = 32;
@@ -28,6 +29,7 @@ export interface TaskWorkbenchTemplate {
   readonly changes: {
     readonly workspaceId: string;
     readonly selectedPath: string | null;
+    readonly scope: ReviewScope;
   };
 }
 
@@ -98,7 +100,7 @@ export function decodeTaskWorkbenchTemplate(value: unknown): TaskWorkbenchTempla
     if (active === null) fail("line without active file");
     line = { start, end };
   }
-  const changes = record(root.changes, ["workspaceId", "selectedPath"]);
+  const changes = record(root.changes, ["workspaceId", "selectedPath", "scope"]);
   return {
     visibility: root.visibility,
     tools,
@@ -110,6 +112,8 @@ export function decodeTaskWorkbenchTemplate(value: unknown): TaskWorkbenchTempla
     changes: {
       workspaceId: text(changes.workspaceId),
       selectedPath: changes.selectedPath === null ? null : text(changes.selectedPath),
+      scope:
+        changes.scope === undefined ? { kind: "uncommitted" } : decodeReviewScope(changes.scope),
     },
   };
 }

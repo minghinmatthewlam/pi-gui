@@ -217,7 +217,11 @@ export function useWorkbench({ api, target, isUnsent = false }: UseWorkbenchOpti
       if (!ref) return;
       const changes = ensureEntry(ref, current.current.isUnsent).view.changes;
       const next = typeof update === "function" ? update(changes) : update;
-      if (next.workspaceId === changes.workspaceId && next.selectedPath === changes.selectedPath)
+      if (
+        next.workspaceId === changes.workspaceId &&
+        next.selectedPath === changes.selectedPath &&
+        JSON.stringify(next.scope) === JSON.stringify(changes.scope)
+      )
         return;
       apply(ref, [{ type: "set-changes", changes: next }]);
     },

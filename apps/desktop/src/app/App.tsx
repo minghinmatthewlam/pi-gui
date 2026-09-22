@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { RuntimeSnapshot } from "@pi-gui/session-driver/runtime-types";
+import type { SessionRef } from "@pi-gui/session-driver/types";
 import {
   getSelectedSession,
   getSelectedWorkspace,
@@ -28,6 +29,11 @@ import { DiffPanel } from "../features/workbench/diff-panel";
 import type { DiffPanelFileRequest } from "../features/workbench/diff-panel-types";
 import { FileWorkbench } from "../features/workbench/file-workbench";
 import { useWorkbench } from "../features/workbench/use-workbench";
+import {
+  ExtensionViewPanel,
+  type ExtensionViewTheme,
+} from "../features/extensions/extension-view-panel";
+import { useExtensionViews } from "../features/extensions/use-extension-views";
 import { Workbench } from "../features/workbench/workbench";
 import { WorktreesPanel } from "../features/workbench/worktrees-panel";
 import type { WorkspaceFileLine } from "../features/conversation/workspace-file-line";
@@ -92,6 +98,19 @@ export default function App() {
   const [skillsWorkspaceId, setSkillsWorkspaceId] = useState("");
   const [extensionsWorkspaceId, setExtensionsWorkspaceId] = useState("");
   const [resolvedTheme, setResolvedTheme] = useState<"light" | "dark">("light");
+  const [extensionViewTheme, setExtensionViewTheme] = useState<ExtensionViewTheme>({
+    mode: "light",
+    background: "#ffffff",
+    foreground: "#171717",
+    accent: "#6554a4",
+  });
+  const [extensionFileError, setExtensionFileError] = useState<{
+    readonly target: SessionRef;
+    readonly message: string;
+  } | null>(null);
+  const [preparingExtensionDrafts, setPreparingExtensionDrafts] = useState<
+    ReadonlyMap<string, SessionRef>
+  >(() => new Map());
   const [dockExpandedBySession, setDockExpandedBySession] = useState<Record<string, string>>({});
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const timelinePaneRef = useRef<HTMLDivElement | null>(null);
@@ -143,18 +162,17 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    applyThemePresetToRoot(
-      document.documentElement,
-      snapshot?.themePresetId ?? "default",
-      resolvedTheme,
-    );
-  }, [resolvedTheme, snapshot?.themePresetId]);
-
-  useEffect(() => {
-    if (snapshot) {
-      document.documentElement.classList.toggle("enable-transparency", snapshot.enableTransparency);
-    }
-  }, [snapshot?.enableTransparency]);
+    const root = document.documentElement;
+    applyThemePresetToRoot(root, snapshot?.themePresetId ?? "default", resolvedTheme);
+    root.classList.toggle("enable-transparency", snapshot?.enableTransparency ?? false);
+    const style = getComputedStyle(root);
+    setExtensionViewTheme({
+      mode: resolvedTheme,
+      background: style.getPropertyValue("--main").trim(),
+      foreground: style.getPropertyValue("--text").trim(),
+      accent: style.getPropertyValue("--accent").trim(),
+    });
+  }, [resolvedTheme, snapshot?.themePresetId, snapshot?.enableTransparency]);
 
   const {
     activeWorktrees,
@@ -200,12 +218,17 @@ export default function App() {
   );
   const selectedSessionKey =
     selectedWorkspace && selectedSession ? `${selectedWorkspace.id}:${selectedSession.id}` : "";
-  const { composerDraft, setComposerDraft, composerDraftRef, flushComposerDraft } =
-    useComposerDraftSync({
-      api,
-      snapshot,
-      selectedSessionKey,
-    });
+  const {
+    composerDraft,
+    setComposerDraft,
+    composerDraftRef,
+    flushComposerDraft,
+    flushComposerDraftAsync,
+  } = useComposerDraftSync({
+    api,
+    snapshot,
+    selectedSessionKey,
+  });
   const workbenchTarget = useMemo(
     () =>
       selectedWorkspace && selectedSession
@@ -213,9 +236,71 @@ export default function App() {
         : null,
     [selectedWorkspace?.id, selectedSession?.id],
   );
+  const extensionViews = useExtensionViews({ api, target: workbenchTarget });
   const workbench = useWorkbench({ api, target: workbenchTarget, isUnsent: !workbenchTarget });
+  const workbenchTargetRef = useRef(workbenchTarget);
+  workbenchTargetRef.current = workbenchTarget;
+  const beforePrepareTaskDraft = useCallback(async () => {
+    const target = workbenchTarget;
+    if (!target || workbenchTargetRef.current !== target)
+      throw new Error("Return to the extension's task to create a task draft.");
+    await flushComposerDraftAsync(target);
+    if (workbenchTargetRef.current !== target)
+      throw new Error("The task changed before its draft could be saved.");
+  }, [flushComposerDraftAsync, workbenchTarget]);
+  const handlePrepareTaskDraftPendingChange = useCallback(
+    (pending: boolean, requestKey: string) => {
+      setPreparingExtensionDrafts((current) => {
+        if (pending && !workbenchTarget) return current;
+        if (!pending && !current.has(requestKey)) return current;
+        const next = new Map(current);
+        if (pending && workbenchTarget) next.set(requestKey, workbenchTarget);
+        else next.delete(requestKey);
+        return next;
+      });
+    },
+    [workbenchTarget],
+  );
+  const activeTool = workbench.activeTool;
+  const activeExtensionView =
+    activeTool?.kind === "extension"
+      ? extensionViews.views.find(
+          (view) => view.extensionId === activeTool.extensionId && view.id === activeTool.viewId,
+        )
+      : undefined;
   const workbenchRef = useRef(workbench);
   workbenchRef.current = workbench;
+  const extensionFileRequestRef = useRef(0);
+  useEffect(() => {
+    setExtensionFileError(null);
+  }, [workbenchTarget, workbench.view.selection]);
+  useEffect(
+    () =>
+      api?.onExtensionViewOpenFile((event) => {
+        const target = workbenchTargetRef.current;
+        if (
+          target?.workspaceId !== event.target.workspaceId ||
+          target.sessionId !== event.target.sessionId
+        )
+          return;
+        const request = ++extensionFileRequestRef.current;
+        setExtensionFileError(null);
+        void workbenchRef.current
+          .openFile({ workspaceId: event.target.workspaceId, path: event.path, line: event.line })
+          .catch((error: unknown) => {
+            if (
+              workbenchTargetRef.current !== target ||
+              extensionFileRequestRef.current !== request
+            )
+              return;
+            setExtensionFileError({
+              target,
+              message: `Couldn't open ${event.path}. ${error instanceof Error ? error.message : "Try opening the file again."}`,
+            });
+          });
+      }),
+    [api],
+  );
   const selectedToolId =
     workbench.view.selection.kind === "tool" ? workbench.view.selection.toolId : null;
   const sidePanelAvailable = snapshot?.activeView === "threads" && Boolean(workbenchTarget);
@@ -349,13 +434,42 @@ export default function App() {
     const workspace = selectedWorkspaceRef.current;
     if (!workspace) return;
     const current = workbenchRef.current;
-    current.setChanges({ workspaceId: workspace.id, selectedPath: path });
+    current.setChanges({
+      workspaceId: workspace.id,
+      selectedPath: path,
+      scope: { kind: "uncommitted" },
+    });
     current.openTool({ kind: "changes" });
     setDiffFileRequest({
       sessionKey: selectedSessionKeyRef.current,
       request: { workspaceId: workspace.id, path, nonce: Date.now() },
     });
   }, []);
+  const reviewTurnRequestRef = useRef(0);
+  const handleReviewTurn = useCallback(
+    async (messageId: string) => {
+      const target = workbenchTargetRef.current;
+      if (!api || !target) return;
+      const request = ++reviewTurnRequestRef.current;
+      const stillSelected = () =>
+        workbenchTargetRef.current === target && reviewTurnRequestRef.current === request;
+      try {
+        const result = await api.resolveTurnReview({ target, messageId });
+        if (!stillSelected()) return;
+        if (result.state !== "available") throw new Error(result.message);
+        workbenchRef.current.setChanges({
+          workspaceId: target.workspaceId,
+          selectedPath: null,
+          scope: { kind: "turn", checkpointId: result.checkpointId },
+        });
+        workbenchRef.current.openTool({ kind: "changes" });
+        setDiffFileRequest(null);
+      } catch (error) {
+        if (stillSelected()) throw error;
+      }
+    },
+    [api],
+  );
   const selectedSessionKeyRef = useRef(selectedSessionKey);
   selectedSessionKeyRef.current = selectedSessionKey;
   const selectedWorkspaceRef = useRef(selectedWorkspace);
@@ -510,6 +624,7 @@ export default function App() {
   const {
     composerAttachments,
     submitComposerDraft,
+    stopCurrentRun,
     handlePickAttachments,
     handleRemoveAttachment,
     handleEditQueuedMessage,
@@ -1237,6 +1352,7 @@ export default function App() {
                   ) : null}
 
                   <ConversationTimeline
+                    key={selectedSessionKey}
                     transcript={activeTranscript}
                     isTranscriptLoading={isTranscriptLoading}
                     transcriptFailed={transcriptFailed}
@@ -1244,6 +1360,7 @@ export default function App() {
                     viewport={viewport}
                     threadSearch={threadSearch}
                     onViewFileInDiff={handleViewFileInDiff}
+                    onReviewTurn={handleReviewTurn}
                     onOpenWorkspaceFileLine={handleOpenWorkspaceFileLine}
                     workspacePath={selectedWorkspace.path}
                     onForkFromMessage={
@@ -1261,6 +1378,11 @@ export default function App() {
               ) : null}
               <ComposerPanel
                 key={selectedSessionKey}
+                preparingTaskDraft={[...preparingExtensionDrafts.values()].some(
+                  (target) =>
+                    target.workspaceId === workbenchTarget?.workspaceId &&
+                    target.sessionId === workbenchTarget.sessionId,
+                )}
                 activeSlashCommand={slashMenu.activeSlashFlow?.command}
                 activeSlashCommandMeta={slashMenu.activeSlashFlow?.command?.description}
                 attachments={composerAttachments}
@@ -1295,6 +1417,7 @@ export default function App() {
                   openSettings(selectedWorkspace?.rootWorkspaceId ?? selectedWorkspace?.id, section)
                 }
                 onSubmit={submitComposerDraft}
+                onStop={stopCurrentRun}
                 runningLabel={runningLabel}
                 selectedSession={selectedSession}
                 lastError={snapshot.lastError}
@@ -1381,15 +1504,33 @@ export default function App() {
         {sidePanelVisible && selectedWorkspace && selectedSession ? (
           <Workbench
             view={workbench.view}
+            extensionViews={extensionViews.views}
+            extensionViewsLoading={extensionViews.loading}
+            extensionViewsError={extensionViews.error}
+            onReloadExtensionViews={extensionViews.reload}
             onOpenTool={workbench.openTool}
             onActivateTool={workbench.activateTool}
             onCloseTool={workbench.closeTool}
             onShowChooser={workbench.showChooser}
-            error={workbench.error}
+            error={
+              workbench.error ||
+              (extensionFileError?.target === workbenchTarget
+                ? extensionFileError.message
+                : undefined)
+            }
             loading={!workbench.ready}
             onRetryRestore={workbench.retryRestore}
           >
-            {selectedToolId === "changes" ? (
+            {activeExtensionView?.state === "ready" && workbenchTarget && api ? (
+              <ExtensionViewPanel
+                api={api}
+                target={workbenchTarget}
+                view={activeExtensionView}
+                theme={extensionViewTheme}
+                onBeforePrepareTaskDraft={beforePrepareTaskDraft}
+                onPrepareTaskDraftPendingChange={handlePrepareTaskDraftPendingChange}
+              />
+            ) : selectedToolId === "changes" ? (
               <DiffPanel
                 key={selectedSessionKey}
                 workspaceId={selectedWorkspace.id}
@@ -1398,6 +1539,7 @@ export default function App() {
                 sessionStatus={selectedSession.status}
                 selection={workbench.view.changes}
                 onSelectionChange={workbench.setChanges}
+                onOpenFile={workbench.openFile}
                 fileRequest={
                   diffFileRequest?.sessionKey === selectedSessionKey
                     ? diffFileRequest.request

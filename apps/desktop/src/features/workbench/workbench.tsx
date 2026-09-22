@@ -1,5 +1,6 @@
 import { useId, useRef, type KeyboardEvent, type ReactNode } from "react";
 import { toolRefId, type TaskWorkbenchTemplate, type ToolRef } from "../../../contracts/workbench";
+import type { DesktopExtensionViewInfo } from "../../../contracts/extension-views";
 import {
   CloseIcon,
   DiffIcon,
@@ -21,6 +22,10 @@ interface WorkbenchProps {
   readonly error?: string;
   readonly loading?: boolean;
   readonly onRetryRestore?: () => void;
+  readonly extensionViews?: readonly DesktopExtensionViewInfo[];
+  readonly extensionViewsLoading?: boolean;
+  readonly extensionViewsError?: string;
+  readonly onReloadExtensionViews?: () => void;
 }
 
 const BUILTIN_TOOLS = [
@@ -70,11 +75,21 @@ export function Workbench({
   error,
   loading = false,
   onRetryRestore,
+  extensionViews = [],
+  extensionViewsLoading = false,
+  extensionViewsError = "",
+  onReloadExtensionViews,
 }: WorkbenchProps) {
   const panelId = useId();
   const addRef = useRef<HTMLButtonElement | null>(null);
   const tabRefs = useRef(new Map<string, HTMLButtonElement>());
   const activeTool = activeWorkbenchTool(view);
+  const activeExtension =
+    activeTool?.kind === "extension"
+      ? extensionViews.find(
+          (entry) => entry.extensionId === activeTool.extensionId && entry.id === activeTool.viewId,
+        )
+      : undefined;
   const tabId = (toolId: string) => `${panelId}-${encodeURIComponent(toolId)}`;
 
   const closeAndFocus = (toolId: string) => {
@@ -134,7 +149,12 @@ export function Workbench({
         <div aria-label="Workspace tools" className="workbench__tabs" role="tablist">
           {view.tools.map((tool, index) => {
             const toolId = toolRefId(tool);
-            const label = workbenchToolLabel(tool);
+            const label =
+              tool.kind === "extension"
+                ? (extensionViews.find(
+                    (entry) => entry.extensionId === tool.extensionId && entry.id === tool.viewId,
+                  )?.title ?? workbenchToolLabel(tool))
+                : workbenchToolLabel(tool);
             const selected = view.selection.kind === "tool" && view.selection.toolId === toolId;
             return (
               <div className="workbench__tab-wrapper" key={toolId} role="presentation">
@@ -231,15 +251,74 @@ export function Workbench({
                 </span>
               </button>
             ))}
+            <h3 className="workbench__extension-heading">Extension views</h3>
+            {extensionViewsLoading ? <p role="status">Loading extension views…</p> : null}
+            {extensionViewsError ? (
+              <div role="status">
+                <p>{extensionViewsError}</p>
+                {onReloadExtensionViews ? (
+                  <button className="button" type="button" onClick={onReloadExtensionViews}>
+                    Refresh views
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+            {extensionViews.map((extension) => (
+              <button
+                aria-label={extension.title}
+                className="workbench__choice"
+                key={toolRefId({
+                  kind: "extension",
+                  extensionId: extension.extensionId,
+                  viewId: extension.id,
+                })}
+                onClick={() =>
+                  onOpenTool({
+                    kind: "extension",
+                    extensionId: extension.extensionId,
+                    viewId: extension.id,
+                  })
+                }
+                type="button"
+              >
+                <span className="workbench__choice-icon">
+                  <ExtensionIcon />
+                </span>
+                <span className="workbench__choice-copy">
+                  <strong>{extension.title}</strong>
+                  <span>
+                    {extension.state === "error"
+                      ? (extension.error ?? "View unavailable")
+                      : extension.extensionId}
+                  </span>
+                </span>
+              </button>
+            ))}
+            {!extensionViewsLoading && !extensionViewsError && extensionViews.length === 0 ? (
+              <p>Installed extensions can provide additional views here.</p>
+            ) : null}
           </div>
-        ) : activeTool?.kind === "extension" ? (
+        ) : activeTool?.kind === "extension" && activeExtension?.state !== "ready" ? (
           <div className="workbench__unavailable" role="status">
             <ExtensionIcon />
-            <h2>This extension view is unavailable</h2>
+            <h2>
+              {extensionViewsLoading
+                ? "Finding this extension view…"
+                : "This extension view is unavailable"}
+            </h2>
             <p>
               {activeTool.extensionId} · {activeTool.viewId}
             </p>
-            <p>Your saved tab is retained. Extension commands can still be used when installed.</p>
+            <p>
+              {activeExtension?.error ||
+                extensionViewsError ||
+                "Your saved tab is retained. Extension commands can still be used when installed."}
+            </p>
+            {!extensionViewsLoading && onReloadExtensionViews ? (
+              <button className="button" type="button" onClick={onReloadExtensionViews}>
+                Refresh views
+              </button>
+            ) : null}
             <button
               className="button"
               onClick={() => closeAndFocus(toolRefId(activeTool))}

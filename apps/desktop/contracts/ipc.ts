@@ -1,3 +1,11 @@
+import type {
+  ExtensionViewOpenFile,
+  DesktopExtensionViewInfo,
+  OpenExtensionViewInput,
+  ExtensionViewConnection,
+  ExtensionViewMessage,
+  ExtensionViewCatalogChange,
+} from "./extension-views";
 import type { RuntimeSettingsSnapshot } from "@pi-gui/session-driver/runtime-types";
 import type {
   NavigateSessionTreeOptions,
@@ -7,6 +15,18 @@ import type {
 import type { ClipboardImageRead } from "./composer-attachments";
 import type { SessionRef } from "@pi-gui/session-driver/types";
 import type { SaveTaskWorkbenchTemplateInput, TaskWorkbenchTemplate } from "./workbench";
+import type {
+  ResolveTurnReviewInput,
+  ResolveTurnReviewResult,
+  GetReviewInput,
+  ReviewResult,
+  ReviewFileInput,
+  ReviewFileResult,
+  SetReviewFileReviewedInput,
+  SetReviewFileReviewedResult,
+  ChangeReviewFileStageInput,
+  ChangeReviewFileStageResult,
+} from "./review";
 import type {
   AppView,
   ComposerAttachment,
@@ -53,6 +73,13 @@ export type CustomProviderProbeResult =
   | { readonly ok: false; readonly error: string };
 
 export const desktopIpc = {
+  extensionViewOpenFile: "pi-gui:extension-view-open-file",
+  listExtensionViews: "pi-gui:list-extension-views",
+  openExtensionView: "pi-gui:open-extension-view",
+  sendExtensionViewMessage: "pi-gui:send-extension-view-message",
+  closeExtensionView: "pi-gui:close-extension-view",
+  extensionViewMessage: "pi-gui:extension-view-message",
+  extensionViewCatalogChanged: "pi-gui:extension-view-catalog-changed",
   stateRequest: "pi-gui:state-request",
   stateChanged: "pi-gui:state-changed",
   getTaskWorkbenchTemplate: "pi-gui:get-task-workbench-template",
@@ -140,6 +167,7 @@ export const desktopIpc = {
   cancelQueuedComposerEdit: "pi-gui:cancel-queued-composer-edit",
   removeQueuedComposerMessage: "pi-gui:remove-queued-composer-message",
   steerQueuedComposerMessage: "pi-gui:steer-queued-composer-message",
+  persistComposerDraft: "pi-gui:persist-composer-draft",
   updateComposerDraft: "pi-gui:update-composer-draft",
   submitComposer: "pi-gui:submit-composer",
   getSessionTree: "pi-gui:get-session-tree",
@@ -151,6 +179,11 @@ export const desktopIpc = {
   getChangedFiles: "pi-gui:get-changed-files",
   getFileDiff: "pi-gui:get-file-diff",
   stageFile: "pi-gui:stage-file",
+  resolveTurnReview: "pi-gui:resolve-turn-review",
+  getReview: "pi-gui:get-review",
+  getReviewFile: "pi-gui:get-review-file",
+  setReviewFileReviewed: "pi-gui:set-review-file-reviewed",
+  changeReviewFileStage: "pi-gui:change-review-file-stage",
   getThemeMode: "pi-gui:get-theme-mode",
   getResolvedTheme: "pi-gui:get-resolved-theme",
   setThemeMode: "pi-gui:set-theme-mode",
@@ -609,6 +642,10 @@ export interface PiDesktopApi {
   cancelQueuedComposerEdit(): Promise<DesktopAppState>;
   removeQueuedComposerMessage(messageId: string): Promise<DesktopAppState>;
   steerQueuedComposerMessage(messageId: string): Promise<DesktopAppState>;
+  persistComposerDraft(input: {
+    readonly target: SessionRef;
+    readonly draft: string;
+  }): Promise<void>;
   updateComposerDraft(composerDraft: string): Promise<DesktopAppState>;
   submitComposer(
     text: string,
@@ -629,6 +666,18 @@ export interface PiDesktopApi {
   getChangedFiles(workspaceId: string): Promise<ChangedFilesResult>;
   getFileDiff(workspaceId: string, filePath: string): Promise<string>;
   stageFile(workspaceId: string, filePath: string, stagingSourcePath?: string): Promise<void>;
+  onExtensionViewOpenFile(listener: (event: ExtensionViewOpenFile) => void): () => void;
+  listExtensionViews(target: SessionRef): Promise<readonly DesktopExtensionViewInfo[]>;
+  openExtensionView(input: OpenExtensionViewInput): Promise<ExtensionViewConnection>;
+  sendExtensionViewMessage(input: ExtensionViewMessage): Promise<void>;
+  closeExtensionView(connectionId: string): Promise<void>;
+  onExtensionViewMessage(listener: (event: ExtensionViewMessage) => void): () => void;
+  onExtensionViewCatalogChanged(listener: (event: ExtensionViewCatalogChange) => void): () => void;
+  resolveTurnReview(input: ResolveTurnReviewInput): Promise<ResolveTurnReviewResult>;
+  getReview(input: GetReviewInput): Promise<ReviewResult>;
+  getReviewFile(input: ReviewFileInput): Promise<ReviewFileResult>;
+  setReviewFileReviewed(input: SetReviewFileReviewedInput): Promise<SetReviewFileReviewedResult>;
+  changeReviewFileStage(input: ChangeReviewFileStageInput): Promise<ChangeReviewFileStageResult>;
   toggleWindowMaximize(): Promise<void>;
   openExternal(url: string): Promise<void>;
   getThemeMode(): Promise<"system" | "light" | "dark">;

@@ -6,6 +6,8 @@
 @import "./styles/new-thread.css";
 @import "./styles/main.css";
 @import "./styles/workbench.css";
+@import "./styles/review.css";
+@import "./styles/extension-views.css";
 @import "./styles/timeline.css";
 @import "./styles/scheduled-tasks.css";
 @import "./styles/syntax-highlight.css";

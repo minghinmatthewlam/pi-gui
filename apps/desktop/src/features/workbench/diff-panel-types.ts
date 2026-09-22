@@ -1,4 +1,5 @@
 import type { WorkspaceRecord, WorktreeRecord } from "../../../contracts/desktop-state";
+import type { ReviewScope } from "../../../contracts/review";
 
 export interface DiffPanelFileRequest {
   readonly workspaceId: string;
@@ -9,6 +10,7 @@ export interface DiffPanelFileRequest {
 export interface DiffPanelSelection {
   readonly workspaceId: string;
   readonly selectedPath: string | null;
+  readonly scope: ReviewScope;
 }
 
 export interface FileWorkbenchContext {

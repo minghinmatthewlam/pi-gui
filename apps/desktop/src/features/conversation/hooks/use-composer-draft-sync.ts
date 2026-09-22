@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type SetStateAction } from "react";
+import type { SessionRef } from "@pi-gui/session-driver/types";
 import type { ComposerDraftSyncSource, DesktopAppState } from "../../../../contracts/desktop-state";
 import type { PiDesktopApi } from "../../../../contracts/ipc";
 
@@ -38,10 +39,14 @@ export function useComposerDraftSync(params: UseComposerDraftSyncParams) {
   const handledComposerSyncNonceRef = useRef(0);
   const localEditGenerationRef = useRef(0);
   const acknowledgedLocalEditGenerationRef = useRef(0);
-  const inFlightComposerDraftWritesRef = useRef(new Set<PendingComposerDraftWrite>());
+  const inFlightComposerDraftWritesRef = useRef(
+    new Map<PendingComposerDraftWrite, Promise<void>>(),
+  );
   const pendingComposerDraftRef = useRef<PendingComposerDraftWrite | null>(null);
   const composerDraftWriteTimerRef = useRef<number | null>(null);
   const flushComposerDraftRef = useRef<() => void>(() => {});
+  const currentSessionKeyRef = useRef(selectedSessionKey);
+  currentSessionKeyRef.current = selectedSessionKey;
 
   composerDraftRef.current = composerDraft;
   const persistedComposerDraft = snapshot?.composerDraft ?? "";
@@ -97,15 +102,14 @@ export function useComposerDraftSync(params: UseComposerDraftSyncParams) {
     if (!api) {
       return;
     }
-    inFlightComposerDraftWritesRef.current.add(write);
-    void api.updateComposerDraft(write.draft).then(
+    const completion = api.updateComposerDraft(write.draft).then(
       (state) => {
         inFlightComposerDraftWritesRef.current.delete(write);
-        const hasOtherWriteForSession = [...inFlightComposerDraftWritesRef.current.values()].some(
+        const hasOtherWriteForSession = [...inFlightComposerDraftWritesRef.current.keys()].some(
           (candidate) => candidate.sessionKey === write.sessionKey,
         );
         if (
-          write.sessionKey === selectedSessionKey &&
+          write.sessionKey === currentSessionKeyRef.current &&
           write.generation === localEditGenerationRef.current &&
           state.composerDraft === write.draft &&
           !hasOtherWriteForSession
@@ -117,6 +121,7 @@ export function useComposerDraftSync(params: UseComposerDraftSyncParams) {
         inFlightComposerDraftWritesRef.current.delete(write);
       },
     );
+    inFlightComposerDraftWritesRef.current.set(write, completion);
   };
 
   useEffect(() => {
@@ -129,7 +134,7 @@ export function useComposerDraftSync(params: UseComposerDraftSyncParams) {
       return undefined;
     }
 
-    const inFlightWritesForSession = [...inFlightComposerDraftWritesRef.current.values()].filter(
+    const inFlightWritesForSession = [...inFlightComposerDraftWritesRef.current.keys()].filter(
       (write) => write.sessionKey === selectedSessionKey,
     );
     if (composerDraft === persistedComposerDraft && inFlightWritesForSession.length === 0) {
@@ -184,5 +189,75 @@ export function useComposerDraftSync(params: UseComposerDraftSyncParams) {
   };
   flushComposerDraftRef.current = flushComposerDraft;
 
-  return { composerDraft, setComposerDraft, composerDraftRef, flushComposerDraft };
+  const flushComposerDraftAsync = useCallback(
+    async (target: SessionRef): Promise<void> => {
+      if (!api) throw new Error("The desktop connection is unavailable.");
+      const sessionKey = `${target.workspaceId}:${target.sessionId}`;
+      const requireCurrentSession = () => {
+        if (
+          currentSessionKeyRef.current !== sessionKey ||
+          hydratedComposerSessionKeyRef.current !== sessionKey
+        )
+          throw new Error("The task changed before its draft could be saved.");
+      };
+      const cancelPendingWrite = () => {
+        if (composerDraftWriteTimerRef.current !== null) {
+          window.clearTimeout(composerDraftWriteTimerRef.current);
+          composerDraftWriteTimerRef.current = null;
+        }
+        pendingComposerDraftRef.current = null;
+      };
+      // A task-creating host action must not overtake an older debounced write or lose an
+      // edit made while saving. Every explicit write stays bound to the original task.
+      for (;;) {
+        requireCurrentSession();
+        cancelPendingWrite();
+        // Keep the latest edit flushable if ordinary task navigation happens while an
+        // older write is still completing. Its existing pre-navigation flush owns that case.
+        pendingComposerDraftRef.current = {
+          draft: composerDraftRef.current,
+          generation: localEditGenerationRef.current,
+          sessionKey,
+        };
+        const earlierWrites = [...inFlightComposerDraftWritesRef.current.entries()]
+          .filter(([write]) => write.sessionKey === sessionKey)
+          .map(([, completion]) => completion);
+        await Promise.allSettled(earlierWrites);
+        requireCurrentSession();
+        cancelPendingWrite();
+        const generation = localEditGenerationRef.current;
+        const draft = composerDraftRef.current;
+        const pendingWrite = { draft, generation, sessionKey };
+        pendingComposerDraftRef.current = pendingWrite;
+        const completion = api.persistComposerDraft({ target, draft });
+        inFlightComposerDraftWritesRef.current.set(pendingWrite, completion);
+        try {
+          await completion;
+        } finally {
+          inFlightComposerDraftWritesRef.current.delete(pendingWrite);
+        }
+        requireCurrentSession();
+        if (
+          generation === localEditGenerationRef.current &&
+          draft === composerDraftRef.current &&
+          ![...inFlightComposerDraftWritesRef.current.keys()].some(
+            (write) => write.sessionKey === sessionKey,
+          )
+        ) {
+          cancelPendingWrite();
+          acknowledgedLocalEditGenerationRef.current = generation;
+          return;
+        }
+      }
+    },
+    [api],
+  );
+
+  return {
+    composerDraft,
+    setComposerDraft,
+    composerDraftRef,
+    flushComposerDraft,
+    flushComposerDraftAsync,
+  };
 }

@@ -20,7 +20,7 @@ test("existing tasks start on Changes and unsent tasks keep the workbench hidden
     visibility: "visible",
     tools: [{ kind: "changes" }],
     selection: { kind: "tool", toolId: "changes" },
-    changes: { workspaceId: "checkout", selectedPath: null },
+    changes: { scope: { kind: "uncommitted" }, workspaceId: "checkout", selectedPath: null },
   });
   expect(initialWorkbenchView("checkout", true).visibility).toBe("hidden");
   expect(decodeTaskWorkbenchTemplate(existing)).toEqual(existing);
@@ -63,7 +63,11 @@ test("hiding and tab switching retain file references and Changes selection", ()
   });
   view = reduceWorkbench(view, {
     type: "set-changes",
-    changes: { workspaceId: "checkout", selectedPath: "src/index.ts" },
+    changes: {
+      scope: { kind: "uncommitted" },
+      workspaceId: "checkout",
+      selectedPath: "src/index.ts",
+    },
   });
   view = reduceWorkbench(view, { type: "open-tool", tool: { kind: "files" } });
   const hidden = reduceWorkbench(view, { type: "set-visibility", visibility: "hidden" });

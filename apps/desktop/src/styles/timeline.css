@@ -184,6 +184,14 @@
   font-weight: 500;
 }
 
+.timeline-item__review-error {
+  margin: var(--space-1) 0 0;
+  color: var(--error-ink);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  overflow-wrap: anywhere;
+}
+
 .timeline-item__action:hover {
   background: var(--surface-muted);
   border-color: var(--line);

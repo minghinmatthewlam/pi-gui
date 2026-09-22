@@ -161,7 +161,11 @@ export interface DesktopAppStoreOptions {
   readonly shouldKeepSessionDialogs?: (sessionRef: SessionRef) => boolean;
   readonly driverOptions?: Pick<
     PiSdkDriverConfig,
-    "extensionFactories" | "inlineExtensionMetadata"
+    | "extensionFactories"
+    | "inlineExtensionMetadata"
+    | "desktopExtensions"
+    | "onTurnCaptureBoundary"
+    | "turnCaptureTimeoutMs"
   >;
   readonly generateThreadTitleOverride?: (
     workspace: WorkspaceRef,
@@ -3125,6 +3129,7 @@ export class DesktopAppStore {
         runMetricsBySession: this.sessionState.runMetricsBySession,
         runningSinceBySession: this.sessionState.runningSinceBySession,
         activeAssistantMessageBySession: this.sessionState.activeAssistantMessageBySession,
+        pendingAssistantMessageBySession: this.sessionState.pendingAssistantMessageBySession,
         activeWorkingActivityBySession: this.sessionState.activeWorkingActivityBySession,
       });
       this.state = applySessionEventState(
