@@ -41,6 +41,7 @@ import { ThemeManager } from "./platform/theme-manager";
 import { TerminalService } from "./platform/terminal-service";
 import type { DesktopAppState, DesktopAppViewState } from "../contracts/desktop-state";
 import {
+  desktopCommands,
   desktopIpc,
   getDesktopCommandFromShortcut,
   type CustomProviderProbeInput,
@@ -391,8 +392,19 @@ function createWindow(): BrowserWindow {
 
     const lowerKey = input.key.toLowerCase();
     const platformModifier = process.platform === "darwin" ? input.meta : input.control;
+    const command = getDesktopCommandFromShortcut({
+      modifier: process.platform === "darwin" ? input.meta : input.control,
+      alt: input.alt,
+      shift: input.shift,
+      key: input.key,
+      code: input.code,
+    });
     const terminalFocused = terminalFocusedWebContentsIds.has(window.webContents.id);
     if (terminalFocused) {
+      if (command === desktopCommands.toggleSidePanel) {
+        event.preventDefault();
+        window.webContents.send(desktopIpc.appCommand, command);
+      }
       return;
     }
     if (platformModifier && !input.shift && lowerKey === "n") {
@@ -418,13 +430,6 @@ function createWindow(): BrowserWindow {
       }
     }
 
-    const command = getDesktopCommandFromShortcut({
-      modifier: process.platform === "darwin" ? input.meta : input.control,
-      alt: input.alt,
-      shift: input.shift,
-      key: input.key,
-      code: input.code,
-    });
     if (command) {
       event.preventDefault();
       window.webContents.send(desktopIpc.appCommand, command);

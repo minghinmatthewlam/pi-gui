@@ -102,6 +102,22 @@ test("toggles the last side panel and switches from a vertical menu", async () =
     await terminalMenu.getByRole("menuitem", { name: /^Terminal/ }).click();
     await expect(terminal).toBeVisible();
     await expect(changes).toBeVisible();
+
+    await terminal.locator(".xterm").click();
+    const sidePanelModifier = process.platform === "darwin" ? "meta" : "control";
+    const pressSidePanelShortcut = () =>
+      harness.electronApp.evaluate(({ BrowserWindow }, modifier) => {
+        BrowserWindow.getAllWindows()[0]?.webContents.sendInputEvent({
+          type: "keyDown",
+          keyCode: "b",
+          modifiers: [modifier, "alt"],
+        });
+      }, sidePanelModifier);
+    await pressSidePanelShortcut();
+    await expect(changes).toHaveCount(0);
+    await expect(terminal).toBeVisible();
+    await pressSidePanelShortcut();
+    await expect(changes).toBeVisible();
   } finally {
     await harness.close();
   }
