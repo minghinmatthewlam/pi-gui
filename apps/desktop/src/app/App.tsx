@@ -360,13 +360,18 @@ export default function App() {
   }, []);
   const selectedSessionKeyRef = useRef(selectedSessionKey);
   selectedSessionKeyRef.current = selectedSessionKey;
+  const selectedWorkspaceRef = useRef(selectedWorkspace);
+  selectedWorkspaceRef.current = selectedWorkspace;
+  // Snapshot ticks replace selectedWorkspace. A new callback identity reparses every
+  // visible assistant message and drops stick-to-bottom while a reply is streaming.
   const handleOpenWorkspaceFileLine = useCallback(
     (target: WorkspaceFileLine) => {
-      if (!api || !selectedWorkspace) {
+      const workspace = selectedWorkspaceRef.current;
+      if (!api || !workspace) {
         return;
       }
-      const workspaceId = selectedWorkspace.id;
-      const sessionKey = selectedSessionKey;
+      const workspaceId = workspace.id;
+      const sessionKey = selectedSessionKeyRef.current;
       void api
         .readWorkspaceFile(workspaceId, target.path)
         .then(() => {
@@ -382,7 +387,7 @@ export default function App() {
           // Missing, unreadable, or outside the workspace: leave the panel unchanged.
         });
     },
-    [api, selectedSessionKey, selectedWorkspace],
+    [api],
   );
 
   const dismissSchemaSkewNotice = useCallback((sessionKey: string) => {
