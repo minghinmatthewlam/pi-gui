@@ -90,9 +90,9 @@ export function useThreadSwitcher(options: UseThreadSwitcherOptions) {
           step(current, event.shiftKey ? -1 : 1);
           return;
         }
-        // Leave modal dialogs and single-line fields (thread rename) alone.
+        // Leave modal dialogs and an in-progress thread or folder rename alone.
         if (document.querySelector("[aria-modal='true']")) return;
-        if (event.target instanceof HTMLInputElement) return;
+        if (event.target instanceof Element && event.target.closest(".workspace-rename")) return;
         if (open(event.shiftKey)) swallow(event);
         return;
       }
