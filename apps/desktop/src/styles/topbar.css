@@ -5,8 +5,9 @@
 
 .topbar {
   -webkit-app-region: drag;
-  min-height: 48px;
-  padding: 8px 20px;
+  height: 48px;
+  min-width: 0;
+  padding: 0 16px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -30,6 +31,8 @@
 }
 
 .topbar__workspace {
+  flex: 0 1 auto;
+  max-width: 120px;
   color: var(--muted);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -151,4 +154,14 @@
 .shell--sidebar-collapsed .topbar {
   margin-left: var(--titlebar-collapsed-main-padding-left);
   padding-left: 0;
+}
+
+.topbar__title:has(.chat-header__title) .topbar__workspace {
+  flex-shrink: 3;
+}
+
+@media (max-width: 1200px) {
+  .topbar .chat-header__status {
+    display: none;
+  }
 }

@@ -1,4 +1,4 @@
-import { useId, useRef, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useId, useRef, type KeyboardEvent, type ReactNode } from "react";
 import { toolRefId, type TaskWorkbenchTemplate, type ToolRef } from "../../../contracts/workbench";
 import type { DesktopExtensionViewInfo } from "../../../contracts/extension-views";
 import {
@@ -7,13 +7,17 @@ import {
   ExtensionIcon,
   FileIcon,
   PlusIcon,
+  SidePanelIcon,
   TerminalIcon,
   WorktreeIcon,
 } from "../../ui/icons";
+import { WorkbenchResizeHandle } from "./workbench-resize-handle";
 import { activeWorkbenchTool } from "./workbench-state";
 
 interface WorkbenchProps {
   readonly view: TaskWorkbenchTemplate;
+  readonly onResize: (width: number) => void;
+  readonly onTogglePanel: () => void;
   readonly onOpenTool: (tool: ToolRef) => void;
   readonly onActivateTool: (toolId: string) => void;
   readonly onCloseTool: (toolId: string) => void;
@@ -67,6 +71,8 @@ function ToolIcon({ tool }: { readonly tool: ToolRef }) {
 
 export function Workbench({
   view,
+  onResize,
+  onTogglePanel,
   onOpenTool,
   onActivateTool,
   onCloseTool,
@@ -90,6 +96,14 @@ export function Workbench({
           (entry) => entry.extensionId === activeTool.extensionId && entry.id === activeTool.viewId,
         )
       : undefined;
+  useEffect(() => {
+    if (view.visibility === "visible" && view.selection.kind === "tool") {
+      tabRefs.current
+        .get(view.selection.toolId)
+        ?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    }
+  }, [view.selection, view.visibility]);
+
   const tabId = (toolId: string) => `${panelId}-${encodeURIComponent(toolId)}`;
 
   const closeAndFocus = (toolId: string) => {
@@ -145,6 +159,7 @@ export function Workbench({
       data-testid="workbench"
       id="task-workbench"
     >
+      <WorkbenchResizeHandle onResize={onResize} />
       <div className="workbench__tabbar">
         <div aria-label="Workspace tools" className="workbench__tabs" role="tablist">
           {view.tools.map((tool, index) => {
@@ -206,6 +221,18 @@ export function Workbench({
           type="button"
         >
           <PlusIcon />
+        </button>
+        <button
+          aria-label="Toggle side panel"
+          aria-pressed="true"
+          aria-controls="task-workbench"
+          data-testid="toggle-side-panel"
+          className="workbench__add icon-button"
+          onClick={onTogglePanel}
+          title="Hide side panel"
+          type="button"
+        >
+          <SidePanelIcon />
         </button>
       </div>
       {error ? (

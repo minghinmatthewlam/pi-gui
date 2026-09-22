@@ -35,6 +35,7 @@ import {
 } from "../features/extensions/extension-view-panel";
 import { useExtensionViews } from "../features/extensions/use-extension-views";
 import { Workbench } from "../features/workbench/workbench";
+import { useWorkbenchWidth } from "../features/workbench/use-workbench-width";
 import { WorktreesPanel } from "../features/workbench/worktrees-panel";
 import type { WorkspaceFileLine } from "../features/conversation/workspace-file-line";
 import { buildModelOptions } from "../features/conversation/composer-commands";
@@ -90,6 +91,7 @@ import { useSessionComposer } from "../features/conversation/hooks/use-session-c
 
 export default function App() {
   const desktop = useDesktopAppState();
+  const workbenchWidth = useWorkbenchWidth();
   const snapshot = desktop.snapshot;
   const setSnapshot = desktop.setSnapshot;
   const selectedTranscript = desktop.selectedTranscript;
@@ -941,7 +943,6 @@ export default function App() {
   const mainClassName = [
     "main",
     sidePanelVisible ? "main--with-side-panel" : "",
-    sidePanelVisible && selectedToolId === "files" ? "main--with-files" : "",
     snapshot.startupDiagnostics.length > 0 ? "main--with-startup-diagnostics" : "",
   ]
     .filter(Boolean)
@@ -1167,7 +1168,7 @@ export default function App() {
         />
       ) : null}
 
-      <main className={mainClassName}>
+      <main className={mainClassName} style={workbenchWidth.style}>
         <Topbar
           activeView={snapshot.activeView}
           rootWorkspace={rootWorkspace}
@@ -1177,7 +1178,64 @@ export default function App() {
           panelAvailable={sidePanelAvailable}
           panelVisible={sidePanelVisible}
           onTogglePanel={toggleSidePanel}
-        />
+          sessionTitle={
+            snapshot.activeView === "threads" && selectedSession ? displayedSessionTitle : undefined
+          }
+        >
+          {snapshot.activeView === "threads" && selectedWorkspace && selectedSession ? (
+            <>
+              <div className="chat-header__status">
+                {selectedSession.status === "running"
+                  ? runningLabel
+                  : formatRelativeTime(selectedSession.updatedAt)}
+              </div>
+              <div className="chat-header__menu-wrap">
+                <button
+                  aria-haspopup="menu"
+                  aria-expanded={threadMenuOpen}
+                  aria-label="Thread actions"
+                  className="icon-button"
+                  data-testid="thread-header-menu"
+                  type="button"
+                  onClick={() => setThreadMenuOpen((open) => !open)}
+                >
+                  …
+                </button>
+                {threadMenuOpen ? (
+                  <div className="workspace-menu chat-header__menu" role="menu">
+                    <button
+                      className="workspace-menu__item"
+                      data-testid="thread-add-scheduled-task"
+                      type="button"
+                      onClick={() => {
+                        setThreadMenuOpen(false);
+                        if (scheduledBinding) {
+                          setScheduledEditor({
+                            mode: "edit",
+                            taskId: scheduledBinding.id,
+                          });
+                          return;
+                        }
+                        setScheduledEditor({
+                          mode: "create",
+                          prefill: {
+                            target: {
+                              kind: "existing-thread",
+                              workspaceId: selectedWorkspace.id,
+                              sessionId: selectedSession.id,
+                            },
+                          },
+                        });
+                      }}
+                    >
+                      {scheduledBinding ? "Edit scheduled task…" : "Add scheduled task…"}
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            </>
+          ) : null}
+        </Topbar>
 
         {snapshot.startupDiagnostics.length > 0 ? (
           <div className="startup-diagnostics" role="status" data-testid="startup-diagnostics">
@@ -1275,61 +1333,6 @@ export default function App() {
             <>
               <section className="canvas canvas--thread">
                 <div className="conversation conversation--thread">
-                  <div className="chat-header">
-                    <div className="chat-header__row">
-                      <h1 className="chat-header__title">{displayedSessionTitle}</h1>
-                      <div className="chat-header__status">
-                        {selectedSession.status === "running"
-                          ? runningLabel
-                          : formatRelativeTime(selectedSession.updatedAt)}
-                      </div>
-                      <div className="chat-header__menu-wrap">
-                        <button
-                          aria-haspopup="menu"
-                          aria-expanded={threadMenuOpen}
-                          aria-label="Thread actions"
-                          className="icon-button"
-                          data-testid="thread-header-menu"
-                          type="button"
-                          onClick={() => setThreadMenuOpen((open) => !open)}
-                        >
-                          …
-                        </button>
-                        {threadMenuOpen ? (
-                          <div className="workspace-menu chat-header__menu" role="menu">
-                            <button
-                              className="workspace-menu__item"
-                              data-testid="thread-add-scheduled-task"
-                              type="button"
-                              onClick={() => {
-                                setThreadMenuOpen(false);
-                                if (scheduledBinding) {
-                                  setScheduledEditor({
-                                    mode: "edit",
-                                    taskId: scheduledBinding.id,
-                                  });
-                                  return;
-                                }
-                                setScheduledEditor({
-                                  mode: "create",
-                                  prefill: {
-                                    target: {
-                                      kind: "existing-thread",
-                                      workspaceId: selectedWorkspace.id,
-                                      sessionId: selectedSession.id,
-                                    },
-                                  },
-                                });
-                              }}
-                            >
-                              {scheduledBinding ? "Edit scheduled task…" : "Add scheduled task…"}
-                            </button>
-                          </div>
-                        ) : null}
-                      </div>
-                    </div>
-                  </div>
-
                   {showSchemaSkewNotice ? (
                     <div
                       className="schema-skew-notice"
@@ -1504,6 +1507,8 @@ export default function App() {
         {sidePanelVisible && selectedWorkspace && selectedSession ? (
           <Workbench
             view={workbench.view}
+            onResize={workbenchWidth.setWidth}
+            onTogglePanel={toggleSidePanel}
             extensionViews={extensionViews.views}
             extensionViewsLoading={extensionViews.loading}
             extensionViewsError={extensionViews.error}

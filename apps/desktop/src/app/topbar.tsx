@@ -1,10 +1,12 @@
-import type { MouseEvent as ReactMouseEvent } from "react";
+import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import type { AppView, WorkspaceRecord, WorktreeRecord } from "../../contracts/desktop-state";
 import { getSidePanelToggleShortcutLabel, type PiDesktopApi } from "../../contracts/ipc";
 import { SidePanelIcon } from "../ui/icons";
 
 interface TopbarProps {
   readonly activeView: AppView;
+  readonly sessionTitle?: string;
+  readonly children?: ReactNode;
   readonly rootWorkspace: WorkspaceRecord | undefined;
   readonly selectedWorkspace: WorkspaceRecord | undefined;
   readonly selectedWorktree: WorktreeRecord | undefined;
@@ -16,6 +18,8 @@ interface TopbarProps {
 
 export function Topbar({
   activeView,
+  sessionTitle,
+  children,
   rootWorkspace,
   selectedWorkspace,
   selectedWorktree,
@@ -39,10 +43,20 @@ export function Topbar({
   return (
     <header className="topbar" data-testid="topbar" onDoubleClick={handleDoubleClick}>
       <div className="topbar__title">
-        <span className="topbar__workspace">
+        <span
+          className="topbar__workspace"
+          title={checkoutLabel ? `${rootWorkspace?.name ?? ""} · ${checkoutLabel}` : undefined}
+        >
           {rootWorkspace ? rootWorkspace.name : "Open a folder to begin"}
         </span>
-        {activeView === "threads" && checkoutLabel ? (
+        {sessionTitle ? (
+          <>
+            <span className="topbar__separator">/</span>
+            <h1 className="chat-header__title" title={sessionTitle}>
+              {sessionTitle}
+            </h1>
+          </>
+        ) : activeView === "threads" && checkoutLabel ? (
           <>
             <span className="topbar__separator">/</span>
             <span className="topbar__session">{checkoutLabel}</span>
@@ -55,24 +69,27 @@ export function Topbar({
         ) : null}
       </div>
       <div className="topbar__actions">
-        <div className="shortcut-tooltip-wrap topbar__tooltip-wrap">
-          <button
-            type="button"
-            aria-label="Toggle side panel"
-            aria-pressed={panelVisible}
-            aria-controls="task-workbench"
-            data-testid="toggle-side-panel"
-            className={`icon-button topbar__icon${panelVisible ? " icon-button--active" : ""}`}
-            disabled={!panelAvailable}
-            onClick={onTogglePanel}
-          >
-            <SidePanelIcon />
-          </button>
-          <span className="shortcut-tooltip topbar__tooltip" role="tooltip">
-            <span>{panelVisible ? "Hide side panel" : "Show side panel"}</span>
-            <kbd>{getSidePanelToggleShortcutLabel(api.platform)}</kbd>
-          </span>
-        </div>
+        {children}
+        {!panelVisible ? (
+          <div className="shortcut-tooltip-wrap topbar__tooltip-wrap">
+            <button
+              type="button"
+              aria-label="Toggle side panel"
+              aria-pressed={panelVisible}
+              aria-controls="task-workbench"
+              data-testid="toggle-side-panel"
+              className={`icon-button topbar__icon${panelVisible ? " icon-button--active" : ""}`}
+              disabled={!panelAvailable}
+              onClick={onTogglePanel}
+            >
+              <SidePanelIcon />
+            </button>
+            <span className="shortcut-tooltip topbar__tooltip" role="tooltip">
+              <span>{panelVisible ? "Hide side panel" : "Show side panel"}</span>
+              <kbd>{getSidePanelToggleShortcutLabel(api.platform)}</kbd>
+            </span>
+          </div>
+        ) : null}
       </div>
     </header>
   );

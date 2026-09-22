@@ -327,3 +327,127 @@ test("two windows keep independent live tool selections for the same task", asyn
     await harness.close();
   }
 });
+
+test("keeps one resizable width across tools, chooser, tasks, and restart", async ({}, testInfo) => {
+  test.setTimeout(90_000);
+  const fixture = await prepareWorkspace();
+  const options = {
+    agentDir: fixture.agentDir,
+    initialWorkspaces: [fixture.workspacePath],
+    testMode: "background" as const,
+  };
+  let harness = await launchDesktop(fixture.userDataDir, options);
+  const setWindowWidth = async (width: number) => {
+    await harness.electronApp.evaluate(({ BrowserWindow }, nextWidth) => {
+      BrowserWindow.getAllWindows()[0]?.setContentSize(nextWidth, 900);
+    }, width);
+  };
+  try {
+    await setWindowWidth(1440);
+    let window = await harness.firstWindow();
+    await selectSession(window, TASK_A);
+    const panelWidth = async () =>
+      Math.round((await window.getByTestId("workbench").boundingBox())!.width);
+    await expect.poll(panelWidth).toBe(440);
+    const handle = window.getByRole("separator", { name: "Side panel width" });
+    const start = (await handle.boundingBox())!;
+    await window.mouse.move(start.x + 3, start.y + 160);
+    await window.mouse.down();
+    await window.mouse.move(start.x - 97, start.y + 160, { steps: 10 });
+    await window.mouse.up();
+    await expect.poll(panelWidth).toBe(540);
+    for (const tool of ["Files", "Changes", "Worktrees", "Terminal"] as const) {
+      await window.getByTestId("workbench-add-tab").click();
+      await expect.poll(panelWidth).toBe(540);
+      await window
+        .getByTestId("workbench-chooser")
+        .getByRole("button", { name: tool, exact: true })
+        .click();
+      await expectActiveTool(window, tool);
+      await expect.poll(panelWidth).toBe(540);
+    }
+    const add = (await window.getByTestId("workbench-add-tab").boundingBox())!;
+    const toggle = (await window.getByTestId("toggle-side-panel").boundingBox())!;
+    const title = (await window.locator(".chat-header__title").boundingBox())!;
+    expect(Math.abs(add.y - toggle.y)).toBeLessThan(2);
+    expect(title.y).toBeLessThan(48);
+    expect(toggle.x).toBeGreaterThan(add.x);
+    await expect(window.getByTestId("topbar").getByRole("heading", { name: TASK_A })).toBeVisible();
+    await window.getByTestId("thread-header-menu").click();
+    await expect(window.getByTestId("thread-add-scheduled-task")).toBeVisible();
+    await window.getByTestId("thread-header-menu").click();
+    await window.getByTestId("toggle-side-panel").click();
+    await expect(window.getByTestId("workbench")).toHaveCount(0);
+    await window.getByTestId("toggle-side-panel").click();
+    await expect.poll(panelWidth).toBe(540);
+    await selectSession(window, TASK_B);
+    await expect.poll(panelWidth).toBe(540);
+    await handle.focus();
+    await handle.press("ArrowRight");
+    await expect.poll(panelWidth).toBe(520);
+    await window.screenshot({ path: testInfo.outputPath("compact-resizable-workspace.png") });
+    await setWindowWidth(1040);
+    await expect.poll(panelWidth).toBeLessThanOrEqual(520);
+    await expect(window.getByTestId("composer")).toBeVisible();
+    await setWindowWidth(900);
+    await expect.poll(panelWidth).toBe(520);
+    await handle.focus();
+    await handle.press("Home");
+    await expect.poll(panelWidth).toBe(320);
+    await selectSession(window, TASK_A);
+    await addTool(window, "Terminal");
+    const activeTab = (await window
+      .getByRole("tab", { name: "Terminal", exact: true })
+      .boundingBox())!;
+    const strip = (await window.getByRole("tablist", { name: "Workspace tools" }).boundingBox())!;
+    expect(activeTab.x).toBeGreaterThanOrEqual(strip.x);
+    expect(activeTab.x + activeTab.width).toBeLessThanOrEqual(strip.x + strip.width + 1);
+    await handle.focus();
+    await handle.press("ArrowLeft");
+    await expect.poll(panelWidth).toBe(340);
+    await window.getByTestId("workbench-add-tab").click();
+    await expect.poll(panelWidth).toBe(340);
+    await window.screenshot({ path: testInfo.outputPath("narrow-workspace-chooser.png") });
+    // Wait for the debounced preference write before exercising a fresh process.
+    await expect
+      .poll(() => window.evaluate(() => localStorage.getItem("pi-gui.workbench-width")))
+      .toBe("340");
+    await harness.close();
+    harness = await launchDesktop(fixture.userDataDir, options);
+    window = await harness.firstWindow();
+    await selectSession(window, TASK_A);
+    await expect.poll(panelWidth).toBe(340);
+  } finally {
+    await harness.close();
+  }
+});
+
+test("shows and selects GPT-6 Sol from the upgraded Pi model catalog", async ({}, testInfo) => {
+  const fixture = await prepareWorkspace();
+  // Synthetic credentials enable the provider catalog; this test never sends a request.
+  await seedAgentDir(fixture.agentDir, {
+    enabledModels: ["openai/gpt-6-sol", "openai/gpt-6-luna"],
+  });
+  const harness = await launchDesktop(fixture.userDataDir, {
+    agentDir: fixture.agentDir,
+    initialWorkspaces: [fixture.workspacePath],
+    testMode: "background",
+  });
+  try {
+    const window = await harness.firstWindow();
+    await selectSession(window, TASK_A);
+    const badge = window.locator(".composer__bar .model-selector__badge").first();
+    await badge.click();
+    const dropdown = window.locator(".composer__bar .model-selector__dropdown").first();
+    await expect(dropdown).toContainText("GPT-6 Sol");
+    await expect(dropdown).toContainText("GPT-6 Luna");
+    await dropdown.getByRole("button", { name: /GPT-6 Sol/ }).click();
+    await expect(badge).toHaveText("openai:gpt-6-sol");
+    await expect(
+      window.locator(".composer").getByRole("button", { name: "medium", exact: true }),
+    ).toBeVisible();
+    await window.screenshot({ path: testInfo.outputPath("gpt-6-sol-selected.png") });
+  } finally {
+    await harness.close();
+  }
+});

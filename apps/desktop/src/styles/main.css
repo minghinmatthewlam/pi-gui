@@ -20,15 +20,11 @@
 }
 
 .main--with-side-panel {
-  grid-template-columns: 1fr 400px;
-}
-
-.main--with-side-panel.main--with-files {
-  grid-template-columns: minmax(0, 1fr) minmax(480px, 1fr);
+  grid-template-columns: minmax(0, 1fr) min(var(--workbench-width, 440px), 65%);
 }
 
 .main--with-side-panel > .topbar {
-  grid-column: 1 / -1;
+  grid-column: 1;
 }
 
 .main--with-side-panel > .composer {
@@ -40,7 +36,7 @@
 }
 
 .main--with-side-panel > .startup-diagnostics {
-  grid-column: 1 / -1;
+  grid-column: 1;
 }
 
 .canvas {
@@ -86,34 +82,16 @@
   pointer-events: none;
 }
 
-.chat-header {
-  display: grid;
-  gap: 4px;
-  margin-bottom: 18px;
-}
-
-.chat-header__eyebrow {
-  color: var(--muted-subtle);
-  font-size: 12px;
-  font-weight: 560;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.chat-header__row {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-}
-
 .chat-header__title {
   margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--text-strong);
-  font-size: 18px;
+  font-size: 14px;
   font-weight: 610;
-  letter-spacing: -0.03em;
-  line-height: 1.15;
+  letter-spacing: -0.02em;
 }
 
 .chat-header__status {
@@ -169,12 +147,8 @@
 
 .main--with-side-panel > .side-panel {
   grid-column: 2;
-  grid-row: 2 / -1;
+  grid-row: 1 / -1;
   border-left: 1px solid var(--border);
-}
-
-.main--with-side-panel.main--with-startup-diagnostics > .side-panel {
-  grid-row: 3 / -1;
 }
 
 .file-workbench__mode {
@@ -2856,18 +2830,19 @@
 }
 
 @media (max-width: 980px) {
-  .main--with-side-panel,
-  .main--with-side-panel.main--with-files {
+  .main--with-side-panel {
     grid-template-columns: minmax(0, 1fr);
   }
 
   .main--with-side-panel > .side-panel {
+    grid-column: auto;
+    grid-row: auto;
     position: absolute;
     top: 48px;
     right: 0;
     bottom: 0;
     z-index: 20;
-    width: min(560px, 100%);
+    width: min(var(--workbench-width, 440px), 100%);
     border-left: 1px solid var(--border);
     box-shadow: var(--shadow-lg);
   }
@@ -2880,7 +2855,6 @@
   }
 
   .composer__bar,
-  .chat-header__row,
   .view-header,
   .tree-modal__footer {
     flex-direction: column;
