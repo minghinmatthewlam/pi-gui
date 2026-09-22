@@ -12,7 +12,10 @@ PNPM_VERSION=10.25.0
 
 # Virtual display and the shared libraries Electron needs on Ubuntu 24.04.
 export DEBIAN_FRONTEND=noninteractive
-apt-get update -q
+# The image ships extra PPAs (deadsnakes, ondrej/php) that the Custom network
+# allowlist blocks, so apt-get update exits 100 even though the Ubuntu indexes
+# download. Tolerate that; a missing package still fails the install below.
+apt-get update -q || true
 apt-get install -y -q --no-install-recommends \
   xvfb xauth dbus-x11 fonts-liberation \
   libnss3 libatk1.0-0t64 libatk-bridge2.0-0t64 libcups2t64 libdrm2 libgbm1 \
