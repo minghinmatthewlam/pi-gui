@@ -178,7 +178,7 @@ test("selects pinned threads first with 1-9 and paints badges while the modifier
     try {
       await expect(window.locator("[data-thread-shortcut]")).toHaveCount(3);
       await window.keyboard.press("2");
-      await expect(window.locator(".topbar__session")).toHaveText("Alpha");
+      await expect(window.locator(".chat-header__title")).toHaveText("Alpha");
       await expect(window.locator("[data-thread-shortcut]")).toHaveCount(0);
     } finally {
       await window.keyboard.up(commandModifier);
