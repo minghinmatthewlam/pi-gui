@@ -44,6 +44,7 @@ import {
   desktopCommands,
   desktopIpc,
   getDesktopCommandFromShortcut,
+  isCloseFocusedSurfaceShortcut,
   type CustomProviderProbeInput,
   type CustomProviderProbeResult,
 } from "../contracts/ipc";
@@ -142,6 +143,8 @@ let stopUpdateChecker: (() => void) | undefined;
 let stopPruningTerminals: (() => void) | undefined;
 let retainedTerminalWorkspacePathSignature = "";
 const terminalFocusedWebContentsIds = new Set<number>();
+const sidePanelFocusedWebContentsIds = new Set<number>();
+const surfaceCloseShortcutIds = new Set<number>();
 let quittingAfterStoreFlush = false;
 
 const SUPPORTED_IMAGE_TYPES = SUPPORTED_COMPOSER_IMAGE_TYPES;
@@ -341,6 +344,16 @@ function readClipboardImageAttachment(): ClipboardImageRead {
   };
 }
 
+function dispatchCloseFocusedSurface(window: BrowserWindow, event: Electron.Event): void {
+  event.preventDefault();
+  const webContentsId = window.webContents.id;
+  surfaceCloseShortcutIds.add(webContentsId);
+  setImmediate(() => {
+    surfaceCloseShortcutIds.delete(webContentsId);
+  });
+  window.webContents.send(desktopIpc.appCommand, desktopCommands.closeFocusedSurface);
+}
+
 function createWindow(): BrowserWindow {
   const backgroundTestMode = windowTestMode === "background";
   const enableTransparency = store ? store.snapshot().enableTransparency : false;
@@ -380,6 +393,13 @@ function createWindow(): BrowserWindow {
     openExternalWebUrl(url);
   });
 
+  window.on("close", (event) => {
+    if (!surfaceCloseShortcutIds.has(window.webContents.id)) {
+      return;
+    }
+    event.preventDefault();
+    surfaceCloseShortcutIds.delete(window.webContents.id);
+  });
   window.once("ready-to-show", () => {
     if (!backgroundTestMode) {
       window.show();
@@ -399,12 +419,30 @@ function createWindow(): BrowserWindow {
       key: input.key,
       code: input.code,
     });
-    const terminalFocused = terminalFocusedWebContentsIds.has(window.webContents.id);
+    const webContentsId = window.webContents.id;
+    const terminalFocused = terminalFocusedWebContentsIds.has(webContentsId);
+    const closeFocusedSurface =
+      isCloseFocusedSurfaceShortcut({
+        meta: input.meta,
+        control: input.control,
+        alt: input.alt,
+        shift: input.shift,
+        key: input.key,
+        code: input.code,
+        platform: process.platform,
+      }) &&
+      (terminalFocused || sidePanelFocusedWebContentsIds.has(webContentsId));
     if (terminalFocused) {
       if (command === desktopCommands.toggleSidePanel) {
         event.preventDefault();
         window.webContents.send(desktopIpc.appCommand, command);
+      } else if (closeFocusedSurface) {
+        dispatchCloseFocusedSurface(window, event);
       }
+      return;
+    }
+    if (closeFocusedSurface) {
+      dispatchCloseFocusedSurface(window, event);
       return;
     }
     if (platformModifier && !input.shift && lowerKey === "n") {
@@ -461,6 +499,8 @@ function createAppWindow(sourceView?: DesktopAppViewState): BrowserWindow {
   window.once("closed", () => {
     windowOwner.remove(window);
     terminalFocusedWebContentsIds.delete(webContentsId);
+    sidePanelFocusedWebContentsIds.delete(webContentsId);
+    surfaceCloseShortcutIds.delete(webContentsId);
     terminalService?.disposeWebContents(webContentsId);
     void store
       .cancelPendingDialogsWithoutVisibleWindow((sessionRef) =>
@@ -882,6 +922,13 @@ app
             terminalFocusedWebContentsIds.add(webContentsId);
           } else {
             terminalFocusedWebContentsIds.delete(webContentsId);
+          }
+        },
+        setSidePanelFocused: (webContentsId, focused) => {
+          if (focused) {
+            sidePanelFocusedWebContentsIds.add(webContentsId);
+          } else {
+            sidePanelFocusedWebContentsIds.delete(webContentsId);
           }
         },
         setTransparency: (enabled) => {

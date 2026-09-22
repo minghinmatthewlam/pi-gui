@@ -169,6 +169,7 @@ export interface DesktopIpcCapabilities {
   readonly terminal: () => TerminalService;
   readonly optionalTerminal: () => TerminalService | undefined;
   readonly setTerminalFocused: (webContentsId: number, focused: boolean) => void;
+  readonly setSidePanelFocused: (webContentsId: number, focused: boolean) => void;
   readonly setTransparency: (enabled: boolean) => void;
   readonly pickComposerAttachments: (
     window: BrowserWindow,
@@ -858,6 +859,10 @@ function registerTerminalIpc(windows: WindowOwner, capabilities: DesktopIpcCapab
   ipcMain.on(desktopIpc.terminalSetFocused, (event, rawFocused: unknown) => {
     const window = windows.windowForSender(event.sender);
     capabilities.setTerminalFocused(window.webContents.id, expectBoolean(rawFocused, "focused"));
+  });
+  ipcMain.on(desktopIpc.sidePanelSetFocused, (event, rawFocused: unknown) => {
+    const window = windows.windowForSender(event.sender);
+    capabilities.setSidePanelFocused(window.webContents.id, expectBoolean(rawFocused, "focused"));
   });
 }
 

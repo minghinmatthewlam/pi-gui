@@ -120,6 +120,7 @@ export const desktopIpc = {
   terminalCloseSession: "pi-gui:terminal-close-session",
   terminalSetTitle: "pi-gui:terminal-set-title",
   terminalSetFocused: "pi-gui:terminal-set-focused",
+  sidePanelSetFocused: "pi-gui:side-panel-set-focused",
   terminalData: "pi-gui:terminal-data",
   terminalExit: "pi-gui:terminal-exit",
   terminalError: "pi-gui:terminal-error",
@@ -161,6 +162,7 @@ export const desktopCommands = {
   openNewThread: "open-new-thread",
   toggleTerminal: "toggle-terminal",
   toggleSidePanel: "toggle-side-panel",
+  closeFocusedSurface: "close-focused-surface",
   toggleSidebar: "toggle-sidebar",
   selectRecentThread1: "select-recent-thread-1",
   selectRecentThread2: "select-recent-thread-2",
@@ -340,6 +342,26 @@ export function getDesktopCommandFromShortcut(
   return undefined;
 }
 
+export function isCloseFocusedSurfaceShortcut(input: {
+  readonly meta: boolean;
+  readonly control: boolean;
+  readonly alt: boolean;
+  readonly shift: boolean;
+  readonly key: string;
+  readonly code?: string;
+  readonly platform: NodeJS.Platform;
+}): boolean {
+  if (input.alt || input.shift) {
+    return false;
+  }
+  const platformModifier = input.platform === "darwin" ? input.meta : input.control;
+  const otherModifier = input.platform === "darwin" ? input.control : input.meta;
+  if (!platformModifier || otherModifier) {
+    return false;
+  }
+  return input.key.toLowerCase() === "w" || input.code === "KeyW";
+}
+
 export interface PiDesktopApi {
   platform: NodeJS.Platform;
   versions: NodeJS.ProcessVersions;
@@ -466,6 +488,7 @@ export interface PiDesktopApi {
   closeTerminalSession(terminalId: string): Promise<TerminalPanelSnapshot | null>;
   setTerminalTitle(terminalId: string, title: string): Promise<void>;
   setTerminalFocused(focused: boolean): Promise<void>;
+  setSidePanelFocused(focused: boolean): Promise<void>;
   onTerminalData(listener: (event: TerminalDataEvent) => void): () => void;
   onTerminalExit(listener: (event: TerminalExitEvent) => void): () => void;
   onTerminalError(listener: (event: TerminalErrorEvent) => void): () => void;

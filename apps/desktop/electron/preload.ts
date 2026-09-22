@@ -372,6 +372,10 @@ contextBridge.exposeInMainWorld("piApp", {
     ipcRenderer.send(desktopIpc.terminalSetFocused, focused);
     return Promise.resolve();
   },
+  setSidePanelFocused: (focused: boolean) => {
+    ipcRenderer.send(desktopIpc.sidePanelSetFocused, focused);
+    return Promise.resolve();
+  },
   onTerminalData: (listener: (event: TerminalDataEvent) => void) =>
     subscribeIpc(desktopIpc.terminalData, listener),
   onTerminalExit: (listener: (event: TerminalExitEvent) => void) =>
