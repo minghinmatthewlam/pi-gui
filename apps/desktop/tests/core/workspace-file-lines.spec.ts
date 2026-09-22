@@ -9,6 +9,7 @@ import {
   seedAgentDir,
   seedNamedTextSessionFixture,
   selectSession,
+  selectSidePanel,
 } from "../helpers/electron-app";
 
 const SESSION_TITLE = "File line fixture session";
@@ -136,7 +137,7 @@ test("assistant file lines open in the Files panel and web links stay external",
     expect(window.url()).toBe(appUrl);
     await expect(window.getByTestId("file-workbench")).toHaveCount(0);
 
-    await window.getByLabel("Toggle changes").click();
+    await selectSidePanel(window, "Changes");
     await expect(window.locator(".diff-panel")).toBeVisible();
     await fileButton(assistant, "missing.ts:2").click();
     await expect(window.locator(".diff-panel")).toBeVisible();

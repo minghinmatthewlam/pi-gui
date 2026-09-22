@@ -162,6 +162,7 @@ export const desktopCommands = {
   openNewThread: "open-new-thread",
   toggleTerminal: "toggle-terminal",
   toggleSidePanel: "toggle-side-panel",
+  toggleChanges: "toggle-changes",
   closeFocusedSurface: "close-focused-surface",
   toggleSidebar: "toggle-sidebar",
   selectRecentThread1: "select-recent-thread-1",
@@ -349,9 +350,17 @@ export interface EarlyModifierChord {
   readonly code: string;
 }
 
+function isBufferedModifierChord(key: string, code?: string): boolean {
+  const lower = key.toLowerCase();
+  if (lower === "f" || code === "KeyF") return true;
+  if (lower === "," || code === "Comma") return true;
+  if (lower === "d" || code === "KeyD") return true;
+  return /^[1-9]$/.test(key) || /^Digit[1-9]$/.test(code ?? "");
+}
+
 /**
  * Keeps Command/Ctrl chords that arrive before the React shortcut listener
- * exists. Only search and settings are replayed; other chords need the sidebar.
+ * exists. Search, settings, Changes, and thread digits are replayed.
  */
 export function createEarlyModifierChordBuffer() {
   const pending: EarlyModifierChord[] = [];
@@ -361,10 +370,7 @@ export function createEarlyModifierChordBuffer() {
       input: EarlyModifierChord & { readonly modifier: boolean; readonly shift: boolean },
     ): void {
       if (ready || !input.modifier || input.shift) return;
-      const key = input.key.toLowerCase();
-      const relevant =
-        key === "f" || input.code === "KeyF" || key === "," || input.code === "Comma";
-      if (!relevant) return;
+      if (!isBufferedModifierChord(input.key, input.code)) return;
       pending.push({ key: input.key, code: input.code });
       if (pending.length > 8) pending.shift();
     },
@@ -388,6 +394,7 @@ export function getDesktopCommandFromShortcut(
   const isComma = input.key === "," || input.code === "Comma";
   const isB = lowerKey === "b" || input.code === "KeyB";
   const isJ = lowerKey === "j" || input.code === "KeyJ";
+  const isD = lowerKey === "d" || input.code === "KeyD";
   const isShiftO = input.shift && (lowerKey === "o" || input.code === "KeyO");
 
   if (input.alt) {
@@ -403,6 +410,10 @@ export function getDesktopCommandFromShortcut(
 
   if (!input.shift && isJ) {
     return desktopCommands.toggleTerminal;
+  }
+
+  if (!input.shift && isD) {
+    return desktopCommands.toggleChanges;
   }
 
   if (!input.shift && isB) {

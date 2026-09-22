@@ -49,6 +49,31 @@ test("keeps a shortcut that arrives before the renderer subscribes", () => {
   expect(next).toEqual([desktopCommands.openSettings]);
 });
 
+test("maps Changes and thread digits from key or code", () => {
+  expect(
+    getDesktopCommandFromShortcut({
+      modifier: true,
+      shift: false,
+      key: "Unidentified",
+      code: "KeyD",
+    }),
+  ).toBe(desktopCommands.toggleChanges);
+  expect(
+    getDesktopCommandFromShortcut({ modifier: true, shift: false, key: "d", code: "KeyD" }),
+  ).toBe(desktopCommands.toggleChanges);
+  expect(
+    getDesktopCommandFromShortcut({
+      modifier: true,
+      shift: false,
+      key: "Unidentified",
+      code: "Digit2",
+    }),
+  ).toBe(desktopCommands.selectRecentThread2);
+  expect(
+    getDesktopCommandFromShortcut({ modifier: true, shift: false, key: "2", code: "Digit2" }),
+  ).toBe(desktopCommands.selectRecentThread2);
+});
+
 test("replays search and settings chords that arrive before the listener is armed", () => {
   const buffer = createEarlyModifierChordBuffer();
   buffer.note({ modifier: true, shift: false, key: "f", code: "KeyF" });
@@ -56,9 +81,12 @@ test("replays search and settings chords that arrive before the listener is arme
   buffer.note({ modifier: true, shift: true, key: "f", code: "KeyF" });
   buffer.note({ modifier: false, shift: false, key: "f", code: "KeyF" });
   buffer.note({ modifier: true, shift: false, key: "1", code: "Digit1" });
+  buffer.note({ modifier: true, shift: false, key: "Unidentified", code: "KeyD" });
   expect(buffer.arm()).toEqual([
     { key: "f", code: "KeyF" },
     { key: "Unidentified", code: "Comma" },
+    { key: "1", code: "Digit1" },
+    { key: "Unidentified", code: "KeyD" },
   ]);
   buffer.note({ modifier: true, shift: false, key: ",", code: "Comma" });
   expect(buffer.arm()).toEqual([]);
