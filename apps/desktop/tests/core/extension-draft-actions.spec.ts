@@ -50,14 +50,20 @@ export default function extension(pi) {
     if (!(await window.getByTestId("workbench").isVisible()))
       await window.getByTestId("toggle-side-panel").click();
     await window.getByTestId("workbench-add-tab").click();
-    await window
+    const choice = window
       .getByTestId("workbench-chooser")
-      .getByRole("button", { name: "Draft actions", exact: true })
-      .click();
+      .getByRole("button", { name: "Draft actions", exact: true });
+    // The chooser and tab show the view's title, never the internal extension hash.
+    await expect(choice).toHaveText("Draft actions");
+    await choice.click();
     const frame = window.frameLocator('[data-testid="extension-view-frame"]');
     await expect(
       frame.getByRole("button", { name: "Prepare task draft", exact: true }),
     ).toBeVisible();
+    await expect(window.getByRole("tab", { name: "Draft actions", exact: true })).toHaveAttribute(
+      "title",
+      "Draft actions",
+    );
     const state = await getDesktopState(window);
     const target = { workspaceId: state.selectedWorkspaceId!, sessionId: state.selectedSessionId! };
 
