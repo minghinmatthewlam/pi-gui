@@ -20,9 +20,10 @@ test("one icon and keyboard shortcuts toggle the selected workspace tool", async
   try {
     const window = await harness.firstWindow();
     await createNamedThread(window, "Shortcut thread");
-    const topbarActions = window.locator(".topbar__actions");
-    const toggle = topbarActions.getByRole("button", { name: "Toggle side panel" });
-    await expect(topbarActions.locator(".topbar__icon")).toHaveCount(1);
+    // The toggle sits in the topbar while the pane is hidden and in the
+    // workbench tab strip while it is shown; there is only ever one.
+    const toggle = window.getByRole("button", { name: "Toggle side panel" });
+    await expect(toggle).toHaveCount(1);
     await expect(toggle).toBeVisible();
     await expect(toggle).toHaveText("");
     await selectSidePanel(window, "Files");
