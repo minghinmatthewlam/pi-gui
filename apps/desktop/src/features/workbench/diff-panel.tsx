@@ -481,6 +481,7 @@ export function DiffPanel({
                     />
                     <button
                       className="diff-panel__file-name"
+                      title={JSON.stringify(file.path)}
                       type="button"
                       onClick={() =>
                         onSelectionChange({
@@ -623,8 +624,10 @@ function ReviewIssueBanner({
 function CoverageNotice({ coverage }: { readonly coverage: ReviewCoverage }) {
   if (coverage.state === "complete" && coverage.notes.length === 0) return null;
   return (
-    <div className="review-panel__coverage" data-testid="review-coverage" role="status">
-      {coverage.state === "partial" ? <strong>Partial comparison</strong> : null}
+    <details className="review-panel__coverage" data-testid="review-coverage">
+      <summary>
+        {coverage.state === "partial" ? "Comparison has limits" : "Comparison details"}
+      </summary>
       {coverage.notes.length ? (
         <ul>
           {coverage.notes.map((note, index) => (
@@ -634,7 +637,7 @@ function CoverageNotice({ coverage }: { readonly coverage: ReviewCoverage }) {
       ) : (
         <p>Some changes could not be included.</p>
       )}
-    </div>
+    </details>
   );
 }
 

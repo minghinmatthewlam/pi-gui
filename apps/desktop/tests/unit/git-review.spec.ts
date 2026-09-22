@@ -344,3 +344,27 @@ test("review creation and lazy reads do not mutate user Git files, objects, refs
   expect(await inventory(join(cwd, ".git"))).toEqual(before);
   expect(await readFile(join(cwd, "file.txt"))).toEqual(worktreeBefore);
 });
+
+test("repository ignore rules exclude generated evidence and caches, preserving source and tracked files", async () => {
+  const cwd = await repository();
+  await writeFile(
+    join(cwd, ".gitignore"),
+    await readFile(join(__dirname, "../../../..", ".gitignore")),
+  );
+  await mkdir(join(cwd, ".artifacts"));
+  await mkdir(join(cwd, ".pnpm-store"));
+  await writeFile(join(cwd, ".artifacts", "tracked.txt"), "baseline\n");
+  await git(cwd, "add", ".gitignore");
+  await git(cwd, "add", "--force", ".artifacts/tracked.txt");
+  await git(cwd, "commit", "-m", "Tracked exception");
+  await writeFile(join(cwd, ".artifacts", "backup.bin"), "generated backup");
+  await writeFile(join(cwd, ".pnpm-store", "package.bin"), "generated cache");
+  await writeFile(join(cwd, ".artifacts", "tracked.txt"), "changed tracked file\n");
+  await writeFile(join(cwd, "new-source.ts"), "export const value = 1;\n");
+  const review = await uncommitted(cwd);
+  expect(review.files.map((file) => file.path).sort()).toEqual([
+    ".artifacts/tracked.txt",
+    "new-source.ts",
+  ]);
+  expect(review.coverage.state).toBe("complete");
+});

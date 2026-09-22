@@ -76,6 +76,26 @@
   min-width: 0;
 }
 
+/* Keep large reviews cheap to scroll without removing keyboard/search targets.
+ * A stable row height avoids scroll jumps as off-screen content is revealed. */
+.review-panel .diff-panel__file {
+  height: 36px;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 36px;
+}
+
+.review-panel .diff-panel__file-path {
+  flex: 1;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.review-panel .file-workbench__status-label,
+.review-panel__stage-actions {
+  flex-shrink: 0;
+}
+
 .review-panel .file-workbench__body {
   flex: 0 1 35%;
   min-height: 100px;
@@ -141,6 +161,21 @@
 
 .review-panel__coverage ul {
   padding-left: 18px;
+}
+
+.review-panel__coverage {
+  flex-shrink: 0;
+  max-height: 140px;
+  overflow-y: auto;
+}
+
+.review-panel__coverage summary {
+  cursor: pointer;
+  font-weight: var(--font-medium);
+}
+
+.review-panel__coverage[open] summary {
+  margin-bottom: 8px;
 }
 
 .review-panel__summary,

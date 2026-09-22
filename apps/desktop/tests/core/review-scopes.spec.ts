@@ -188,7 +188,7 @@ test("binary, oversized, and conflicted files show incomplete review coverage", 
     await openFile(panel, "oversized.txt");
     await expect(
       panel.getByTestId("review-coverage").filter({ hasText: "8 MiB" }).first(),
-    ).toContainText("Partial comparison");
+    ).toContainText("Comparison has limits");
     await openFile(panel, "conflict.txt");
     await expect(panel).toContainText("Unmerged index stages");
     await expect(
@@ -259,6 +259,76 @@ test("an existing task without captures shows Last turn as unavailable", async (
     await expect(panel.getByText("No changes", { exact: true })).toHaveCount(0);
     await window.getByLabel("Review scope", { exact: true }).selectOption("uncommitted");
     await expect(fileRow(panel, "manual.txt")).toBeVisible();
+  } finally {
+    await harness.close();
+  }
+});
+
+test("large changed-file lists scroll with bounded row layout and expandable coverage", async ({}, testInfo) => {
+  test.setTimeout(90_000);
+  const workspacePath = await makeWorkspace("large-review-list");
+  await initGitRepo(workspacePath);
+  await writeFile(join(workspacePath, "baseline.txt"), "baseline\n");
+  await commitAllInGitRepo(workspacePath, "Baseline");
+  for (let start = 0; start < 2000; start += 100) {
+    await Promise.all(
+      Array.from({ length: 100 }, (_, offset) => {
+        const index = start + offset;
+        return writeFile(
+          join(workspacePath, `file-${String(index).padStart(4, "0")}.txt`),
+          `source ${index}\n`,
+        );
+      }),
+    );
+  }
+  const { harness, window, panel } = await openReview(workspacePath);
+  try {
+    const rows = panel.locator(".diff-panel__file");
+    await expect(rows).toHaveCount(2000, { timeout: 30_000 });
+    const notice = panel.getByTestId("review-coverage").first();
+    await expect(notice.locator("summary")).toHaveText("Comparison has limits");
+    await expect(notice.locator("ul")).toBeHidden();
+    await notice.locator("summary").click();
+    await expect(notice.locator("ul")).toBeVisible();
+    await notice.locator("summary").click();
+    await expect(rows.first()).toHaveCSS("content-visibility", "auto");
+    await expect(rows.first()).toHaveCSS("height", "36px");
+    const list = panel.locator(".diff-panel__file-list");
+    const box = (await list.boundingBox())!;
+    await window.mouse.move(box.x + box.width / 2, box.y + Math.min(box.height / 2, 80));
+    // Record a short diagnostic sample; correctness does not depend on machine speed.
+    await window.evaluate(() => {
+      const samples: number[] = [];
+      let previous = performance.now();
+      const sample = (now: number) => {
+        samples.push(now - previous);
+        previous = now;
+        if (samples.length < 120) requestAnimationFrame(sample);
+      };
+      Object.assign(window, { reviewScrollSamples: samples });
+      requestAnimationFrame(sample);
+    });
+    for (let index = 0; index < 12; index += 1) await window.mouse.wheel(0, 160);
+    await expect.poll(() => list.evaluate((element) => element.scrollTop)).toBeGreaterThan(500);
+    await window.screenshot({ path: testInfo.outputPath("large-review-scroll.png") });
+    // Keyboard navigation must still reach off-screen actions.
+    await fileRow(panel, "file-1999.txt").locator(".diff-panel__file-name").focus();
+    await window.keyboard.press("Enter");
+    await expect(
+      panel.getByRole("region", { name: "Combined changes", exact: true }),
+    ).toContainText("source 1999");
+    await expect(fileRow(panel, "file-1999.txt")).toBeInViewport();
+    await panel.getByTestId("diff-panel-reviewed-file-1999.txt").click();
+    try {
+      await expect(panel.getByTestId("diff-panel-reviewed-file-1999.txt")).toBeChecked();
+    } finally {
+      await window.screenshot({ path: testInfo.outputPath("large-review-mark.png") });
+      await writeFile(testInfo.outputPath("review-status.txt"), await panel.innerText());
+    }
+    const samples = await window.evaluate((): unknown =>
+      Reflect.get(window, "reviewScrollSamples"),
+    );
+    await writeFile(testInfo.outputPath("scroll-frames.json"), JSON.stringify(samples));
   } finally {
     await harness.close();
   }

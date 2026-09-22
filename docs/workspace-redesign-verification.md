@@ -33,3 +33,15 @@ The workspace now has one saved width across tools, the chooser, and tasks; poin
 - An earlier [real-provider attempt](../.artifacts/verify-pi-gui/run-q7dgh6/result.json) stopped at archive because shortcut badges hid archive controls. Both unsuccessful attempts are retained. Controlled Electron draft/layout restart tests pass; the foreground live draft discrepancy still needs an isolated follow-up.
 
 Independent source review found one issue (newly selected overflow tabs were offscreen); it was fixed and rechecked. All changes remain local; no PR/hosted CI or release publication was performed in this follow-up.
+
+## Follow-up: generated artifacts and large Changes lists
+
+The reported 2,000-file partial comparison included local app backups and verification evidence. Git listed 57,922 status entries before this fix. Root-anchored ignores for `.artifacts` and `.pnpm-store` reduced the installed app's review to six real changed files at verification time; all artifacts were retained. A Git regression test verifies ignored generated files disappear while ordinary untracked source and explicitly tracked files in ignored directories remain reviewable.
+
+Coverage explanations now use a collapsed “Comparison has limits” disclosure. Large lists use stable single-line rows and Chromium's off-screen content rendering optimization; full filenames remain available on hover. Review bounds and partial-coverage semantics are unchanged.
+
+- The [focused initial run](../.artifacts/review-lag-core.log) passed 24 cases; its new large-list case failed on an immediate controlled-checkbox assertion. The [scope rerun](../.artifacts/review-lag-scopes-final.log) passed six cases but its nested accessibility locator again timed out. Diagnostic evidence showed the checkbox actually checked. After using the existing direct test-ID pattern, the [2,000-file Electron case passed](../.artifacts/review-lag-large-final.log), covering wheel scrolling, expandable notes, off-screen keyboard selection, diff content, and marking reviewed. Across these runs, all 25 distinct focused cases passed. Scroll samples are diagnostic only; no before/after frame-rate benchmark was established.
+- Build, modified-file lint, desktop typecheck, independent source review, [packaged runtime checks](../.artifacts/review-lag-packaged-runtime.log), and macOS signature validation passed. Review corrected the notice wording because attribute-check limits do not always omit changes.
+- Installed the ad-hoc signed build into `/Applications/pi-gui.app`; ASAR SHA-256 `f615e0dfac5175e65081ad0e9edda81474c43760c1117b1b7deaac78164126ab` matched the built package. The previous app remains in `.artifacts/review-lag-install-20260922-170257/previous-pi-gui.app`. The actual installed app reopened the existing task, showed six changed files without the partial-comparison notice, and opened the `.gitignore` diff. No conversation was sent during verification.
+
+This follow-up remains local. No publication, remote push, or hosted CI run was performed.
