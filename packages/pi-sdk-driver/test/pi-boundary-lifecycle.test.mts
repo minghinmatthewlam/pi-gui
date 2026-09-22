@@ -105,14 +105,21 @@ async function fixture(
   const rawEvents: AgentSessionEvent[] = [];
   const events: SessionDriverEvent[] = [];
   const changed = new Set<() => void>();
+  let runtime!: AgentSessionRuntime;
   const driver = new PiSdkDriver({
     agentDir,
     catalogFilePath: join(root, "catalogs.json"),
     createAgentSessionRuntimeImpl: async (options) => {
-      const runtime = await createAgentSessionRuntimeWithNpmFallback({
+      runtime = await createAgentSessionRuntimeWithNpmFallback({
         ...options,
         tools: [],
-        resourceLoaderOptions: { extensionFactories: extension ? [extension] : [] },
+        resourceLoaderOptions: {
+          ...options?.resourceLoaderOptions,
+          extensionFactories: [
+            ...(options?.resourceLoaderOptions?.extensionFactories ?? []),
+            ...(extension ? [extension] : []),
+          ],
+        },
       });
       runtime.session.agent.streamFunction = streamFunction;
       runtime.session.subscribe((event) => rawEvents.push(event));
@@ -148,6 +155,7 @@ async function fixture(
   return {
     driver,
     ref,
+    runtime,
     events,
     rawEvents,
     until,
@@ -162,6 +170,48 @@ async function fixture(
       return first.snapshot.runningRunId;
     },
   };
+}
+
+async function assertPersistedAssistantIdentity(h: Awaited<ReturnType<typeof fixture>>) {
+  const nativeIds = h.runtime.session.sessionManager
+    .getBranch()
+    .filter((entry) => entry.type === "message" && entry.message.role === "assistant")
+    .map((entry) => entry.id);
+  const persisted = h.events.filter((event) => event.type === "assistantMessagePersisted");
+  assert.deepEqual(
+    persisted.map((event) => event.sourceMessageId),
+    nativeIds,
+    "each finalized assistant response must publish its actual persisted Pi entry ID",
+  );
+  assert.deepEqual(
+    h.events
+      .filter(
+        (event) =>
+          event.type === "assistantMessageEnded" || event.type === "assistantMessagePersisted",
+      )
+      .map((event) => event.type),
+    nativeIds.flatMap(() => ["assistantMessageEnded", "assistantMessagePersisted"]),
+    "message completion precedes persisted identity, including retries and continuations",
+  );
+  for (const event of persisted) {
+    assert.deepEqual(event.sessionRef, h.ref);
+    assert.ok(event.runId);
+  }
+  const transcript = await h.driver.getTranscript(h.ref);
+  for (const item of transcript) {
+    if (item.kind === "message" && item.role === "assistant") {
+      assert.ok(
+        nativeIds.includes(item.id),
+        "hydrated assistant rows use the same identity as live events",
+      );
+      assert.equal(
+        item.sourceMessageId,
+        item.id,
+        "hydrated review actions retain the native source ID",
+      );
+    }
+  }
+  return persisted;
 }
 
 await test(
@@ -250,6 +300,7 @@ await test(
           (event) =>
             event.type === "assistantDelta" ||
             event.type === "assistantMessageEnded" ||
+            event.type === "assistantMessagePersisted" ||
             event.type === "runCompleted",
         )
         .map((event) => [
@@ -260,11 +311,14 @@ await test(
       [
         ["assistantDelta", "First response", h.initialRunId()],
         ["assistantMessageEnded", undefined, h.initialRunId()],
+        ["assistantMessagePersisted", undefined, h.initialRunId()],
         ["assistantDelta", "Continued response", h.initialRunId()],
         ["assistantMessageEnded", undefined, h.initialRunId()],
+        ["assistantMessagePersisted", undefined, h.initialRunId()],
         ["runCompleted", undefined, h.initialRunId()],
       ],
     );
+    await assertPersistedAssistantIdentity(h);
     const final = await h.driver.openSession(h.ref);
     assert.equal(final.status, "idle");
     assert.equal(final.runningRunId, undefined);
@@ -308,6 +362,12 @@ await test(
     assert.equal(h.completions()[0]?.runId, h.initialRunId());
     assert.equal(h.completions()[0]?.snapshot.preview, "Recovered response");
     assert.equal(h.failures().length, 0);
+    const persisted = await assertPersistedAssistantIdentity(h);
+    assert.equal(persisted.length, 2, "the failed retry attempt also retains its native identity");
+    assert.deepEqual(
+      persisted.map((event) => event.runId),
+      [h.initialRunId(), h.initialRunId()],
+    );
   },
 );
 
@@ -372,5 +432,10 @@ await test(
       ],
     );
     assert.equal(h.failures().length, 0);
+    const persisted = await assertPersistedAssistantIdentity(h);
+    assert.deepEqual(
+      persisted.map((event) => event.runId),
+      [h.initialRunId(), extensionRunId],
+    );
   },
 );

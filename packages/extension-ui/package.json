@@ -1,0 +1,38 @@
+{
+  "name": "@pi-gui/extension-ui",
+  "private": true,
+  "type": "module",
+  "version": "0.0.0",
+  "license": "MIT",
+  "description": "Author helpers and scoped Chord transport for Pi desktop extension views.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./browser": {
+      "types": "./dist/browser.d.ts",
+      "default": "./dist/browser.js"
+    },
+    "./transport": {
+      "types": "./dist/transport.d.ts",
+      "default": "./dist/transport.js"
+    },
+    "./frame-bridge": "./dist/frame-bridge.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node scripts/build-browser.mjs",
+    "watch": "node scripts/watch.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "pnpm run build && node --test \"test/**/*.test.mts\""
+  },
+  "dependencies": {
+    "@earendil-works/chord": "^0.87.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  }
+}

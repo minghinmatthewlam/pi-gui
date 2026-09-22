@@ -8,6 +8,7 @@ const repoRoot = path.resolve(desktopDir, "..", "..");
 const rawArgs = process.argv.slice(2);
 const extraArgs = rawArgs[0] === "--" ? rawArgs.slice(1) : rawArgs;
 const packageFilters = ["@pi-gui/session-driver", "@pi-gui/pi-sdk-driver", "@pi-gui/catalogs"];
+const extensionUiPackage = "@pi-gui/extension-ui";
 
 async function main() {
   await run(
@@ -15,12 +16,7 @@ async function main() {
     [
       "--dir",
       repoRoot,
-      "--filter",
-      packageFilters[0],
-      "--filter",
-      packageFilters[1],
-      "--filter",
-      packageFilters[2],
+      ...[...packageFilters, extensionUiPackage].flatMap((name) => ["--filter", name]),
       "run",
       "build",
     ],
@@ -34,18 +30,14 @@ async function main() {
         "--dir",
         repoRoot,
         "--parallel",
-        "--filter",
-        packageFilters[0],
-        "--filter",
-        packageFilters[1],
-        "--filter",
-        packageFilters[2],
+        ...packageFilters.flatMap((name) => ["--filter", name]),
         "run",
         "build",
         "--watch",
       ],
       desktopDir,
     ),
+    start("pnpm", ["--dir", repoRoot, "--filter", extensionUiPackage, "run", "watch"], desktopDir),
     start("pnpm", ["exec", "electron-vite", "dev", "--watch", ...extraArgs], desktopDir),
   ];
 

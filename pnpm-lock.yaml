@@ -13,6 +13,9 @@ importers:
 
   .:
     devDependencies:
+      '@pi-gui/extension-ui':
+        specifier: workspace:*
+        version: link:packages/extension-ui
       '@playwright/test':
         specifier: ^1.52.0
         version: 1.58.2
@@ -88,6 +91,9 @@ importers:
       '@aws/lambda-invoke-store':
         specifier: ^0.2.2
         version: 0.2.4
+      '@earendil-works/chord':
+        specifier: ^0.87.0
+        version: 0.87.0
       '@earendil-works/pi-coding-agent':
         specifier: ^0.87.0
         version: 0.87.0(ws@8.21.3)(zod@4.3.6)
@@ -103,6 +109,9 @@ importers:
       '@pi-gui/catalogs':
         specifier: workspace:*
         version: link:../../packages/catalogs
+      '@pi-gui/extension-ui':
+        specifier: workspace:*
+        version: link:../../packages/extension-ui
       '@pi-gui/pi-sdk-driver':
         specifier: workspace:*
         version: link:../../packages/pi-sdk-driver
@@ -352,6 +361,16 @@ importers:
         specifier: workspace:*
         version: link:../session-driver
 
+  packages/extension-ui:
+    dependencies:
+      '@earendil-works/chord':
+        specifier: ^0.87.0
+        version: 0.87.0
+    devDependencies:
+      esbuild:
+        specifier: 0.28.2
+        version: 0.28.2
+
   packages/pi-sdk-driver:
     dependencies:
       '@earendil-works/pi-coding-agent':
@@ -360,6 +379,9 @@ importers:
       '@pi-gui/catalogs':
         specifier: workspace:*
         version: link:../catalogs
+      '@pi-gui/extension-ui':
+        specifier: workspace:*
+        version: link:../extension-ui
       '@pi-gui/session-driver':
         specifier: workspace:*
         version: link:../session-driver

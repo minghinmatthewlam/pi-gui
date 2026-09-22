@@ -281,6 +281,7 @@ export function transcriptFromMessages(
       transcript.push({
         kind: "message",
         id: typeof message.id === "string" ? message.id : `${role}-${index}`,
+        ...(typeof message.id === "string" ? { sourceMessageId: message.id } : {}),
         role,
         text,
         ...(attachments.length > 0 ? { attachments } : {}),

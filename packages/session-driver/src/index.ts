@@ -1,6 +1,7 @@
 export type {
   AssistantDeltaEvent,
   AssistantMessageEndedEvent,
+  AssistantMessagePersistedEvent,
   CreateSessionOptions,
   ForkPosition,
   ForkSessionOptions,
@@ -76,3 +77,9 @@ export type {
 } from "./transcript.js";
 
 export { sessionKey } from "./identity.js";
+export type {
+  TurnCaptureOpening,
+  TurnCaptureClosing,
+  TurnCaptureBoundary,
+  TurnCaptureObserver,
+} from "./turn-capture.js";

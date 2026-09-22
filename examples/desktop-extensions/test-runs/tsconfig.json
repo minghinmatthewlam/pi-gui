@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022", "DOM"],
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "paths": {
+      "@pi-gui/extension-ui": ["../../../packages/extension-ui/src/index.ts"],
+      "@pi-gui/extension-ui/browser": ["../../../packages/extension-ui/src/browser.ts"]
+    }
+  },
+  "include": ["*.ts", "test/*.mts"]
+}

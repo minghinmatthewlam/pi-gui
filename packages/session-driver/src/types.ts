@@ -176,6 +176,12 @@ export interface AssistantMessageEndedEvent extends SessionEventBase {
   readonly type: "assistantMessageEnded";
 }
 
+/** Identifies the immediately preceding ended assistant message after Pi persists it. */
+export interface AssistantMessagePersistedEvent extends SessionEventBase {
+  readonly type: "assistantMessagePersisted";
+  readonly sourceMessageId: string;
+}
+
 export interface QueuedMessageStartedEvent extends SessionEventBase {
   readonly type: "queuedMessageStarted";
   readonly message: SessionQueuedMessage;
@@ -325,6 +331,7 @@ export type SessionDriverEvent =
   | SessionUpdatedEvent
   | AssistantDeltaEvent
   | AssistantMessageEndedEvent
+  | AssistantMessagePersistedEvent
   | QueuedMessageStartedEvent
   | ToolStartedEvent
   | ToolUpdatedEvent

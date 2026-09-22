@@ -97,6 +97,12 @@ import {
   type RunOutcome,
 } from "./session-supervisor-utils.js";
 import { forcePersistPiSession } from "./compat/pi-session-persistence.js";
+import { createTurnCaptureExtension } from "./turn-capture.js";
+import { createTranscriptIdentityExtension } from "./transcript-identity.js";
+import {
+  createDesktopExtensionBridge,
+  type PiDesktopExtensionObserver,
+} from "./desktop-extension-bridge.js";
 import {
   createAgentSessionRuntimeWithNpmFallback,
   type PiCreateAgentSessionOptions,
@@ -144,6 +150,9 @@ export interface PiSdkDriverOptions {
   ) => Promise<AgentSessionRuntime>;
   readonly agentDir?: string;
   readonly extensionFactories?: readonly ExtensionFactory[];
+  readonly desktopExtensions?: PiDesktopExtensionObserver;
+  readonly onTurnCaptureBoundary?: import("@pi-gui/session-driver").TurnCaptureObserver;
+  readonly turnCaptureTimeoutMs?: number;
   readonly generateThreadTitleOverride?: (
     workspace: WorkspaceRef,
     options: import("./thread-title-generator.js").GenerateThreadTitleOptions,
@@ -222,6 +231,10 @@ export class SessionSupervisor {
     options?: PiCreateAgentSessionOptions,
   ) => Promise<AgentSessionRuntime>;
   private readonly agentDir: string | undefined;
+  private readonly extensionFactories: readonly ExtensionFactory[];
+  private readonly desktopExtensions: PiDesktopExtensionObserver | undefined;
+  private readonly onTurnCaptureBoundary: PiSdkDriverOptions["onTurnCaptureBoundary"];
+  private readonly turnCaptureTimeoutMs: number | undefined;
   private readonly records = new Map<string, ManagedSessionRecord>();
   private readonly ensureRecordInFlight = new Map<string, Promise<ManagedSessionRecord>>();
   /** Preserve invocation order so stale touches cannot undo a later rename or removal. */
@@ -237,17 +250,11 @@ export class SessionSupervisor {
         ? new JsonCatalogStore({ catalogFilePath: options.catalogFilePath })
         : new JsonCatalogStore());
     this.createAgentSessionRuntimeImpl =
-      options.createAgentSessionRuntimeImpl ??
-      ((createOptions) =>
-        createAgentSessionRuntimeWithNpmFallback({
-          ...createOptions,
-          resourceLoaderOptions: {
-            ...(createOptions as PiCreateAgentSessionOptions | undefined)?.resourceLoaderOptions,
-            ...(options.extensionFactories
-              ? { extensionFactories: [...options.extensionFactories] }
-              : {}),
-          },
-        }));
+      options.createAgentSessionRuntimeImpl ?? createAgentSessionRuntimeWithNpmFallback;
+    this.extensionFactories = options.extensionFactories ?? [];
+    this.desktopExtensions = options.desktopExtensions;
+    this.onTurnCaptureBoundary = options.onTurnCaptureBoundary;
+    this.turnCaptureTimeoutMs = options.turnCaptureTimeoutMs;
     this.agentDir = options.agentDir;
   }
 
@@ -260,13 +267,79 @@ export class SessionSupervisor {
    * workspace's endpoint or credentials for the same provider id.
    */
   private baseCreateOptions(
-    cwd: string,
+    workspace: WorkspaceRef,
     sessionManager: SessionManager,
   ): PiCreateAgentSessionOptions {
-    return {
-      cwd,
+    const createOptions: PiCreateAgentSessionOptions = {
+      cwd: workspace.path,
       sessionManager,
+      resourceLoaderOptions: {
+        extensionFactories: [
+          ...this.extensionFactories,
+          {
+            name: "pi-gui-transcript-identity",
+            hidden: true,
+            factory: createTranscriptIdentityExtension({
+              workspace,
+              onPersisted: (sessionRef, sourceMessageId) => {
+                const record = this.records.get(sessionKey(sessionRef));
+                if (!record) return;
+                this.queueDriverEvents(
+                  record,
+                  [
+                    {
+                      type: "assistantMessagePersisted",
+                      sessionRef,
+                      timestamp: nowIso(),
+                      sourceMessageId,
+                      ...(record.runningRunId ? { runId: record.runningRunId } : {}),
+                    },
+                  ],
+                  { persistSnapshot: false },
+                );
+              },
+            }),
+          },
+          ...(this.onTurnCaptureBoundary
+            ? [
+                {
+                  name: "pi-gui-turn-capture",
+                  hidden: true,
+                  factory: createTurnCaptureExtension({
+                    workspace,
+                    observer: this.onTurnCaptureBoundary,
+                    timeoutMs: this.turnCaptureTimeoutMs,
+                    getRunId: (sessionId) => {
+                      const record = this.records.get(
+                        sessionKey({ workspaceId: workspace.workspaceId, sessionId }),
+                      );
+                      return record
+                        ? (record.runningRunId ??= crypto.randomUUID())
+                        : crypto.randomUUID();
+                    },
+                    isCancelled: (sessionId) =>
+                      this.records.get(
+                        sessionKey({ workspaceId: workspace.workspaceId, sessionId }),
+                      )?.cancellationRequested ?? false,
+                    isInterrupted: (sessionId) =>
+                      this.records.get(
+                        sessionKey({ workspaceId: workspace.workspaceId, sessionId }),
+                      )?.closed ?? true,
+                  }),
+                },
+              ]
+            : []),
+        ],
+      },
       ...(this.agentDir ? { agentDir: this.agentDir } : {}),
+    };
+    if (!this.desktopExtensions) return createOptions;
+    return {
+      ...createOptions,
+      resourceLoaderOptions: createDesktopExtensionBridge({
+        workspace,
+        observer: this.desktopExtensions,
+      }).mergeResourceLoaderOptions(createOptions.resourceLoaderOptions ?? {}),
     };
   }
 
@@ -558,7 +631,7 @@ export class SessionSupervisor {
 
     const initialModel = options?.initialModel;
     const createOptions: PiCreateAgentSessionOptions = {
-      ...this.baseCreateOptions(workspace.path, SessionManager.create(workspace.path)),
+      ...this.baseCreateOptions(workspace, SessionManager.create(workspace.path)),
       ...(initialModel
         ? {
             resolveInitialModel: (modelRuntime: ModelRuntime) =>
@@ -693,7 +766,7 @@ export class SessionSupervisor {
     const forkProvider = forkConfig?.provider;
     const forkModelId = forkConfig?.modelId;
     const createOptions: PiCreateAgentSessionOptions = {
-      ...this.baseCreateOptions(targetWorkspace.path, branchedManager),
+      ...this.baseCreateOptions(targetWorkspace, branchedManager),
       ...(forkProvider && forkModelId
         ? {
             // A model the source session used may not exist in the target
@@ -1160,7 +1233,7 @@ export class SessionSupervisor {
     await this.assertSessionNotForeignLeased(sessionFile);
 
     const runtime = await this.createAgentSessionRuntimeImpl(
-      this.baseCreateOptions(workspace.path, SessionManager.open(sessionFile)),
+      this.baseCreateOptions(workspace, SessionManager.open(sessionFile)),
     );
     const session = runtime.session;
 
@@ -1382,6 +1455,12 @@ export class SessionSupervisor {
     try {
       await session.bindExtensions({
         uiContext: this.createExtensionUiContext(record),
+        abortHandler: () => {
+          if (session.isStreaming) record.cancellationRequested = true;
+          void session.abort().catch((error: unknown) => {
+            console.warn("[pi-sdk-driver] extension abort failed", error);
+          });
+        },
         commandContextActions: this.createCommandContextActions(record),
         onError: (error) => {
           const unsupportedIssue = parseUnsupportedHostUiErrorMessage(error.error);
