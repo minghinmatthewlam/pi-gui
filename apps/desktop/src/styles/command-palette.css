@@ -3,7 +3,8 @@
 .command-palette-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 40;
+  /* Above the top bar and sidebar toggle (z-index 60 to 80). */
+  z-index: 100;
   display: flex;
   justify-content: center;
   align-items: flex-start;
@@ -57,6 +58,11 @@
   color: var(--text-strong);
   font: inherit;
   font-size: var(--text-md);
+}
+
+/* The palette itself is the focus context; a ring around the field is noise. */
+.command-palette__input:focus-visible {
+  box-shadow: none;
 }
 
 .command-palette__input::placeholder {

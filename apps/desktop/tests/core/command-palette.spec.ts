@@ -78,6 +78,14 @@ test("Cmd/Ctrl+K finds chats and actions, Cmd/Ctrl+P opens files", async () => {
     await window.keyboard.press(desktopShortcut("K"));
     await expect(palette(window)).toHaveCount(0);
 
+    // Another app shortcut closes the palette before acting on the thread behind it.
+    await openPalette(window, "K");
+    await window.keyboard.press(desktopShortcut("J"));
+    await expect(palette(window)).toHaveCount(0);
+    await expect(window.getByTestId("integrated-terminal")).toBeVisible();
+    // Off macOS, Ctrl+K in the focused terminal stays with the shell.
+    await window.getByTestId("composer").click();
+
     // Actions run from the palette, and the palette also works over Settings.
     await openPalette(window, "K");
     await window.keyboard.type("appearance");

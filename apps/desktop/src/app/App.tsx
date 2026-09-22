@@ -657,6 +657,10 @@ export default function App() {
   const sidebarToggleShortcutLabel = api ? getDesktopShortcutLabel(api.platform, "B") : "";
 
   const handleCommand = (command: PiDesktopCommand): boolean => {
+    // Any other shortcut acts on the app behind the palette, so close it first.
+    if (paletteMode && !isPaletteCommand(command)) {
+      setPaletteMode(null);
+    }
     if (command === desktopCommands.openSettings) {
       openSettings(selectedWorkspace?.rootWorkspaceId ?? selectedWorkspace?.id);
       return true;
@@ -690,7 +694,7 @@ export default function App() {
     }
     if (isPaletteCommand(command)) {
       const mode = command === desktopCommands.openCommandPalette ? "commands" : "files";
-      if (paletteGates.current[mode](performance.now())) {
+      if (threadSidebarModel && paletteGates.current[mode](performance.now())) {
         setPaletteMode((current) => (current === mode ? null : mode));
       }
       return true;
@@ -725,6 +729,7 @@ export default function App() {
   handleCommandRef.current = handleCommand;
   toggleThreadSearchRef.current = () => {
     if (!threadSearchGate.current(performance.now())) return;
+    setPaletteMode(null);
     if (threadSearch.isOpen) threadSearch.close();
     else threadSearch.open();
   };
@@ -777,14 +782,19 @@ export default function App() {
       key: event.key,
       code: event.code,
     });
-    if (
-      isPaletteCommand(command) &&
-      !platformShortcutModifier(api?.platform ?? "linux", {
-        meta: event.metaKey,
-        control: event.ctrlKey,
-      })
-    ) {
-      return;
+    if (isPaletteCommand(command)) {
+      if (
+        !platformShortcutModifier(api?.platform ?? "linux", {
+          meta: event.metaKey,
+          control: event.ctrlKey,
+        })
+      ) {
+        return;
+      }
+      if (event.repeat) {
+        event.preventDefault();
+        return;
+      }
     }
     if (command && handleCommandRef.current(command)) {
       event.preventDefault();
@@ -1104,10 +1114,12 @@ export default function App() {
       ? { workspaceId: selectedWorkspace.id, sessionId: selectedSession.id }
       : undefined;
   const selectedRootWorkspaceId = selectedWorkspace?.rootWorkspaceId ?? selectedWorkspace?.id;
-  const paletteModelOptions = selectedThreadTarget ? buildModelOptions(selectedModelRuntime) : [];
+  const paletteModelOptions =
+    paletteMode && selectedThreadTarget ? buildModelOptions(selectedModelRuntime) : [];
   const commandPalette =
     paletteMode && threadSidebarModel ? (
       <CommandPaletteSurface
+        key={paletteMode}
         api={api}
         mode={paletteMode}
         onModeChange={setPaletteMode}

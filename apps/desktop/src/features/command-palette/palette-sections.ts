@@ -1,5 +1,5 @@
 import type { PaletteFilter, PaletteItem, PaletteSection } from "./command-palette";
-import { rankByFuzzy, rankPaths } from "./fuzzy-match";
+import { rankByFuzzy, type RankedMatch } from "./fuzzy-match";
 
 /** An item before matching; the palette highlights its title. */
 export type PaletteCandidate = Omit<PaletteItem, "titleMatches" | "detailMatches">;
@@ -97,15 +97,15 @@ export function splitPath(path: string): { readonly name: string; readonly direc
 
 /**
  * Cmd-P results. With no query, the thread's open file tabs, newest first.
- * A query ranks every listed path and highlights the name and directory.
+ * A query shows the ranked paths (from rankPaths) with name and directory highlights.
  */
 export function buildFileSections(input: {
   readonly query: string;
-  readonly files: readonly string[];
+  readonly ranked: readonly RankedMatch<string>[];
   readonly openTabs: readonly string[];
   readonly toCandidate: (path: string) => PaletteCandidate;
 }): readonly PaletteSection[] {
-  const { query, files, openTabs, toCandidate } = input;
+  const { query, ranked, openTabs, toCandidate } = input;
   if (query.trim() === "") {
     return [
       {
@@ -115,7 +115,7 @@ export function buildFileSections(input: {
       },
     ];
   }
-  const items = rankPaths(files, query, FILE_RESULT_LIMIT).map(({ item: path, match }) => {
+  const items = ranked.map(({ item: path, match }) => {
     const { directory } = splitPath(path);
     const nameStart = directory ? directory.length + 1 : 0;
     return {

@@ -122,14 +122,14 @@ test("file palette lists open tabs until a query, then splits name and directory
   const toCandidate = (path: string) => candidate(`file:${path}`, path.split("/").at(-1) ?? path);
   const openTabs = ["README.md", "src/app/App.tsx"];
   expect(
-    buildFileSections({ query: "", files: [], openTabs, toCandidate })[0]?.items.map(
+    buildFileSections({ query: "", ranked: [], openTabs, toCandidate })[0]?.items.map(
       (item) => item.id,
     ),
   ).toEqual(["file:src/app/App.tsx", "file:README.md"]);
 
   const [section] = buildFileSections({
     query: "srcapp",
-    files: ["src/app/App.tsx"],
+    ranked: rankPaths(["src/app/App.tsx"], "srcapp", 10),
     openTabs,
     toCandidate,
   });

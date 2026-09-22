@@ -62,10 +62,12 @@ export function CommandPalette<F extends string>({
 }: CommandPaletteProps<F>) {
   const listId = useId();
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const resultsRef = useRef<HTMLDivElement | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const items = sections.flatMap((section) => section.items);
-  const active = items[Math.min(activeIndex, items.length - 1)];
+  const activePosition = Math.min(activeIndex, items.length - 1);
+  const active = items[activePosition];
+  // Item ids can hold paths with spaces, so DOM ids use the position instead.
+  const optionId = (position: number) => `${listId}-option-${position}`;
 
   useEffect(() => {
     const previousFocus = document.activeElement;
@@ -85,14 +87,10 @@ export function CommandPalette<F extends string>({
     setActiveIndex(0);
   }, [query, activeFilter, label]);
 
+  // Keyed on the position, not the item: items are rebuilt on every app render.
   useLayoutEffect(() => {
-    if (!active) {
-      return;
-    }
-    resultsRef.current
-      ?.querySelector<HTMLElement>(`[data-palette-item="${CSS.escape(active.id)}"]`)
-      ?.scrollIntoView({ block: "nearest" });
-  }, [active]);
+    document.getElementById(optionId(activePosition))?.scrollIntoView({ block: "nearest" });
+  }, [activePosition, query, activeFilter, label]);
 
   const cycleFilter = (step: 1 | -1) => {
     if (!filters || filters.length === 0 || !onFilterChange) {
@@ -174,7 +172,7 @@ export function CommandPalette<F extends string>({
           </span>
           <input
             ref={inputRef}
-            aria-activedescendant={active ? `${listId}-${active.id}` : undefined}
+            aria-activedescendant={active ? optionId(activePosition) : undefined}
             aria-autocomplete="list"
             aria-controls={listId}
             aria-expanded="true"
@@ -217,7 +215,7 @@ export function CommandPalette<F extends string>({
           </div>
         ) : null}
 
-        <div ref={resultsRef} className="command-palette__results" id={listId} role="listbox">
+        <div className="command-palette__results" id={listId} role="listbox">
           {items.length === 0 ? (
             <div className="command-palette__empty" data-testid="command-palette-empty">
               {emptyText}
@@ -246,8 +244,7 @@ export function CommandPalette<F extends string>({
                         key={item.id}
                         aria-selected={selected}
                         className={`command-palette__item${selected ? " command-palette__item--active" : ""}`}
-                        data-palette-item={item.id}
-                        id={`${listId}-${item.id}`}
+                        id={optionId(index)}
                         role="option"
                         onClick={() => item.run()}
                         onMouseDown={(event) => event.preventDefault()}

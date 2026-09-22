@@ -24,6 +24,9 @@ const PENALTY_GAP_START = 3;
 const PENALTY_LEADING_GAP = 0.05;
 const NONE = Number.NEGATIVE_INFINITY;
 
+let scratchScores = new Float64Array(1024);
+let scratchFrom = new Int32Array(1024);
+
 function isSeparator(char: string): boolean {
   return (
     char === "/" ||
@@ -83,21 +86,28 @@ export function fuzzyMatch(query: string, text: string): FuzzyMatch | null {
     cursor += 1;
   }
 
-  // scores[i][j]: best score with query[i] matched at text[j].
-  // from[i][j]: text index of query[i - 1] in that alignment.
-  const scores: Float64Array[] = [];
-  const from: Int32Array[] = [];
+  // scores[row * textLength + j]: best score with query[row] matched at text[j].
+  // from[...]: text index of query[row - 1] in that alignment.
+  // Cmd-P scores thousands of paths per keystroke, so the tables are reused.
+  const cells = queryLength * textLength;
+  if (scratchScores.length < cells) {
+    scratchScores = new Float64Array(cells * 2);
+    scratchFrom = new Int32Array(cells * 2);
+  }
+  const scores = scratchScores;
+  const from = scratchFrom;
+  scores.fill(NONE, 0, cells);
   for (let row = 0; row < queryLength; row += 1) {
-    const rowScores = new Float64Array(textLength).fill(NONE);
-    const rowFrom = new Int32Array(textLength).fill(-1);
+    const base = row * textLength;
+    const previousBase = base - textLength;
     const char = query[row] as string;
-    const previousScores = row > 0 ? scores[row - 1] : undefined;
+    const hasPrevious = row > 0;
     // Best of previous[k] + k over k < column - 1, with its k.
     let bestGapValue = NONE;
     let bestGapIndex = -1;
     for (let column = row; column < textLength; column += 1) {
-      if (previousScores && column >= 2) {
-        const candidate = previousScores[column - 2] as number;
+      if (hasPrevious && column >= 2) {
+        const candidate = scores[previousBase + column - 2] as number;
         if (candidate !== NONE) {
           const value = candidate + (column - 2);
           if (value > bestGapValue) {
@@ -110,13 +120,13 @@ export function fuzzyMatch(query: string, text: string): FuzzyMatch | null {
         continue;
       }
       const bonus = boundaryBonus(text, column);
-      if (!previousScores) {
-        rowScores[column] = SCORE_MATCH + bonus - PENALTY_LEADING_GAP * column;
+      if (!hasPrevious) {
+        scores[base + column] = SCORE_MATCH + bonus - PENALTY_LEADING_GAP * column;
         continue;
       }
       let best = NONE;
       let bestFrom = -1;
-      const adjacent = previousScores[column - 1] as number;
+      const adjacent = scores[previousBase + column - 1] as number;
       if (adjacent !== NONE) {
         best = adjacent + SCORE_MATCH + bonus + BONUS_CONSECUTIVE;
         bestFrom = column - 1;
@@ -129,18 +139,16 @@ export function fuzzyMatch(query: string, text: string): FuzzyMatch | null {
           bestFrom = bestGapIndex;
         }
       }
-      rowScores[column] = best;
-      rowFrom[column] = bestFrom;
+      scores[base + column] = best;
+      from[base + column] = bestFrom;
     }
-    scores.push(rowScores);
-    from.push(rowFrom);
   }
 
-  const lastScores = scores[queryLength - 1] as Float64Array;
+  const lastBase = (queryLength - 1) * textLength;
   let bestScore = NONE;
   let bestEnd = -1;
   for (let column = queryLength - 1; column < textLength; column += 1) {
-    const value = lastScores[column] as number;
+    const value = scores[lastBase + column] as number;
     if (value > bestScore) {
       bestScore = value;
       bestEnd = column;
@@ -154,7 +162,7 @@ export function fuzzyMatch(query: string, text: string): FuzzyMatch | null {
   let column = bestEnd;
   for (let row = queryLength - 1; row >= 0; row -= 1) {
     positions[row] = column;
-    column = (from[row] as Int32Array)[column] as number;
+    column = from[row * textLength + column] as number;
   }
   return { score: bestScore, positions };
 }
@@ -198,19 +206,18 @@ export function rankPaths(
   }
   const ranked: RankedMatch<string>[] = [];
   for (const path of paths) {
-    const full = fuzzyMatch(normalized, path);
-    if (!full) {
+    // A match inside the file name wins; score the whole path only without one.
+    const nameStart = path.lastIndexOf("/") + 1;
+    const name = fuzzyMatch(normalized, nameStart > 0 ? path.slice(nameStart) : path);
+    const match = name
+      ? {
+          score: name.score + BONUS_WORD_START,
+          positions: name.positions.map((position) => position + nameStart),
+        }
+      : fuzzyMatch(normalized, path);
+    if (!match) {
       continue;
     }
-    const nameStart = path.lastIndexOf("/") + 1;
-    const name = nameStart > 0 ? fuzzyMatch(normalized, path.slice(nameStart)) : null;
-    const match =
-      name && name.score + BONUS_WORD_START >= full.score
-        ? {
-            score: name.score + BONUS_WORD_START,
-            positions: name.positions.map((position) => position + nameStart),
-          }
-        : full;
     // Shorter paths win ties, so "README.md" beats "docs/old/README.md".
     ranked.push({ item: path, match: { ...match, score: match.score - path.length * 0.01 } });
   }

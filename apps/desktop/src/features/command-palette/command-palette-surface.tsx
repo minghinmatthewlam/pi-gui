@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import type { WorkspaceRecord, WorkspaceSessionTarget } from "../../../contracts/desktop-state";
 import type { PiDesktopApi } from "../../../contracts/ipc";
 import { sessionLastInteractedAt } from "../../../contracts/thread-recency";
@@ -7,12 +7,14 @@ import { ChatIcon, FileIcon, FolderIcon, ModelIcon } from "../../ui/icons";
 import type { ComposerModelOption } from "../conversation/composer-commands";
 import type { ThreadListEntry } from "../threads/thread-groups";
 import { CommandPalette, type PaletteSection } from "./command-palette";
+import { rankPaths } from "./fuzzy-match";
 import type { PaletteAction, PaletteMode } from "./palette-actions";
 import {
   buildCommandSections,
   buildFileSections,
   buildListSection,
   COMMAND_FILTERS,
+  FILE_RESULT_LIMIT,
   splitPath,
   type CommandFilter,
   type PaletteCandidate,
@@ -30,6 +32,7 @@ export interface PaletteModelScope {
   readonly currentModelId?: string;
 }
 
+/** Mount one per mode (key it by mode) so each list starts with an empty query. */
 interface CommandPaletteSurfaceProps {
   readonly api: PiDesktopApi;
   readonly mode: PaletteMode;
@@ -74,11 +77,13 @@ export function CommandPaletteSurface({
   const [filter, setFilter] = useState<CommandFilter>("all");
   const [listing, setListing] = useState<FileListing>({ status: "loading" });
   const fileWorkspaceId = fileScope?.workspaceId;
-
-  useEffect(() => {
-    setQuery("");
-    setFilter("all");
-  }, [mode]);
+  const files = listing.status === "ready" ? listing.files : undefined;
+  // Ranking a large tree can take tens of milliseconds; keep typing responsive.
+  const fileQuery = useDeferredValue(query);
+  const rankedFiles = useMemo(
+    () => (mode === "files" && files ? rankPaths(files, fileQuery, FILE_RESULT_LIMIT) : []),
+    [fileQuery, files, mode],
+  );
 
   useEffect(() => {
     if (mode !== "files" || !fileWorkspaceId) {
@@ -100,59 +105,48 @@ export function CommandPaletteSurface({
     };
   }, [api, fileWorkspaceId, mode]);
 
-  const chatCandidates = useMemo<readonly PaletteCandidate[]>(
-    () =>
-      threads.map((thread) => {
-        const target = { workspaceId: thread.workspaceId, sessionId: thread.session.id };
-        const isCurrent =
-          currentThread?.workspaceId === target.workspaceId &&
-          currentThread.sessionId === target.sessionId;
-        return {
-          id: `chat:${target.workspaceId}:${target.sessionId}`,
-          title: thread.session.title,
-          detail: [thread.contextLabel, formatRelativeTime(sessionLastInteractedAt(thread.session))]
-            .filter(Boolean)
-            .join(" · "),
-          icon: <ChatIcon />,
-          hint: isCurrent ? "Current" : thread.session.status === "running" ? "Running" : undefined,
-          run: () => {
-            onClose();
-            onOpenThread(target);
-          },
-        };
-      }),
-    [currentThread?.sessionId, currentThread?.workspaceId, onClose, onOpenThread, threads],
-  );
+  // Cheap for hundreds of threads; only the file ranking is memoized.
+  const chatCandidates: readonly PaletteCandidate[] = threads.map((thread) => {
+    const target = { workspaceId: thread.workspaceId, sessionId: thread.session.id };
+    const isCurrent =
+      currentThread?.workspaceId === target.workspaceId &&
+      currentThread.sessionId === target.sessionId;
+    return {
+      id: `chat:${target.workspaceId}:${target.sessionId}`,
+      title: thread.session.title,
+      detail: [thread.contextLabel, formatRelativeTime(sessionLastInteractedAt(thread.session))]
+        .filter(Boolean)
+        .join(" · "),
+      icon: <ChatIcon />,
+      hint: isCurrent ? "Current" : thread.session.status === "running" ? "Running" : undefined,
+      run: () => {
+        onClose();
+        onOpenThread(target);
+      },
+    };
+  });
 
-  const workspaceCandidates = useMemo<readonly PaletteCandidate[]>(
-    () =>
-      workspaces.map((workspace) => ({
-        id: `workspace:${workspace.id}`,
-        title: workspace.name,
-        detail: workspace.path,
-        icon: <FolderIcon />,
-        run: () => {
-          onClose();
-          onOpenWorkspace(workspace.id);
-        },
-      })),
-    [onClose, onOpenWorkspace, workspaces],
-  );
+  const workspaceCandidates: readonly PaletteCandidate[] = workspaces.map((workspace) => ({
+    id: `workspace:${workspace.id}`,
+    title: workspace.name,
+    detail: workspace.path,
+    icon: <FolderIcon />,
+    run: () => {
+      onClose();
+      onOpenWorkspace(workspace.id);
+    },
+  }));
 
-  const actionCandidates = useMemo<readonly PaletteCandidate[]>(
-    () =>
-      actions.map((action) => ({
-        id: `action:${action.id}`,
-        title: action.title,
-        icon: action.icon,
-        hint: action.hint,
-        run: () => {
-          if (!action.keepsOpen) onClose();
-          action.run();
-        },
-      })),
-    [actions, onClose],
-  );
+  const actionCandidates: readonly PaletteCandidate[] = actions.map((action) => ({
+    id: `action:${action.id}`,
+    title: action.title,
+    icon: action.icon,
+    hint: action.hint,
+    run: () => {
+      if (!action.keepsOpen) onClose();
+      action.run();
+    },
+  }));
 
   let label: string;
   let placeholder: string;
@@ -161,12 +155,11 @@ export function CommandPaletteSurface({
   if (mode === "files") {
     label = "Go to file";
     placeholder = fileScope ? `Search files in ${fileScope.label}` : "Search files";
-    const files = listing.status === "ready" ? listing.files : [];
     sections =
-      fileScope && listing.status === "ready"
+      fileScope && files
         ? buildFileSections({
-            query,
-            files,
+            query: fileQuery,
+            ranked: rankedFiles,
             openTabs: fileScope.openTabs,
             toCandidate: (path) => {
               const { name, directory } = splitPath(path);
@@ -191,7 +184,7 @@ export function CommandPaletteSurface({
           ? "Couldn't load files."
           : query.trim()
             ? "No matching files."
-            : `Type to search ${files.length.toLocaleString()} files.`;
+            : `Type to search ${(files?.length ?? 0).toLocaleString()} files.`;
   } else if (mode === "models") {
     label = "Switch model";
     placeholder = "Switch model";

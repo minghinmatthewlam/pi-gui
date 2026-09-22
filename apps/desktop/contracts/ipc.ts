@@ -452,8 +452,8 @@ export function getDesktopCommandFromShortcut(
 }
 
 /**
- * Palettes follow the platform modifier only. On macOS, Control+K and
- * Control+P stay with text fields (kill line, previous line).
+ * Callers accept palette commands only from the platform modifier, so macOS
+ * Control+K and Control+P stay with text fields, and only from a first press.
  */
 export function isPaletteCommand(command: PiDesktopCommand | undefined): boolean {
   return (

@@ -439,7 +439,7 @@ function createWindow(): BrowserWindow {
       // chords open a palette from the terminal.
       if (
         command === desktopCommands.toggleSidePanel ||
-        (process.platform === "darwin" && isPaletteCommand(command))
+        (process.platform === "darwin" && isPaletteCommand(command) && !input.isAutoRepeat)
       ) {
         event.preventDefault();
         window.webContents.send(desktopIpc.appCommand, command);
@@ -477,6 +477,10 @@ function createWindow(): BrowserWindow {
 
     if (command) {
       event.preventDefault();
+      // Holding a palette chord would open and close it at the repeat rate.
+      if (isPaletteCommand(command) && input.isAutoRepeat) {
+        return;
+      }
       window.webContents.send(desktopIpc.appCommand, command);
     }
   });
