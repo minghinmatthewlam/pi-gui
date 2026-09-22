@@ -74,6 +74,11 @@
   min-height: 0;
   min-width: 0;
   overflow: hidden;
+  /* The transcript scroller spans the full canvas so its scrollbar sits on the
+   * panel edge; fixed chrome keeps the centered column via --thread-column. */
+  --thread-gutter: 28px;
+  --thread-column: min(920px, 100% - 2 * var(--thread-gutter));
+  padding-inline: 0;
 }
 
 .conversation {
@@ -84,9 +89,16 @@
 .conversation--thread {
   display: flex;
   flex: 1 1 auto;
+  width: 100%;
   min-height: 0;
   min-width: 0;
   flex-direction: column;
+}
+
+.conversation--thread > :not(.timeline-surface),
+.conversation--thread .thread-search-bar {
+  width: var(--thread-column);
+  margin-inline: auto;
 }
 
 .conversation--composer {
@@ -2920,6 +2932,11 @@
   .canvas {
     padding-left: 18px;
     padding-right: 18px;
+  }
+
+  .canvas--thread {
+    --thread-gutter: 18px;
+    padding-inline: 0;
   }
 
   .topbar,

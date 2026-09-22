@@ -61,6 +61,10 @@
   min-height: 0;
   min-width: 0;
   max-height: none;
+  /* The scrollbar takes its width out of the right gutter, so the transcript
+   * lines up with the header and composer column on both sides. */
+  padding-inline: var(--thread-gutter) calc(var(--thread-gutter) - var(--scrollbar-size));
+  scrollbar-gutter: stable;
 }
 
 .timeline-empty {

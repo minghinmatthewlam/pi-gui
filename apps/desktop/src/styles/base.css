@@ -313,6 +313,37 @@ svg {
   white-space: nowrap;
 }
 
+/* One scrollbar style app-wide (Codex-style): a thin rounded thumb on a
+ * transparent track, so platform scrollbars never draw track borders or arrow
+ * buttons. The transparent border insets the thumb from the scroller edge. */
+::-webkit-scrollbar {
+  width: var(--scrollbar-size);
+  height: var(--scrollbar-size);
+  background: transparent;
+}
+
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+::-webkit-scrollbar-button {
+  display: none;
+}
+
+::-webkit-scrollbar-thumb {
+  min-height: 32px;
+  min-width: 32px;
+  border: 2px solid transparent;
+  border-radius: var(--radius-pill);
+  background: var(--scrollbar-thumb) padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover,
+::-webkit-scrollbar-thumb:active {
+  background-color: var(--scrollbar-thumb-hover);
+}
+
 /* Tokenized focus ring for interactive elements. */
 button:focus-visible,
 a:focus-visible,

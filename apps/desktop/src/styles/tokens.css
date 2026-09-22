@@ -89,6 +89,11 @@
   --overlay-hover: color-mix(in srgb, var(--text-strong) 6%, transparent);
   --overlay-active: color-mix(in srgb, var(--text-strong) 9%, transparent);
 
+  /* ---- Scrollbars — thin rounded thumb, no track (auto-flip) ------------- */
+  --scrollbar-size: 10px;
+  --scrollbar-thumb: color-mix(in srgb, var(--text-strong) 16%, transparent);
+  --scrollbar-thumb-hover: color-mix(in srgb, var(--text-strong) 30%, transparent);
+
   /* ---- Accent tints (auto-flip via --accent) ----------------------------- */
   --accent-tint-bg: color-mix(in srgb, var(--accent) 12%, transparent);
   --accent-tint-bg-strong: color-mix(in srgb, var(--accent) 16%, transparent);
