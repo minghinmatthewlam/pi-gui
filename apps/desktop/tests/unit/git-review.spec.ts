@@ -387,3 +387,31 @@ test("repository ignore rules exclude generated evidence and caches, preserving 
   ]);
   expect(review.coverage.state).toBe("complete");
 });
+
+test("inherited Git repository overrides cannot redirect review reads or staging", async () => {
+  const cwd = await repository();
+  const decoy = await repository();
+  await writeFile(join(cwd, "file.txt"), "checkout change\n");
+  await writeFile(join(decoy, "decoy.txt"), "decoy change\n");
+  const overrides = {
+    GIT_DIR: join(decoy, ".git"),
+    GIT_WORK_TREE: decoy,
+    GIT_INDEX_FILE: join(decoy, ".git", "index"),
+  };
+  const previous = Object.fromEntries(Object.keys(overrides).map((key) => [key, process.env[key]]));
+  Object.assign(process.env, overrides);
+  try {
+    const review = await uncommitted(cwd);
+    expect(review.files.map((file) => file.path)).toEqual(["file.txt"]);
+    await expect(changeGitReviewFileStage(review, review.files[0]!.id, "stage")).resolves.toEqual({
+      state: "applied",
+    });
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+  expect(await git(cwd, "diff", "--cached", "--name-only")).toBe("file.txt\n");
+  expect(await git(decoy, "diff", "--cached", "--name-only")).toBe("");
+});

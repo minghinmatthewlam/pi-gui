@@ -23,6 +23,7 @@ import type {
   ReviewScope,
   ReviewSection,
 } from "../../../contracts/review";
+import { isolatedGitEnvironment } from "./git-environment";
 
 const MAX_FILES = 2_000;
 const MAX_CONTENT_BYTES = 8 * 1024 * 1024;
@@ -105,7 +106,7 @@ function git(cwd: string, args: readonly string[], maxBuffer = MAX_GIT_BYTES): P
         encoding: "buffer",
         maxBuffer,
         timeout: 15_000,
-        env: { ...process.env, GIT_OPTIONAL_LOCKS: "0", GIT_TERMINAL_PROMPT: "0" },
+        env: isolatedGitEnvironment(),
       },
       (error, stdout, stderr) => {
         if (error && error.code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER") {
