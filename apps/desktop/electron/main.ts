@@ -893,6 +893,7 @@ app
       windows: windowOwner,
       owners: {
         state: store,
+        workbench: store,
         workspace: store,
         conversation: store,
         orchestration: store,

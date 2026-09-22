@@ -5,6 +5,8 @@ import type {
   SessionTreeSnapshot,
 } from "@pi-gui/session-driver/types";
 import type { ClipboardImageRead } from "./composer-attachments";
+import type { SessionRef } from "@pi-gui/session-driver/types";
+import type { SaveTaskWorkbenchTemplateInput, TaskWorkbenchTemplate } from "./workbench";
 import type {
   AppView,
   ComposerAttachment,
@@ -53,6 +55,8 @@ export type CustomProviderProbeResult =
 export const desktopIpc = {
   stateRequest: "pi-gui:state-request",
   stateChanged: "pi-gui:state-changed",
+  getTaskWorkbenchTemplate: "pi-gui:get-task-workbench-template",
+  saveTaskWorkbenchTemplate: "pi-gui:save-task-workbench-template",
   selectedTranscriptRequest: "pi-gui:selected-transcript-request",
   selectedTranscriptChanged: "pi-gui:selected-transcript-changed",
   appCommand: "pi-gui:app-command",
@@ -464,6 +468,8 @@ export interface PiDesktopApi {
   versions: NodeJS.ProcessVersions;
   ping(): Promise<string>;
   getState(): Promise<DesktopAppState>;
+  getTaskWorkbenchTemplate(target: SessionRef): Promise<TaskWorkbenchTemplate | null>;
+  saveTaskWorkbenchTemplate(input: SaveTaskWorkbenchTemplateInput): Promise<void>;
   onStateChanged(listener: PiDesktopStateListener): () => void;
   getSelectedTranscript(): Promise<SelectedTranscriptRecord | null>;
   onSelectedTranscriptChanged(listener: PiDesktopSelectedTranscriptListener): () => void;

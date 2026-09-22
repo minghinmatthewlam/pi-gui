@@ -18,6 +18,8 @@ import {
   type TerminalSize,
 } from "../contracts/ipc";
 import type { ClipboardImageRead } from "../contracts/composer-attachments";
+import type { SaveTaskWorkbenchTemplateInput, TaskWorkbenchTemplate } from "../contracts/workbench";
+import type { SessionRef } from "@pi-gui/session-driver/types";
 import type {
   NavigateSessionTreeOptions,
   NavigateSessionTreeResult,
@@ -81,6 +83,13 @@ contextBridge.exposeInMainWorld("piApp", {
   versions: process.versions,
   ping: () => ipcRenderer.invoke(desktopIpc.ping) as Promise<string>,
   getState: () => ipcRenderer.invoke(desktopIpc.stateRequest) as Promise<DesktopAppState>,
+  getTaskWorkbenchTemplate: (target: SessionRef) =>
+    ipcRenderer.invoke(
+      desktopIpc.getTaskWorkbenchTemplate,
+      target,
+    ) as Promise<TaskWorkbenchTemplate | null>,
+  saveTaskWorkbenchTemplate: (input: SaveTaskWorkbenchTemplateInput) =>
+    ipcRenderer.invoke(desktopIpc.saveTaskWorkbenchTemplate, input) as Promise<void>,
   onStateChanged: (listener: (state: DesktopAppState) => void) => {
     const handle = (_event: Electron.IpcRendererEvent, state: DesktopAppState) => {
       listener(state);

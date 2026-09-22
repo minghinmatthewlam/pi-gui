@@ -21,6 +21,7 @@ import type { NotificationPermissionService } from "../platform/notification-per
 import type { TerminalService } from "../platform/terminal-service";
 import type { ThemeManager } from "../platform/theme-manager";
 import type { WindowOwner } from "../windows/window-owner";
+import { WorkbenchRequests, type WorkbenchOwner } from "./workbench-requests";
 import { assertComposerAttachmentPixels } from "./composer-attachment-pixels";
 import {
   expectAppView,
@@ -147,6 +148,7 @@ type SettingsOwner = Pick<
 
 export interface DesktopIpcOwners {
   readonly state: StateOwner;
+  readonly workbench: WorkbenchOwner;
   readonly workspace: WorkspaceOwner;
   readonly conversation: ConversationOwner;
   readonly orchestration: OrchestrationOwner;
@@ -210,6 +212,29 @@ export function registerDesktopIpc({
   owners,
   capabilities,
 }: RegisterDesktopIpcOptions): void {
+  const workbench = new WorkbenchRequests(owners.workbench);
+  const workbenchSenders = new WeakSet<Electron.WebContents>();
+  const workbenchSender = (event: IpcMainInvokeEvent) => {
+    const sender = windows.windowForSender(event.sender).webContents;
+    if (!event.senderFrame || event.senderFrame !== sender.mainFrame) {
+      throw new Error("Workbench requests must originate from the window's main frame.");
+    }
+    if (!workbenchSenders.has(sender)) {
+      workbenchSenders.add(sender);
+      sender.on("did-start-navigation", (_event, _url, isInPlace, isMainFrame) => {
+        if (isMainFrame && !isInPlace) workbench.resetRenderer(sender);
+      });
+      sender.once("destroyed", () => workbench.resetRenderer(sender));
+    }
+    return sender;
+  };
+  ipcMain.handle(desktopIpc.getTaskWorkbenchTemplate, (event, rawTarget: unknown) => {
+    workbenchSender(event);
+    return workbench.get(rawTarget);
+  });
+  ipcMain.handle(desktopIpc.saveTaskWorkbenchTemplate, (event, rawInput: unknown) =>
+    workbench.save(workbenchSender(event), rawInput),
+  );
   const run = (event: IpcMainInvokeEvent, action: () => Promise<DesktopAppState>) =>
     windows.runStateAction(senderWindow(windows, event), action);
   const immediate = (event: IpcMainInvokeEvent, action: () => Promise<DesktopAppState>) =>

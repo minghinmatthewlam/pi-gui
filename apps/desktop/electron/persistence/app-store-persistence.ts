@@ -15,9 +15,13 @@ import { isThemeMode, isThemePresetId, isThreadGrouping } from "../../contracts/
 import type { ModelSettingsSnapshot } from "@pi-gui/session-driver/runtime-types";
 import { readJsonWithBackup, writeFileAtomicQueued } from "./atomic-file-write";
 import { decodeAttachments } from "./attachment-store";
+import { randomUUID } from "node:crypto";
+import { basename, dirname, join } from "node:path";
+import { decodeTaskWorkbenchTemplate, type TaskWorkbenchTemplate } from "../../contracts/workbench";
 
 export interface PersistedUiState {
-  readonly version?: 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17;
+  readonly version?: 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18;
+  readonly taskWorkbenchTemplatesBySession?: Record<string, TaskWorkbenchTemplate>;
   readonly selectedWorkspaceId?: string;
   readonly selectedSessionId?: string;
   readonly activeView?: AppView;
@@ -77,6 +81,10 @@ export function decodePersistedUiState(parsed: unknown): LegacyPersistedUiState 
 
   return {
     version: toPersistedVersion(candidate.version),
+    taskWorkbenchTemplatesBySession:
+      candidate.taskWorkbenchTemplatesBySession === undefined
+        ? undefined
+        : decodeWorkbenchTemplates(candidate.taskWorkbenchTemplatesBySession),
     selectedWorkspaceId: stringValue(candidate.selectedWorkspaceId),
     selectedSessionId: stringValue(candidate.selectedSessionId),
     activeView: toAppView(candidate.activeView),
@@ -125,13 +133,39 @@ export async function writePersistedUiState(
   const serialized = `${JSON.stringify(
     {
       ...payload,
-      version: 17,
+      version: 18,
     } satisfies PersistedUiState,
     null,
     2,
   )}\n`;
   decodePersistedUiState(payload);
-  await writeFileAtomicQueued(uiStateFilePath, serialized, decodePersistedUiState);
+  await writeFileAtomicQueued(uiStateFilePath, serialized, decodePersistedUiState, {
+    preserveExistingAs: (validated) => {
+      const existing = validated as LegacyPersistedUiState;
+      if (existing.version === 18) return undefined;
+      return join(
+        dirname(uiStateFilePath),
+        `${basename(uiStateFilePath, ".json")}.pre-workbench-v${existing.version ?? "legacy"}.${randomUUID()}.json`,
+      );
+    },
+  });
+}
+
+function decodeWorkbenchTemplates(value: unknown): Record<string, TaskWorkbenchTemplate> {
+  const records = objectRecord(value);
+  if (!records) throw new Error("Invalid ui-state field taskWorkbenchTemplatesBySession");
+  return Object.fromEntries(
+    Object.entries(records).map(([key, template]) => {
+      if (!key || key.length > 8192) throw new Error("Invalid ui-state workbench task reference");
+      try {
+        return [key, decodeTaskWorkbenchTemplate(template)];
+      } catch (error) {
+        throw new Error(`Invalid ui-state field taskWorkbenchTemplatesBySession.${key}`, {
+          cause: error,
+        });
+      }
+    }),
+  );
 }
 
 function validateUiState(value: unknown): Record<string, unknown> {
@@ -148,6 +182,7 @@ function validateUiState(value: unknown): Record<string, unknown> {
     root,
     [
       "version",
+      "taskWorkbenchTemplatesBySession",
       "selectedWorkspaceId",
       "selectedSessionId",
       "activeView",
@@ -191,6 +226,11 @@ function validateUiState(value: unknown): Record<string, unknown> {
     return !!r && Object.values(r).every(string);
   };
   optional(root, "version", (v) => toPersistedVersion(v) !== undefined);
+  if (root.taskWorkbenchTemplatesBySession !== undefined) {
+    if (typeof root.version === "number" && root.version < 18)
+      fail("workbench templates before v18");
+    decodeWorkbenchTemplates(root.taskWorkbenchTemplatesBySession);
+  }
   for (const key of [
     "selectedWorkspaceId",
     "selectedSessionId",
@@ -448,7 +488,7 @@ function toAppView(value: unknown): AppView | undefined {
 }
 
 function toPersistedVersion(value: unknown): NonNullable<PersistedUiState["version"]> | undefined {
-  return typeof value === "number" && Number.isInteger(value) && value >= 2 && value <= 17
+  return typeof value === "number" && Number.isInteger(value) && value >= 2 && value <= 18
     ? (value as NonNullable<PersistedUiState["version"]>)
     : undefined;
 }
