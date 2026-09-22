@@ -39,6 +39,8 @@ For the secondary no-provider settings/navigation proof:
 .agents/skills/verify-pi-gui/scripts/prove.sh --smoke
 ```
 
+On Linux with no `DISPLAY` or `WAYLAND_DISPLAY` (containers, Claude Code cloud sessions), `prove.sh` re-runs itself under `xvfb-run` automatically.
+
 These commands build first, show and focus Electron with `PI_APP_TEST_MODE` removed, and retain a unique `.artifacts/verify-pi-gui/run-XXXXXX/`. Build failure blocks launch; do not reuse stale output. On this host the full Xcode selection can block `git`/`swiftc` on its license. An already working Command Line Tools installation can be selected per invocation with `DEVELOPER_DIR=/Library/Developer/CommandLineTools`; verify `xcrun --find swiftc` under that environment first. Do not accept licenses or change global developer settings for the user.
 
 Each run uses a scratch workspace and isolated profile. The conversation proof copies only the selected provider credentials into a mode-0700 private temporary directory outside the evidence tree, with a mode-0600 auth file. It creates a minimal model configuration there once and reuses it across restart. It does not modify the source profile. Do not publish the private directory or credentials. Separate profiles prevent history collision, but build output and foreground input are shared: serialize runs and do not drive the user's installed app.

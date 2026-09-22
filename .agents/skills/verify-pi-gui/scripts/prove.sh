@@ -7,6 +7,13 @@ case "${1:-}" in
   --maintenance) spec=maintenance.spec.ts ;;
   *) printf 'Usage: %s [--conversation|--smoke|--maintenance]\n' "$0" >&2; exit 2 ;;
 esac
+# Headless Linux (cloud sessions, containers) has no display for Electron.
+if [ "$(uname -s)" = Linux ] && [ -z "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ] && [ -z "${PI_GUI_PROVE_XVFB:-}" ] && command -v xvfb-run >/dev/null; then
+  export PI_GUI_PROVE_XVFB=1
+  set -- "$PWD/.agents/skills/verify-pi-gui/scripts/prove.sh" "$@"
+  if command -v dbus-run-session >/dev/null; then set -- dbus-run-session -- "$@"; fi
+  exec xvfb-run -a --server-args="-screen 0 1600x1000x24" "$@"
+fi
 mkdir -p .artifacts/verify-pi-gui
 PI_GUI_PROOF_DIR=$(mktemp -d "$PWD/.artifacts/verify-pi-gui/run-XXXXXX")
 export PI_GUI_PROOF_DIR
