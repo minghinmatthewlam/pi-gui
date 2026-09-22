@@ -30,7 +30,7 @@
     "test": "pnpm run build && node --test \"test/**/*.test.mts\""
   },
   "dependencies": {
-    "@earendil-works/chord": "^0.87.0"
+    "@earendil-works/chord": "^0.87.1"
   },
   "devDependencies": {
     "esbuild": "0.28.2"

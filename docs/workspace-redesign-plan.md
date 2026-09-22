@@ -1,6 +1,6 @@
 # Workspace redesign: implementation design
 
-Status: **implemented and verified within the documented macOS scope**, September 22, 2026. P0.0–P0.2 have the historical proof below; P0.3/P0.4 review/capture and P1.1/P1.2 extension views passed the final baseline, Core Electron, real-provider and local packaged-app gates. See the [verification report](workspace-redesign-verification.md) for exact evidence and limits. This is not a published/notarized release or Windows/Linux verification. The approved tabbed prototype and installed Pi/Chord `0.87.0` remain the baseline; the earlier blocks-first protocol proposal is superseded.
+Status: **implemented and verified within the documented macOS scope**, September 22, 2026. P0.0–P0.2 have the historical proof below; P0.3/P0.4 review/capture and P1.1/P1.2 extension views passed the final baseline, Core Electron, real-provider and local packaged-app gates. See the [verification report](workspace-redesign-verification.md) for exact evidence and limits. This is not a published/notarized release or Windows/Linux verification. The approved tabbed prototype and installed Pi/Chord `0.87.1` are the current baseline; the earlier blocks-first protocol proposal is superseded.
 
 ## Recommendation
 
@@ -185,7 +185,7 @@ The host actions are validated existing-file navigation and preparing an unsent 
 
 ## Pi and Pico compatibility
 
-The app now resolves Pi Coding Agent and Chord 0.87.0, upgraded from 0.85.1. This is the [latest release](https://github.com/earendil-works/pi/releases/tag/v0.87.0) verified September 22, 2026. Staying current is a product requirement. The upgrade separates visible transcript history from model-context edits and finalizes desktop runs at Pi's settled boundary; verification results are recorded with the upgrade.
+The initial upgrade moved Pi Coding Agent and Chord from 0.85.1 to 0.87.0. The subsequent UI polish pass updates both to [0.87.1](https://github.com/earendil-works/pi/releases/tag/v0.87.1), published with GPT-6 Sol/Luna support. Staying current is a product requirement. The upgrade separates visible transcript history from model-context edits and finalizes desktop runs at Pi's settled boundary; verification results are recorded with the upgrade.
 
 Keep three evidence levels distinct:
 

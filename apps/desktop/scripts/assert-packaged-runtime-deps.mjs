@@ -90,12 +90,12 @@ const desktopDir = path.resolve(scriptDir, "..");
 const packagePlatform = (process.env.PI_APP_PACKAGE_PLATFORM ?? process.platform)
   .trim()
   .toLowerCase();
-const asarPath = resolveAsarPath(desktopDir, packagePlatform);
+const releaseDir = path.resolve(desktopDir, process.env.PI_APP_TEST_RELEASE_DIR ?? "release");
+const asarPath = resolveAsarPath(releaseDir, packagePlatform);
 const notificationHelperPath =
   packagePlatform === "darwin"
     ? path.join(
-        desktopDir,
-        "release",
+        releaseDir,
         "mac-arm64",
         "pi-gui.app",
         "Contents",
@@ -105,8 +105,18 @@ const notificationHelperPath =
     : undefined;
 const pnpmBinary = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 const piCodingAgentPackageName = "@earendil-works/pi-coding-agent";
-const requiredPiCodingAgentVersion = "0.87.0";
+const requiredPiCodingAgentVersion = "0.87.1";
 const modelChecks = [
+  ...["openai", "openai-codex", "github-copilot"].flatMap((provider) =>
+    ["sol", "luna"].map((variant) => ({
+      provider,
+      id: `gpt-6-${variant}`,
+      reason: "Pi 0.87.1 GPT-6 support",
+      requireReasoning: true,
+      requireImageInput: true,
+      requireMaxThinking: true,
+    })),
+  ),
   ...["luna", "sol", "terra"].map((variant) => ({
     provider: "openai-codex",
     id: `gpt-5.6-${variant}`,
@@ -185,21 +195,12 @@ if (cleanupError) throw cleanupError;
 
 console.log(`Verified packaged runtime dependencies in ${asarPath}`);
 
-function resolveAsarPath(desktopDir, packagePlatform) {
+function resolveAsarPath(releaseDir, packagePlatform) {
   if (packagePlatform === "darwin") {
-    return path.join(
-      desktopDir,
-      "release",
-      "mac-arm64",
-      "pi-gui.app",
-      "Contents",
-      "Resources",
-      "app.asar",
-    );
+    return path.join(releaseDir, "mac-arm64", "pi-gui.app", "Contents", "Resources", "app.asar");
   }
 
   if (packagePlatform === "linux") {
-    const releaseDir = path.join(desktopDir, "release");
     const unpackedAsarPath = readdirSync(releaseDir, { withFileTypes: true })
       .filter((entry) => entry.isDirectory() && /^linux(?:-[\w]+)?-unpacked$/.test(entry.name))
       .map((entry) => path.join(releaseDir, entry.name, "resources", "app.asar"))
@@ -213,7 +214,6 @@ function resolveAsarPath(desktopDir, packagePlatform) {
   }
 
   if (packagePlatform === "win32") {
-    const releaseDir = path.join(desktopDir, "release");
     const unpackedAsarPath = readdirSync(releaseDir, { withFileTypes: true })
       .filter((entry) => entry.isDirectory() && /^win(?:-[\w]+)?-unpacked$/.test(entry.name))
       .map((entry) => path.join(releaseDir, entry.name, "resources", "app.asar"))
