@@ -291,7 +291,6 @@ test("keeps the latest assistant content visible when the composer grows at the 
   try {
     const window = await harness.firstWindow();
     await createTimelineSession(window, "Bottom pinning session");
-    await window.getByTestId("toggle-side-panel").click();
     await expect(window.getByTestId("workbench")).toHaveCount(0);
 
     const finalMarker = "PIN_FINAL_ROW";
@@ -744,7 +743,6 @@ test("keeps the mid-thread viewport stable when the composer grows away from the
   try {
     const window = await harness.firstWindow();
     await createTimelineSession(window, "Mid-thread pinning session");
-    await window.getByTestId("toggle-side-panel").click();
     await expect(window.getByTestId("workbench")).toHaveCount(0);
 
     const sentinelMarker = "MID_SENTINEL_ROW";

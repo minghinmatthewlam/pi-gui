@@ -248,7 +248,6 @@ test("view-in-changes button on a write tool row opens the diff panel without to
     const sessionRef = await selectedSessionRef(window);
 
     const diffPanel = window.locator(".diff-panel");
-    await window.getByTestId("toggle-side-panel").click();
     await expect(diffPanel).toHaveCount(0);
 
     const timestamp = new Date().toISOString();

@@ -57,7 +57,15 @@ async function expectActiveTool(window: Page, name: ToolName): Promise<void> {
   ).toHaveAttribute("aria-selected", "true");
 }
 
+/** Tasks without a saved layout start with the workbench hidden. */
+async function openWorkbench(window: Page): Promise<void> {
+  const workbench = window.getByTestId("workbench");
+  if (!(await workbench.isVisible())) await window.getByTestId("toggle-side-panel").click();
+  await expect(workbench).toBeVisible();
+}
+
 async function addTool(window: Page, name: ToolName): Promise<void> {
+  await openWorkbench(window);
   await window.getByTestId("workbench-add-tab").click();
   const chooser = window.getByTestId("workbench-chooser");
   await expect(chooser).toBeVisible();
@@ -115,6 +123,8 @@ test("adds singleton tool tabs, closes to a neighbor, and keeps an empty chooser
   try {
     const window = await harness.firstWindow();
     await selectSession(window, TASK_A);
+    await expect(window.getByTestId("workbench")).toHaveCount(0);
+    await openWorkbench(window);
     await expectActiveTool(window, "Changes");
     await addTool(window, "Files");
     await expect(window.getByTestId("file-workbench")).toBeVisible();
@@ -194,6 +204,8 @@ test("restores each task's tabs and draft through Settings, switching, and resta
     await window.getByTestId("composer").fill("Draft for task A");
 
     await selectSession(window, TASK_B);
+    await expect(window.getByTestId("workbench")).toHaveCount(0);
+    await openWorkbench(window);
     await expectActiveTool(window, "Changes");
     await expect(window.getByRole("tab", { name: "Files", exact: true })).toHaveCount(0);
     await addTool(window, "Worktrees");
@@ -346,6 +358,7 @@ test("keeps one resizable width across tools, chooser, tasks, and restart", asyn
     await setWindowWidth(1440);
     let window = await harness.firstWindow();
     await selectSession(window, TASK_A);
+    await openWorkbench(window);
     const panelWidth = async () =>
       Math.round((await window.getByTestId("workbench").boundingBox())!.width);
     await expect.poll(panelWidth).toBe(440);
@@ -381,6 +394,7 @@ test("keeps one resizable width across tools, chooser, tasks, and restart", asyn
     await window.getByTestId("toggle-side-panel").click();
     await expect.poll(panelWidth).toBe(540);
     await selectSession(window, TASK_B);
+    await openWorkbench(window);
     await expect.poll(panelWidth).toBe(540);
     await handle.focus();
     await handle.press("ArrowRight");
