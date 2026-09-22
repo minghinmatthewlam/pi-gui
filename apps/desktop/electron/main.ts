@@ -45,6 +45,7 @@ import {
   desktopIpc,
   getDesktopCommandFromShortcut,
   isCloseFocusedSurfaceShortcut,
+  platformShortcutModifier,
   type CustomProviderProbeInput,
   type CustomProviderProbeResult,
 } from "../contracts/ipc";
@@ -411,9 +412,9 @@ function createWindow(): BrowserWindow {
     }
 
     const lowerKey = input.key.toLowerCase();
-    const platformModifier = process.platform === "darwin" ? input.meta : input.control;
+    const platformModifier = platformShortcutModifier(process.platform, input);
     const command = getDesktopCommandFromShortcut({
-      modifier: process.platform === "darwin" ? input.meta : input.control,
+      modifier: platformModifier,
       alt: input.alt,
       shift: input.shift,
       key: input.key,

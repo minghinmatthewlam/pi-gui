@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 import { PRELOAD_DEV_RELOAD_MARKER } from "./dev-reload-preload-probe";
 import {
+  createDesktopCommandSubscription,
   desktopIpc,
   type PiDesktopApi,
   type CustomProviderConfig,
@@ -70,6 +71,11 @@ function subscribeIpc<T>(channel: string, listener: (payload: T) => void): () =>
   };
 }
 
+const appCommands = createDesktopCommandSubscription();
+ipcRenderer.on(desktopIpc.appCommand, (_event, command: PiDesktopCommand) => {
+  appCommands.deliver(command);
+});
+
 contextBridge.exposeInMainWorld("piApp", {
   platform: process.platform,
   versions: process.versions,
@@ -100,15 +106,7 @@ contextBridge.exposeInMainWorld("piApp", {
       ipcRenderer.removeListener(desktopIpc.selectedTranscriptChanged, handle);
     };
   },
-  onCommand: (listener: (command: PiDesktopCommand) => void) => {
-    const handle = (_event: Electron.IpcRendererEvent, command: PiDesktopCommand) => {
-      listener(command);
-    };
-    ipcRenderer.on(desktopIpc.appCommand, handle);
-    return () => {
-      ipcRenderer.removeListener(desktopIpc.appCommand, handle);
-    };
-  },
+  onCommand: (listener: (command: PiDesktopCommand) => void) => appCommands.subscribe(listener),
   onWorkspacePicked: (listener: (workspaceId: string) => void) => {
     const handle = (_event: Electron.IpcRendererEvent, workspaceId: string) => {
       listener(workspaceId);

@@ -83,8 +83,26 @@ test("clicks and downward wheel at the bottom do not stop following; search uses
     await expect
       .poll(async () => (await getTimelineScrollMetrics(p)).remainingFromBottom)
       .toBeLessThanOrEqual(2);
-    await p.keyboard.press(desktopShortcut("f"));
+    await p.evaluate(() => {
+      const fire = () =>
+        window.dispatchEvent(
+          new KeyboardEvent("keydown", {
+            key: "f",
+            code: "KeyF",
+            ctrlKey: true,
+            bubbles: true,
+            cancelable: true,
+          }),
+        );
+      fire();
+      fire();
+    });
     const search = p.getByPlaceholder("Search thread...");
+    await expect(search).toBeVisible();
+    await search.press("Escape");
+    await expect(search).toHaveCount(0);
+    await p.waitForTimeout(250);
+    await p.keyboard.press(desktopShortcut("f"));
     await expect(search).toBeVisible();
     await search.fill("Searchable row 2.");
     await expect(p.locator("mark.thread-find-active")).toBeVisible();

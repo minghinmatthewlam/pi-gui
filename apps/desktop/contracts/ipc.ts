@@ -296,6 +296,87 @@ export interface DesktopShortcutInput {
   readonly code?: string;
 }
 
+/** Command on macOS, Control on Windows and Linux. */
+export function platformShortcutModifier(
+  platform: NodeJS.Platform,
+  input: { readonly meta: boolean; readonly control: boolean },
+): boolean {
+  return platform === "darwin" ? input.meta : input.control;
+}
+
+const MAX_QUEUED_DESKTOP_COMMANDS = 16;
+
+/**
+ * Delivers main-process shortcuts to the renderer.
+ * A chord can arrive before React subscribes, or in the gap while a listener
+ * is swapped. Those commands are kept until the next subscriber.
+ */
+export function createDesktopCommandSubscription() {
+  let listener: ((command: PiDesktopCommand) => void) | null = null;
+  const queued: PiDesktopCommand[] = [];
+  return {
+    subscribe(next: (command: PiDesktopCommand) => void): () => void {
+      listener = next;
+      const pending = queued.splice(0, queued.length);
+      for (const command of pending) next(command);
+      return () => {
+        if (listener === next) listener = null;
+      };
+    },
+    deliver(command: PiDesktopCommand): void {
+      if (listener) {
+        listener(command);
+        return;
+      }
+      queued.push(command);
+      if (queued.length > MAX_QUEUED_DESKTOP_COMMANDS) queued.shift();
+    },
+  };
+}
+
+/** Collapses a repeated keydown from one physical chord so a toggle stays open. */
+export function createChordToggleGate(windowMs = 200) {
+  let last = Number.NEGATIVE_INFINITY;
+  return (now: number): boolean => {
+    if (now - last < windowMs) return false;
+    last = now;
+    return true;
+  };
+}
+
+export interface EarlyModifierChord {
+  readonly key: string;
+  readonly code: string;
+}
+
+/**
+ * Keeps Command/Ctrl chords that arrive before the React shortcut listener
+ * exists. Only search and settings are replayed; other chords need the sidebar.
+ */
+export function createEarlyModifierChordBuffer() {
+  const pending: EarlyModifierChord[] = [];
+  let ready = false;
+  return {
+    note(
+      input: EarlyModifierChord & { readonly modifier: boolean; readonly shift: boolean },
+    ): void {
+      if (ready || !input.modifier || input.shift) return;
+      const key = input.key.toLowerCase();
+      const relevant =
+        key === "f" || input.code === "KeyF" || key === "," || input.code === "Comma";
+      if (!relevant) return;
+      pending.push({ key: input.key, code: input.code });
+      if (pending.length > 8) pending.shift();
+    },
+    arm(): readonly EarlyModifierChord[] {
+      ready = true;
+      return pending.splice(0, pending.length);
+    },
+  };
+}
+
+export const earlyModifierChords = createEarlyModifierChordBuffer();
+
 export function getDesktopCommandFromShortcut(
   input: DesktopShortcutInput,
 ): PiDesktopCommand | undefined {

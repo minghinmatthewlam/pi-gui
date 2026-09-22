@@ -34,7 +34,9 @@ import {
 } from "../features/workbench/file-workbench-state";
 import { buildModelOptions } from "../features/conversation/composer-commands";
 import {
+  createChordToggleGate,
   desktopCommands,
+  earlyModifierChords,
   getDesktopCommandFromShortcut,
   isCloseFocusedSurfaceShortcut,
   getDesktopShortcutLabel,
@@ -318,6 +320,7 @@ export default function App() {
   const threadGroupingRef = useRef(snapshot?.threadGrouping ?? "time");
   threadGroupingRef.current = snapshot?.threadGrouping ?? "time";
   const threadShortcutOrderRef = useRef<readonly ThreadListEntry[] | null>(null);
+  const threadSearchGate = useRef(createChordToggleGate());
   const focusComposer = () => {
     window.requestAnimationFrame(() => {
       if (restoreTopmostDialogFocus()) {
@@ -659,6 +662,11 @@ export default function App() {
     const removeClipboardImageListener = window.piApp?.onClipboardImagePasted?.(
       handlePastedClipboardImage,
     );
+    const toggleThreadSearch = () => {
+      if (!threadSearchGate.current(performance.now())) return;
+      if (threadSearch.isOpen) threadSearch.close();
+      else threadSearch.open();
+    };
     const handleKeyDown = (event: globalThis.KeyboardEvent) => {
       const closeSurfaceShortcut = isCloseFocusedSurfaceShortcut({
         meta: event.metaKey,
@@ -691,14 +699,16 @@ export default function App() {
         }
         return;
       }
-      // Cmd+F toggles thread search
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "f" && !event.shiftKey) {
+      // One physical Command/Ctrl+F can be delivered twice. The second
+      // keydown would close search after the transcript lays out.
+      if (
+        (event.metaKey || event.ctrlKey) &&
+        !event.shiftKey &&
+        !event.repeat &&
+        (event.key.toLowerCase() === "f" || event.code === "KeyF")
+      ) {
         event.preventDefault();
-        if (threadSearch.isOpen) {
-          threadSearch.close();
-        } else {
-          threadSearch.open();
-        }
+        toggleThreadSearch();
         return;
       }
       // Cmd+D toggles diff panel
@@ -718,6 +728,11 @@ export default function App() {
         event.preventDefault();
       }
     };
+    for (const chord of earlyModifierChords.arm()) {
+      const key = chord.key.toLowerCase();
+      if (key === "f" || chord.code === "KeyF") toggleThreadSearch();
+      else handleCommand(desktopCommands.openSettings);
+    }
     window.addEventListener("keydown", handleKeyDown);
     return () => {
       removeCommandListener?.();
