@@ -481,7 +481,7 @@ export function DiffPanel({
                     />
                     <button
                       className="diff-panel__file-name"
-                      title={JSON.stringify(file.path)}
+                      title={formatPathForDisplay(file.path)}
                       type="button"
                       onClick={() =>
                         onSelectionChange({
@@ -493,7 +493,9 @@ export function DiffPanel({
                       <span
                         className={`diff-panel__status-dot diff-panel__status-dot--${file.status}`}
                       />
-                      <span className="diff-panel__file-path">{JSON.stringify(file.path)}</span>
+                      <span className="diff-panel__file-path">
+                        {formatPathForDisplay(file.path)}
+                      </span>
                       <span className="file-workbench__status-label">
                         {file.conflicted ? "Conflicted" : file.status}
                       </span>
@@ -530,7 +532,9 @@ export function DiffPanel({
       <div className="diff-panel__viewer file-workbench__viewer">
         <div className="diff-panel__viewer-header file-workbench__viewer-header">
           <span className="file-workbench__viewer-path">
-            {selection.selectedPath ? JSON.stringify(selection.selectedPath) : "Select a file"}
+            {selection.selectedPath
+              ? formatPathForDisplay(selection.selectedPath)
+              : "Select a file"}
           </span>
           {review && selectedFile && selectedFile.status !== "deleted" ? (
             <button
@@ -545,7 +549,7 @@ export function DiffPanel({
         </div>
         {selectedFile?.previousPath ? (
           <div className="review-panel__rename">
-            Renamed from {JSON.stringify(selectedFile.previousPath)}
+            Renamed from {formatPathForDisplay(selectedFile.previousPath)}
           </div>
         ) : null}
         <div className="review-panel__patches">
@@ -639,6 +643,18 @@ function CoverageNotice({ coverage }: { readonly coverage: ReviewCoverage }) {
       )}
     </details>
   );
+}
+
+/**
+ * Plain paths read as-is. Paths whose edges or characters would be invisible or
+ * ambiguous (surrounding whitespace, control characters, a leading or trailing
+ * quote) are shown JSON-quoted so they cannot be confused with another path.
+ */
+function formatPathForDisplay(path: string): string {
+  const ambiguous =
+    /^[\s"]|[\s"]$/.test(path) ||
+    [...path].some((char) => char.charCodeAt(0) < 0x20 || char.charCodeAt(0) === 0x7f);
+  return ambiguous ? JSON.stringify(path) : path;
 }
 
 function sectionLabel(kind: "combined" | "staged" | "unstaged"): string {

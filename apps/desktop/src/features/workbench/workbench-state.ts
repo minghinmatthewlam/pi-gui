@@ -24,9 +24,10 @@ export type WorkbenchAction =
   | { readonly type: "set-changes"; readonly changes: TaskWorkbenchTemplate["changes"] }
   | { readonly type: "open-file"; readonly file: WorkspaceFileReference };
 
-export function initialWorkbenchView(workspaceId: string, isUnsent = false): TaskWorkbenchTemplate {
+/** A task without a saved layout keeps the side workspace closed until the user opens it. */
+export function initialWorkbenchView(workspaceId: string): TaskWorkbenchTemplate {
   return {
-    visibility: isUnsent ? "hidden" : "visible",
+    visibility: "hidden",
     tools: [{ kind: "changes" }],
     selection: { kind: "tool", toolId: "changes" },
     files: { workspaceId, tabs: EMPTY_FILE_TABS },

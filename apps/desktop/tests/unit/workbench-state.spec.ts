@@ -14,15 +14,14 @@ import {
   restoreWorkbenchView,
 } from "../../src/features/workbench/workbench-state";
 
-test("existing tasks start on Changes and unsent tasks keep the workbench hidden", () => {
+test("tasks without a saved layout keep the workbench hidden with Changes ready", () => {
   const existing = initialWorkbenchView("checkout");
   expect(existing).toMatchObject({
-    visibility: "visible",
+    visibility: "hidden",
     tools: [{ kind: "changes" }],
     selection: { kind: "tool", toolId: "changes" },
     changes: { scope: { kind: "uncommitted" }, workspaceId: "checkout", selectedPath: null },
   });
-  expect(initialWorkbenchView("checkout", true).visibility).toBe("hidden");
   expect(decodeTaskWorkbenchTemplate(existing)).toEqual(existing);
 });
 

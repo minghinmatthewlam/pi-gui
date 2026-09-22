@@ -239,7 +239,7 @@ export default function App() {
     [selectedWorkspace?.id, selectedSession?.id],
   );
   const extensionViews = useExtensionViews({ api, target: workbenchTarget });
-  const workbench = useWorkbench({ api, target: workbenchTarget, isUnsent: !workbenchTarget });
+  const workbench = useWorkbench({ api, target: workbenchTarget });
   const workbenchTargetRef = useRef(workbenchTarget);
   workbenchTargetRef.current = workbenchTarget;
   const beforePrepareTaskDraft = useCallback(async () => {

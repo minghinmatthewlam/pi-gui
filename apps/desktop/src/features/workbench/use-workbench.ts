@@ -24,7 +24,6 @@ interface WorkbenchEntry {
 interface UseWorkbenchOptions {
   readonly api: PiDesktopApi | undefined;
   readonly target: SessionRef | null;
-  readonly isUnsent?: boolean;
 }
 
 let saveSequence = 0;
@@ -35,13 +34,13 @@ function targetKey(target: SessionRef): string {
 }
 
 /** Each window owns this map. Host templates are read once, never subscribed to as live state. */
-export function useWorkbench({ api, target, isUnsent = false }: UseWorkbenchOptions) {
+export function useWorkbench({ api, target }: UseWorkbenchOptions) {
   const entries = useRef(new Map<string, WorkbenchEntry>());
   const pendingRestores = useRef(new Set<string>());
   const mounted = useRef(true);
   const [, setRevision] = useState(0);
-  const current = useRef({ api, target, isUnsent });
-  current.current = { api, target, isUnsent };
+  const current = useRef({ api, target });
+  current.current = { api, target };
 
   const publish = useCallback(() => {
     if (mounted.current) setRevision((revision) => revision + 1);
@@ -54,11 +53,11 @@ export function useWorkbench({ api, target, isUnsent = false }: UseWorkbenchOpti
     };
   }, []);
 
-  const ensureEntry = useCallback((ref: SessionRef, unsent = false): WorkbenchEntry => {
+  const ensureEntry = useCallback((ref: SessionRef): WorkbenchEntry => {
     const key = targetKey(ref);
     const existing = entries.current.get(key);
     if (existing) return existing;
-    const initialView = initialWorkbenchView(ref.workspaceId, unsent);
+    const initialView = initialWorkbenchView(ref.workspaceId);
     const entry: WorkbenchEntry = {
       view: initialView,
       initialView,
@@ -100,11 +99,11 @@ export function useWorkbench({ api, target, isUnsent = false }: UseWorkbenchOpti
   );
 
   const restore = useCallback(
-    (ref: SessionRef, unsent: boolean) => {
+    (ref: SessionRef) => {
       const desktopApi = current.current.api;
       if (!desktopApi) return;
       const key = targetKey(ref);
-      const entry = ensureEntry(ref, unsent);
+      const entry = ensureEntry(ref);
       if (entry.restore === "ready" || pendingRestores.current.has(key)) return;
       pendingRestores.current.add(key);
       entry.restore = "loading";
@@ -137,12 +136,12 @@ export function useWorkbench({ api, target, isUnsent = false }: UseWorkbenchOpti
   const workspaceId = target?.workspaceId;
   const sessionId = target?.sessionId;
   useEffect(() => {
-    if (workspaceId && sessionId) restore({ workspaceId, sessionId }, isUnsent);
-  }, [api, isUnsent, restore, sessionId, workspaceId]);
+    if (workspaceId && sessionId) restore({ workspaceId, sessionId });
+  }, [api, restore, sessionId, workspaceId]);
 
   const apply = useCallback(
     (ref: SessionRef, actions: readonly WorkbenchAction[]) => {
-      const entry = ensureEntry(ref, current.current.isUnsent);
+      const entry = ensureEntry(ref);
       const result = applyWorkbenchActions(entry.view, actions);
       const next = result.view;
       if (result.error) {
@@ -190,7 +189,7 @@ export function useWorkbench({ api, target, isUnsent = false }: UseWorkbenchOpti
   const toggleVisibility = useCallback(() => {
     const ref = current.current.target;
     if (!ref) return;
-    const entry = ensureEntry(ref, current.current.isUnsent);
+    const entry = ensureEntry(ref);
     dispatch({
       type: "set-visibility",
       visibility: entry.view.visibility === "visible" ? "hidden" : "visible",
@@ -201,7 +200,7 @@ export function useWorkbench({ api, target, isUnsent = false }: UseWorkbenchOpti
     (update: SetStateAction<FileWorkbenchTabs>, checkoutId?: string) => {
       const ref = current.current.target;
       if (!ref) return;
-      const entry = ensureEntry(ref, current.current.isUnsent);
+      const entry = ensureEntry(ref);
       const files = entry.view.files;
       const nextTabs = typeof update === "function" ? update(files.tabs) : update;
       const nextWorkspaceId = checkoutId ?? files.workspaceId;
@@ -215,7 +214,7 @@ export function useWorkbench({ api, target, isUnsent = false }: UseWorkbenchOpti
     (update: SetStateAction<TaskWorkbenchTemplate["changes"]>) => {
       const ref = current.current.target;
       if (!ref) return;
-      const changes = ensureEntry(ref, current.current.isUnsent).view.changes;
+      const changes = ensureEntry(ref).view.changes;
       const next = typeof update === "function" ? update(changes) : update;
       if (
         next.workspaceId === changes.workspaceId &&
@@ -240,12 +239,12 @@ export function useWorkbench({ api, target, isUnsent = false }: UseWorkbenchOpti
   );
 
   const retryRestore = useCallback(() => {
-    const { target: ref, isUnsent: unsent } = current.current;
-    if (ref) restore(ref, unsent);
+    const ref = current.current.target;
+    if (ref) restore(ref);
   }, [restore]);
 
   const entry = target ? entries.current.get(targetKey(target)) : undefined;
-  const view = entry?.view ?? initialWorkbenchView(target?.workspaceId ?? "", isUnsent || !target);
+  const view = entry?.view ?? initialWorkbenchView(target?.workspaceId ?? "");
   return {
     view,
     activeTool: activeWorkbenchTool(view),
