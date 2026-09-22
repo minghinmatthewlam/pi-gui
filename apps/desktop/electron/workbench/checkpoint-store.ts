@@ -593,6 +593,7 @@ export class TurnCheckpointStore {
       if (interrupted) await this.persist();
     })().catch((error: unknown) => {
       // A transient read failure must not disable captures until restart.
+      this.records.clear();
       this.loaded = undefined;
       throw error;
     });

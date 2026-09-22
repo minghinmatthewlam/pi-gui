@@ -486,7 +486,8 @@ test("a failed metadata read is retried instead of disabling captures until rest
   );
   await unlink(path);
   await store.recordBoundary(boundary(workspace, "one", "opening"), signal);
-  expect(JSON.parse(await readFile(path, "utf8")).records).toHaveLength(1);
+  const saved = JSON.parse(await readFile(path, "utf8")) as { records: unknown[] };
+  expect(saved.records).toHaveLength(1);
 });
 
 test("reports measured capture cost for a 500-file checkout", async () => {
