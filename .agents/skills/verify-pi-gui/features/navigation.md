@@ -23,7 +23,7 @@ Users switch folders and conversations in the sidebar and recover the selected t
 
 Preconditions: isolated profile and two fixture folders for sidebar switching.
 
-- **Switch/restart:** run `pnpm --filter @pi-gui/desktop run test:e2e:runner -- apps/desktop/tests/core/navigation.spec.ts`. It selects Alpha/Beta sessions through the sidebar, asserts `.topbar__session`, and checks `composer` draft and `.session-row--active` after restart.
+- **Switch/restart:** run `pnpm --filter @pi-gui/desktop run test:e2e:runner -- apps/desktop/tests/core/navigation.spec.ts`. It selects Alpha/Beta sessions through the sidebar, asserts `.chat-header__title`, and checks `composer` draft and `.session-row--active` after restart.
 - **New-thread entry:** run `pnpm --filter @pi-gui/desktop run test:e2e:runner -- apps/desktop/tests/core/composer-controls.spec.ts`; `new-thread-composer` must become visible and focused after the shortcut.
 - **Folder picker:** use `pnpm --filter @pi-gui/desktop run test:prod:open-folder-real` for the actual native dialog; reserve foreground input. Core `initialWorkspaces` is fixture setup, not picker proof.
 - **Visible maintenance:** `.agents/skills/verify-pi-gui/scripts/prove.sh --maintenance` starts threads with New thread and Start thread until the Today bucket shows `Show more Today`, then clicks Show less Today. It also pins and unpins the active row while that run still reports running. It does not insert sessions through IPC.

@@ -1,6 +1,6 @@
 # Workspace redesign: implementation design
 
-Status: proposed workspace architecture, September 22, 2026. The user authorized the Pi upgrade and Chord evaluation; frontend redesign implementation remains separate. Grounded in pi-gui `f06a5501dbcf1f39e105f0375ae7646bd9841c8f`, the approved tabbed workspace prototype, and installed upstream release `v0.87.0`. The earlier blocks-first/custom service-and-state protocol recommendation is superseded.
+Status: P0.0–P0.2 implemented and verified, September 22, 2026. The user authorized P0.1/P0.2 after the completed Pi upgrade and Chord evaluation. Grounded in the approved tabbed workspace prototype and installed upstream release `v0.87.0`. Review scopes and the custom extension host remain later phases. The earlier blocks-first/custom service-and-state protocol recommendation is superseded.
 
 ## Recommendation
 
@@ -10,7 +10,7 @@ The composer keeps both model and reasoning level visible. The side-workspace to
 
 Use Chord for extension services, state and lifecycle; the installed 0.87.0 APIs passed Node/browser feasibility probes. Pi-gui supplies the desktop view host and a small registration adapter to existing Pi extensions. A fixed blocks schema is no longer the chosen public interface. The [custom frontend design](chord-desktop-extension-design.md) defines the author contract, missing host responsibilities and remaining Electron proof. Its Pi EventBus bootstrap is discovery only, not a second service/state protocol.
 
-## Current behavior and the change
+## Baseline behavior before the workspace foundation
 
 | Area         | Verified today                                                                                                                    | Proposed change                                                                                                                   |
 | ------------ | --------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
@@ -21,9 +21,19 @@ Use Chord for extension services, state and lifecycle; the installed 0.87.0 APIs
 | Extensions   | Pi UI calls become dialogs, notifications, status, and text widgets. The app has no desktop view registration API.                | Preserve existing compatibility; prove custom desktop views using current upstream APIs before defining the missing GUI contract. |
 | Persistence  | Pi owns session data; catalogs own workspace/session records; desktop owns validated UI state.                                    | Add layout preferences and review metadata to desktop-owned storage; do not copy Pi history or extension findings into it.        |
 
-Current source: [shell](../apps/desktop/src/app/App.tsx), [draft synchronization](../apps/desktop/src/features/conversation/hooks/use-composer-draft-sync.ts), [desktop owners](architecture.md), [UI persistence](../apps/desktop/electron/persistence/app-store-persistence.ts), [Git diff adapter](../apps/desktop/electron/platform/files/app-store-diff.ts), [extension binding](../packages/pi-sdk-driver/src/session-supervisor.ts).
+Baseline: `f06a5501dbcf1f39e105f0375ae7646bd9841c8f`. Current source: [shell](../apps/desktop/src/app/App.tsx), [draft synchronization](../apps/desktop/src/features/conversation/hooks/use-composer-draft-sync.ts), [desktop owners](architecture.md), [UI persistence](../apps/desktop/electron/persistence/app-store-persistence.ts), [Git diff adapter](../apps/desktop/electron/platform/files/app-store-diff.ts), [extension binding](../packages/pi-sdk-driver/src/session-supervisor.ts).
 
-## End-to-end example
+## Implemented workspace foundation
+
+The live layout now follows one [workbench controller](../apps/desktop/src/features/workbench/use-workbench.ts) and [reducer](../apps/desktop/src/features/workbench/workbench-state.ts). Files, Changes, Worktrees and Terminal share the outer tab strip and chooser. A single icon toggles visibility. Files keeps its document tabs; Terminal keeps its shell tabs and process owner. The old picker, bottom terminal drawer and independent visibility flags are removed.
+
+Each task retains its ordered tools, selected tool, visibility, file references and selected Changes checkout/path. Settings does not clear that layout. File refresh no longer deletes saved document tabs; a missing file remains an explicit read error. Last-shell close callbacks are invalidated when their view unmounts, so they cannot close another task's tool tab. Worktrees uses the existing checkout/task navigation and creation operations.
+
+The [browser-safe contract](../apps/desktop/contracts/workbench.ts) is also the strict persistence/IPC decoder. Main stores the last explicit layout template per task, outside broadcast snapshots. Windows restore once and keep independent live state. Early interactions are rebased onto the saved template after loading; failed restores offer Retry and do not overwrite unknown saved layout. Main serializes saves, rejects stale per-renderer sequence numbers and resets that sequence on renderer navigation. Schema v18 preserves a separate, immutable copy of the original validated pre-migration bytes.
+
+Neutral Default light/dark colors, consistent spacing, a quieter sidebar and composer, and the tab styles use the existing token system. Named themes retain their own colors. Model and reasoning controls remain visible. Existing conversation controllers and the single timeline viewport owner remain in place. The extension tool reference is reserved and restores as unavailable; executable extension frontends are not enabled by this phase.
+
+## Proposed extension example (later phase)
 
 A user opens **+ → PR Review**, asks Pi to review, and creates a fix task:
 
@@ -52,7 +62,7 @@ Arrows describe requests/data flow. The renderer never imports the host or Pi im
 | Component              | Owns                                                                                     | Location and change                                                                                                                                                                 |
 | ---------------------- | ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | App shell              | Startup/recovery, sidebar, app routes, composition                                       | Slim down `src/app/App.tsx`; keep Settings/Extensions/Skills/schedules reachable.                                                                                                   |
-| Conversation screen    | Selected task's transcript/composer composition                                          | New `src/features/conversation/conversation-screen.tsx`; reuse draft, viewport, attachment and command controllers.                                                                 |
+| Conversation screen    | Selected task's transcript/composer composition                                          | Currently composed in `src/app/App.tsx` using the existing draft, viewport, attachment and command controllers; a separate screen module is not required for the tab foundation.    |
 | Workbench              | Current window's per-task tool order, active tool, visibility and view preferences       | New `src/features/workbench/workbench.tsx`, `workbench-state.ts`, `use-workbench.ts`; replace the old picker and parallel visibility paths.                                         |
 | Tool content           | Files and inner document tabs, review, terminal shells, worktree navigation              | Reuse/adapt existing feature components. A small explicit built-in resolver is enough.                                                                                              |
 | Durable layout storage | Validated last-saved layout template per task                                            | Extend `electron/persistence/app-store-persistence.ts`, narrow application-store operations, and IPC. No new renderer localStorage path.                                            |
@@ -99,7 +109,7 @@ The reducer and saved-state decoder enforce unique tool identity and selected-to
 
 - One outer tab per built-in tool; Files retains its inner document tabs and Terminal its inner shell tabs. Do not flatten those different resources into the outer strip in this iteration.
 - Reopening a tool focuses it. Closing the active tool selects its neighbor; closing the last shows the chooser. Hidden layout retains selection and tool state.
-- With no saved layout, existing tasks start with Changes on Uncommitted; a new unsent task starts with its side workspace hidden. Completion may update badges/data but does not steal focus or replace the user's selected tool. Opening Changes from a response explicitly selects that response's captured turn.
+- With no saved layout, existing tasks start with Changes on Uncommitted; a new unsent task starts with its side workspace hidden. Completion may update badges/data but does not steal focus or replace the user's selected tool. Today, a response's Changes link opens its checkout/path in the current uncommitted view. Selecting that response's captured turn requires P0.4.
 - Close Terminal's outer tab means close its view. An explicit shell-close action terminates that shell. App/window exit retains existing PTY disposal semantics; restoring a saved tab does not claim a live process survived.
 - Settings and Extensions are management routes; entering/leaving them does not mutate task layout. Their return action and Escape restore the prior workspace.
 - Each window keeps its own live per-task layouts. Opening the same task in a second window seeds from its last-saved template; subsequent clicks do not rearrange the other window. The last explicit layout change wins the durable template. Serialize writes and reject older saves from the same renderer; async data refreshes never write layout.
@@ -191,7 +201,17 @@ Pi Coding Agent 0.87.0 is implemented and verified. Visible history now uses Pi'
 - The macOS arm64 packaged app launched and created a thread through its real UI. Packaged model-registry, provider implementation imports, native dependency presence and recursive Pi dependency-version checks passed. The recursive audit covered 137 packages. Staging pins and two explicit nested copies prevent the packager from silently selecting incompatible versions.
 - Independent review found and rechecked the assistant-message and idle-boundary fixes; no concrete findings remain in the final reviewed changes.
 
-Local evidence is retained under `.artifacts/pi-087-upgrade/` and `.artifacts/verify-pi-gui/run-vYTlSs/`. The Chord probes and their scope are documented in the [extension design](chord-desktop-extension-design.md). Windows/Linux packaging, notarization and the proposed custom-view Electron host were not verified or implemented in this task. The next product phase remains daily coding polish and tool tabs.
+Local evidence is retained under `.artifacts/pi-087-upgrade/` and `.artifacts/verify-pi-gui/run-vYTlSs/`. The Chord probes and their scope are documented in the [extension design](chord-desktop-extension-design.md). Windows/Linux packaging, notarization and the proposed custom-view Electron host were not verified or implemented in the upgrade. The subsequent daily coding polish and tool tabs are described above.
+
+## Workspace foundation verification — September 22, 2026
+
+P0.1/P0.2 now run in the actual Electron app. `pnpm check` passed with an isolated Pi profile, including formatting, lint, architecture boundaries, workspace typechecks and 165 desktop unit tests. Fifty-two distinct fixture-backed Core cases passed across the focused runs. These cover tab lifecycle, task and Settings return, independent windows, restart/drafts, file navigation, Changes, worktrees, shell survival, visible image attachment and oversized-image error recovery. Six inspected screenshots cover populated Files, Changes and Terminal at 1280 and 1040 pixels.
+
+The first runs exposed stale tests for the removed title/picker controls and one real missing behavior: Escape from Settings did not return to the task. The implementation now handles Escape while respecting nested dialogs, and the task layout/draft/restart test passes. Independent review also caught a late last-shell close callback that could target a newly selected task; unmount now invalidates that callback. Both fixes were rechecked. The narrow-window provider notice was corrected and recaptured.
+
+The visible `openai-codex/gpt-5.6-sol` conversation proof passed all ten checkpoints in `run-Kbam6L`: send/stream, reading and typing during output, completion, switching during a tool run, real tool output/file creation, Stop, draft isolation, archive/restore, and both conversations after restart. The maintenance proof passed all seven checkpoints in `run-E5XxGQ`, including Skills Try/aliases, pinning while running, thread-list expansion, permanent worktree creation checked against Git, and real queued follow-up/steering. No assertion failures were recorded. The conversation and follow-up traces were opened in the trace viewer and showed no errors; screenshots and the retained tool result were inspected. All four owned Electron processes exited.
+
+The detailed fixture evidence and baseline log are retained under `.artifacts/workbench-redesign/`; the two provider runs are under `.artifacts/verify-pi-gui/`. This proves the built-in workspace foundation in freshly built development Electron. It does not establish Branch/Last turn review, custom Chord frontend hosting, packaged installation, or Windows/Linux behavior.
 
 ## Implementation phases and release gates
 
