@@ -4,6 +4,7 @@ import { expect, test, type Page } from "@playwright/test";
 import {
   createNamedThread,
   launchDesktop,
+  selectSidePanel,
   makeUserDataDir,
   makeWorkspace,
 } from "../helpers/electron-app";
@@ -46,7 +47,7 @@ test("Files workbench puts the explorer to the right of an open file pane", asyn
   try {
     const window = await harness.firstWindow();
     await createNamedThread(window, "Plain folder files");
-    await window.locator(".topbar__actions").getByLabel("Toggle files").click();
+    await selectSidePanel(window, "Files");
 
     const workbench = window.getByTestId("file-workbench");
     await expect(workbench).toBeVisible();
@@ -108,7 +109,7 @@ test("Files explorer drops the previous workspace tree after a folder switch", a
     await createNamedThread(window, "Alpha files", { workspaceName: "alpha-files-workspace" });
     await createNamedThread(window, "Bravo files", { workspaceName: "bravo-files-workspace" });
     await window.locator(".session-row__select", { hasText: "Alpha files" }).click();
-    await window.locator(".topbar__actions").getByLabel("Toggle files").click();
+    await selectSidePanel(window, "Files");
     const tree = window.getByTestId("file-workbench-tree");
     await expect(
       tree.locator('.file-workbench__tree-row--file[data-file-path="alpha-only.md"]'),
@@ -120,7 +121,7 @@ test("Files explorer drops the previous workspace tree after a folder switch", a
     await window.locator(".session-row__select", { hasText: "Bravo files" }).click();
     const workbench = window.getByTestId("file-workbench");
     if ((await workbench.count()) === 0) {
-      await window.locator(".topbar__actions").getByLabel("Toggle files").click();
+      await selectSidePanel(window, "Files");
     }
     await expect(workbench).toBeVisible();
     await expect(

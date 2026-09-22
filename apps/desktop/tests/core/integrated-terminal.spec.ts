@@ -8,6 +8,7 @@ import {
   makeUserDataDir,
   makeWorkspace,
   selectSession,
+  selectSidePanel,
   TINY_PNG_BASE64,
   waitForWorkspaceByPath,
 } from "../helpers/electron-app";
@@ -27,12 +28,10 @@ test("opens a workspace terminal with persistent output, tabs, and takeover cont
     await waitForWorkspaceByPath(window, workspacePath);
     await createNamedThread(window, "Terminal host thread");
 
-    await window.getByLabel("Toggle terminal").hover();
-    const terminalTooltip = window.locator(".topbar__tooltip", { hasText: "Toggle terminal" });
-    await expect(terminalTooltip).toContainText("Toggle terminal");
-    await expect(terminalTooltip.locator("kbd")).toHaveText(/⌘J|Ctrl\+J/);
-
-    await window.getByLabel("Toggle terminal").click();
+    await window.getByRole("button", { name: "Open side panel" }).click();
+    const terminalItem = window.getByRole("menuitem", { name: /^Terminal/ });
+    await expect(terminalItem.locator("kbd")).toHaveText(/⌘J|Ctrl\+J/);
+    await terminalItem.click();
     const terminal = window.getByTestId("integrated-terminal");
     await expect(terminal).toBeVisible();
     await expect(window.getByTestId("terminal-tab")).toHaveCount(1);
@@ -156,7 +155,7 @@ test("pastes clipboard text into the integrated terminal once", async () => {
     await waitForWorkspaceByPath(window, workspacePath);
     await createNamedThread(window, "Terminal paste thread");
 
-    await window.getByLabel("Toggle terminal").click();
+    await selectSidePanel(window, "Terminal");
     const terminal = window.getByTestId("integrated-terminal");
     await expect(terminal).toBeVisible();
     await terminal.locator(".xterm").click();
@@ -197,7 +196,7 @@ test("writes an oversized terminal paste in chunks instead of dropping it", asyn
     await waitForWorkspaceByPath(window, workspacePath);
     await createNamedThread(window, "Terminal large paste thread");
 
-    await window.getByLabel("Toggle terminal").click();
+    await selectSidePanel(window, "Terminal");
     const terminal = window.getByTestId("integrated-terminal");
     await expect(terminal).toBeVisible();
     await terminal.locator(".xterm").click();

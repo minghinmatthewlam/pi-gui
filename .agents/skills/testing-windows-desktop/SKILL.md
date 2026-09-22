@@ -19,9 +19,9 @@ description: End-to-end test the pi-gui Electron desktop app on Windows. Use whe
 
 ## Integrated terminal (node-pty / ConPTY) — IMPORTANT gotcha
 
-- The top-bar terminal toggle is `disabled` until there is an **active session**: `terminalAvailable={Boolean(selectedSessionKey)}` in `apps/desktop/src/App.tsx`.
+- The Terminal item in the Open side panel menu is disabled until there is an **active session**: `terminalAvailable={Boolean(selectedSessionKey)}` in `apps/desktop/src/app/App.tsx`.
 - Creating a session through the live UI requires a **connected provider/model**. Without provider credentials you CANNOT reach the terminal via the GUI ("No models available" blocks send).
-- Workaround that needs no credentials: run a **headless Playwright spec in background test mode**. Use helpers from `apps/desktop/tests/helpers/electron-app.ts`: `launchDesktop(userDataDir, { initialWorkspaces, testMode: "background" })` -> `createNamedThread(window, ...)` -> click `Toggle terminal` -> type a command -> assert `.xterm-rows` text.
+- Workaround that needs no credentials: run a **headless Playwright spec in background test mode**. Use helpers from `apps/desktop/tests/helpers/electron-app.ts`: `launchDesktop(userDataDir, { initialWorkspaces, testMode: "background" })` -> `createNamedThread(window, ...)` -> open Terminal from the Open side panel menu (or press Ctrl+J) -> type a command -> assert `.xterm-rows` text.
 - Use a **cross-platform command**: `echo <marker>` works in both `cmd.exe` (Windows default shell via `defaultShellForPlatform()`) and POSIX shells. The existing `tests/core/integrated-terminal.spec.ts` uses `printf`/`pwd`, which do NOT exist in `cmd.exe` — that lane runs on macOS CI only, so don't expect it to pass as-is on Windows.
 - Run a single spec: `pnpm --filter @pi-gui/desktop run test:e2e:runner -- apps/desktop/tests/core/<spec>.spec.ts`. Delete any temporary spec you add after the run.
 
@@ -29,10 +29,6 @@ description: End-to-end test the pi-gui Electron desktop app on Windows. Use whe
 
 - "Open first folder" opens the real Windows folder dialog (itself a Windows-compat proof).
 - Computer-use `type` action may DROP uppercase letters and `:` in the dialog's path field (e.g. `C:\Users\Administrator` becomes `\sers\dministrator`). Workaround: put the path on the clipboard (`Set-Clipboard -Value "<path>"`) and `Ctrl+V` into the Folder field, then Select Folder.
-
-## Known preexisting failures (verify against base before blaming your change)
-
-- `tests/core/context-rail.spec.ts` asserts `transcript.clientWidth === 768` but may render `761` (scrollbar/runner rendering). This has reproduced on `origin/main` and macOS CI. If you see it, confirm it exists on the base branch — it is likely NOT caused by your change.
 
 ## Cosmetic (not functional) macOS-centric labels on Windows
 

@@ -1554,6 +1554,17 @@ export async function selectSession(window: Page, sessionTitle: string): Promise
   await expect(window.locator(".topbar__session")).toHaveText(sessionTitle);
 }
 
+export async function selectSidePanel(
+  window: Page,
+  choice: "Files" | "Changes" | "Terminal",
+): Promise<void> {
+  await window.getByRole("button", { name: "Open side panel" }).click();
+  const menu = window.getByTestId("side-panel-picker-menu");
+  await expect(menu).toBeVisible();
+  await menu.getByRole("menuitem", { name: new RegExp(`^${choice}`) }).click();
+  await expect(menu).toHaveCount(0);
+}
+
 export async function clickSession(window: Page, sessionTitle: string): Promise<void> {
   await window.locator(".session-row__select", { hasText: sessionTitle }).click();
 }

@@ -44,7 +44,7 @@ Packaged-app launch, native dialogs/clipboard, model/account onboarding, attachm
 
 - `run-DlCXRS`: visible real `openai-codex/gpt-5.6-luna` conversation proof passed with the new viewport owner. While Stop run was visible, wheel input moved away from the bottom, assistant text continued growing, and reading position stayed within 2 CSS pixels. Jump returned to the bottom. Streaming, switch-during-run, tool, Stop, draft isolation, archive/restore, and both conversations after restart passed. `scroll-frames.json`: 181 intervals, p95 9.1 ms, max 9.3 ms, none above 33 ms. This is a short diagnostic sample, not a general performance guarantee or native trackpad proof. Owned processes closed.
 - `run-mm4hik`: preceding recipe attempt produced only 380 px of overflow against a 500 px fixture requirement; it failed before scroll proof. The recipe now requests 120 longer lines and waits for 300 px of overflow while still running. Retain the failed run.
-- Focused Core coverage is `timeline-pinning.spec.ts`, `context-rail.spec.ts`, and `timeline-viewport.spec.ts`. The latter covers windowed long messages, click/downward-wheel intent, search navigation, a growing 700-line code row, and layout clamping. Its frame timing is diagnostic; correctness assertions are required in Core.
+- Focused Core coverage is `timeline-pinning.spec.ts`, `context-rail.spec.ts` (turn timing markers), and `timeline-viewport.spec.ts`. The latter covers windowed long messages, click/downward-wheel intent, search navigation, a growing 700-line code row, and layout clamping. Its frame timing is diagnostic; correctness assertions are required in Core.
 
 ## Earlier observed proof (2026-09-18)
 

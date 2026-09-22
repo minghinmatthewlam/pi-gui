@@ -96,7 +96,7 @@ Report evidence at its actual level: static/type checks, unit tests, fixture-bac
 `use-timeline-viewport.ts` owns the conversation's scroll intent, active-session measurements,
 visible range, saved reading anchors, and programmatic scroll writes. `timeline-layout.ts`
 contains pure offset/anchor calculations. The timeline renders that range and reports sizes;
-search and the prompt rail request navigation through the owner. The timeline-owner guard
+search requests navigation through the owner. The timeline-owner guard
 rejects direct scroll writes in these consumers.
 
 Streaming publication is batched at 50 ms per session while the store applies every event
@@ -106,8 +106,8 @@ last size provisionally until measured again, avoiding a one-frame jump to an es
 Long messages and attachments do not disable virtualization. Search explicitly mounts the
 same row renderer's full range; its bar sits outside the scroll pane.
 
-Use the Core `timeline-pinning`, `timeline-viewport`, and `context-rail` specs for position
-contracts. The viewport spec records frame intervals during a 700-line growing response;
+Use the Core `timeline-pinning` and `timeline-viewport` specs for position
+contracts. `context-rail` covers turn timing markers. The viewport spec records frame intervals during a 700-line growing response;
 timing is diagnostic, not a shared-runner CI threshold. The real-provider verification recipe
 also checks reading during active streaming and retains `scroll-frames.json`. Row anchors
 preserve offsets; they do not preserve the exact word after reflow within a large message.

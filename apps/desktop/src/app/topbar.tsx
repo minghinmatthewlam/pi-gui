@@ -1,12 +1,11 @@
-import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
+import type { MouseEvent as ReactMouseEvent } from "react";
 import type {
   AppView,
   SessionRecord,
   WorkspaceRecord,
   WorktreeRecord,
 } from "../../contracts/desktop-state";
-import { DiffIcon, FileIcon, PromptRailIcon, TerminalIcon } from "../ui/icons";
-import { getDesktopShortcutLabel, type PiDesktopApi } from "../../contracts/ipc";
+import type { PiDesktopApi } from "../../contracts/ipc";
 import type { WorkspaceMenuState } from "../features/threads/hooks/use-workspace-menu";
 import { SidePanelPicker, type SidePanelPickerChoice } from "./side-panel-picker";
 
@@ -23,15 +22,10 @@ interface TopbarProps {
   readonly api: PiDesktopApi;
   readonly terminalAvailable: boolean;
   readonly terminalVisible: boolean;
-  readonly onToggleTerminal: () => void;
   readonly panelAvailable: boolean;
   readonly changesVisible: boolean;
-  readonly onToggleChanges: () => void;
   readonly filesVisible: boolean;
-  readonly onToggleFiles: () => void;
   readonly onSelectSidePanel: (choice: SidePanelPickerChoice) => void;
-  readonly promptRailVisible: boolean;
-  readonly onTogglePromptRail: () => void;
 }
 
 export function Topbar(props: TopbarProps) {
@@ -48,18 +42,11 @@ export function Topbar(props: TopbarProps) {
     api,
     terminalAvailable,
     terminalVisible,
-    onToggleTerminal,
     panelAvailable,
     changesVisible,
-    onToggleChanges,
     filesVisible,
-    onToggleFiles,
     onSelectSidePanel,
-    promptRailVisible,
-    onTogglePromptRail,
   } = props;
-  const terminalShortcut = getDesktopShortcutLabel(api.platform, "J");
-  const diffShortcut = getDesktopShortcutLabel(api.platform, "D");
 
   const handleDoubleClick = (event: ReactMouseEvent<HTMLElement>) => {
     const target = event.target;
@@ -160,72 +147,7 @@ export function Topbar(props: TopbarProps) {
           terminalVisible={terminalVisible}
           onSelect={onSelectSidePanel}
         />
-        <TopbarActionButton
-          active={terminalVisible}
-          disabled={!terminalAvailable}
-          icon={<TerminalIcon />}
-          label="Toggle terminal"
-          shortcut={terminalShortcut}
-          onClick={onToggleTerminal}
-        />
-        <TopbarActionButton
-          active={changesVisible}
-          disabled={!panelAvailable}
-          icon={<DiffIcon />}
-          label="Toggle changes"
-          shortcut={diffShortcut}
-          onClick={onToggleChanges}
-        />
-        <TopbarActionButton
-          active={filesVisible}
-          disabled={!panelAvailable}
-          icon={<FileIcon />}
-          label="Toggle files"
-          onClick={onToggleFiles}
-        />
-        <TopbarActionButton
-          active={promptRailVisible}
-          icon={<PromptRailIcon />}
-          label={promptRailVisible ? "Hide prompt navigation" : "Show prompt navigation"}
-          onClick={onTogglePromptRail}
-        />
       </div>
     </header>
-  );
-}
-
-interface TopbarActionButtonProps {
-  readonly label: string;
-  readonly icon: ReactNode;
-  readonly active?: boolean;
-  readonly disabled?: boolean;
-  readonly shortcut?: string;
-  readonly onClick: () => void;
-}
-
-function TopbarActionButton({
-  label,
-  icon,
-  active = false,
-  disabled = false,
-  shortcut,
-  onClick,
-}: TopbarActionButtonProps) {
-  return (
-    <div className="shortcut-tooltip-wrap topbar__tooltip-wrap">
-      <button
-        aria-label={label}
-        className={`icon-button topbar__icon ${active ? "icon-button--active" : ""}`}
-        type="button"
-        disabled={disabled}
-        onClick={onClick}
-      >
-        {icon}
-      </button>
-      <span className="shortcut-tooltip topbar__tooltip" role="tooltip">
-        <span>{label}</span>
-        {shortcut ? <kbd>{shortcut}</kbd> : null}
-      </span>
-    </div>
   );
 }

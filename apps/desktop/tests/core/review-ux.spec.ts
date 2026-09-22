@@ -9,6 +9,7 @@ import {
   commitAllInGitRepo,
   createNamedThread,
   desktopShortcut,
+  selectSidePanel,
   emitTestSessionEvent,
   getDesktopState,
   initGitRepo,
@@ -185,7 +186,7 @@ test("Files mode shows a file browser and reader instead of the changes reviewer
       .click();
     await expect(diffPanel.locator(".diff-inline")).toBeVisible();
 
-    await window.locator(".topbar__actions").getByLabel("Toggle files").click();
+    await selectSidePanel(window, "Files");
     const workbench = window.getByTestId("file-workbench");
     await expect(workbench).toBeVisible();
     await expect(window.locator(".diff-panel")).toHaveCount(0);

@@ -44,6 +44,14 @@ test("toggles the last side panel and switches from a vertical menu", async () =
     const window = await harness.firstWindow();
     await createNamedThread(window, "Picker thread");
 
+    const topbarActions = window.locator(".topbar__actions");
+    await expect(topbarActions.locator(".topbar__icon")).toHaveCount(1);
+    await expect(topbarActions.getByLabel("Open side panel")).toBeVisible();
+    await expect(topbarActions.getByLabel("Toggle terminal")).toHaveCount(0);
+    await expect(topbarActions.getByLabel("Toggle changes")).toHaveCount(0);
+    await expect(topbarActions.getByLabel("Toggle files")).toHaveCount(0);
+    await expect(topbarActions.getByLabel(/prompt navigation/i)).toHaveCount(0);
+
     const files = window.getByTestId("file-workbench");
     const changes = window.locator(".diff-panel");
     const terminal = window.getByTestId("integrated-terminal");
@@ -78,8 +86,11 @@ test("toggles the last side panel and switches from a vertical menu", async () =
     const items = menu.getByRole("menuitem");
     await expect(items).toHaveCount(3);
     await expect(items.nth(0)).toContainText("Files");
+    await expect(items.nth(0).locator("kbd")).toHaveCount(0);
     await expect(items.nth(1)).toContainText("Changes");
+    await expect(items.nth(1).locator("kbd")).toHaveText(/⌘D|Ctrl\+D/);
     await expect(items.nth(2)).toContainText("Terminal");
+    await expect(items.nth(2).locator("kbd")).toHaveText(/⌘J|Ctrl\+J/);
     await expect(menu).not.toContainText(/Review|Browser|Side chat/);
     const boxes = await itemBoxes(menu);
     expect(boxes).toHaveLength(3);

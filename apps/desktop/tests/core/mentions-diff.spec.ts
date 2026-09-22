@@ -84,12 +84,12 @@ test("toggles the diff panel from the keyboard shortcut and renders changed file
     await createNamedThread(window, "Diff test");
 
     const topbarActions = window.locator(".topbar__actions");
-    await expect(topbarActions.locator(".topbar__icon")).toHaveCount(5);
+    await expect(topbarActions.locator(".topbar__icon")).toHaveCount(1);
     await expect(topbarActions.getByLabel("Open side panel")).toBeVisible();
-    await expect(topbarActions.getByLabel("Toggle terminal")).toBeVisible();
-    await expect(topbarActions.getByLabel("Toggle changes")).toBeVisible();
-    await expect(topbarActions.getByLabel("Toggle files")).toBeVisible();
-    await expect(topbarActions.getByLabel(/prompt navigation/i)).toBeVisible();
+    await expect(topbarActions.getByLabel("Toggle terminal")).toHaveCount(0);
+    await expect(topbarActions.getByLabel("Toggle changes")).toHaveCount(0);
+    await expect(topbarActions.getByLabel("Toggle files")).toHaveCount(0);
+    await expect(topbarActions.getByLabel(/prompt navigation/i)).toHaveCount(0);
     await expect(topbarActions.getByLabel(/Evidence|Workbench|Open folder/i)).toHaveCount(0);
 
     const diffPanel = window.locator(".diff-panel");

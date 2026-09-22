@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import {
   createNamedThread,
   launchDesktop,
+  selectSidePanel,
   makeUserDataDir,
   makeWorkspace,
   waitForWorkspaceByPath,
@@ -45,11 +46,11 @@ test("keeps Changes visible when the integrated terminal is open and maximized",
     await waitForWorkspaceByPath(window, workspacePath);
     await createNamedThread(window, "Terminal and Changes layout");
 
-    await window.getByLabel("Toggle changes").click();
+    await selectSidePanel(window, "Changes");
     const diffPanel = window.locator(".diff-panel");
     await expect(diffPanel.locator(".diff-panel__title")).toContainText("Changes");
 
-    await window.getByLabel("Toggle terminal").click();
+    await selectSidePanel(window, "Terminal");
     await expectTerminalAndChangesSplit(window);
 
     const beforeTakeover = await window.getByTestId("integrated-terminal").boundingBox();

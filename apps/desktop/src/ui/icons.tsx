@@ -573,29 +573,6 @@ export function GripIcon() {
   );
 }
 
-export function PromptRailIcon() {
-  return (
-    <Icon>
-      <rect
-        x="3.4"
-        y="4.1"
-        width="13.2"
-        height="11.8"
-        rx="2.2"
-        stroke="currentColor"
-        strokeWidth="1.35"
-      />
-      <path d="M12.6 4.2v11.6" stroke="currentColor" strokeWidth="1.35" />
-      <path
-        d="M13.75 7.4h1.55M13.75 10h1.55M13.75 12.6h1.55"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeWidth="1.2"
-      />
-    </Icon>
-  );
-}
-
 export function DiffIcon() {
   return (
     <Icon>

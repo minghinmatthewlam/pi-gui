@@ -343,15 +343,6 @@ export function useTimelineViewport({
     model.current.userIntent = 0;
     schedule();
   }, [schedule]);
-  const navigateToRow = useCallback(
-    (id: string) => {
-      model.current.state = { kind: "reading", anchor: { rowId: id, offsetWithinRow: -16 } };
-      model.current.pendingNavigation = true;
-      model.current.userIntent = 0;
-      schedule();
-    },
-    [schedule],
-  );
   const navigateToElement = useCallback(
     (element: HTMLElement) => {
       const pane = paneRef.current;
@@ -378,7 +369,6 @@ export function useTimelineViewport({
     measureRow,
     savePosition,
     jumpToLatest,
-    navigateToRow,
     navigateToElement,
     setSearchMode,
   };

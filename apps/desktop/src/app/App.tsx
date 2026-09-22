@@ -53,10 +53,6 @@ import {
   type ScheduledEditorState,
 } from "../features/scheduled-tasks/scheduled-task-editor";
 import { ScheduledTaskChip } from "../features/scheduled-tasks/scheduled-task-chip";
-import {
-  loadPromptRailVisible,
-  savePromptRailVisible,
-} from "../features/conversation/prompt-rail-store";
 import { useSlashMenu } from "../features/conversation/hooks/use-slash-menu";
 import { useMentionMenu } from "../features/conversation/hooks/use-mention-menu";
 import { useThreadSearch } from "../features/conversation/hooks/use-thread-search";
@@ -99,7 +95,6 @@ export default function App() {
   const [terminalHeight, setTerminalHeight] = useState(340);
   const [diffFileRequest, setDiffFileRequest] = useState<DiffPanelFileRequest | null>(null);
   const [fileTabs, setFileTabs] = useState<FileWorkbenchTabs>(EMPTY_FILE_TABS);
-  const [promptRailVisible, setPromptRailVisible] = useState(loadPromptRailVisible);
   const [scheduledEditor, setScheduledEditor] = useState<ScheduledEditorState | null>(null);
   const [threadMenuOpen, setThreadMenuOpen] = useState(false);
   const api = window.piApp;
@@ -384,18 +379,6 @@ export default function App() {
   const toggleChangesPanel = useCallback(() => {
     toggleSidePanelMode("changes");
   }, [toggleSidePanelMode]);
-
-  const toggleFilesPanel = useCallback(() => {
-    toggleSidePanelMode("files");
-  }, [toggleSidePanelMode]);
-
-  const togglePromptRail = useCallback(() => {
-    setPromptRailVisible((current) => {
-      const next = !current;
-      savePromptRailVisible(next);
-      return next;
-    });
-  }, []);
 
   const openSettings = (workspaceId?: string, section?: SettingsSection) => {
     if (!api) {
@@ -1014,15 +997,10 @@ export default function App() {
           api={api}
           terminalAvailable={Boolean(selectedSessionKey)}
           terminalVisible={isTerminalVisibleForSelectedThread}
-          onToggleTerminal={toggleTerminal}
           panelAvailable={sidePanelAvailable}
           changesVisible={sidePanelMode === "changes"}
-          onToggleChanges={toggleChangesPanel}
           filesVisible={sidePanelMode === "files"}
-          onToggleFiles={toggleFilesPanel}
           onSelectSidePanel={selectSidePanel}
-          promptRailVisible={promptRailVisible}
-          onTogglePromptRail={togglePromptRail}
         />
 
         {snapshot.startupDiagnostics.length > 0 ? (
@@ -1218,7 +1196,6 @@ export default function App() {
                       onForkFromMessage={
                         selectedSession.status === "running" ? undefined : openForkModal
                       }
-                      promptRailVisible={promptRailVisible}
                       scheduledOrigins={scheduledOrigins}
                     />
                   </div>

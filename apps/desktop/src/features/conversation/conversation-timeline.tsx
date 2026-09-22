@@ -34,7 +34,6 @@ interface ConversationTimelineProps {
   readonly threadSearch: ThreadSearchModel;
   readonly onViewFileInDiff?: (path: string) => void;
   readonly onForkFromMessage?: (messageIndex: number, preview?: string) => void;
-  readonly promptRailVisible?: boolean;
   readonly scheduledOrigins?: ReadonlyMap<string, ScheduledTaskOrigin>;
 }
 export function ConversationTimeline({
@@ -46,7 +45,6 @@ export function ConversationTimeline({
   threadSearch,
   onViewFileInDiff,
   onForkFromMessage,
-  promptRailVisible = true,
   scheduledOrigins,
 }: ConversationTimelineProps) {
   const [expandedToolCallIds, setExpandedToolCallIds] = useState<Set<string>>(() => new Set());
@@ -74,18 +72,6 @@ export function ConversationTimeline({
     let index = 0;
     for (const item of transcript) if (item.kind === "message") indices.set(item.id, index++);
     return indices;
-  }, [transcript]);
-  const userPrompts = useMemo(() => {
-    const prompts: UserPromptEntry[] = [];
-    for (const item of transcript)
-      if (item.kind === "message" && item.role === "user") {
-        prompts.push({
-          id: item.id,
-          turnNumber: prompts.length + 1,
-          preview: buildPromptPreview(item.text),
-        });
-      }
-    return prompts;
   }, [transcript]);
   return (
     <div className="timeline-surface">
@@ -161,60 +147,8 @@ export function ConversationTimeline({
           ) : null}
         </div>
       </div>
-      {promptRailVisible && !isTranscriptLoading && !transcriptFailed && userPrompts.length > 1 ? (
-        <TimelineContextRail prompts={userPrompts} onSelect={viewport.navigateToRow} />
-      ) : null}
     </div>
   );
-}
-
-interface UserPromptEntry {
-  readonly id: string;
-  readonly turnNumber: number;
-  readonly preview: string;
-}
-
-function TimelineContextRail({
-  prompts,
-  onSelect,
-}: {
-  readonly prompts: readonly UserPromptEntry[];
-  readonly onSelect: (messageId: string) => void;
-}) {
-  return (
-    <nav
-      className="timeline-context-rail"
-      data-testid="timeline-context-rail"
-      aria-label="Prompts in this thread"
-    >
-      <div className="timeline-context-rail__title">Prompts</div>
-      <ol className="timeline-context-rail__list">
-        {prompts.map((prompt) => (
-          <li key={prompt.id}>
-            <button
-              type="button"
-              className="timeline-context-rail__item"
-              data-testid="timeline-context-rail-item"
-              title={prompt.preview}
-              onClick={() => onSelect(prompt.id)}
-            >
-              <span className="timeline-context-rail__index">{prompt.turnNumber}</span>
-              <span className="timeline-context-rail__text">{prompt.preview}</span>
-            </button>
-          </li>
-        ))}
-      </ol>
-    </nav>
-  );
-}
-
-function buildPromptPreview(text: string): string {
-  const firstLine =
-    text
-      .split("\n")
-      .map((line) => line.trim())
-      .find((line) => line.length > 0) ?? "";
-  return firstLine.length > 80 ? `${firstLine.slice(0, 80)}…` : firstLine || "Prompt";
 }
 
 function TranscriptSkeleton() {

@@ -87,9 +87,6 @@
   min-height: 0;
   min-width: 0;
   flex-direction: column;
-  /* Preserve the 768px transcript measure beside the prompt rail when macOS
-   * uses classic 15px scrollbars instead of overlay scrollbars. */
-  width: min(927px, 100%);
 }
 
 .conversation--composer {

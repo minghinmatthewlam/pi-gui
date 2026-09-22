@@ -47,20 +47,13 @@
   scroll-behavior: auto;
 }
 
-/* Row wrapper holding the scrolling transcript and the right context rail. It
- * takes over the vertical flex growth the pane used to own, so the pane keeps
- * its own bounded height + internal scroll while the rail sits beside it. */
+/* Row wrapper for the scrolling transcript. It takes the vertical flex growth
+ * the pane used to own, so the pane keeps its bounded height and internal scroll. */
 .timeline-surface {
   display: flex;
   flex: 1 1 auto;
   min-height: 0;
   min-width: 0;
-  gap: 12px;
-  /* Track the reading area's own width so the rail can drop out before it would
-   * squeeze the transcript below its 768px measure, independent of viewport or
-   * sidebar width. */
-  container-type: inline-size;
-  container-name: timeline-surface;
 }
 
 .timeline-pane--thread {
@@ -68,83 +61,6 @@
   min-height: 0;
   min-width: 0;
   max-height: none;
-}
-
-.timeline-context-rail {
-  flex: 0 0 auto;
-  width: 132px;
-  align-self: stretch;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 4px 0 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  border-left: 1px solid var(--line);
-  padding-left: 16px;
-}
-
-.timeline-context-rail__title {
-  color: var(--muted-soft);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  padding: 4px 0;
-}
-
-.timeline-context-rail__list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.timeline-context-rail__item {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  width: 100%;
-  padding: 5px 8px;
-  border: none;
-  border-radius: var(--radius-md);
-  background: transparent;
-  color: var(--muted-strong);
-  font: inherit;
-  font-size: 12px;
-  line-height: 1.4;
-  text-align: left;
-  cursor: pointer;
-}
-
-.timeline-context-rail__item:hover {
-  background: var(--surface-muted);
-  color: var(--ink);
-}
-
-.timeline-context-rail__index {
-  flex-shrink: 0;
-  color: var(--muted-soft);
-  font-variant-numeric: tabular-nums;
-  font-size: 11px;
-}
-
-.timeline-context-rail__text {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* The rail lives in the outer margin beside the reading column. It only earns
- * its space once the surface can hold the 768px measure, a classic 15px macOS
- * scrollbar, the 12px gap, and the 132px rail (927px total). */
-@container timeline-surface (max-width: 926px) {
-  .timeline-context-rail {
-    display: none;
-  }
 }
 
 .timeline-empty {
