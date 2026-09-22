@@ -81,6 +81,7 @@ export function useThreadSwitcher(options: UseThreadSwitcherOptions) {
 
     // Capture phase, so the composer, dialogs and the terminal never see the Tab.
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.isComposing) return;
       const current = stateRef.current;
       const isSwitchChord = event.key === "Tab" && event.ctrlKey && !event.metaKey && !event.altKey;
       if (isSwitchChord) {
@@ -89,7 +90,9 @@ export function useThreadSwitcher(options: UseThreadSwitcherOptions) {
           step(current, event.shiftKey ? -1 : 1);
           return;
         }
+        // Leave modal dialogs and single-line fields (thread rename) alone.
         if (document.querySelector("[aria-modal='true']")) return;
+        if (event.target instanceof HTMLInputElement) return;
         if (open(event.shiftKey)) swallow(event);
         return;
       }
@@ -116,10 +119,17 @@ export function useThreadSwitcher(options: UseThreadSwitcherOptions) {
       }
     };
 
+    // A missed Control keyup (a native popup took it) must not leave the list open.
+    const handlePointerDown = (event: PointerEvent) => {
+      if (stateRef.current && !event.ctrlKey) cancel();
+    };
+
     window.addEventListener("keydown", handleKeyDown, true);
     window.addEventListener("keyup", handleKeyUp, true);
+    window.addEventListener("pointerdown", handlePointerDown, true);
     window.addEventListener("blur", cancel);
     return () => {
+      window.removeEventListener("pointerdown", handlePointerDown, true);
       window.removeEventListener("keydown", handleKeyDown, true);
       window.removeEventListener("keyup", handleKeyUp, true);
       window.removeEventListener("blur", cancel);
