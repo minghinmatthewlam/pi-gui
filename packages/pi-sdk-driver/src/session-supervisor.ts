@@ -80,6 +80,7 @@ import {
   deriveSessionConfig,
   deriveWorkspaceTitle,
   determineRunOutcome,
+  displayMessagesFromSession,
   extractPreview,
   injectFileAttachmentPreamble,
   messageText,
@@ -93,6 +94,7 @@ import {
   transcriptFromMessages,
   truncate,
   workspaceToRef,
+  type RunOutcome,
 } from "./session-supervisor-utils.js";
 import { forcePersistPiSession } from "./compat/pi-session-persistence.js";
 import {
@@ -167,6 +169,7 @@ interface ManagedSessionRecord {
   config: SessionConfig | undefined;
   runningRunId: string | undefined;
   cancellationRequested: boolean;
+  pendingRunOutcome: RunOutcome | undefined;
   queuedMessages: SessionQueuedMessage[];
   closed: boolean;
   listeners: Set<SessionEventListener>;
@@ -462,7 +465,10 @@ export class SessionSupervisor {
         record.transcriptDiskMtimeMs = diskMtimeMs;
         return this.readTranscriptFromDisk(sessionRef);
       }
-      return transcriptFromMessages(record.session.messages ?? [], record.updatedAt);
+      return transcriptFromMessages(
+        displayMessagesFromSession(record.session.sessionManager),
+        record.updatedAt,
+      );
     }
     return this.readTranscriptFromDisk(sessionRef);
   }
@@ -481,7 +487,7 @@ export class SessionSupervisor {
 
     const sessionManager = SessionManager.open(sessionFile);
     return transcriptFromMessages(
-      sessionManager.buildSessionContext().messages,
+      displayMessagesFromSession(sessionManager),
       sessionEntry?.updatedAt,
     );
   }
@@ -751,7 +757,11 @@ export class SessionSupervisor {
     }
 
     const branch = sourceManager.getBranch();
-    const selectedEntry = resolveForkSourceEntry(branch, sourceSession.messages ?? [], options);
+    const selectedEntry = resolveForkSourceEntry(
+      branch,
+      displayMessagesFromSession(sourceManager),
+      options,
+    );
     if (!selectedEntry) {
       const selector =
         options.sourceMessageId !== undefined
@@ -1197,6 +1207,7 @@ export class SessionSupervisor {
       config: deriveSessionConfig(session.sessionManager),
       runningRunId: undefined,
       cancellationRequested: false,
+      pendingRunOutcome: undefined,
       queuedMessages: [],
       closed: false,
       listeners: new Set<SessionEventListener>(),
@@ -1429,7 +1440,7 @@ export class SessionSupervisor {
     record: ManagedSessionRecord,
   ): ExtensionCommandContextActions {
     return {
-      waitForIdle: () => this.requireSession(record).agent.waitForIdle(),
+      waitForIdle: () => this.requireSession(record).waitForIdle(),
       newSession: async (options) => {
         const { cancelled } = await this.requireRuntime(record).newSession(options);
         await this.syncRecordAfterSessionMutation(record, { emitUpdate: true });
@@ -1908,10 +1919,8 @@ export class SessionSupervisor {
       ? (record.runningRunId ?? crypto.randomUUID())
       : undefined;
     record.config = deriveSessionConfig(session.sessionManager);
-    record.preview =
-      session.messages.length > 0
-        ? extractPreview(session.messages[session.messages.length - 1])
-        : undefined;
+    const displayMessages = displayMessagesFromSession(session.sessionManager);
+    record.preview = extractPreview(displayMessages.at(-1));
     record.sessionCommands = this.collectSessionCommands(session);
     await this.persistSnapshot(record);
     if (options.emitUpdate) {
@@ -1970,6 +1979,10 @@ export class SessionSupervisor {
 
     switch (event.type) {
       case "agent_start":
+        record.runningRunId ??= crypto.randomUUID();
+        record.pendingRunOutcome = undefined;
+        record.status = "running";
+        return [sessionUpdatedEvent(record)];
       case "turn_start":
         record.status = "running";
         return [sessionUpdatedEvent(record)];
@@ -1995,6 +2008,12 @@ export class SessionSupervisor {
           }
         }
         this.updatePreviewFromMessage(record, event.message);
+        if (event.type === "message_end" && event.message.role === "assistant") {
+          return toDriverEvents(
+            { type: "assistantMessageEnded", sessionRef: record.ref, timestamp },
+            record,
+          );
+        }
         return [sessionUpdatedEvent(record)];
       case "message_update":
         this.updatePreviewFromMessage(record, event.message);
@@ -2053,13 +2072,25 @@ export class SessionSupervisor {
       case "turn_end":
         return [sessionUpdatedEvent(record)];
       case "agent_end": {
-        const outcome = determineRunOutcome(event.messages, record.cancellationRequested);
+        // Pi can retry or continue from agent_before_settle after agent_end.
+        // Keep one desktop run alive until Pi publishes its settled boundary.
+        record.pendingRunOutcome = determineRunOutcome(
+          event.messages,
+          record.cancellationRequested,
+        );
+        return [sessionUpdatedEvent(record)];
+      }
+      case "agent_settled": {
+        const outcome = record.cancellationRequested
+          ? { status: "cancelled" as const }
+          : record.pendingRunOutcome;
+        record.pendingRunOutcome = undefined;
         record.cancellationRequested = false;
         const runId = record.runningRunId;
         record.runningRunId = undefined;
-        record.status = outcome.status === "failed" ? "failed" : "idle";
+        record.status = outcome?.status === "failed" ? "failed" : "idle";
         record.updatedAt = timestamp;
-        if (outcome.status === "failed") {
+        if (outcome?.status === "failed") {
           record.preview = outcome.error.message;
         }
         if (record.session) {
@@ -2068,7 +2099,7 @@ export class SessionSupervisor {
 
         // User cancellation is neither successful completion nor a runtime
         // failure. Publish idle without triggering completion/failure consumers.
-        if (outcome.status === "cancelled") return [sessionUpdatedEvent(record)];
+        if (!outcome || outcome.status === "cancelled") return [sessionUpdatedEvent(record)];
 
         return toDriverEvents(
           outcome.status === "completed"
@@ -2627,6 +2658,10 @@ function treeNodeTitle(entry: SessionTreeNodeRecord["entry"]): string {
       return "Label";
     case "session_info":
       return "Title";
+    case "context_edit":
+      return "Context edit";
+    case "usage":
+      return "Usage";
   }
   return "Entry";
 }
@@ -2654,6 +2689,10 @@ function treeNodePreview(
       return entry.label ?? "(cleared)";
     case "session_info":
       return entry.name || "(empty)";
+    case "context_edit":
+      return `${entry.replacement === null ? "Omit" : "Replace"} ${entry.targetId} in model context`;
+    case "usage":
+      return entry.note ?? `${entry.kind}: ${entry.provider}:${entry.model}`;
     default:
       return undefined;
   }

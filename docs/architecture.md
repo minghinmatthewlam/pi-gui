@@ -43,7 +43,7 @@ Workspace sync, rename, and removal share a per-workspace mutation queue. The qu
 
 `packages/session-driver` owns portable session contracts, `packages/catalogs` owns catalog contracts and backends, and `packages/pi-sdk-driver` adapts them to upstream Pi. Packages cannot depend on desktop implementation, and catalog code cannot depend back on the Pi adapter. [The host-boundary guard](../scripts/check-host-boundary.mjs) resolves imports, including type-only and dynamic edges, to enforce these directions.
 
-The Pi adapter stays thin over upstream behavior. Required access to private Pi 0.85.1 APIs is isolated in explicit compatibility seams under [`packages/pi-sdk-driver/src/compat`](../packages/pi-sdk-driver/src/compat): one forces the early session-file rewrite while maintaining Pi's flush bookkeeping, and one persists project-scoped settings. An upstream shape change should fail at these small seams instead of spreading private-runtime assumptions through the driver.
+The Pi adapter stays thin over upstream behavior. Required access to private Pi 0.87.0 APIs is isolated in explicit compatibility seams under [`packages/pi-sdk-driver/src/compat`](../packages/pi-sdk-driver/src/compat): one forces the early session-file rewrite while maintaining Pi's flush bookkeeping, and one persists project-scoped settings. An upstream shape change should fail at these small seams instead of spreading private-runtime assumptions through the driver.
 
 Do not redeclare package-owned interfaces in ambient vendor files. Validate external data at the package or persistence boundary, then use the trusted contract internally.
 

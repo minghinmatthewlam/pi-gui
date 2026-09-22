@@ -67,6 +67,8 @@ export type SessionTreeNodeKind =
   | "message"
   | "thinking_level_change"
   | "model_change"
+  | "usage"
+  | "context_edit"
   | "compaction"
   | "branch_summary"
   | "custom"
@@ -167,6 +169,11 @@ export interface SessionUpdatedEvent extends SessionEventBase {
 export interface AssistantDeltaEvent extends SessionEventBase {
   readonly type: "assistantDelta";
   readonly text: string;
+}
+
+/** Finalizes one assistant message while the containing run may continue. */
+export interface AssistantMessageEndedEvent extends SessionEventBase {
+  readonly type: "assistantMessageEnded";
 }
 
 export interface QueuedMessageStartedEvent extends SessionEventBase {
@@ -317,6 +324,7 @@ export type SessionDriverEvent =
   | SessionOpenedEvent
   | SessionUpdatedEvent
   | AssistantDeltaEvent
+  | AssistantMessageEndedEvent
   | QueuedMessageStartedEvent
   | ToolStartedEvent
   | ToolUpdatedEvent

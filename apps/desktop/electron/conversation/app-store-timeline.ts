@@ -157,6 +157,9 @@ export function applyTimelineEvent(
   const currentMetrics = state.runMetricsBySession.get(key);
 
   switch (event.type) {
+    case "assistantMessageEnded":
+      clearActiveAssistantMessage(state.activeAssistantMessageBySession, event.sessionRef);
+      return;
     case "sessionOpened":
       transcript.push(
         makeActivityItem("Resumed session", { metadata: relativeDetail(event.timestamp) }),

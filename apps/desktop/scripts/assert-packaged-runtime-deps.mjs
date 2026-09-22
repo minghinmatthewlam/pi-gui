@@ -1,10 +1,12 @@
 import { execFileSync } from "node:child_process";
 import { constants, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { access } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { fileURLToPath } from "node:url";
+import semver from "semver";
 
 const requiredPackages = [
   // Keep packaging-sensitive runtime transitive deps explicit; electron-builder
@@ -101,7 +103,7 @@ const notificationHelperPath =
     : undefined;
 const pnpmBinary = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 const piCodingAgentPackageName = "@earendil-works/pi-coding-agent";
-const requiredPiCodingAgentVersion = "0.85.1";
+const requiredPiCodingAgentVersion = "0.87.0";
 const modelChecks = [
   ...["luna", "sol", "terra"].map((variant) => ({
     provider: "openai-codex",
@@ -127,7 +129,10 @@ const modelChecks = [
   },
 ];
 const packagedRuntimeImportChecks = [
-  ["@earendil-works", "pi-ai", "dist", "providers", "google.js"],
+  // Import implementations: provider descriptors can defer loading their SDKs.
+  ["@earendil-works", "pi-ai", "dist", "api", "google-generative-ai.js"],
+  ["@earendil-works", "pi-ai", "dist", "api", "anthropic-messages.js"],
+  ["@earendil-works", "pi-ai", "dist", "api", "openai-responses.js"],
   ["@earendil-works", "pi-ai", "dist", "bedrock-provider.js"],
   ["proxy-agent", "dist", "index.js"],
 ];
@@ -150,6 +155,7 @@ try {
   });
 
   verifyRequiredPackages(extractedDir);
+  verifyPiDependencyVersions(extractedDir);
   await verifyPackagedPiRuntime(extractedDir);
   await verifyPackagedRuntimeImports(extractedDir);
   await verifyNativeNodePty(asarPath);
@@ -226,6 +232,46 @@ function verifyRequiredPackages(extractedDir) {
 
   if (missingPackages.length > 0) {
     throw new Error(`Packaged app is missing runtime dependencies: ${missingPackages.join(", ")}`);
+  }
+}
+
+function verifyPiDependencyVersions(extractedDir) {
+  const mismatches = [];
+  // Validate the full required graph using the versions Node would resolve.
+  // Hoisted packaging can include a dependency but lose its required nested version.
+  const pending = [
+    piCodingAgentPackageName,
+    "@earendil-works/pi-agent-core",
+    "@earendil-works/pi-ai",
+    "@earendil-works/pi-tui",
+    "@earendil-works/chord",
+  ].map((packageName) => path.join(extractedDir, "node_modules", packageName, "package.json"));
+  const visited = new Set();
+  while (pending.length > 0) {
+    const packageFile = pending.pop();
+    if (visited.has(packageFile)) continue;
+    visited.add(packageFile);
+    const manifest = JSON.parse(readFileSync(packageFile, "utf8"));
+    const resolveFromPackage = createRequire(packageFile);
+    for (const [dependency, requiredVersion] of Object.entries(manifest.dependencies ?? {})) {
+      const dependencyFile = (resolveFromPackage.resolve.paths(dependency) ?? [])
+        // Never let dependencies installed outside the extracted app hide an omission.
+        .filter((directory) => directory.startsWith(`${extractedDir}${path.sep}`))
+        .map((directory) => path.join(directory, dependency, "package.json"))
+        .find((candidate) => existsSync(candidate));
+      const actualVersion = dependencyFile
+        ? JSON.parse(readFileSync(dependencyFile, "utf8")).version
+        : undefined;
+      if (!actualVersion || !semver.satisfies(actualVersion, requiredVersion)) {
+        mismatches.push(
+          `${path.relative(extractedDir, packageFile)} (${manifest.version}) requires ${dependency}@${requiredVersion}; packaged resolution is ${actualVersion ?? "missing"}`,
+        );
+      }
+      if (dependencyFile) pending.push(dependencyFile);
+    }
+  }
+  if (mismatches.length > 0) {
+    throw new Error(`Packaged Pi dependency versions do not match:\n${mismatches.join("\n")}`);
   }
 }
 

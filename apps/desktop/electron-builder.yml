@@ -10,6 +10,18 @@ directories:
 files:
   - out/**/*
   - package.json
+  # The pnpm collector drops this nested version in the hoisted layout.
+  # Keep retry 0.12 for Pi's lockfile code; other consumers require root 0.13.
+  - from: ../../node_modules/proper-lockfile/node_modules/retry
+    to: node_modules/proper-lockfile/node_modules/retry
+    filter:
+      - "**/*"
+  # The collector nests the newer SSO under Bedrock. Its token provider must
+  # stay below SSO: Bedrock itself pins a different token-provider version.
+  - from: ../../node_modules/@aws-sdk/credential-provider-sso/node_modules/@aws-sdk/token-providers
+    to: node_modules/@aws-sdk/client-bedrock-runtime/node_modules/@aws-sdk/credential-provider-sso/node_modules/@aws-sdk/token-providers
+    filter:
+      - "**/*"
 
 extraResources:
   - from: resources/icon.png

@@ -1,5 +1,9 @@
 import { basename } from "node:path";
-import type { SessionInfo } from "@earendil-works/pi-coding-agent";
+import {
+  sessionEntryToContextMessages,
+  type SessionInfo,
+  type SessionManager,
+} from "@earendil-works/pi-coding-agent";
 import type {
   SessionAttachment,
   SessionConfig,
@@ -290,6 +294,25 @@ export function transcriptFromMessages(
   }
 
   return transcript;
+}
+
+/**
+ * Keep the visible transcript independent from Pi's model-only context edits.
+ * Pi still selects the active branch and compaction range; its public entry
+ * projector supplies the original message and summary content for that range.
+ */
+export function displayMessagesFromSession(
+  sessionManager: Pick<SessionManager, "buildContextEntries">,
+) {
+  return sessionManager.buildContextEntries().flatMap((entry, index) => {
+    // A retained range can contain older compactions. Only the latest one,
+    // which Pi places first, contributes a summary (matching Pi's projection).
+    if (entry.type === "compaction" && index > 0) return [];
+    return sessionEntryToContextMessages(entry).map((message) => ({
+      ...message,
+      id: entry.id,
+    }));
+  });
 }
 
 function messageCreatedAt(message: Record<string, unknown>, fallback: string): string {

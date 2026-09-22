@@ -1,5 +1,6 @@
 export type {
   AssistantDeltaEvent,
+  AssistantMessageEndedEvent,
   CreateSessionOptions,
   ForkPosition,
   ForkSessionOptions,
