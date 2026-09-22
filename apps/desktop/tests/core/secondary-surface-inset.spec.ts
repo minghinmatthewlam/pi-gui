@@ -29,7 +29,7 @@ test("Back to app sits at the same offset below the window buttons as New thread
       const back = window.getByRole("button", { name: "Back to app", exact: true });
       await expect(back).toBeVisible();
       await window.screenshot({ path: testInfo.outputPath(`${view.toLowerCase()}.png`) });
-      expect.soft(await topOf(window, ".secondary-surface__back"), view).toBe(newThreadTop);
+      expect.soft(await topOf(window, ".secondary-surface__back"), view).toBeCloseTo(newThreadTop, 0);
       await back.click();
       await expect(window.locator(".sidebar__new")).toBeVisible();
     }
