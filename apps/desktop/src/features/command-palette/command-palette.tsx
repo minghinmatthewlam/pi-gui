@@ -42,6 +42,8 @@ interface CommandPaletteProps<F extends string> {
   readonly filters?: readonly PaletteFilter<F>[];
   readonly activeFilter?: F;
   readonly onFilterChange?: (filter: F) => void;
+  /** Results still reflect an older query; Enter waits until they catch up. */
+  readonly settling?: boolean;
   /** Backspace on an empty query goes here, for nested lists. */
   readonly onBack?: () => void;
   readonly onClose: () => void;
@@ -57,12 +59,14 @@ export function CommandPalette<F extends string>({
   filters,
   activeFilter,
   onFilterChange,
+  settling = false,
   onBack,
   onClose,
 }: CommandPaletteProps<F>) {
   const listId = useId();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [enterQueued, setEnterQueued] = useState(false);
   const items = sections.flatMap((section) => section.items);
   const activePosition = Math.min(activeIndex, items.length - 1);
   const active = items[activePosition];
@@ -86,6 +90,13 @@ export function CommandPalette<F extends string>({
   useEffect(() => {
     setActiveIndex(0);
   }, [query, activeFilter, label]);
+
+  useEffect(() => {
+    if (enterQueued && !settling) {
+      setEnterQueued(false);
+      active?.run();
+    }
+  }, [active, enterQueued, settling]);
 
   // Keyed on the position, not the item: items are rebuilt on every app render.
   useLayoutEffect(() => {
@@ -123,7 +134,11 @@ export function CommandPalette<F extends string>({
       }
       case "Enter":
         event.preventDefault();
-        active?.run();
+        if (settling) {
+          setEnterQueued(true);
+        } else {
+          active?.run();
+        }
         return;
       case "Escape":
         event.preventDefault();

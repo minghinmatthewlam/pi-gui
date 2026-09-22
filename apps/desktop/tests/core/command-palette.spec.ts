@@ -122,6 +122,13 @@ test("Cmd/Ctrl+K finds chats and actions, Cmd/Ctrl+P opens files", async () => {
     await paletteOptions(window).filter({ hasText: "alpha.ts" }).click();
     await expect(files.locator(".file-editor__tab--active")).toContainText("alpha.ts");
     await expect(files.getByTestId("file-workbench-tab")).toHaveCount(2);
+
+    // Enter pressed before the ranking catches up still opens the typed query's match.
+    await openPalette(window, "P");
+    await window.keyboard.type("beta-n");
+    await window.keyboard.press("Enter");
+    await expect(palette(window)).toHaveCount(0);
+    await expect(files.locator(".file-editor__tab--active")).toContainText("beta-notes.md");
   } finally {
     await harness.close();
   }

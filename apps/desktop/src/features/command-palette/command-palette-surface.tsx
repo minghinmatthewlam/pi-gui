@@ -182,9 +182,11 @@ export function CommandPaletteSurface({
         ? "Loading files…"
         : listing.status === "error"
           ? "Couldn't load files."
-          : query.trim()
-            ? "No matching files."
-            : `Type to search ${(files?.length ?? 0).toLocaleString()} files.`;
+          : query !== fileQuery
+            ? "Searching…"
+            : query.trim()
+              ? "No matching files."
+              : `Type to search ${(files?.length ?? 0).toLocaleString()} files.`;
   } else if (mode === "models") {
     label = "Switch model";
     placeholder = "Switch model";
@@ -230,6 +232,7 @@ export function CommandPaletteSurface({
       placeholder={placeholder}
       query={query}
       sections={sections}
+      settling={mode === "files" && query !== fileQuery}
       onBack={mode === "models" ? () => onModeChange("commands") : undefined}
       onClose={onClose}
       onFilterChange={setFilter}
