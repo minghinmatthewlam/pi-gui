@@ -1,25 +1,25 @@
 # Workspace redesign: implementation design
 
-Status: P0.0–P0.2 implemented and verified, September 22, 2026. The user authorized P0.1/P0.2 after the completed Pi upgrade and Chord evaluation. Grounded in the approved tabbed workspace prototype and installed upstream release `v0.87.0`. Review scopes and the custom extension host remain later phases. The earlier blocks-first/custom service-and-state protocol recommendation is superseded.
+Status: **implemented and verified within the documented macOS scope**, September 22, 2026. P0.0–P0.2 have the historical proof below; P0.3/P0.4 review/capture and P1.1/P1.2 extension views passed the final baseline, Core Electron, real-provider and local packaged-app gates. See the [verification report](workspace-redesign-verification.md) for exact evidence and limits. This is not a published/notarized release or Windows/Linux verification. The approved tabbed prototype and installed Pi/Chord `0.87.0` remain the baseline; the earlier blocks-first protocol proposal is superseded.
 
 ## Recommendation
 
-First upgrade and verify the integration with the latest released Pi Coding Agent, currently 0.87.0. Then reimplement the frontend workspace composition while retaining established desktop owners. Make the conversation the main surface; Files, Changes, Worktrees, Terminal, and optional extension views use one companion workspace with task-local tabs. Keep the runtime upgrade a focused change so compatibility failures can be separated from visual changes.
+The conversation remains the main surface. Files, Changes, Worktrees, Terminal, and optional extension views share one companion workspace with task-local tabs. The Pi 0.87.0 upgrade and built-in workspace foundation preceded review/capture and extension hosting, retaining the established desktop owners.
 
 The composer keeps both model and reasoning level visible. The side-workspace toggle is icon-only, with an accessible name, tooltip, pressed state, and existing keyboard shortcut. Appearance and density stay in Settings. There is no local/cloud picker when only local operation exists.
 
-Use Chord for extension services, state and lifecycle; the installed 0.87.0 APIs passed Node/browser feasibility probes. Pi-gui supplies the desktop view host and a small registration adapter to existing Pi extensions. A fixed blocks schema is no longer the chosen public interface. The [custom frontend design](chord-desktop-extension-design.md) defines the author contract, missing host responsibilities and remaining Electron proof. Its Pi EventBus bootstrap is discovery only, not a second service/state protocol.
+Chord supplies extension services, replicated state and facet lifecycle. Pi-gui supplies the desktop view host and a small registration adapter to existing Pi extensions. Authors provide browser interfaces rather than a fixed blocks schema. The [custom frontend design](chord-desktop-extension-design.md) records the implemented contract, ownership and verification scope. Its Pi EventBus bridge performs discovery only.
 
 ## Baseline behavior before the workspace foundation
 
-| Area         | Verified today                                                                                                                    | Proposed change                                                                                                                   |
-| ------------ | --------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| Shell        | `App.tsx` separately owns Files/Changes mode, document tabs, and terminal visibility. Selection changes clear some of this state. | One workbench controller owns opening, focusing, closing, hiding, and restoring tools.                                            |
-| Conversation | Draft synchronization, timeline viewport, explicit session targeting, queued messages, model/thinking controls already exist.     | Recompose and restyle these features; preserve their behavior and ownership.                                                      |
-| Changes      | Current working-tree status, grouped across checkout contexts. The file-diff helper prefers unstaged over staged content.         | Explicit checkout and comparison, correct partial-staging presentation, then branch and captured-turn review.                     |
-| Terminal     | Main owns PTYs, scoped by window, canonical checkout, and task. Renderer unmount does not terminate them.                         | Render the same service in a tool tab; view lifetime remains separate from shell lifetime.                                        |
-| Extensions   | Pi UI calls become dialogs, notifications, status, and text widgets. The app has no desktop view registration API.                | Preserve existing compatibility; prove custom desktop views using current upstream APIs before defining the missing GUI contract. |
-| Persistence  | Pi owns session data; catalogs own workspace/session records; desktop owns validated UI state.                                    | Add layout preferences and review metadata to desktop-owned storage; do not copy Pi history or extension findings into it.        |
+| Area         | Historical baseline                                                                                                               | Implemented direction                                                                                                      |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Shell        | `App.tsx` separately owns Files/Changes mode, document tabs, and terminal visibility. Selection changes clear some of this state. | One workbench controller owns opening, focusing, closing, hiding, and restoring tools.                                     |
+| Conversation | Draft synchronization, timeline viewport, explicit session targeting, queued messages, model/thinking controls already exist.     | Recompose and restyle these features; preserve their behavior and ownership.                                               |
+| Changes      | Current working-tree status, grouped across checkout contexts. The file-diff helper prefers unstaged over staged content.         | Explicit checkout and comparison, correct partial-staging presentation, then branch and captured-turn review.              |
+| Terminal     | Main owns PTYs, scoped by window, canonical checkout, and task. Renderer unmount does not terminate them.                         | Render the same service in a tool tab; view lifetime remains separate from shell lifetime.                                 |
+| Extensions   | Pi UI calls become dialogs, notifications, status, and text widgets. The app has no desktop view registration API.                | Preserve existing compatibility and add registered browser views connected through Chord to the original Pi extension.     |
+| Persistence  | Pi owns session data; catalogs own workspace/session records; desktop owns validated UI state.                                    | Add layout preferences and review metadata to desktop-owned storage; do not copy Pi history or extension findings into it. |
 
 Baseline: `f06a5501dbcf1f39e105f0375ae7646bd9841c8f`. Current source: [shell](../apps/desktop/src/app/App.tsx), [draft synchronization](../apps/desktop/src/features/conversation/hooks/use-composer-draft-sync.ts), [desktop owners](architecture.md), [UI persistence](../apps/desktop/electron/persistence/app-store-persistence.ts), [Git diff adapter](../apps/desktop/electron/platform/files/app-store-diff.ts), [extension binding](../packages/pi-sdk-driver/src/session-supervisor.ts).
 
@@ -29,20 +29,22 @@ The live layout now follows one [workbench controller](../apps/desktop/src/featu
 
 Each task retains its ordered tools, selected tool, visibility, file references and selected Changes checkout/path. Settings does not clear that layout. File refresh no longer deletes saved document tabs; a missing file remains an explicit read error. Last-shell close callbacks are invalidated when their view unmounts, so they cannot close another task's tool tab. Worktrees uses the existing checkout/task navigation and creation operations.
 
-The [browser-safe contract](../apps/desktop/contracts/workbench.ts) is also the strict persistence/IPC decoder. Main stores the last explicit layout template per task, outside broadcast snapshots. Windows restore once and keep independent live state. Early interactions are rebased onto the saved template after loading; failed restores offer Retry and do not overwrite unknown saved layout. Main serializes saves, rejects stale per-renderer sequence numbers and resets that sequence on renderer navigation. Schema v18 preserves a separate, immutable copy of the original validated pre-migration bytes.
+The [browser-safe contract](../apps/desktop/contracts/workbench.ts) is also the strict persistence/IPC decoder. Main stores the last explicit layout template per task, outside broadcast snapshots. Windows restore once and keep independent live state. Early interactions are rebased onto the saved template after loading; failed restores offer Retry and do not overwrite unknown saved layout. Main serializes saves, rejects stale per-renderer sequence numbers and resets that sequence on renderer navigation. Schema v19 adds `changes.scope`; v18 layouts without it restore Uncommitted. Migration preserves a separate, immutable copy of the original validated pre-migration bytes, including a v18 source file.
 
-Neutral Default light/dark colors, consistent spacing, a quieter sidebar and composer, and the tab styles use the existing token system. Named themes retain their own colors. Model and reasoning controls remain visible. Existing conversation controllers and the single timeline viewport owner remain in place. The extension tool reference is reserved and restores as unavailable; executable extension frontends are not enabled by this phase.
+Neutral Default light/dark colors, consistent spacing, a quieter sidebar and composer, and the tab styles use the existing token system. Named themes retain their own colors. Model and reasoning controls remain visible. Existing conversation controllers and the single timeline viewport owner remain in place. Registered extension views now appear in the chooser. A saved extension tab whose registration is missing or broken remains visible with an unavailable reason and recovery/close controls.
 
-## Proposed extension example (later phase)
+## Implemented extension example
 
 A user opens **+ → PR Review**, asks Pi to review, and creates a fix task:
 
 1. The workbench adds or focuses the extension's tool tab for the selected task. Opening the tab does not start a review.
 2. Pi-gui's view host mounts the extension's desktop interface and connects it to the backend for that exact Pi session. The custom frontend and its connection are scoped to the current runtime generation.
-3. The user presses **Review with Pi**. The frontend calls its backend service through the validated desktop connection. Pi executes the extension's normal command/tool workflow; the existing transcript and run controls show its activity.
+3. The user refreshes the real GitHub PR and presses **Review with Pi**. The frontend calls the extension's backend through Chord. Pi's public `sendUserMessage` returns before admission, so the example displays Requested until the matching Pi hook confirms Running. Transcript and normal Stop controls show the actual run.
 4. The extension saves its findings in Pi extension state and updates the state exposed to its frontend. The frontend renders the findings with its own layout. Its live state is a projection, not a second durable findings store.
 5. **Create fix task** calls a narrow host action which prepares a draft in the PR's checkout. The user sends it through the normal composer.
-6. Closing PR Review closes its presentation. Findings and commands remain available. Switching tasks cannot redirect a late action result to the newly selected task.
+6. Closing PR Review releases its presentation and subscriptions. Findings and commands remain available. A stale connection or changed task rejects presentation; results remain with the extension and are not automatically replayed.
+
+The second example, **Test Runs**, executes fixed local `node:test` suites through Pi's released bash operations, streams bounded output, and supports explicit Stop and timeout. Both are ordinary file-based extensions using the same local helper and host; neither requires a feature-specific desktop IPC route. See the [local author workflow](../examples/desktop-extensions/README.md).
 
 ```mermaid
 flowchart LR
@@ -50,8 +52,12 @@ flowchart LR
   P -->|explicit task target| D[Desktop owners]
   D -->|session operations| A[Thin Pi adapter]
   A -->|public SDK calls| PI[Pi Coding Agent]
-  PI -->|extension execution| E[Pi extension backend]
-  E -->|view data and action replies| A
+  PI -->|loads once| E[Pi extension backend]
+  E -->|registration| A
+  A -->|loaded catalog and declarations| V[Desktop view host]
+  P -->|scoped Chord messages| V
+  V <-->|services and state| E
+  V -->|connection replies| P
   D -->|scoped snapshots| W
 ```
 
@@ -59,18 +65,19 @@ Arrows describe requests/data flow. The renderer never imports the host or Pi im
 
 ## Components and ownership
 
-| Component              | Owns                                                                                     | Location and change                                                                                                                                                                 |
-| ---------------------- | ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| App shell              | Startup/recovery, sidebar, app routes, composition                                       | Slim down `src/app/App.tsx`; keep Settings/Extensions/Skills/schedules reachable.                                                                                                   |
-| Conversation screen    | Selected task's transcript/composer composition                                          | Currently composed in `src/app/App.tsx` using the existing draft, viewport, attachment and command controllers; a separate screen module is not required for the tab foundation.    |
-| Workbench              | Current window's per-task tool order, active tool, visibility and view preferences       | New `src/features/workbench/workbench.tsx`, `workbench-state.ts`, `use-workbench.ts`; replace the old picker and parallel visibility paths.                                         |
-| Tool content           | Files and inner document tabs, review, terminal shells, worktree navigation              | Reuse/adapt existing feature components. A small explicit built-in resolver is enough.                                                                                              |
-| Durable layout storage | Validated last-saved layout template per task                                            | Extend `electron/persistence/app-store-persistence.ts`, narrow application-store operations, and IPC. No new renderer localStorage path.                                            |
-| Review owner           | Comparison identities, pinned revisions, checkpoint metadata, reviewed marks             | New `electron/workbench/review-owner.ts`, using existing Git platform capabilities plus a checkpoint adapter.                                                                       |
-| Desktop view host      | Tab registration, frontend mounting, session-scoped connections and allowed host actions | Proposed renderer host in `src/features/extensions`; main validates connections/actions. Final module split follows the current-version pilot; reuse Chord ownership where it fits. |
-| Pi adapter             | Session lifecycle and translation to public Pi APIs                                      | Extend `packages/pi-sdk-driver` narrowly; no tab layout, Git checkpoint implementation, React, or PR business rules here.                                                           |
+| Component              | Owns                                                                               | Location and change                                                                                                                                                              |
+| ---------------------- | ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| App shell              | Startup/recovery, sidebar, app routes, composition                                 | Slim down `src/app/App.tsx`; keep Settings/Extensions/Skills/schedules reachable.                                                                                                |
+| Conversation screen    | Selected task's transcript/composer composition                                    | Currently composed in `src/app/App.tsx` using the existing draft, viewport, attachment and command controllers; a separate screen module is not required for the tab foundation. |
+| Workbench              | Current window's per-task tool order, active tool, visibility and view preferences | New `src/features/workbench/workbench.tsx`, `workbench-state.ts`, `use-workbench.ts`; replace the old picker and parallel visibility paths.                                      |
+| Tool content           | Files and inner document tabs, review, terminal shells, worktree navigation        | Reuse/adapt existing feature components. A small explicit built-in resolver is enough.                                                                                           |
+| Durable layout storage | Validated last-saved layout template per task                                      | Extend `electron/persistence/app-store-persistence.ts`, narrow application-store operations, and IPC. No new renderer localStorage path.                                         |
+| Review owner           | Comparison identities, pinned revisions and revision-scoped reviewed marks         | `electron/workbench/review-owner.ts`, `reviewed-store.ts`, and `electron/platform/files/git-review.ts`.                                                                          |
+| Checkpoint store       | App-owned Git snapshots, interval metadata and transcript lookup                   | `electron/workbench/checkpoint-store.ts`; receives portable capture boundaries, never drives Pi or task selection.                                                               |
+| Desktop view host      | Registration, backend hosts, scoped connections, assets and allowed host actions   | `electron/extensions/extension-view-owner.ts`, `extension-view-source.ts`, `extension-view-actions.ts`; renderer `extension-view-panel.tsx` owns the iframe/port.                |
+| Pi adapter             | Session lifecycle and translation to public Pi APIs                                | Extend `packages/pi-sdk-driver` narrowly; no tab layout, Git checkpoint implementation, React, or PR business rules here.                                                        |
 
-Browser-safe workbench/review requests belong in `apps/desktop/contracts/workbench.ts`. Any remaining portable extension integration contracts belong in `packages/session-driver`, next to the existing host-UI protocol; do not duplicate upstream service/state types there. Concrete rendering stays in desktop features. Shared packages continue to have no dependency on `apps/desktop`.
+Browser-safe contracts live in `apps/desktop/contracts/workbench.ts`, `review.ts` and `extension-views.ts`. `packages/session-driver/src/turn-capture.ts` carries portable capture identities and boundaries. `packages/extension-ui` owns registration, browser host-action types and the Chord wire adapter; `packages/pi-sdk-driver/src/desktop-extension-bridge.ts` adapts discovery to Pi's loaded catalog. Shared packages have no dependency on desktop implementation, and Chord owns service/state semantics.
 
 The workbench reducer is the only writer of live layout in a renderer window. Main's existing persistence owner is the only writer of its durable representation. These are separate responsibilities: main supplies restore templates, not a second live layout controller.
 
@@ -86,30 +93,22 @@ type ToolRef =
   | { kind: "terminal" }
   | { kind: "extension"; extensionId: string; viewId: string };
 
-type ToolSelection =
-  | { kind: "chooser" }
-  | { kind: "tool"; toolId: string };
+type ToolSelection = { kind: "chooser" } | { kind: "tool"; toolId: string };
 
-interface TaskWorkbenchView {
+interface TaskWorkbenchTemplate {
   visibility: "visible" | "hidden";
   tools: readonly ToolRef[];
   selection: ToolSelection;
-  files: FileViewState;       // existing document-tab model, checkout + path
-  changes: ChangesViewState; // checkout, comparison, selected file
+  files: FileViewState; // existing document-tab model, checkout + path
+  changes: { workspaceId: string; selectedPath: string | null; scope: ReviewScope };
 }
-
-openTool(task: SessionRef, tool: ToolRef): void;
-openFile(task: SessionRef, file: WorkspaceFileReference): Promise<void>;
-openChanges(task: SessionRef, comparison: ReviewRequest): void;
-closeTool(task: SessionRef, toolId: string): void;
-setWorkbenchVisibility(task: SessionRef, visibility: "visible" | "hidden"): void;
 ```
 
 The reducer and saved-state decoder enforce unique tool identity and selected-tool membership. Invalid external data is rejected before it reaches that reducer. File references are resolved through existing host path validation; a missing file does not silently open an unrelated path.
 
 - One outer tab per built-in tool; Files retains its inner document tabs and Terminal its inner shell tabs. Do not flatten those different resources into the outer strip in this iteration.
 - Reopening a tool focuses it. Closing the active tool selects its neighbor; closing the last shows the chooser. Hidden layout retains selection and tool state.
-- With no saved layout, existing tasks start with Changes on Uncommitted; a new unsent task starts with its side workspace hidden. Completion may update badges/data but does not steal focus or replace the user's selected tool. Today, a response's Changes link opens its checkout/path in the current uncommitted view. Selecting that response's captured turn requires P0.4.
+- With no saved layout, existing tasks start with Changes on Uncommitted; a new unsent task starts with its side workspace hidden. Completion may update data but does not steal focus or replace the selected tool. A transcript Review action resolves that exact persisted message to a checkpoint and opens its turn comparison. An uncaptured message stays unavailable instead of falling back to the latest turn.
 - Close Terminal's outer tab means close its view. An explicit shell-close action terminates that shell. App/window exit retains existing PTY disposal semantics; restoring a saved tab does not claim a live process survived.
 - Settings and Extensions are management routes; entering/leaving them does not mutate task layout. Their return action and Escape restore the prior workspace.
 - Each window keeps its own live per-task layouts. Opening the same task in a second window seeds from its last-saved template; subsequent clicks do not rearrange the other window. The last explicit layout change wins the durable template. Serialize writes and reject older saves from the same renderer; async data refreshes never write layout.
@@ -132,50 +131,57 @@ Success includes keyboard access, stable composer focus, sensible empty/error st
 ```ts
 type ReviewScope =
   | { kind: "uncommitted" }
-  | { kind: "branch"; baseRef: string }
-  | { kind: "turn"; checkpointId: string };
+  | { kind: "branch"; baseRef?: string }
+  | { kind: "turn"; checkpointId?: string };
 
-getReview(target: SessionRef, checkoutId: string, scope: ReviewScope): Promise<ReviewResult>;
-getReviewFile(reviewId: string, fileId: string): Promise<ReviewFileResult>;
+getReview(input: { target: SessionRef; checkoutId: string; scope: ReviewScope }): Promise<ReviewResult>;
+getReviewFile(input: { reviewId: string; fileId: string }): Promise<ReviewFileResult>;
+resolveTurnReview(input: { target: SessionRef; messageId: string }): Promise<ResolveTurnReviewResult>;
 ```
 
-`ReviewResult` is `available | unavailable | failed`. Available includes an immutable comparison identity, resolved checkout/revisions, file entries, and coverage information. File reads and reviewed marks use that identity. Refreshing a working tree creates a new comparison; changed content invalidates the relevant reviewed mark. A temporary Git failure must not erase marks.
+The [review contract](../apps/desktop/contracts/review.ts) returns `available | stale | unavailable | failed`. Available results include an immutable comparison identity, resolved checkout/revisions, file identities and `complete | partial` coverage with notes. The [review owner](../apps/desktop/electron/workbench/review-owner.ts) retains up to 16 comparisons in memory. File reads, reviewed marks and staging use the returned comparison/file IDs; evicted or changed comparisons require Refresh. The requested scope is persisted, but asynchronous resolution never writes layout: Branch without `baseRef` resolves the repository default again on refresh; Last turn without `checkpointId` means latest. A transcript action stores an exact checkpoint ID.
 
-| Scope       | Meaning                                                                                                | Edge behavior                                                                                                                                        |
-| ----------- | ------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Uncommitted | HEAD to current tracked contents, plus nonignored untracked files; staged/unstaged indicators retained | Partially staged files expose both portions, including staged changes cancelled by later edits. Empty/unborn repositories use an empty baseline.     |
-| Branch      | Merge-base of selected base and HEAD to pinned HEAD                                                    | Excludes uncommitted edits. Resolve the repo's default/base branch; do not hardcode `main`. Missing/unrelated base is unavailable, not a clean diff. |
-| Last turn   | Saved before/after file contents for a specific completed user-facing turn                             | Never substitute HEAD diff. Older/imported sessions without captures show unavailable. A transcript action pins its own turn even after later work.  |
+Reviewed marks live in host-owned `reviewed-files.json`, keyed by task, checkout, scope and file-content identity. Changes invalidate the relevant mark, and restarting can retain marks for unchanged content. Renderer-local path-only marks are no longer read or written; old bytes are left intact. Temporary Git errors do not erase marks.
 
-Uncommitted reads include freshness checks around file access. If contents changed since the list was built, return stale and refresh rather than displaying a new patch under an old review identity. Conflict stages, binary files, submodules and truncated content get explicit summaries/coverage; no false empty result. Staging operations, where retained, apply only to Uncommitted and revalidate current content.
+| Scope       | Meaning                                                                                                | Edge behavior                                                                                                                                                                 |
+| ----------- | ------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Uncommitted | HEAD to current tracked contents, plus nonignored untracked files; staged/unstaged indicators retained | Partially staged files expose both portions, including staged changes cancelled by later edits. Empty/unborn repositories use an empty baseline.                              |
+| Branch      | Merge-base of selected base and HEAD to pinned HEAD                                                    | Excludes dirty edits. Default resolution prefers the tracking remote's HEAD, then a sole remote HEAD, then the branch's upstream. Missing or unrelated bases are unavailable. |
+| Last turn   | Saved before/after contents for a user-facing interval                                                 | Never substitutes a HEAD diff. Uncaptured/imported history stays unavailable. Stopped/failed/interrupted intervals with both captures carry partial-coverage notes.           |
 
-For Last turn, use a small internal checkpoint extension through the supported extension-factory path. The earlier source trace found awaited `message_start` hooks suitable for a pre-tool capture, but the exact capture hooks must be revalidated on the upgraded release: 0.87.0 changes actionable turn and settling boundaries. Prove the before/after boundary before choosing hooks; an asynchronous public event subscriber is insufficient. Consecutive user inputs before assistant work share a baseline. Queued follow-ups and steering inside one agent loop require their own boundaries; `before_agent_start` alone is insufficient. Treat captures as provisional until driver lifecycle classifies completion, retry, cancellation or failure.
+Uncommitted exposes Combined (HEAD → current bytes), Staged (HEAD → index) and Unstaged (index → current bytes), including changes that cancel out in Combined. Reads check freshness around file access. Changed content returns stale rather than a new patch under an old identity. Conflict stages, binary files, submodules and truncation receive summaries/coverage. Stage/Unstage applies only to Uncommitted, revalidates the file, and serializes mutations per checkout. Branch and turn comparisons remain pinned. **Open in Files** explicitly opens the current file separately from its historical patch.
 
-The checkpoint adapter owns a separate Git object store and temporary index under userData. It inventories tracked and nonignored untracked paths from the source checkout, then records their actual bytes/modes in that store; it does not run repository clean filters or follow symlinks outside the checkout. App-owned refs in this separate store retain the trees. It must not alter the user's Git objects/refs, index, branch, HEAD, or working files. Record exclusions or failure, with task, transcript/turn anchors, checkout, runtime generation, timestamps and tree IDs in the checkpoint metadata. Bound capture time and size; timeout/partial capture makes the comparison explicitly unavailable or partial while coding can proceed. No restore/reset feature or automatic history deletion is included.
+The hidden [capture extension](../packages/pi-sdk-driver/src/turn-capture.ts) uses Pi's ordinary awaited extension-factory hooks. `agent_start` captures the baseline before tools; a user `message_start` after assistant work closes the previous interval and opens the next with one shared snapshot. Consecutive user messages before assistant work share a baseline. Retry and before-settle continuation retain that baseline; `agent_settled` closes the final interval, and shutdown records interruption. Observer failure/timeout does not block coding indefinitely or fabricate a usable capture.
 
-This shows changes during an interval, including concurrent human or other-agent edits. It cannot prove authorship or an atomic filesystem snapshot. Same-checkout runs carry overlap provenance. Sparse checkout, filters, conflicts and large repositories are required capture tests; unsupported cases remain explicit until proven.
+Checkpoint metadata stores native Pi branch-entry anchors. A separate hidden transcript-identity hook uses released `turn_end.messageEntryId` to attach `sourceMessageId` to live assistant rows; canonical transcript reads carry the same native ID. The Review action uses that source ID, preserving the renderer row identity and timing while the exact captured interval remains addressable before or after transcript reload.
+
+The [checkpoint store](../apps/desktop/electron/workbench/checkpoint-store.ts) owns `userData/turn-checkpoints/objects.git`, its temporary index/spooled bytes, app-owned refs and `checkpoints.json`. It inventories tracked and nonignored untracked paths, then records their actual bytes/modes in that independent bare repository. It does not run clean filters or follow file symlinks; inherited Git routing variables are removed. Source Git objects, refs, index, HEAD, branch and working files remain untouched, including linked worktrees. Initialization publishes a validated bare repository atomically. Metadata records task, checkout, runtime/run identity, entry anchors, outcome, timestamps and tree IDs; finalized checkpoints cannot be rewritten by replay. Restart treats unfinished intervals as interrupted, not recovered live execution.
+
+Capture defaults are 2 seconds, 10,000 paths, 64 MiB total and 16 MiB per file. Sparse entries, submodules, conflicts, unavailable roots and exceeded limits make captures explicitly unavailable. Both review and capture currently require the Git checkout root. Review itself limits lists to 2,000 files, individual content to 8 MiB, patches to 1 MiB, and working-byte preparation to 32 MiB/10 seconds; these limits produce coverage notes rather than a false clean result. Raw-byte patches may differ from Git attribute/EOL conversions, which are reported.
+
+Captures show edits during an interval, including concurrent human or other-agent edits. They cannot prove authorship or an atomic filesystem snapshot. Same-checkout runs carry overlap provenance. Stored turn comparisons can still be read from the independent object store when their original checkout is missing. There is no restore/reset command, automatic history deletion, or checkpoint garbage collection in this phase.
 
 ## Functional extension views
 
-The intended experience is functional Pi extensions with optional author-provided desktop interfaces. A PR Review extension could render its own findings layout and controls. Shared Pi-gui components and theme tokens can help it fit the app; authors are not limited to a predefined list of text/button/finding blocks. This remains extension-scoped: it does not grant arbitrary replacement of the app shell.
+Pi extensions can provide custom browser interfaces for their own workflows. PR Review renders structured findings and Test Runs renders live process output. Authors receive theme values and bundle their own frontend dependencies; there is no shared React instance or fixed text/button/finding schema. Views cannot replace the app shell.
 
-The [installed-package evaluation and proposed author contract](chord-desktop-extension-design.md) now establish the implementation direction. Chord service/state and replacement behavior passed Node/browser probes; a Pi EventBus bootstrap registered a facet from the original extension instance without loading another backend. Pi-gui must supply browser loading/mounting, session targeting, allowed desktop actions and presentation conventions. Chord's supplied facet artifact loader is Node-only; it is not a ready-made browser plugin host.
+The [implemented author contract](chord-desktop-extension-design.md) uses the released Coding Agent extension API and Chord service/state primitives. `registerDesktopView` registers from the original Pi extension closure; discovery matches its canonical source against Pi's final loaded catalog. It does not load another backend or use the unimportable experimental Pi plugin entrypoint. Each validated view has one backend facet host per task runtime generation, shared by its windows/connections.
 
-Next prove a file-based PR Review extension across the real Electron boundary. The optional registration helper and browser entry convention are Pi-gui proposals; the installed experimental Pi plugin entrypoint is not importable. Retain the released Coding Agent session API and use its loaded catalog rather than a parallel plugin scanner.
+The helper is private, not an npm publication or upstream Pi API. The [author README](../examples/desktop-extensions/README.md) documents local configuration, browser builds, offline checks, terminal fallback, editing and reload. Both examples passed desktop workflows, and separate locally packed helper/example tarballs loaded through actual Pi outside this repository. The [verification report](workspace-redesign-verification.md) distinguishes that loader proof from Electron and provider execution.
 
 Pi-gui's view host owns the connection between a registered frontend and a tool tab; the extension owns its domain data, operations and rendering. Loading, ready, unavailable and failed states must be visible. Backend operations require validated inputs, explicit outcomes, bounded pending requests and no automatic replay after an unknown outcome. Use upstream identity, cancellation and replacement behavior where it applies, while retaining explicit task targeting at the desktop boundary. Do not invent parallel lifecycle or state-replication mechanisms by default.
 
-Main also captures the initiating IPC sender/window and selected-task generation in its pending-action record; neither comes from extension-supplied data. File navigation and fix-task presentation return only to that window. If it closed, do not redirect to the active window; retain any completed domain result and settle the presentation action as unavailable. If the user switched tasks meanwhile, retain the result with a link rather than steal selection. A background snapshot never navigates any window. Include two windows showing the same task, a delayed action, and closing/switching the initiating window in P1.1 proof.
+Main binds each connection to its initiating IPC sender, task, view and runtime generation. Actions validate that connection and the window's current task after awaited work and again when a queued state action starts. The renderer persists the outgoing task's pending composer draft before forwarding a draft-creation action, and drops the action if its mount/task changed during preflight. File navigation returns only to the initiating window; closed, crashed or obsolete connections cannot redirect it to the foreground window. The implemented recovery is an unavailable/rejected presentation action with extension-owned results retained, not a new late-result link or inbox. Background state updates do not navigate.
 
-Retain existing `ctx.ui` compatibility for command-only/TUI-oriented extensions. A terminal custom component does not automatically become a desktop interface; the author supplies a compatible frontend. Reuse Pi's package discovery and diagnostics wherever the released host exposes them. Do not build a second installer or marketplace. Start with a development PR Review extension and prove a second coding view before publishing the author-facing helper or manifest contract.
+Existing `ctx.ui` compatibility remains for command-only/TUI-oriented extensions. A terminal custom component does not automatically become a desktop interface. Pi's resource discovery, trust decision and diagnostics remain authoritative; no second installer, marketplace or manifest scanner was added.
 
-Pi extension backends already execute trusted Node code. That does not justify granting their frontend direct Node or broad preload access. Browser module format, isolation, resource loading, styling and narrowly scoped host capabilities are required pilot decisions. Verify those decisions before loading user-installed frontend code. Shared styling is an optional authoring aid, not a sandbox.
+The frontend mounts in an opaque-origin `sandbox="allow-scripts"` iframe with a dedicated message port. The `pi-extension://<connection>/` route serves only validated local assets below the matched extension entry's directory. Per-connection CSP restricts scripts/styles/images/fonts, denies network fetches and nested frames, and retains the sandbox. Main rejects unrelated frame navigation; the frame receives neither Node nor the app preload API. The actual Electron security tests passed. These boundaries do not sandbox the already-trusted Pi backend, which owns filesystem/network/tool work.
 
 The extension owns commands/tools, execution and saved findings. It uses Pi's extension entries and session-branch lifecycle to restore validated, versioned state. PR results include repository/checkout, PR identity and reviewed head revision; changed heads show stale findings. Desktop snapshots are disposable projections. Closing a view does not unload its backend; hiding it does not cancel work.
 
-On extension reload/session rebind, reject obsolete session targets and release retired frontend resources. Follow upstream reload semantics where supported instead of forcing every successful provider replacement through a disconnect. An unavailable saved tab remains visible with a reason and recovery/close action. A broken view must not prevent ordinary conversation or legacy extension commands.
+Reload/session rebind immediately revokes retired capabilities and reconnects against a new runtime. Desktop discovery notification does not await authored activation/disposal on Pi's lifecycle path; activation has a timeout and late activation is disposed. A failed view stays visible with diagnostics and does not block ordinary conversation or legacy commands. Closing a connection releases subscriptions and rejects waiting browser calls while accepted backend work can finish; an explicit backend cancellation remains separate. Unknown-outcome mutations are never replayed automatically.
 
-The only initial host actions are validated existing-file navigation and preparing a new coding-task draft with explicit checkout/context. Neither a snapshot nor an extension update auto-sends a prompt. **Ask Pi to improve this extension** prepares an authoring task scoped to its source. Changes are previewed/tested first; reload behavior waits until the affected session is idle or offers an explicit reload. No live backend code replacement mid-run.
+The host actions are validated existing-file navigation and preparing an unsent coding-task draft in the connection's checkout. Neither accepts a caller-supplied window/task identity or auto-sends a prompt. The current authoring workflow is local edit → checks/build → Reload view for browser changes, or idle `/reload` for backend changes. A dedicated **Ask Pi to improve this extension** action and npm publication are not implemented; they are not required to use the two local examples.
 
 ## Pi and Pico compatibility
 
@@ -183,15 +189,15 @@ The app now resolves Pi Coding Agent and Chord 0.87.0, upgraded from 0.85.1. Thi
 
 Keep three evidence levels distinct:
 
-- **Released Coding Agent SDK:** the package root still exposes the existing session/extension integration. Upgrade our adapter and validate compatibility. Version 0.87.0 changes canonical session/context ownership and extension event boundaries, so a dependency bump alone is not proof.
-- **Released Chord package:** available now, independently of whether Pi's new plugin host is ready for our embedding path. Evaluate it now for services, state and facet lifecycle. Its presence in our lockfile does not mean the GUI uses it.
+- **Released Coding Agent SDK:** the adapter uses the package root's existing session/extension integration, with the completed upgrade proof below. Version 0.87.0 changed session/context ownership and event boundaries; future upgrades still require runtime verification.
+- **Released Chord package:** the implemented desktop host uses its services, state codecs and facet lifecycle independently of Pi's experimental plugin host. Earlier Node/browser probes and current Electron integration are different evidence levels.
 - **Experimental Coding Agent/Pico integration:** repository code is not automatically an importable npm API. The [0.87.0 package manifest](https://github.com/earendil-works/pi/blob/v0.87.0/packages/coding-agent/package.json) gives `./experimental/plugin` only a `source` export and excludes experimental build output from published files. The installed import failed with `ERR_PACKAGE_PATH_NOT_EXPORTED`; the design therefore uses the existing public extension API. Upgrading the Coding Agent does not enable desktop facets automatically.
 
 Cached `origin/pico` at `eed5263cdd2bd049f743965b7564626abafa8e8f` informed earlier research, but it is not the design baseline. Use the selected release's source and published artifacts for implementation decisions. Any proposal-only or branch-only capability must be labeled separately.
 
 Before freezing the extension SDK or capture hooks, record the exact release, package exports, integration example and remaining host gap, and exercise a minimal integration on that version. Keep only the GUI functionality Pi does not supply. Do not import an experimental Pico scheduler or introduce another session database for the frontend redesign.
 
-## Verified upgrade baseline — September 22, 2026
+## Historical verified upgrade baseline — September 22, 2026
 
 Pi Coding Agent 0.87.0 is implemented and verified. Visible history now uses Pi's original session entries instead of its edited model context. Desktop completion waits for `agent_settled`, while individual assistant messages keep separate rows. Extension `waitForIdle` also follows the public session boundary. Deterministic tests exercise the installed Pi runtime, including continuation, retry, cancellation, context edits and extension-initiated runs.
 
@@ -203,7 +209,7 @@ Pi Coding Agent 0.87.0 is implemented and verified. Visible history now uses Pi'
 
 Local evidence is retained under `.artifacts/pi-087-upgrade/` and `.artifacts/verify-pi-gui/run-vYTlSs/`. The Chord probes and their scope are documented in the [extension design](chord-desktop-extension-design.md). Windows/Linux packaging, notarization and the proposed custom-view Electron host were not verified or implemented in the upgrade. The subsequent daily coding polish and tool tabs are described above.
 
-## Workspace foundation verification — September 22, 2026
+## Historical workspace foundation verification — September 22, 2026
 
 P0.1/P0.2 now run in the actual Electron app. `pnpm check` passed with an isolated Pi profile, including formatting, lint, architecture boundaries, workspace typechecks and 165 desktop unit tests. Fifty-two distinct fixture-backed Core cases passed across the focused runs. These cover tab lifecycle, task and Settings return, independent windows, restart/drafts, file navigation, Changes, worktrees, shell survival, visible image attachment and oversized-image error recovery. Six inspected screenshots cover populated Files, Changes and Terminal at 1280 and 1040 pixels.
 
@@ -215,6 +221,8 @@ The detailed fixture evidence and baseline log are retained under `.artifacts/wo
 
 ## Implementation phases and release gates
 
+P0.0–P0.2 are the previously verified baseline. P0.3/P0.4/P1.1/P1.2 are **implemented and verified** within the macOS scope of the [final report](workspace-redesign-verification.md). Focused Git/capture/transport checks, 27 distinct Core cases, real-provider conversation/maintenance/PR execution, external local-package loading and local packaged-app proof are recorded separately. The real-provider PR test uses fixture GitHub metadata; it does not establish live GitHub access or posting.
+
 | Priority | Deliverable                                                                                               | Exit proof                                                                                                                                                                                                                         |
 | -------- | --------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | P0.0     | Upgrade to the latest released Pi Coding Agent and audit its extension/Chord integration                  | Record release and published exports; pass adapter checks plus real Electron send/stream/stop, model/provider, extensions, session restore and packaged-runtime proof. Identify experimental gaps before choosing a view contract. |
@@ -223,18 +231,18 @@ The detailed fixture evidence and baseline log are retained under `.artifacts/wo
 | P0.3     | Correct selected-checkout Uncommitted review and branch comparison                                        | Real temporary Git repositories prove partial staging, rename/delete/untracked/conflict/binary cases, dirty branch exclusion, missing base, stale response and reviewed-mark behavior.                                             |
 | P0.4     | Captured Last turn review                                                                                 | Awaited capture blocks the first tool; queued follow-up/steer, retry, cancellation, overlapping runs, failure and relaunch preserve truthful provenance. Capture cost is measured on a large checkout.                             |
 | P1.1     | One functional PR Review Pi extension + custom desktop frontend using upstream primitives where supported | Prove browser loading and the installed-package authoring path; register/open/review/update/close/reopen; fix-task draft; session/window isolation; stale PR; malformed data; reload/disable/late replies.                         |
-| P1.2     | Second extension, user-installed helper and scoped authoring workflow                                     | The second workflow fits the same contract; install/discovery and preview/reload recovery work without app patches. Publish only then.                                                                                             |
+| P1.2     | Test Runs second extension and documented local author workflow                                           | Load both files through Pi's normal configuration; prove the same contract, local edit/build/reload recovery and terminal fallback. The private helper is not published to npm.                                                    |
 | P2       | Additional surfaces and advanced orchestration UX                                                         | Separate product/design pass using the released Pi capabilities. Existing orchestration/schedules remain reachable throughout earlier phases.                                                                                      |
 
-Review each phase in the real app before broadening. P0.0 establishes the runtime baseline first. Establish the tool identity and extension-view slot in P0.2, but do not block daily coding polish on the complete custom frontend host. Later Pi upgrades remain focused compatibility changes; recheck API assumptions when their source version changes.
+The implementation followed the upgrade → workspace → review/capture → extension-host order, and the final gates above passed. P2 remains a separate product scope. Later Pi upgrades remain focused compatibility changes; capture, transcript identity and discovery hooks are explicit compatibility boundaries.
 
 Use the existing [verification skill](../.agents/skills/verify-pi-gui/SKILL.md) and [baseline](ci-baseline.md). `pnpm check` is the baseline; targeted desktop specs go through the existing `test:e2e:runner` or named Core scripts. Extend the existing `workspace-files`, `changed-files`, `integrated-terminal`, `composer-draft-sync`, `multi-window`, persistence/reopen, extension-dialog/dock/reload/isolation and worktree coverage. Add deterministic checkpoint and bridge integration fixtures. Then run the real-provider conversation/maintenance recipes with an isolated profile. Packaging/native behavior has its own proof; it is not established by browser prototypes or Core fixtures.
 
 ## Migration and enforcement
 
-- Change only the feature slices above; preserve Pi sessions, catalog identities, drafts, attachments, settings and existing commands. Add a versioned UI-state migration with empty layout defaults for older profiles. Unknown versions or malformed data must not be silently overwritten. Before its first write, migration retains a separately named immutable `ui-state.pre-workbench-v17.<id>.json` copy of the validated original. The normal `.bak` file rotates on later writes and is not a migration backup. Older binaries reject the newer format; there is no automatic downgrade. Manual recovery must also preserve the current file, which may contain newer drafts/preferences absent from that migration copy.
-- Replace `sidePanelMode`, terminal visibility keys and the old picker when the new controller takes over. Avoid shipping two navigation owners. Keep the existing inner Files/Terminal resource logic.
-- Retire renderer-local reviewed-file persistence when revision-based marks land. Do not apply old path-only marks to new scopes; leave old bytes intact until a deliberate migration/cleanup policy exists.
+- UI-state v19 preserves Pi sessions, catalog identities, drafts, attachments, settings and existing commands. Older layouts default missing review scope to Uncommitted; invalid scopes and unsupported versions reject before overwrite. First migration write retains exact original bytes in `ui-state.pre-workbench-v<version>.<id>.json`, including v18. The rotating `.bak` is separate. Older binaries reject the newer format; no automatic downgrade exists. Recovery must also retain the current file, which may contain newer drafts/preferences.
+- The workbench replaced `sidePanelMode`, terminal visibility keys and the old picker. Inner Files/Terminal resource ownership remains unchanged.
+- Host-owned revision-based reviewed marks replace renderer-local path-only persistence. Old localStorage bytes are left intact and are never applied to new scopes.
 - Keep renderer/host/contract/state-owner/timeline guards. Add focused rejected fixtures for renderer-to-Pi/Git/PTY imports, package-to-desktop imports, full-store access from new owners, and direct layout writes bypassing the workbench controller. Use bounded interfaces instead of expanding allowlists.
 - Validate external view messages and persistence formats at their entry points. Use exhaustive unions internally; no raw casts to bypass unknown payloads.
-- Keep evidence levels separate: the Pi upgrade has implementation and compatibility verification; Chord has installed-package Node/browser probes. The complete desktop frontend host and Last turn capture remain proposed and require their Electron/product gates before shipping.
+- Keep evidence levels separate: the upgrade/workspace foundation have historical proof; the [final report](workspace-redesign-verification.md) records review/capture/custom-view unit, Core, real-provider and local macOS packaged proof. Windows/Linux behavior, notarization and release publication were not exercised.

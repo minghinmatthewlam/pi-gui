@@ -8,7 +8,7 @@ The primary product flow is to send a prompt, watch an assistant response grow, 
 - `conversation-stream`: observe at least two increasing assistant text lengths while the thread shows running.
 - `conversation-complete`: observe the final assistant marker and the running indicator clearing without an error.
 - `conversation-tool`: execute a real tool, inspect its output, and corroborate a file written in the scratch workspace.
-- `conversation-stop`: send a follow-up, observe its assistant output starting, then click Stop run and verify the run ends.
+- `conversation-stop`: send a follow-up that starts a bounded shell tool, click Stop run while it is executing, and verify cancellation before its completion file can be written.
 
 ## How to get to it (user POV)
 
@@ -26,7 +26,7 @@ Preconditions: a built app, an explicitly selected working provider/model, and t
 - **Stream:** sample `.timeline-item--assistant .message__content` while the active row has `data-sidebar-indicator="running"`. Retain timestamped lengths in `stream-samples.json` and a partial screenshot. Looking for text in the entire transcript can falsely match the user's prompt; assertions must target assistant messages.
 - **Complete:** require `ALPHA_DONE` in the assistant response and a cleared running indicator. Failed/auth-error states are failures, not completion.
 - **Tool:** Bravo runs a short shell command in the scratch folder to write `verification-tool.txt`. Check `BRAVO_TOOL_OK` in both the file and the expanded `.timeline-tool__body`, then collapse the header.
-- **Stop:** submit a longer follow-up; after `CANCEL_BEGIN` appears in assistant text, click the button named Stop run. Require the thread to stop running and the button to return to Send message.
+- **Stop:** submit the prescribed 25-second shell command. Require a running tool plus the actual `verification-cancel-started.txt` marker; the marker printed in the command input alone is insufficient. Click Stop run, require idle within 10 seconds, Send message, and `Command aborted` in tool output. Require less than 20 seconds since the start observation and no `verification-cancel-completed.txt`; retain `stop-proof.json`. Do not depend on a model producing a requested number of sentences to keep the run open.
 
 ## Gotchas
 
