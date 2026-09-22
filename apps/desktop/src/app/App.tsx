@@ -56,6 +56,7 @@ import {
   type ThreadListEntry,
 } from "../features/threads/thread-groups";
 import { Sidebar } from "../features/threads/sidebar";
+import { dismissThreadShortcutHints } from "../features/threads/thread-shortcut-hints";
 import { SidebarToggleButton } from "../features/threads/sidebar-toggle-button";
 import type { SidePanelPickerChoice } from "./side-panel-picker";
 import { Topbar } from "./topbar";
@@ -767,6 +768,7 @@ export default function App() {
     // Bind once. Re-subscribing when session or search identity changes drops
     // Cmd+D and 1-9 in the gap after a thread switch or relaunch.
     const dispatch = (command: PiDesktopCommand) => {
+      dismissThreadShortcutHints();
       handleCommandRef.current(command);
     };
     const removeCommandListener = window.piApp?.onCommand?.(dispatch);

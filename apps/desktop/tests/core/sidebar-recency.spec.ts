@@ -173,6 +173,24 @@ test("selects pinned threads first with 1-9 and paints badges while the modifier
     await window.keyboard.press(desktopShortcut("2"));
     await expect(window.locator(".topbar__session")).toHaveText("Alpha");
     await captureSidebarProof(window, "shortcut-pinned-before-send.png");
+
+    await window.keyboard.down(commandModifier);
+    try {
+      await expect(window.locator("[data-thread-shortcut]")).toHaveCount(3);
+      await window.keyboard.press("2");
+      await expect(window.locator(".topbar__session")).toHaveText("Alpha");
+      await expect(window.locator("[data-thread-shortcut]")).toHaveCount(0);
+    } finally {
+      await window.keyboard.up(commandModifier);
+    }
+
+    await window.keyboard.down(otherModifier);
+    try {
+      await window.waitForTimeout(100);
+      await expect(window.locator("[data-thread-shortcut]")).toHaveCount(0);
+    } finally {
+      await window.keyboard.up(otherModifier);
+    }
   } finally {
     await harness.close();
   }
@@ -472,6 +490,7 @@ async function sendComposerPrompt(window: Page, text: string): Promise<void> {
 }
 
 const commandModifier = process.platform === "darwin" ? "Meta" : "Control";
+const otherModifier = process.platform === "darwin" ? "Control" : "Meta";
 
 async function expectShortcutBadges(window: Page, titles: readonly string[]): Promise<void> {
   await window.keyboard.down(commandModifier);
