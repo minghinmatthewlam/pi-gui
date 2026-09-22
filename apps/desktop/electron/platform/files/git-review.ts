@@ -787,12 +787,15 @@ export async function changeGitReviewFileStage(
     );
   const stale = await checkGitReviewFileCurrent(snapshot, fileId);
   if (stale) return stale;
+  // A staged rename has already removed its previous path from the index and
+  // working tree, so `git add` must name only the current path. Unstaging
+  // restores both halves of the pair.
   const paths = [...new Set([file.path, ...(file.previousPath ? [file.previousPath] : [])])];
   try {
     await gitText(
       snapshot.checkoutPath,
       action === "stage"
-        ? ["add", "--", ...paths]
+        ? ["add", "--", file.path]
         : snapshot.headOid
           ? ["reset", "--quiet", snapshot.headOid, "--", ...paths]
           : ["rm", "--cached", "--ignore-unmatch", "--force", "--", ...paths],

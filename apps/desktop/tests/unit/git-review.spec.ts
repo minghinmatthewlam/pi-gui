@@ -148,6 +148,25 @@ test("stages and unstages exact pathological paths, rename pairs, and unborn add
   expect(await readFile(join(fresh, "new.txt"), "utf8")).toBe("first file\n");
 });
 
+test("stages unstaged edits on top of a staged rename", async () => {
+  const cwd = await repository();
+  await git(cwd, "mv", "--", "file.txt", "renamed.txt");
+  await writeFile(join(cwd, "renamed.txt"), "base\nedited after rename\n");
+  const review = await uncommitted(cwd);
+  const renamed = review.files.find((entry) => entry.path === "renamed.txt")!;
+  expect(renamed).toMatchObject({
+    status: "renamed",
+    previousPath: "file.txt",
+    hasUnstagedChanges: true,
+  });
+  expect(await changeGitReviewFileStage(review, renamed.id, "stage")).toEqual({
+    state: "applied",
+  });
+  expect(await git(cwd, "diff", "--name-only")).toBe("");
+  expect(await git(cwd, "show", ":renamed.txt")).toBe("base\nedited after rename\n");
+  expect(await git(cwd, "ls-files")).toBe("renamed.txt\n");
+});
+
 test("pins branch merge-base and HEAD while excluding staged, unstaged, and untracked edits", async () => {
   const cwd = await repository();
   await git(cwd, "switch", "-c", "feature");
