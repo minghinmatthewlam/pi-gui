@@ -102,7 +102,7 @@ test("navigates across folders and sessions through the sidebar", async () => {
     await createNamedThread(window, "Alpha session two", { workspaceName: basename(alphaPath) });
     await createNamedThread(window, "Beta session one", { workspaceName: basename(betaPath) });
 
-    await expect(window.locator(".topbar__session")).toHaveText("Beta session one");
+    await expect(window.locator(".chat-header__title")).toHaveText("Beta session one");
     await expect(window.locator(".session-row", { hasText: "Alpha session two" })).toHaveAttribute(
       "data-sidebar-indicator",
       "none",
@@ -163,12 +163,12 @@ test("switching sessions republishes the selected transcript", async () => {
     await expect(window.getByTestId("transcript")).toContainText("beta response");
 
     await selectSession(window, "Thread one");
-    await expect(window.locator(".topbar__session")).toHaveText("Thread one");
+    await expect(window.locator(".chat-header__title")).toHaveText("Thread one");
     await expect(window.getByTestId("transcript")).toContainText("alpha response");
     await expect(window.getByTestId("transcript")).not.toContainText("Loading transcript");
 
     await selectSession(window, "Thread two");
-    await expect(window.locator(".topbar__session")).toHaveText("Thread two");
+    await expect(window.locator(".chat-header__title")).toHaveText("Thread two");
     await expect(window.getByTestId("transcript")).toContainText("beta response");
     await expect(window.getByTestId("transcript")).not.toContainText("Loading transcript");
   } finally {

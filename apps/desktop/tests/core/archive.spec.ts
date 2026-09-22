@@ -19,7 +19,7 @@ test("archives a hovered thread into a restorable sidebar section", async () => 
     const window = await harness.firstWindow();
     await createNamedThread(window, "Thread one");
     await createNamedThread(window, "Thread two");
-    await expect(window.locator(".topbar__session")).toHaveText("Thread two");
+    await expect(window.locator(".chat-header__title")).toHaveText("Thread two");
 
     const activeRow = window
       .locator(".session-list > .session-row")
@@ -33,7 +33,7 @@ test("archives a hovered thread into a restorable sidebar section", async () => 
 
     await activeRow.hover();
     await archiveButton.click();
-    await expect(window.locator(".topbar__session")).toHaveText("Thread one");
+    await expect(window.locator(".chat-header__title")).toHaveText("Thread one");
     const archivedGroup = window.locator(".archived-thread-group");
     const archivedToggle = archivedGroup.locator(".archived-thread-group__toggle");
     await expect(archivedGroup).toContainText("Archived");

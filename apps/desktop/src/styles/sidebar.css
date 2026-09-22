@@ -1,5 +1,5 @@
 .shell {
-  --sidebar-width: 292px;
+  --sidebar-width: 236px;
   --titlebar-toggle-left: 86px;
   --titlebar-toggle-size: 30px;
   --titlebar-toggle-main-gap: 16px;
@@ -45,11 +45,11 @@
 .sidebar__top,
 .sidebar__section,
 .sidebar__footer {
-  padding: 10px 12px;
+  padding: 12px;
 }
 
 .sidebar__top {
-  padding-top: 52px;
+  padding-top: var(--titlebar-inset-top);
 }
 
 .sidebar__nav {
@@ -68,7 +68,7 @@
   gap: 8px;
   color: var(--muted-strong);
   font-size: 13px;
-  font-weight: 560;
+  font-weight: var(--font-medium);
   border: 1px solid transparent;
 }
 
@@ -78,22 +78,23 @@
 }
 
 .sidebar__nav-item--active {
-  background: var(--theme-selection-bg, var(--surface-overlay));
-  border-color: var(--theme-selection-border, var(--line));
+  background: var(--theme-selection-bg, var(--overlay-hover));
+  border-color: var(--theme-selection-border, transparent);
   color: var(--theme-selection-ink, var(--text-strong));
 }
 
 .sidebar__new {
   -webkit-app-region: no-drag;
   width: 100%;
-  min-height: 32px;
+  min-height: var(--sidebar-first-control-height);
   padding: 7px 10px;
   border-radius: var(--radius-md);
-  background: var(--theme-control-bg, var(--surface-muted));
+  background: var(--theme-control-bg, var(--surface));
   border: 1px solid var(--theme-control-border, var(--line));
   color: var(--text-strong);
   font-size: 13px;
-  font-weight: 600;
+  font-weight: var(--font-medium);
+  white-space: nowrap;
   display: flex;
   align-items: center;
   justify-content: flex-start;
@@ -114,11 +115,9 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  color: var(--muted-subtle);
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: var(--tracking-wide);
-  text-transform: uppercase;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: var(--font-medium);
   margin-bottom: 8px;
 }
 
@@ -361,7 +360,7 @@
 
 .workspace-row__name {
   font-size: 13px;
-  font-weight: 470;
+  font-weight: var(--font-medium);
   color: var(--muted-strong);
 }
 
@@ -548,7 +547,7 @@
 }
 
 .session-row {
-  padding: 4px 8px;
+  padding: 6px 8px;
   border-radius: var(--radius-md);
   min-height: 32px;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -577,10 +576,9 @@
 }
 
 .session-row--active {
-  background: var(--theme-selection-bg, var(--surface-overlay));
+  background: var(--theme-selection-bg, var(--surface));
   border-color: var(--theme-selection-border, var(--line));
   color: var(--theme-selection-ink, var(--text-strong));
-  box-shadow: var(--shadow-sm);
 }
 
 .session-row__select {
@@ -651,7 +649,7 @@
 
 .session-row__title {
   font-size: 13px;
-  font-weight: 470;
+  font-weight: var(--font-normal);
   color: var(--text-strong);
   min-width: 0;
 }
@@ -889,7 +887,6 @@
 
 .sidebar__footer {
   border-top: 1px solid var(--line);
-  background: var(--surface-overlay-muted);
 }
 
 .sidebar__settings {
@@ -897,10 +894,10 @@
   align-items: center;
   gap: 10px;
   color: var(--muted-strong);
-  font-size: 14px;
-  font-weight: 500;
-  padding: 6px 8px;
-  border-radius: var(--radius-lg);
+  font-size: 13px;
+  font-weight: var(--font-medium);
+  padding: 8px;
+  border-radius: var(--radius-md);
 }
 
 .sidebar__settings-mark {
@@ -910,11 +907,8 @@
 }
 
 @media (max-width: 1180px) {
-  /* Scope to the expanded shell: `.shell--sidebar-collapsed` has the same
-     specificity as `.shell`, so an unscoped rule here would win by source
-     order and pin `.main` to a 272px column when the sidebar is collapsed. */
-  .shell:not(.shell--sidebar-collapsed) {
-    grid-template-columns: 272px minmax(0, 1fr);
+  .shell {
+    --sidebar-width: 220px;
   }
 }
 

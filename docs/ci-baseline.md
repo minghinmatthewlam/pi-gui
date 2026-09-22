@@ -28,13 +28,15 @@ Run `pnpm check` locally and in the existing CI typecheck job. It runs:
 3. `pnpm check:architecture`: checks renderer runtime imports and reachable local
    helpers. It rejects Node, Electron, Pi runtime, and main/preload implementation
    dependencies. Explicit type-only imports and pure shared helpers remain valid.
-4. `pnpm typecheck`: builds shared declarations, then checks all six workspaces,
-   including the website and video source. First, `check:workspaces` asks pnpm for
+4. `pnpm typecheck`: builds shared declarations, then checks every workspace,
+   including the website, video source, and extension helper. It also checks both
+   desktop extension examples. First, `check:workspaces` asks pnpm for
    its workspace list and rejects missing or empty typecheck scripts, so a new
    workspace cannot silently skip checking. This checks script presence, not
    whether a deliberately misleading script performs a real typecheck. Existing strict TypeScript settings
    remain in place.
-5. `pnpm test:baseline`: guard tests, driver unit tests, release-helper tests,
+5. `pnpm test:baseline`: guard tests, driver and extension-helper tests, both
+   desktop extension examples and browser-bundle freshness, release-helper tests,
    and desktop unit tests (including failed-action state preservation).
 
 Guard tests exercise the actual lint configuration with invalid and valid input.

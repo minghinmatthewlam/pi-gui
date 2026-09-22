@@ -216,7 +216,7 @@ test("preserves a composer draft across a fast session switch", async () => {
     // Switch away immediately, before the 350ms persist debounce fires: the pending write must be
     // flushed onto Thread A rather than cancelled.
     await clickSession(window, "Draft Thread B");
-    await expect(window.locator(".topbar__session")).toHaveText("Draft Thread B");
+    await expect(window.locator(".chat-header__title")).toHaveText("Draft Thread B");
 
     await selectSession(window, "Draft Thread A");
     await expect(composer).toHaveValue(draft);
@@ -315,7 +315,7 @@ for (const operation of ["draft", "command"] as const) {
         },
       );
 
-      await expect(window.locator(".topbar__session")).toHaveText("Target Bravo");
+      await expect(window.locator(".chat-header__title")).toHaveText("Target Bravo");
       await expect(window.getByTestId("composer")).toHaveValue("Bravo stays intact");
       await expect(window.getByTestId("transcript")).not.toContainText(
         /Model |No session overrides set/,

@@ -65,7 +65,7 @@ test("supports keyboard shortcuts, slash menus, and topbar controls through the 
   try {
     const window = await harness.firstWindow();
     await createNamedThread(window, "Controls session");
-    await expect(window.locator(".topbar__session")).toHaveText("Controls session");
+    await expect(window.locator(".chat-header__title")).toHaveText("Controls session");
 
     const composer = window.getByTestId("composer");
 
@@ -122,7 +122,9 @@ test("supports keyboard shortcuts, slash menus, and topbar controls through the 
     await composer.press("Enter");
     await expect(optionsMenu).toHaveCount(0);
     await expect(window.getByTestId("transcript")).toContainText("Thinking set to max");
-    await expect(window.locator(".composer__hint")).toContainText("max");
+    await expect(
+      window.locator(".composer").getByRole("button", { name: "max", exact: true }),
+    ).toBeVisible();
 
     await composer.fill("Keep the draft /thinking");
     await expect(optionsMenu).toBeVisible();

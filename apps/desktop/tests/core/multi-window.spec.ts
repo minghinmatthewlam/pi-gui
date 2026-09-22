@@ -148,7 +148,7 @@ async function expectSelected(
       workspacePath,
       sessionTitle,
     });
-  await expect(window.locator(".topbar__session")).toHaveText(sessionTitle);
+  await expect(window.locator(".chat-header__title")).toHaveText(sessionTitle);
 }
 
 async function pendingDialogCount(

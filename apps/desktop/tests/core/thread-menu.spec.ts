@@ -94,7 +94,7 @@ test("thread menu supports rename, archive/restore, mark read, copy id, and righ
     row = window.locator(".session-row", { hasText: targetTitle }).first();
     await row.hover();
     await row.locator(".session-row__menu-button").click();
-    await expect(window.locator(".topbar__session")).toHaveText("Other active thread");
+    await expect(window.locator(".chat-header__title")).toHaveText("Other active thread");
     await window.keyboard.press("Escape");
     await window.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
     await row.hover();
@@ -120,7 +120,7 @@ test("thread menu supports rename, archive/restore, mark read, copy id, and righ
     );
     expect(hitIsAction).toBe(false);
     await window.mouse.click(gapPoint.x, gapPoint.y);
-    await expect(window.locator(".topbar__session")).toHaveText(targetTitle);
+    await expect(window.locator(".chat-header__title")).toHaveText(targetTitle);
     await captureProof(window, "06-gap-fixed.png");
 
     await row.hover();

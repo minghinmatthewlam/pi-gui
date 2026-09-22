@@ -34,6 +34,7 @@ interface ConversationTimelineProps {
   readonly viewport: TimelineViewport;
   readonly threadSearch: ThreadSearchModel;
   readonly onViewFileInDiff?: (path: string) => void;
+  readonly onReviewTurn?: (messageId: string) => Promise<void>;
   readonly onForkFromMessage?: (messageIndex: number, preview?: string) => void;
   readonly onOpenWorkspaceFileLine?: (target: WorkspaceFileLine) => void;
   readonly scheduledOrigins?: ReadonlyMap<string, ScheduledTaskOrigin>;
@@ -47,6 +48,7 @@ export function ConversationTimeline({
   viewport,
   threadSearch,
   onViewFileInDiff,
+  onReviewTurn,
   onForkFromMessage,
   onOpenWorkspaceFileLine,
   scheduledOrigins,
@@ -131,6 +133,7 @@ export function ConversationTimeline({
                   expandedToolCallIds={expandedToolCallIds}
                   onToggleToolCall={toggleToolCall}
                   onViewFileInDiff={onViewFileInDiff}
+                  onReviewTurn={onReviewTurn}
                   sourceMessageIndex={renderedMessageIndexById.get(item.id)}
                   onForkFromMessage={onForkFromMessage}
                   onOpenWorkspaceFileLine={onOpenWorkspaceFileLine}
@@ -228,6 +231,7 @@ interface MeasuredTimelineItemProps {
   readonly expandedToolCallIds: ReadonlySet<string>;
   readonly onToggleToolCall: (callId: string) => void;
   readonly onViewFileInDiff?: (path: string) => void;
+  readonly onReviewTurn?: (messageId: string) => Promise<void>;
   readonly sourceMessageIndex?: number;
   readonly onForkFromMessage?: (messageIndex: number, preview?: string) => void;
   readonly onOpenWorkspaceFileLine?: (target: WorkspaceFileLine) => void;
@@ -244,6 +248,7 @@ function MeasuredTimelineItemBase({
   expandedToolCallIds,
   onToggleToolCall,
   onViewFileInDiff,
+  onReviewTurn,
   sourceMessageIndex,
   onForkFromMessage,
   onOpenWorkspaceFileLine,
@@ -285,6 +290,7 @@ function MeasuredTimelineItemBase({
         expandedToolCallIds={expandedToolCallIds}
         onToggleToolCall={onToggleToolCall}
         onViewFileInDiff={onViewFileInDiff}
+        onReviewTurn={onReviewTurn}
         sourceMessageIndex={sourceMessageIndex}
         onForkFromMessage={onForkFromMessage}
         onOpenWorkspaceFileLine={onOpenWorkspaceFileLine}
@@ -308,7 +314,12 @@ function isSameDisplayItem(a: DisplayTimelineItem, b: DisplayTimelineItem): bool
     return false;
   }
   if (a.kind === "message" && b.kind === "message") {
-    return a.role === b.role && a.text === b.text && a.attachments === b.attachments;
+    return (
+      a.role === b.role &&
+      a.text === b.text &&
+      a.attachments === b.attachments &&
+      a.sourceMessageId === b.sourceMessageId
+    );
   }
   if (a.kind === "tool" && b.kind === "tool") {
     // input/output are rebuilt objects on every transcript update, so identity
@@ -350,6 +361,7 @@ function areMeasuredTimelineItemPropsEqual(
     prev.expandedToolCallIds === next.expandedToolCallIds &&
     prev.onToggleToolCall === next.onToggleToolCall &&
     prev.onViewFileInDiff === next.onViewFileInDiff &&
+    prev.onReviewTurn === next.onReviewTurn &&
     prev.sourceMessageIndex === next.sourceMessageIndex &&
     prev.onForkFromMessage === next.onForkFromMessage &&
     prev.onOpenWorkspaceFileLine === next.onOpenWorkspaceFileLine &&

@@ -28,6 +28,7 @@ const paths = [
   "packages/catalogs/test/atomic-write.test.mts",
   "packages/pi-sdk-driver/test/session-schema.test.mts",
   "packages/session-driver/src/index.ts",
+  "packages/extension-ui/src/index.ts",
   "video/src/Root.tsx",
 ];
 
@@ -184,8 +185,8 @@ test("a new workspace cannot silently receive only syntax lint", async () => {
   writeFileSync(
     configPath,
     readFileSync(configPath, "utf8").replace(
-      '...["catalogs", "pi-sdk-driver", "session-driver"]',
-      '...["catalogs", "pi-sdk-driver", "session-driver", "new-feature"]',
+      '...["catalogs", "pi-sdk-driver", "session-driver", "extension-ui"]',
+      '...["catalogs", "pi-sdk-driver", "session-driver", "extension-ui", "new-feature"]',
     ),
   );
   mkdirSync(path.join(registeredWorkspace, "src"));

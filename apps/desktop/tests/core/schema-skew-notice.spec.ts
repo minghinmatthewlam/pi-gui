@@ -41,7 +41,7 @@ test("shows a version-skew notice for a session written by a newer pi, dismissib
   try {
     const window = await secondRun.firstWindow();
     await waitForWorkspaceByPath(window, workspacePath);
-    await expect(window.locator(".topbar__session")).toHaveText("Skewed session");
+    await expect(window.locator(".chat-header__title")).toHaveText("Skewed session");
 
     // The projection is part of the contract: missing schema data must fail this test.
     await expect
@@ -66,7 +66,7 @@ test("shows a version-skew notice for a session written by a newer pi, dismissib
   try {
     const window = await thirdRun.firstWindow();
     await waitForWorkspaceByPath(window, workspacePath);
-    await expect(window.locator(".topbar__session")).toHaveText("Skewed session");
+    await expect(window.locator(".chat-header__title")).toHaveText("Skewed session");
     await expect(window.getByTestId("schema-skew-notice")).toBeVisible({ timeout: 15_000 });
   } finally {
     await thirdRun.close();
@@ -84,7 +84,7 @@ test("does not show the version-skew notice for a current-version session", asyn
   try {
     const window = await harness.firstWindow();
     await createNamedThread(window, "Current session");
-    await expect(window.locator(".topbar__session")).toHaveText("Current session");
+    await expect(window.locator(".chat-header__title")).toHaveText("Current session");
     await expect(window.getByTestId("transcript")).toBeVisible({ timeout: 15_000 });
     await expect(window.getByTestId("schema-skew-notice")).toHaveCount(0);
   } finally {

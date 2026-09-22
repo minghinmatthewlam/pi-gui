@@ -21,6 +21,10 @@ import type { NotificationPermissionService } from "../platform/notification-per
 import type { TerminalService } from "../platform/terminal-service";
 import type { ThemeManager } from "../platform/theme-manager";
 import type { WindowOwner } from "../windows/window-owner";
+import { WorkbenchRequests, type WorkbenchOwner } from "./workbench-requests";
+import type { DesktopExtensionViewOwner } from "../extensions/extension-view-owner";
+import { registerExtensionViewRequests } from "./extension-view-requests";
+import { registerReviewRequests, type ReviewRequestsOwner } from "./review-requests";
 import { assertComposerAttachmentPixels } from "./composer-attachment-pixels";
 import {
   expectAppView,
@@ -42,6 +46,7 @@ import {
   expectRemoveWorktreeInput,
   expectSendChildThreadFollowUpInput,
   expectSessionTarget,
+  expectRecord,
   expectSetChildSupervisionLoopInput,
   expectStartThreadInput,
   expectCreateScheduledTaskInput,
@@ -147,6 +152,9 @@ type SettingsOwner = Pick<
 
 export interface DesktopIpcOwners {
   readonly state: StateOwner;
+  readonly workbench: WorkbenchOwner;
+  readonly review: ReviewRequestsOwner;
+  readonly extensionViews: DesktopExtensionViewOwner;
   readonly workspace: WorkspaceOwner;
   readonly conversation: ConversationOwner;
   readonly orchestration: OrchestrationOwner;
@@ -210,6 +218,31 @@ export function registerDesktopIpc({
   owners,
   capabilities,
 }: RegisterDesktopIpcOptions): void {
+  registerReviewRequests(windows, owners.review);
+  registerExtensionViewRequests(windows, owners.extensionViews);
+  const workbench = new WorkbenchRequests(owners.workbench);
+  const workbenchSenders = new WeakSet<Electron.WebContents>();
+  const workbenchSender = (event: IpcMainInvokeEvent) => {
+    const sender = windows.windowForSender(event.sender).webContents;
+    if (!event.senderFrame || event.senderFrame !== sender.mainFrame) {
+      throw new Error("Workbench requests must originate from the window's main frame.");
+    }
+    if (!workbenchSenders.has(sender)) {
+      workbenchSenders.add(sender);
+      sender.on("did-start-navigation", (_event, _url, isInPlace, isMainFrame) => {
+        if (isMainFrame && !isInPlace) workbench.resetRenderer(sender);
+      });
+      sender.once("destroyed", () => workbench.resetRenderer(sender));
+    }
+    return sender;
+  };
+  ipcMain.handle(desktopIpc.getTaskWorkbenchTemplate, (event, rawTarget: unknown) => {
+    workbenchSender(event);
+    return workbench.get(rawTarget);
+  });
+  ipcMain.handle(desktopIpc.saveTaskWorkbenchTemplate, (event, rawInput: unknown) =>
+    workbench.save(workbenchSender(event), rawInput),
+  );
   const run = (event: IpcMainInvokeEvent, action: () => Promise<DesktopAppState>) =>
     windows.runStateAction(senderWindow(windows, event), action);
   const immediate = (event: IpcMainInvokeEvent, action: () => Promise<DesktopAppState>) =>
@@ -721,6 +754,27 @@ export function registerDesktopIpc({
         target,
         expectNonEmptyString(rawMessageId, "messageId"),
       ),
+    );
+  });
+  ipcMain.handle(desktopIpc.persistComposerDraft, async (event, raw: unknown) => {
+    const window = senderWindow(windows, event);
+    if (event.senderFrame !== window.webContents.mainFrame)
+      throw new Error("Draft persistence requires the main frame");
+    const input = expectRecord(raw, "composer draft");
+    const target = expectSessionTarget(input.target);
+    const draft = expectString(input.draft, "draft");
+    const state = await owners.state.getStateForView(windows.viewForWindow(window));
+    if (
+      !state.workspaces.some(
+        (workspace) =>
+          workspace.id === target.workspaceId &&
+          workspace.sessions.some((session) => session.id === target.sessionId),
+      )
+    ) {
+      throw new Error("The draft's task is unavailable");
+    }
+    await windows.withComposerDraftPersistOrigin(event.sender, () =>
+      owners.conversation.updateComposerDraft(target, draft),
     );
   });
   ipcMain.handle(desktopIpc.updateComposerDraft, (event, rawDraft: unknown) => {

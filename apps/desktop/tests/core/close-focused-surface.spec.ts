@@ -76,7 +76,7 @@ test("Ctrl or Cmd+W closes the focused Files, Changes, or Terminal surface", asy
 
     await selectSidePanel(window, "Changes");
     await selectSidePanel(window, "Terminal");
-    await expect(changes).toBeVisible();
+    await expect(changes).toHaveCount(0);
     await expect(terminal).toBeVisible();
     await terminal.locator(".xterm").click();
     await expectFocusWithin(window, "[data-pi-terminal]");

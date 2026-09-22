@@ -24,6 +24,7 @@ export default [
   {
     ignores: [
       "**/node_modules/**",
+      "examples/desktop-extensions/*/dist/**",
       // Generated output lives at repository/workspace roots, never anywhere
       // named "release" or "build" inside product source.
       ...["", "apps/*/", "packages/*/", "video/"].flatMap((root) =>
@@ -53,6 +54,7 @@ export default [
     files: [
       "apps/**/*.{js,mjs,cjs,ts,tsx,mts,cts}",
       "packages/**/*.{js,mjs,cjs,ts,tsx,mts,cts}",
+      "examples/desktop-extensions/**/*.{js,mjs,cjs,ts,tsx,mts,cts}",
       "video/**/*.{js,mjs,cjs,ts,tsx,mts,cts}",
       "scripts/**/*.{js,mjs,cjs,ts,tsx,mts,cts}",
       ".github/scripts/**/*.{js,mjs,cjs,ts,tsx,mts,cts}",
@@ -97,8 +99,14 @@ export default [
     ],
     "apps/desktop/tsconfig.lint.json",
   ),
-  ...["catalogs", "pi-sdk-driver", "session-driver"].map((name) =>
+  ...["catalogs", "pi-sdk-driver", "session-driver", "extension-ui"].map((name) =>
     typedProject([`packages/${name}/**/*.{ts,tsx,mts,cts}`], `packages/${name}/tsconfig.lint.json`),
+  ),
+  ...["pr-review", "test-runs"].map((name) =>
+    typedProject(
+      [`examples/desktop-extensions/${name}/**/*.{ts,tsx,mts,cts}`],
+      `examples/desktop-extensions/${name}/tsconfig.lint.json`,
+    ),
   ),
   typedProject(["apps/website/**/*.{ts,tsx,mts,cts}"], "apps/website/tsconfig.json"),
   typedProject(["video/**/*.{ts,tsx,mts,cts}"], "video/tsconfig.lint.json"),
