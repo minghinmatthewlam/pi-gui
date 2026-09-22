@@ -8,13 +8,17 @@
 .model-selector {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  flex-wrap: wrap;
+  gap: 4px;
   position: relative;
+  max-width: 100%;
 }
 
 .model-selector__anchor {
   position: relative;
   display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .model-selector__badge {
@@ -22,14 +26,17 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  min-height: 24px;
-  padding: 2px 9px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-pill);
+  min-height: 28px;
+  min-width: 0;
+  padding: 4px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
   background: var(--surface-muted);
+  overflow-wrap: anywhere;
+  text-align: left;
   color: var(--muted-strong);
   font-size: 12px;
-  font-weight: 560;
+  font-weight: var(--font-medium);
   letter-spacing: -0.01em;
   transition:
     background var(--motion-base) var(--ease-out),

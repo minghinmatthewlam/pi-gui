@@ -54,7 +54,7 @@ test("boots an existing workspace and starts a new thread through the real UI", 
 
     await window.getByRole("button", { name: "Start thread" }).click();
 
-    await expect(window.locator(".topbar__session")).toHaveText(/\S+/);
+    await expect(window.locator(".chat-header__title")).toHaveText(/\S+/);
     await expect(window.getByTestId("composer")).toBeFocused();
     await expect
       .poll(

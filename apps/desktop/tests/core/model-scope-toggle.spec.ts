@@ -41,7 +41,7 @@ test("switches between app-global and per-repo model scope while worktrees inher
     await createNamedThread(window, "Repo A global session", {
       workspaceName: rootWorkspaceA.name,
     });
-    await expect(window.locator(".topbar__session")).toHaveText("Repo A global session");
+    await expect(window.locator(".chat-header__title")).toHaveText("Repo A global session");
     await expectComposerModelState(window, {
       activeModel: "openai:gpt-5",
       visibleModelLabels: ["GPT-5", "GPT-4o"],
@@ -51,7 +51,7 @@ test("switches between app-global and per-repo model scope while worktrees inher
     await createNamedThread(window, "Repo B global session", {
       workspaceName: rootWorkspaceB.name,
     });
-    await expect(window.locator(".topbar__session")).toHaveText("Repo B global session");
+    await expect(window.locator(".chat-header__title")).toHaveText("Repo B global session");
     await expectComposerModelState(window, {
       activeModel: "openai:gpt-5",
       visibleModelLabels: ["GPT-5", "GPT-4o"],
@@ -101,7 +101,7 @@ test("switches between app-global and per-repo model scope while worktrees inher
       provider: "openai",
       modelId: "gpt-4o",
     });
-    await expect(window.locator(".topbar__session")).toHaveText("New thread");
+    await expect(window.locator(".chat-header__title")).toHaveText("New thread");
     await expectComposerModelState(window, {
       activeModel: "openai:gpt-4o",
       visibleModelLabels: ["GPT-4o", "GPT-4 Turbo"],

@@ -61,6 +61,10 @@
   min-height: 0;
   min-width: 0;
   max-height: none;
+  /* The scrollbar takes its width out of the right gutter, so the transcript
+   * lines up with the header and composer column on both sides. */
+  padding-inline: var(--thread-gutter) calc(var(--thread-gutter) - var(--scrollbar-size));
+  scrollbar-gutter: stable;
 }
 
 .timeline-empty {
@@ -78,7 +82,7 @@
   border-radius: var(--radius-pill);
   border: 1px solid var(--line);
   background: var(--surface);
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow-sm);
   color: var(--text-strong);
   font-size: 13px;
   font-weight: 600;
@@ -184,6 +188,14 @@
   font-weight: 500;
 }
 
+.timeline-item__review-error {
+  margin: var(--space-1) 0 0;
+  color: var(--error-ink);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  overflow-wrap: anywhere;
+}
+
 .timeline-item__action:hover {
   background: var(--surface-muted);
   border-color: var(--line);
@@ -193,10 +205,10 @@
 .timeline-item__bubble {
   width: min(620px, 100%);
   min-width: 0;
-  padding: 13px 17px;
-  border-radius: var(--radius-3xl);
-  border: 1px solid var(--theme-bubble-border, var(--line));
-  background: var(--theme-bubble-bg, var(--main));
+  padding: 12px 16px;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--theme-bubble-border, transparent);
+  background: var(--theme-bubble-bg, var(--surface-muted));
 }
 
 .timeline-item__attachments {
@@ -714,7 +726,8 @@
   color: var(--text-strong);
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 9px;
+  gap: 12px;
+  font-size: var(--text-base);
   line-height: 1.65;
   max-width: 100%;
   min-width: 0;
@@ -748,7 +761,7 @@
 }
 
 .message__content code {
-  font-family: "SF Mono", "JetBrains Mono", ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 0.92em;
 }
 

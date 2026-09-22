@@ -20,51 +20,27 @@
 }
 
 .main--with-side-panel {
-  grid-template-columns: 1fr 400px;
-}
-
-.main--with-side-panel.main--with-files {
-  grid-template-columns: minmax(0, 1fr) minmax(480px, 1fr);
+  grid-template-columns: minmax(0, 1fr) min(var(--workbench-width, 440px), 65%);
 }
 
 .main--with-side-panel > .topbar {
-  grid-column: 1 / -1;
+  grid-column: 1;
 }
 
 .main--with-side-panel > .composer {
   grid-column: 1;
 }
 
-.main--with-terminal {
-  grid-template-rows: auto minmax(0, 1fr) auto auto;
-}
-
 .main--with-startup-diagnostics {
   grid-template-rows: auto auto minmax(0, 1fr) auto;
 }
 
-.main--with-terminal.main--with-startup-diagnostics {
-  grid-template-rows: auto auto minmax(0, 1fr) auto auto;
-}
-
 .main--with-side-panel > .startup-diagnostics {
-  grid-column: 1 / -1;
-}
-
-.main--with-side-panel > .terminal-panel {
   grid-column: 1;
 }
 
-.main--with-side-panel.main--terminal-takeover {
-  grid-template-rows: auto minmax(0, 1fr);
-}
-
-.main--with-side-panel.main--terminal-takeover.main--with-startup-diagnostics {
-  grid-template-rows: auto auto minmax(0, 1fr);
-}
-
 .canvas {
-  padding: 20px 28px 0;
+  padding: 24px 24px 0;
   overflow: auto;
 }
 
@@ -74,6 +50,11 @@
   min-height: 0;
   min-width: 0;
   overflow: hidden;
+  /* The transcript scroller spans the full canvas so its scrollbar sits on the
+   * panel edge; fixed chrome keeps the centered column via --thread-column. */
+  --thread-gutter: 24px;
+  --thread-column: min(920px, 100% - 2 * var(--thread-gutter));
+  padding-inline: 0;
 }
 
 .conversation {
@@ -84,9 +65,16 @@
 .conversation--thread {
   display: flex;
   flex: 1 1 auto;
+  width: 100%;
   min-height: 0;
   min-width: 0;
   flex-direction: column;
+}
+
+.conversation--thread > :not(.timeline-surface),
+.conversation--thread .thread-search-bar {
+  width: var(--thread-column);
+  margin-inline: auto;
 }
 
 .conversation--composer {
@@ -106,34 +94,16 @@
   pointer-events: none;
 }
 
-.chat-header {
-  display: grid;
-  gap: 4px;
-  margin-bottom: 18px;
-}
-
-.chat-header__eyebrow {
-  color: var(--muted-subtle);
-  font-size: 12px;
-  font-weight: 560;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.chat-header__row {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-}
-
 .chat-header__title {
   margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--text-strong);
-  font-size: 18px;
+  font-size: 14px;
   font-weight: 610;
-  letter-spacing: -0.03em;
-  line-height: 1.15;
+  letter-spacing: -0.02em;
 }
 
 .chat-header__status {
@@ -189,20 +159,8 @@
 
 .main--with-side-panel > .side-panel {
   grid-column: 2;
-  grid-row: 2 / -1;
+  grid-row: 1 / -1;
   border-left: 1px solid var(--border);
-}
-
-.main--with-side-panel.main--with-terminal > .side-panel {
-  grid-row: 2 / span 3;
-}
-
-.main--with-side-panel.main--with-startup-diagnostics > .side-panel {
-  grid-row: 3 / -1;
-}
-
-.main--with-side-panel.main--with-terminal.main--with-startup-diagnostics > .side-panel {
-  grid-row: 3 / span 3;
 }
 
 .file-workbench__mode {
@@ -559,7 +517,7 @@
 .file-workbench__status-label {
   margin-left: auto;
   color: var(--muted-soft);
-  font-family: var(--font-sans);
+  font-family: var(--font-ui);
   font-size: 11px;
 }
 
@@ -673,38 +631,14 @@
 /* Integrated terminal */
 
 .terminal-panel {
-  grid-column: 1;
-  min-height: 220px;
-  max-height: calc(100vh - 140px);
+  min-height: 0;
+  min-width: 0;
   display: grid;
-  grid-template-rows: auto 1fr;
-  border-top: 1px solid #2a2e3a;
+  grid-template-rows: auto minmax(0, 1fr);
   background: #0f1117;
   color: #d7dae0;
   overflow: hidden;
   position: relative;
-  z-index: 8;
-}
-
-.terminal-panel--takeover {
-  grid-row: 2 / -1;
-  height: auto;
-  max-height: none;
-  z-index: 20;
-}
-
-.main--with-startup-diagnostics > .terminal-panel--takeover {
-  grid-row: 3 / -1;
-}
-
-.terminal-panel__resize-handle {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 6px;
-  cursor: ns-resize;
-  z-index: 2;
 }
 
 .terminal-panel__toolbar {
@@ -947,25 +881,28 @@
 }
 
 .composer {
-  padding: 18px 28px 24px;
-  background: linear-gradient(180deg, transparent 0%, var(--main) 54%);
+  padding: 16px 24px 20px;
+  background: var(--main);
 }
 
 .composer__surface {
   position: relative;
-  border-radius: var(--radius-4xl);
-  padding: 12px 14px 11px;
+  border-radius: var(--radius-composer);
+  padding: 12px;
   border: 1px solid var(--theme-control-border, var(--line));
   background: var(--theme-control-bg, var(--surface));
   width: 100%;
-  box-shadow:
-    0 0 0 1px var(--theme-focus-ring, transparent),
-    var(--shadow-md);
+  box-shadow: var(--shadow-sm);
   overflow: visible;
   transition:
     border-color var(--motion-base) var(--ease-out),
     box-shadow var(--motion-base) var(--ease-out),
     background-color var(--motion-base) var(--ease-out);
+}
+
+.composer__surface:focus-within {
+  border-color: var(--theme-control-border, var(--focus-ring-border));
+  box-shadow: 0 0 0 2px var(--theme-focus-ring, var(--focus-ring-color));
 }
 
 .composer__surface--drag-active {
@@ -1063,9 +1000,13 @@
   background: transparent;
   color: var(--text-strong);
   line-height: 1.5;
-  font-size: 15px;
+  font-size: var(--text-base);
   min-height: 24px;
   max-height: 220px;
+}
+
+.composer textarea:focus-visible {
+  box-shadow: none;
 }
 
 .composer__bar {
@@ -1075,7 +1016,7 @@
 
 .composer__footer {
   display: grid;
-  gap: 10px;
+  gap: 8px;
   width: 100%;
 }
 
@@ -1083,16 +1024,18 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 12px;
 }
 
 .composer__hint {
   color: var(--muted-soft);
   font-size: 12px;
+  line-height: 1.4;
 }
 
 .model-onboarding-notice {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
@@ -1102,6 +1045,7 @@
 }
 
 .model-onboarding-notice__body {
+  flex: 1 1 180px;
   min-width: 0;
   display: flex;
   align-items: baseline;
@@ -1187,11 +1131,13 @@
 }
 
 .composer__config {
+  min-width: 0;
   color: var(--muted);
 }
 
 .composer__actions {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   gap: 8px;
 }
@@ -1199,10 +1145,18 @@
 .composer__attach {
   width: 32px;
   height: 32px;
-  border-radius: var(--radius-lg);
-  color: var(--muted-soft);
-  border: 1px solid var(--line);
-  background: var(--surface-muted);
+  border-radius: var(--radius-md);
+  color: var(--muted-strong);
+  border: 1px solid transparent;
+  background: transparent;
+}
+
+.composer__actions .button--cta-icon {
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  min-height: 32px;
+  border-radius: var(--radius-md);
 }
 
 .composer__attachments {
@@ -1401,13 +1355,14 @@
   display: grid;
   align-content: start;
   gap: var(--space-4);
-  padding: var(--space-8) var(--space-3) var(--space-4);
+  padding: var(--titlebar-inset-top) var(--space-3) var(--space-4);
   border-right: 1px solid var(--border-default);
   background: var(--sidebar);
 }
 
 .secondary-surface__back {
   width: fit-content;
+  min-height: var(--sidebar-first-control-height);
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
@@ -2887,31 +2842,22 @@
   margin: 0;
 }
 
-@media (max-width: 1200px) {
-  .main--with-side-panel.main--with-files {
-    grid-template-columns: 1fr;
-  }
-
-  .main--with-side-panel.main--with-files > .side-panel {
-    grid-column: 1;
-    grid-row: auto;
-    max-height: 480px;
-    border-top: 1px solid var(--border);
-    border-left: 0;
-  }
-}
-
 @media (max-width: 980px) {
   .main--with-side-panel {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .main--with-side-panel > .side-panel {
-    grid-column: 1;
+    grid-column: auto;
     grid-row: auto;
-    max-height: 420px;
-    border-top: 1px solid var(--border);
-    border-left: 0;
+    position: absolute;
+    top: 48px;
+    right: 0;
+    bottom: 0;
+    z-index: 20;
+    width: min(var(--workbench-width, 440px), 100%);
+    border-left: 1px solid var(--border);
+    box-shadow: var(--shadow-lg);
   }
 
   .topbar,
@@ -2921,9 +2867,12 @@
     padding-right: 18px;
   }
 
-  .topbar,
+  .canvas--thread {
+    --thread-gutter: 18px;
+    padding-inline: 0;
+  }
+
   .composer__bar,
-  .chat-header__row,
   .view-header,
   .tree-modal__footer {
     flex-direction: column;

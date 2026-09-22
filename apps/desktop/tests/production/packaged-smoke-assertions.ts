@@ -33,7 +33,7 @@ export async function assertPackagedAppCanStartThread(
   await prompt.fill(options.promptText);
   await window.getByRole("button", { name: "Start thread" }).click();
 
-  await expect(window.locator(".topbar__session")).toHaveText(/\S+/);
+  await expect(window.locator(".chat-header__title")).toHaveText(/\S+/);
   await expect(window.getByTestId("composer")).toBeFocused();
   await expect(window.getByTestId("transcript")).toContainText(options.promptText);
 }

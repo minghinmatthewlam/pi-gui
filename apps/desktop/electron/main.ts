@@ -6,11 +6,13 @@ import {
   Menu,
   nativeImage,
   net,
+  protocol,
   shell,
   type MenuItemConstructorOptions,
   type MessageBoxOptions,
 } from "electron";
 import { isValidHttpBaseUrl } from "@pi-gui/pi-sdk-driver";
+import { createRequire } from "node:module";
 import { randomUUID } from "node:crypto";
 import type { AgentToolResult, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { readFile, stat } from "node:fs/promises";
@@ -19,6 +21,14 @@ import { pathToFileURL } from "node:url";
 import { augmentPosixPath } from "../scripts/augment-path.cjs";
 import { DesktopAppStore } from "./application/app-store";
 import { WindowOwner } from "./windows/window-owner";
+import { TurnCheckpointStore } from "./workbench/checkpoint-store";
+import {
+  DesktopExtensionViewOwner,
+  DESKTOP_EXTENSION_SCHEME,
+} from "./extensions/extension-view-owner";
+import { performExtensionViewHostAction } from "./extensions/extension-view-actions";
+import { extensionFrameDocument } from "./extensions/extension-frame-document";
+import { ReviewOwner } from "./workbench/review-owner";
 import { registerDesktopIpc } from "./ipc/register-desktop-ipc";
 import {
   createOrchestrationRuntimeExtension,
@@ -65,11 +75,19 @@ import type { SessionDriverEvent } from "@pi-gui/session-driver";
 import type { GenerateThreadTitleOptions } from "@pi-gui/pi-sdk-driver";
 import type { SessionRef, WorkspaceRef } from "@pi-gui/session-driver";
 
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: DESKTOP_EXTENSION_SCHEME,
+    privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true },
+  },
+]);
+
 const isDev = Boolean(process.env.ELECTRON_RENDERER_URL);
 const appTestMode = resolveAppTestMode(process.env.PI_APP_TEST_MODE);
 const windowTestMode = appTestMode ?? "foreground";
 const devReloadMarkersEnabled = process.env.PI_APP_DEV_RELOAD_MARKERS === "1";
 let store: DesktopAppStore;
+let extensionViewOwner: DesktopExtensionViewOwner | undefined;
 let windowOwner: WindowOwner;
 const themeManager = new ThemeManager();
 let mainWindow: BrowserWindow | null = null;
@@ -385,6 +403,23 @@ function createWindow(): BrowserWindow {
       openExternalWebUrl(url);
     }
     return { action: "deny" };
+  });
+  window.webContents.on("will-frame-navigate", (event) => {
+    if (event.isMainFrame) return;
+    try {
+      const url = new URL(event.url);
+      if (
+        url.protocol !== `${DESKTOP_EXTENSION_SCHEME}:` ||
+        url.pathname !== "/" ||
+        url.search ||
+        url.hash
+      )
+        throw new Error("Unexpected frame navigation");
+      if (!extensionViewOwner) throw new Error("Extension host unavailable");
+      extensionViewOwner.getConnectionContext(url.hostname, window.webContents.id);
+    } catch {
+      event.preventDefault();
+    }
   });
   window.webContents.on("will-navigate", (event, url) => {
     if (isInAppNavigationUrl(url)) {
@@ -770,7 +805,39 @@ app
       | undefined;
     const orchestrationRuntimeBridge = createStoreBackedOrchestrationRuntimeBridge();
     const scheduledTaskRuntimeBridge = createStoreBackedScheduledTaskRuntimeBridge();
-    const driverOptions = {
+    const checkpoints = new TurnCheckpointStore(configuredUserDataDir);
+    const extensionViews: DesktopExtensionViewOwner = new DesktopExtensionViewOwner({
+      frameDocument: extensionFrameDocument,
+      hostAssets: {
+        "frame-bridge.js": {
+          body: await readFile(
+            createRequire(__filename).resolve("@pi-gui/extension-ui/frame-bridge"),
+            "utf8",
+          ),
+          contentType: "text/javascript; charset=utf-8",
+        },
+      },
+      onHostAction: (context) =>
+        performExtensionViewHostAction(
+          { store, windows: windowOwner, views: extensionViews },
+          context,
+        ),
+      onDiagnostic: (target, source, message) =>
+        console.error("[extension-view]", target.sessionId, source, message),
+    });
+    extensionViewOwner = extensionViews;
+    protocol.handle(DESKTOP_EXTENSION_SCHEME, (request) =>
+      extensionViews.assetResponse(request.url),
+    );
+    const driverOptions: NonNullable<
+      ConstructorParameters<typeof DesktopAppStore>[0]["driverOptions"]
+    > = {
+      onTurnCaptureBoundary: (boundary, signal) => checkpoints.recordBoundary(boundary, signal),
+      desktopExtensions: {
+        onChanged: (runtime) => extensionViews.replaceRuntime(runtime),
+        onInvalidated: ({ target, generation }) =>
+          extensionViews.invalidateRuntime(target, generation),
+      },
       extensionFactories: [
         createOrchestrationRuntimeExtension(orchestrationRuntimeBridge),
         createScheduledTaskRuntimeExtension(scheduledTaskRuntimeBridge, (ctx) => {
@@ -893,6 +960,21 @@ app
       windows: windowOwner,
       owners: {
         state: store,
+        workbench: store,
+        extensionViews,
+        review: new ReviewOwner({
+          checkpoints,
+          userDataDir: app.getPath("userData"),
+          resolveCheckoutPath: (checkoutId) => store.getWorkspacePath(checkoutId),
+          validateTask: (target) =>
+            store
+              .snapshot()
+              .workspaces.some(
+                (workspace) =>
+                  workspace.id === target.workspaceId &&
+                  workspace.sessions.some((session) => session.id === target.sessionId),
+              ),
+        }),
         workspace: store,
         conversation: store,
         orchestration: store,
@@ -1033,9 +1115,11 @@ app.on("before-quit", (event) => {
 
   event.preventDefault();
   quittingAfterStoreFlush = true;
-  const flush = store.flushPersistence().catch((error) => {
-    console.error("pi-gui: persistence flush failed during quit:", error);
-  });
+  const flush = Promise.all([store.flushPersistence(), extensionViewOwner?.dispose()]).catch(
+    (error) => {
+      console.error("pi-gui: persistence flush failed during quit:", error);
+    },
+  );
   // Never let a hung flush block quit forever — quit after a bounded wait.
   const flushDeadline = new Promise<void>((resolve) => {
     setTimeout(() => {

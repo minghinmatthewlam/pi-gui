@@ -44,18 +44,18 @@ test("keeps extension widgets, status, and title scoped to the active session", 
     await composer.fill("/mark-ui ");
     await composer.press("Enter");
 
-    await expect(window.locator(".topbar__session")).toHaveText("Marked by extension");
+    await expect(window.locator(".chat-header__title")).toHaveText("Marked by extension");
     await expect(window.getByTestId("extension-dock-summary")).toHaveText("Session marked");
     await window.getByTestId("extension-dock-toggle").click();
     await expect(window.getByTestId("extension-dock-body")).toContainText("Marked widget");
     await expect(window.getByTestId("extension-dock-body")).toContainText("Marked below");
 
     await clickSession(window, "Session B");
-    await expect(window.locator(".topbar__session")).toHaveText("Session B");
+    await expect(window.locator(".chat-header__title")).toHaveText("Session B");
     await expect(window.getByTestId("extension-dock")).toHaveCount(0);
 
     await clickSession(window, "Session A");
-    await expect(window.locator(".topbar__session")).toHaveText("Marked by extension");
+    await expect(window.locator(".chat-header__title")).toHaveText("Marked by extension");
     await expect(window.getByTestId("extension-dock-summary")).toHaveText("Session marked");
     await expect(window.getByTestId("extension-dock-body")).toContainText("Marked widget");
   } finally {

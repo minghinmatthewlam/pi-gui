@@ -22,7 +22,7 @@ export function checkHostBoundary(root) {
   const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, desktop);
   const pending = [
     ...ts.sys.readDirectory(path.join(desktop, "electron"), [".ts", ".mts", ".tsx"]),
-    ...["catalogs", "session-driver", "pi-sdk-driver"].flatMap((name) =>
+    ...["catalogs", "session-driver", "pi-sdk-driver", "extension-ui"].flatMap((name) =>
       ts.sys.readDirectory(path.join(root, "packages", name, "src"), [".ts", ".mts"]),
     ),
   ];

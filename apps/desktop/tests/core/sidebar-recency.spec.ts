@@ -77,7 +77,7 @@ test("does not bump Today when a thread is opened", async () => {
     await recencySection(window, "Today")
       .locator(".session-row__select", { hasText: "Older today" })
       .click();
-    await expect(window.locator(".topbar__session")).toHaveText("Older today");
+    await expect(window.locator(".chat-header__title")).toHaveText("Older today");
     await expectTodayTitles(window, ["Newest today", "Older today"]);
 
     const after = await recencyStamps(window, workspace.id, ["Older today", "Newest today"]);
@@ -109,7 +109,7 @@ test("bumps a sent thread to the top of Today", async () => {
     await recencySection(window, "Today")
       .locator(".session-row__select", { hasText: "Older today" })
       .click();
-    await expect(window.locator(".topbar__session")).toHaveText("Older today");
+    await expect(window.locator(".chat-header__title")).toHaveText("Older today");
     await expectTodayTitles(window, ["Newest today", "Older today"]);
 
     await sendComposerPrompt(window, "Bump this thread by sending");
@@ -157,21 +157,21 @@ test("selects pinned threads first with 1-9 and paints badges while the modifier
     await recencySection(window, "Today")
       .locator(".session-row__select", { hasText: "Alpha" })
       .click();
-    await expect(window.locator(".topbar__session")).toHaveText("Alpha");
+    await expect(window.locator(".chat-header__title")).toHaveText("Alpha");
     await window.keyboard.press(desktopShortcut("1"));
-    await expect(window.locator(".topbar__session")).toHaveText("Charlie");
+    await expect(window.locator(".chat-header__title")).toHaveText("Charlie");
 
     await recencySection(window, "Today")
       .locator(".session-row__select", { hasText: "Alpha" })
       .click();
-    await expect(window.locator(".topbar__session")).toHaveText("Alpha");
+    await expect(window.locator(".chat-header__title")).toHaveText("Alpha");
     await sendComposerPrompt(window, "Send moves Alpha to the top of Today");
     await expectTodayTitles(window, ["Alpha", "Bravo"]);
     await expectShortcutBadges(window, ["Charlie", "Alpha", "Bravo"]);
     await window.keyboard.press(desktopShortcut("1"));
-    await expect(window.locator(".topbar__session")).toHaveText("Charlie");
+    await expect(window.locator(".chat-header__title")).toHaveText("Charlie");
     await window.keyboard.press(desktopShortcut("2"));
-    await expect(window.locator(".topbar__session")).toHaveText("Alpha");
+    await expect(window.locator(".chat-header__title")).toHaveText("Alpha");
     await captureSidebarProof(window, "shortcut-pinned-before-send.png");
   } finally {
     await harness.close();
@@ -275,7 +275,7 @@ test("groups seeded Last 7 Days, Last 30 Days, and Older threads", async () => {
     await recencySection(window, "Last 7 Days")
       .locator(".session-row__select", { hasText: "Week thread" })
       .click();
-    await expect(window.locator(".topbar__session")).toHaveText("Week thread");
+    await expect(window.locator(".chat-header__title")).toHaveText("Week thread");
     await expect(recencySection(window, "Last 7 Days").locator(".session-row__title")).toHaveText([
       "Week thread",
     ]);
@@ -410,7 +410,7 @@ test("caps a long Last 7 Days bucket and sorts the folder by last send", async (
     const before = findSession(await getDesktopState(window), "Catalog newer").session
       .lastInteractedAt;
     await window.locator(".session-row__select", { hasText: "Catalog newer" }).click();
-    await expect(window.locator(".topbar__session")).toHaveText("Catalog newer");
+    await expect(window.locator(".chat-header__title")).toHaveText("Catalog newer");
     await expect(folderThreads.first()).toHaveText("Sent later");
     expect(
       findSession(await getDesktopState(window), "Catalog newer").session.lastInteractedAt,

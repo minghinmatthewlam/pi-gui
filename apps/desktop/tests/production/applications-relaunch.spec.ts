@@ -57,7 +57,7 @@ test("launches an installed app copy from /Applications and relaunches with pers
     await waitForWorkspaceByPath(window, workspacePath);
     await expect(window.getByTestId("workspace-list")).toContainText(basename(workspacePath));
     await createNamedThread(window, threadTitle);
-    await expect(window.locator(".topbar__session")).toHaveText(threadTitle);
+    await expect(window.locator(".chat-header__title")).toHaveText(threadTitle);
     await expect(window.getByTestId("composer")).toBeFocused();
   } finally {
     await firstRun.close();
@@ -77,7 +77,7 @@ test("launches an installed app copy from /Applications and relaunches with pers
   try {
     const window = await secondRun.firstWindow();
     await waitForWorkspaceByPath(window, workspacePath);
-    await expect(window.locator(".topbar__session")).toHaveText(threadTitle);
+    await expect(window.locator(".chat-header__title")).toHaveText(threadTitle);
     await expect(window.getByTestId("workspace-list")).toContainText(basename(workspacePath));
     await expect(window.getByTestId("composer")).toBeFocused();
   } finally {

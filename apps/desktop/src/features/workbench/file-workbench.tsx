@@ -10,13 +10,7 @@ import type { WorkspaceRecord, WorktreeRecord } from "../../../contracts/desktop
 import type { PiDesktopApi } from "../../../contracts/ipc";
 import { FileEditorPane } from "./file-editor-pane";
 import { FileExplorer } from "./file-explorer";
-import {
-  activateFile,
-  closeFile,
-  openFile,
-  pruneFiles,
-  type FileWorkbenchTabs,
-} from "./file-workbench-state";
+import { activateFile, closeFile, openFile, type FileWorkbenchTabs } from "./file-workbench-state";
 
 interface FileWorkbenchProps {
   readonly api: PiDesktopApi;
@@ -38,8 +32,6 @@ export function FileWorkbench({
   const [files, setFiles] = useState<readonly string[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [listError, setListError] = useState<string | null>(null);
-  const onTabsChangeRef = useRef(onTabsChange);
-  onTabsChangeRef.current = onTabsChange;
   const requestIdRef = useRef(0);
 
   const refresh = useCallback(
@@ -54,7 +46,6 @@ export function FileWorkbench({
             return;
           }
           setFiles(listed);
-          onTabsChangeRef.current((current) => pruneFiles(current, listed));
         })
         .catch((error: unknown) => {
           if (requestIdRef.current !== requestId) {

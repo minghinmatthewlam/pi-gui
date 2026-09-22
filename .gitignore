@@ -8,6 +8,9 @@ out/
 release/
 release-*/
 .cache/
+# Local verification evidence, app backups, and package-manager cache.
+/.artifacts/
+/.pnpm-store/
 playwright-report/
 test-results/
 .claude/worktrees/

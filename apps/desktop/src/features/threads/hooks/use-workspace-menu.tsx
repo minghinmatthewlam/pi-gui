@@ -28,12 +28,9 @@ export interface WorkspaceMenuState {
   readonly workspaceRenameId: string | null;
   readonly workspaceRenameDraft: string;
   readonly setWorkspaceRenameDraft: Dispatch<SetStateAction<string>>;
-  readonly environmentMenuOpen: boolean;
-  readonly setEnvironmentMenuOpen: Dispatch<SetStateAction<boolean>>;
   readonly workspaceMenuWrapRef: RefObject<HTMLSpanElement | null>;
   readonly workspaceRenamePanelRef: RefObject<HTMLFormElement | null>;
   readonly workspaceRenameInputRef: RefObject<HTMLInputElement | null>;
-  readonly environmentMenuRef: RefObject<HTMLDivElement | null>;
   readonly openWorkspaceMenu: (workspaceId: string) => void;
   readonly closeWorkspaceMenu: () => void;
   readonly startRename: (workspace: WorkspaceRecord) => void;
@@ -59,12 +56,10 @@ export function useWorkspaceMenu(params: UseWorkspaceMenuParams): WorkspaceMenuS
   const [workspaceMenuId, setWorkspaceMenuId] = useState<string | null>(null);
   const [workspaceRenameId, setWorkspaceRenameId] = useState<string | null>(null);
   const [workspaceRenameDraft, setWorkspaceRenameDraft] = useState("");
-  const [environmentMenuOpen, setEnvironmentMenuOpen] = useState(false);
 
   const workspaceMenuWrapRef = useRef<HTMLSpanElement | null>(null);
   const workspaceRenamePanelRef = useRef<HTMLFormElement | null>(null);
   const workspaceRenameInputRef = useRef<HTMLInputElement | null>(null);
-  const environmentMenuRef = useRef<HTMLDivElement | null>(null);
 
   // Focus/select rename input when rename starts
   useEffect(() => {
@@ -77,7 +72,7 @@ export function useWorkspaceMenu(params: UseWorkspaceMenuParams): WorkspaceMenuS
     return undefined;
   }, [workspaceRenameId]);
 
-  // Click-outside / Escape handler for workspace menu, rename panel, and environment menu
+  // Click-outside / Escape handler for workspace menu and rename panel
   useEffect(() => {
     const handlePointerDown = (event: MouseEvent) => {
       const target = event.target;
@@ -86,11 +81,9 @@ export function useWorkspaceMenu(params: UseWorkspaceMenuParams): WorkspaceMenuS
       }
       const menuContains = workspaceMenuWrapRef.current?.contains(target) ?? false;
       const renamePanelContains = workspaceRenamePanelRef.current?.contains(target) ?? false;
-      const environmentMenuContains = environmentMenuRef.current?.contains(target) ?? false;
-      if (!menuContains && !renamePanelContains && !environmentMenuContains) {
+      if (!menuContains && !renamePanelContains) {
         setWorkspaceMenuId(null);
         setWorkspaceRenameId(null);
-        setEnvironmentMenuOpen(false);
       }
     };
 
@@ -98,7 +91,6 @@ export function useWorkspaceMenu(params: UseWorkspaceMenuParams): WorkspaceMenuS
       if (event.key === "Escape") {
         setWorkspaceMenuId(null);
         setWorkspaceRenameId(null);
-        setEnvironmentMenuOpen(false);
       }
     };
 
@@ -170,7 +162,6 @@ export function useWorkspaceMenu(params: UseWorkspaceMenuParams): WorkspaceMenuS
     fromSessionId?: string,
   ) => {
     setWorkspaceMenuId(null);
-    setEnvironmentMenuOpen(false);
     if (!api) {
       return;
     }
@@ -185,7 +176,6 @@ export function useWorkspaceMenu(params: UseWorkspaceMenuParams): WorkspaceMenuS
     const confirmed = window.confirm(
       `Remove worktree ${worktree.name}? This removes the git worktree from disk.`,
     );
-    setEnvironmentMenuOpen(false);
     if (!confirmed || !api) {
       return;
     }
@@ -197,7 +187,6 @@ export function useWorkspaceMenu(params: UseWorkspaceMenuParams): WorkspaceMenuS
   };
 
   const selectWorkspace = (workspaceId: string) => {
-    setEnvironmentMenuOpen(false);
     if (!api) {
       return;
     }
@@ -220,12 +209,9 @@ export function useWorkspaceMenu(params: UseWorkspaceMenuParams): WorkspaceMenuS
     workspaceRenameId,
     workspaceRenameDraft,
     setWorkspaceRenameDraft,
-    environmentMenuOpen,
-    setEnvironmentMenuOpen,
     workspaceMenuWrapRef,
     workspaceRenamePanelRef,
     workspaceRenameInputRef,
-    environmentMenuRef,
     openWorkspaceMenu,
     closeWorkspaceMenu,
     startRename,

@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 
 export interface SecondarySurfaceNavItem {
   readonly id: string;
@@ -24,6 +24,21 @@ export function SecondarySurface({
   testId,
   children,
 }: SecondarySurfaceProps) {
+  const backRef = useRef(onBack);
+  backRef.current = onBack;
+  useEffect(() => {
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented || event.isComposing || event.repeat)
+        return;
+      // Nested dialogs own Escape, including while a pending operation disables dismissal.
+      if (document.querySelector("[aria-modal='true'], .extension-dialog-backdrop")) return;
+      event.preventDefault();
+      backRef.current();
+    };
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, []);
+
   return (
     <div className="secondary-surface" data-testid={testId}>
       <aside className="secondary-surface__sidebar">

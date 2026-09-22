@@ -85,20 +85,29 @@ test("toggles the diff panel from the keyboard shortcut and renders changed file
 
     const topbarActions = window.locator(".topbar__actions");
     await expect(topbarActions.locator(".topbar__icon")).toHaveCount(1);
-    await expect(topbarActions.getByLabel("Open side panel")).toBeVisible();
+    await expect(topbarActions.getByLabel("Toggle side panel")).toBeVisible();
+    await expect(topbarActions.getByLabel("Toggle side panel")).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
     await expect(topbarActions.getByLabel("Toggle terminal")).toHaveCount(0);
     await expect(topbarActions.getByLabel("Toggle changes")).toHaveCount(0);
     await expect(topbarActions.getByLabel("Toggle files")).toHaveCount(0);
     await expect(topbarActions.getByLabel(/prompt navigation/i)).toHaveCount(0);
     await expect(topbarActions.getByLabel(/Evidence|Workbench|Open folder/i)).toHaveCount(0);
 
+    // A task without a saved layout starts with the side workspace closed.
     const diffPanel = window.locator(".diff-panel");
+    await expect(diffPanel).toHaveCount(0);
+    await window.getByTestId("toggle-side-panel").click();
+    await expect(diffPanel).toBeVisible();
+    await window.getByTestId("toggle-side-panel").click();
     await expect(diffPanel).toHaveCount(0);
 
     await window.keyboard.press(desktopShortcut("D"));
     await expect(diffPanel).toBeVisible();
     await expect(diffPanel.locator(".diff-panel__title")).toContainText("Changes");
-    await expect(diffPanel.locator(".diff-panel__file-name")).toContainText("README.md");
+    await expect(diffPanel.locator(".diff-panel__file-path")).toHaveText("README.md");
 
     const mainBox = await window.locator(".main").boundingBox();
     const panelBox = await diffPanel.boundingBox();
@@ -107,10 +116,11 @@ test("toggles the diff panel from the keyboard shortcut and renders changed file
     expect(panelBox?.x ?? 0).toBeGreaterThan((mainBox?.x ?? 0) + (mainBox?.width ?? 0) / 2);
 
     await diffPanel.locator(".diff-panel__file-name").click();
-    await expect(diffPanel.locator(".diff-inline")).toBeVisible();
-    await expect(diffPanel.locator(".diff-line--added")).toHaveCount(1);
+    const combined = diffPanel.getByRole("region", { name: "Combined changes", exact: true });
+    await expect(combined.locator(".diff-inline")).toBeVisible();
+    await expect(combined.locator(".diff-line--added")).toHaveCount(1);
 
-    await window.keyboard.press(desktopShortcut("D"));
+    await window.getByTestId("toggle-side-panel").click();
     await expect(diffPanel).toHaveCount(0);
   } finally {
     await harness.close();

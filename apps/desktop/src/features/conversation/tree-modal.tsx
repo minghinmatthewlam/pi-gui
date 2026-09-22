@@ -49,6 +49,8 @@ const DEFAULT_HIDDEN_KINDS: ReadonlySet<SessionTreeNodeKind> = new Set([
   "model_change",
   "thinking_level_change",
   "session_info",
+  "usage",
+  "context_edit",
 ]);
 
 export function TreeModal({

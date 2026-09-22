@@ -26,6 +26,15 @@
   --space-7: 28px;
   --space-8: 32px;
 
+  /* ---- Window chrome ----------------------------------------------------- */
+  /* Top inset that clears the macOS traffic lights (trafficLightPosition in
+     electron/main.ts). Every sidebar starts its first control here so they
+     share one offset below the window buttons. */
+  --titlebar-inset-top: 52px;
+  /* Height of that first control (New thread, Back to app), so their labels
+     line up as well as their top edges. */
+  --sidebar-first-control-height: 32px;
+
   /* ---- Radius ramp ------------------------------------------------------- */
   --radius-2xs: 2px;
   --radius-xs: 4px;
@@ -36,8 +45,8 @@
   --radius-2xl: 14px;
   --radius-3xl: 16px;
   --radius-4xl: 18px;
-  --radius-composer: 22px;
-  --radius-panel: 24px;
+  --radius-composer: 12px;
+  --radius-panel: 12px;
   --radius-pill: 999px;
   --radius-round: 50%;
 
@@ -79,6 +88,11 @@
   --overlay-subtle: color-mix(in srgb, var(--text-strong) 4%, transparent);
   --overlay-hover: color-mix(in srgb, var(--text-strong) 6%, transparent);
   --overlay-active: color-mix(in srgb, var(--text-strong) 9%, transparent);
+
+  /* ---- Scrollbars — thin rounded thumb, no track (auto-flip) ------------- */
+  --scrollbar-size: 10px;
+  --scrollbar-thumb: color-mix(in srgb, var(--text-strong) 16%, transparent);
+  --scrollbar-thumb-hover: color-mix(in srgb, var(--text-strong) 30%, transparent);
 
   /* ---- Accent tints (auto-flip via --accent) ----------------------------- */
   --accent-tint-bg: color-mix(in srgb, var(--accent) 12%, transparent);
@@ -123,10 +137,10 @@
   --elevation-modal: var(--elevation-hairline), var(--shadow-xl);
 
   /* ---- Code / diff / find / summary — distinct light/dark values --------- */
-  --code-inline-bg: #f2f4f8;
-  --code-block-bg: #eef2f8;
-  --code-ink: #25304a;
-  --code-border: #dfe3eb;
+  --code-inline-bg: #f3f3f0;
+  --code-block-bg: #f6f6f3;
+  --code-ink: #3b3b36;
+  --code-border: #e4e4df;
 
   --diff-added-bg: color-mix(in srgb, var(--success) 14%, transparent);
   --diff-removed-bg: color-mix(in srgb, var(--error) 14%, transparent);

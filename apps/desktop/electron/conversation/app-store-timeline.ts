@@ -28,6 +28,7 @@ interface TimelineRuntimeState {
   readonly runMetricsBySession: Map<string, RunMetrics>;
   readonly runningSinceBySession: Map<string, string>;
   readonly activeAssistantMessageBySession: Map<string, string>;
+  readonly pendingAssistantMessageBySession: Map<string, string>;
   readonly activeWorkingActivityBySession: Map<string, string>;
 }
 
@@ -157,7 +158,24 @@ export function applyTimelineEvent(
   const currentMetrics = state.runMetricsBySession.get(key);
 
   switch (event.type) {
+    case "assistantMessageEnded": {
+      const activeId = state.activeAssistantMessageBySession.get(key);
+      if (activeId) state.pendingAssistantMessageBySession.set(key, activeId);
+      else state.pendingAssistantMessageBySession.delete(key);
+      clearActiveAssistantMessage(state.activeAssistantMessageBySession, event.sessionRef);
+      return;
+    }
+    case "assistantMessagePersisted": {
+      const endedId = state.pendingAssistantMessageBySession.get(key);
+      state.pendingAssistantMessageBySession.delete(key);
+      const index = transcript.findIndex((item) => item.id === endedId);
+      const ended = transcript[index];
+      if (ended?.kind !== "message" || ended.role !== "assistant") return;
+      transcript[index] = { ...ended, sourceMessageId: event.sourceMessageId };
+      break;
+    }
     case "sessionOpened":
+      state.pendingAssistantMessageBySession.delete(key);
       transcript.push(
         makeActivityItem("Resumed session", { metadata: relativeDetail(event.timestamp) }),
       );
@@ -181,6 +199,7 @@ export function applyTimelineEvent(
       }
       break;
     case "queuedMessageStarted":
+      state.pendingAssistantMessageBySession.delete(key);
       clearActiveAssistantMessage(state.activeAssistantMessageBySession, event.sessionRef);
       appendQueuedUserMessage(transcriptCache, event.sessionRef, event.message);
       return;
@@ -348,6 +367,7 @@ function clearRunState(
   state: TimelineRuntimeState,
 ): void {
   clearActiveAssistantMessage(state.activeAssistantMessageBySession, sessionRef);
+  state.pendingAssistantMessageBySession.delete(key);
   removeWorkingActivity(transcript, state.activeWorkingActivityBySession.get(key));
   state.activeWorkingActivityBySession.delete(key);
   state.runningSinceBySession.delete(key);

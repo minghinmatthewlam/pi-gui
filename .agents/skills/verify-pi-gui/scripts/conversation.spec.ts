@@ -311,20 +311,48 @@ test("real conversation: stream, switch, tool, stop, archive, restart", async ()
       await header.click();
       await expect(header).toHaveAttribute("aria-expanded", "false");
     });
-    await test.step("Send a follow-up and stop it through the composer", async () => {
+    await test.step("Send a follow-up and stop its running shell tool through the composer", async () => {
+      const startedPath = join(workspace, "verification-cancel-started.txt");
+      const completedPath = join(workspace, "verification-cancel-completed.txt");
       await page
         .getByTestId("composer")
         .fill(
-          "Do not use tools. Write 1000 numbered sentences about testing. Start with CANCEL_BEGIN.",
+          'Use the bash tool once to run exactly: `printf "CANCEL_TOOL_STARTED\\n" > verification-cancel-started.txt; cat verification-cancel-started.txt; sleep 25; printf "CANCEL_TOOL_COMPLETED\\n" > verification-cancel-completed.txt; cat verification-cancel-completed.txt` . Do not shorten the sleep or run the command in the background. After it finishes, reply with only CANCEL_TOOL_DONE.',
         );
       await page.getByTestId("send").click();
       await expect(page.getByTestId("send")).toHaveAttribute("aria-label", "Stop run", {
         timeout: 30_000,
       });
-      await expect(assistant().last()).toContainText("CANCEL_BEGIN", { timeout: 90_000 });
+      const tool = page.locator(".timeline-tool").last();
+      await expect(tool).toHaveClass(/timeline-tool--running/, { timeout: 90_000 });
+      // The marker in the displayed command is not proof the process started.
+      await expect
+        .poll(() => readFile(startedPath, "utf8").catch(() => null), { timeout: 15_000 })
+        .toBe("CANCEL_TOOL_STARTED\n");
+      const observedStartedAt = Date.now();
+      const header = tool.locator(".timeline-tool__header");
+      if ((await header.getAttribute("aria-expanded")) !== "true") await header.click();
+      await expect(tool).toHaveClass(/timeline-tool--running/);
+      await expect(row(bravo)).toHaveAttribute("data-sidebar-indicator", "running");
+      await expect(readFile(completedPath, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
       await page.getByRole("button", { name: "Stop run", exact: true }).click();
+      await expect(row(bravo)).not.toHaveAttribute("data-sidebar-indicator", "running", {
+        timeout: 10_000,
+      });
       await idle(bravo);
       await expect(page.getByTestId("send")).toHaveAttribute("aria-label", "Send message");
+      await expect(tool.locator(".timeline-tool__body")).toContainText("Command aborted");
+      const stoppedAfterMs = Date.now() - observedStartedAt;
+      expect(stoppedAfterMs).toBeLessThan(20_000);
+      await expect(readFile(completedPath, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+      await writeFile(
+        join(evidence, "stop-proof.json"),
+        JSON.stringify(
+          { observedStartedAt, stoppedAfterMs, commandAborted: true, completionFileAbsent: true },
+          null,
+          2,
+        ),
+      );
       await checkpoint("stopped");
       await page.getByTestId("composer").fill(drafts.bravo);
       await select(alpha);

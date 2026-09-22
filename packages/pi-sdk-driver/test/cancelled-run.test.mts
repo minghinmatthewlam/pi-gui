@@ -19,10 +19,11 @@ await test("requested abort emits only idle state, without completion or failure
   const supervisor = new SessionSupervisor() as unknown as {
     mapAgentEvent(input: typeof record, event: unknown): SessionDriverEvent[];
   };
-  const events = supervisor.mapAgentEvent(record, {
+  supervisor.mapAgentEvent(record, {
     type: "agent_end",
     messages: [{ role: "assistant", stopReason: "aborted", errorMessage: "Request was aborted" }],
   });
+  const events = supervisor.mapAgentEvent(record, { type: "agent_settled" });
   assert.deepEqual(
     events.map((event) => event.type),
     ["sessionUpdated"],
@@ -30,9 +31,11 @@ await test("requested abort emits only idle state, without completion or failure
   assert.equal(record.status, "idle");
   assert.equal(record.runningRunId, undefined);
   assert.equal(record.cancellationRequested, false);
-  const nextEvents = supervisor.mapAgentEvent(record, {
+  supervisor.mapAgentEvent(record, { type: "agent_start" });
+  supervisor.mapAgentEvent(record, {
     type: "agent_end",
     messages: [{ role: "assistant", stopReason: "aborted", errorMessage: "Unexpected abort" }],
   });
+  const nextEvents = supervisor.mapAgentEvent(record, { type: "agent_settled" });
   assert.equal(nextEvents[0]?.type, "runFailed", "the cancellation marker is consumed once");
 });

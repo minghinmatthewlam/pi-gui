@@ -94,9 +94,7 @@ test("creates and selects a worktree-backed workspace from the desktop UI", asyn
       throw new Error("Expected the selected workspace to be the newly created worktree");
     }
 
-    await expect(window.locator(".environment-picker__button")).toContainText(
-      worktreeWorkspace.name,
-    );
+    await expect(window.locator(".topbar__session")).toContainText(worktreeWorkspace.name);
     await expect(window.locator(".empty-panel")).toContainText("Create a thread for this folder");
     await expect(window.locator(".empty-panel")).not.toContainText("/Users/");
 

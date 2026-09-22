@@ -121,7 +121,9 @@ for (const finish of ["stop", "complete"] as const) {
       await expect(pinnedSection).toBeVisible();
       await expect(row).toHaveAttribute("data-sidebar-indicator", "running");
       await clickSession(page, "Other thread");
-      await expect(page.locator(".topbar__session")).toHaveText("Other thread", { timeout: 5_000 });
+      await expect(page.locator(".chat-header__title")).toHaveText("Other thread", {
+        timeout: 5_000,
+      });
       await expect(row).toHaveAttribute("data-sidebar-indicator", "running");
       if (finish === "complete") {
         await harness.electronApp.evaluate(async () => {
@@ -131,7 +133,7 @@ for (const finish of ["stop", "complete"] as const) {
           await complete();
         });
         await expect(row).not.toHaveAttribute("data-sidebar-indicator", "running");
-        await expect(page.locator(".topbar__session")).toHaveText("Other thread");
+        await expect(page.locator(".chat-header__title")).toHaveText("Other thread");
         return;
       }
       await clickSession(page, "Pending prompt");

@@ -25,6 +25,8 @@ export interface SessionTranscriptMessage {
   readonly attachments?: readonly SessionTranscriptAttachment[];
   readonly createdAt: string;
   readonly id: string;
+  /** Authoritative persisted entry identity; a live display row can retain its own id. */
+  readonly sourceMessageId?: string;
 }
 
 export interface SessionTranscriptToolCall {
