@@ -486,7 +486,7 @@ test("manages extensions and prefers runtime commands over colliding host action
     await createSessionViaIpc(window, workspacePath, "Inspect extension surface");
     await expect(window.getByTestId("composer")).toBeVisible();
 
-    await expect(window.locator(".topbar__session")).toHaveText("Extension Surface");
+    await expect(window.locator(".chat-header__title")).toHaveText("Extension Surface");
     await expect(window.getByTestId("extension-dock")).toBeVisible();
     await expect(window.getByTestId("extension-dock-summary")).toHaveText("Demo ready");
     await expect(window.getByTestId("extension-status-strip")).toHaveCount(0);
@@ -510,7 +510,7 @@ test("manages extensions and prefers runtime commands over colliding host action
     await window.getByRole("button", { name: "Disable", exact: true }).click();
     await expect(window.locator(".skill-detail__status")).toHaveText("Disabled");
     await window.getByRole("button", { name: "Back to app", exact: true }).click();
-    await expect(window.locator(".topbar__session")).toHaveText("Inspect extension surface");
+    await expect(window.locator(".chat-header__title")).toHaveText("Inspect extension surface");
     await expect(window.getByTestId("extension-dock")).toHaveCount(0);
     const composer = window.getByTestId("composer");
     await window.getByRole("button", { name: "Settings", exact: true }).click();
@@ -522,7 +522,7 @@ test("manages extensions and prefers runtime commands over colliding host action
     await window.getByRole("button", { name: "Enable", exact: true }).click();
     await expect(window.locator(".skill-detail__status")).toHaveText("Enabled");
     await window.getByRole("button", { name: "Back to app", exact: true }).click();
-    await expect(window.locator(".topbar__session")).toHaveText("Extension Surface");
+    await expect(window.locator(".chat-header__title")).toHaveText("Extension Surface");
     await expect(window.getByTestId("extension-dock-summary")).toHaveText("Demo ready");
     await expect(window.getByTestId("extension-dock-body")).toHaveCount(0);
     await expect

@@ -1030,7 +1030,7 @@ export async function waitForSelectedSessionReady(
     )
     .toBe(true);
 
-  await expect(window.locator(".topbar__session")).toHaveText(expectedTitle, { timeout });
+  await expect(window.locator(".chat-header__title")).toHaveText(expectedTitle, { timeout });
   await expect(window.getByTestId("transcript-skeleton")).toHaveCount(0, { timeout });
   await expect(window.getByTestId("composer")).toHaveValue(expectedComposerDraft, { timeout });
 
@@ -1602,18 +1602,28 @@ export async function waitForSessionByTitle(
 
 export async function selectSession(window: Page, sessionTitle: string): Promise<void> {
   await clickSession(window, sessionTitle);
-  await expect(window.locator(".topbar__session")).toHaveText(sessionTitle);
+  await expect(window.locator(".chat-header__title")).toHaveText(sessionTitle);
 }
 
 export async function selectSidePanel(
   window: Page,
-  choice: "Files" | "Changes" | "Terminal",
+  choice: "Files" | "Changes" | "Worktrees" | "Terminal",
 ): Promise<void> {
-  await window.getByRole("button", { name: "Open side panel" }).click();
-  const menu = window.getByTestId("side-panel-picker-menu");
-  await expect(menu).toBeVisible();
-  await menu.getByRole("menuitem", { name: new RegExp(`^${choice}`) }).click();
-  await expect(menu).toHaveCount(0);
+  const workbench = window.getByTestId("workbench");
+  if (!(await workbench.isVisible())) {
+    await window.getByTestId("toggle-side-panel").click();
+  }
+  const existing = workbench.getByRole("tab", { name: choice, exact: true });
+  if (await existing.count()) {
+    await existing.click();
+  } else {
+    const chooser = window.getByTestId("workbench-chooser");
+    if (!(await chooser.isVisible())) {
+      await window.getByTestId("workbench-add-tab").click();
+    }
+    await chooser.getByRole("button", { name: choice, exact: true }).click();
+  }
+  await expect(existing).toHaveAttribute("aria-selected", "true");
 }
 
 export async function clickSession(window: Page, sessionTitle: string): Promise<void> {

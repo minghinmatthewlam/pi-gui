@@ -291,6 +291,8 @@ test("keeps the latest assistant content visible when the composer grows at the 
   try {
     const window = await harness.firstWindow();
     await createTimelineSession(window, "Bottom pinning session");
+    await window.getByTestId("toggle-side-panel").click();
+    await expect(window.getByTestId("workbench")).toHaveCount(0);
 
     const finalMarker = "PIN_FINAL_ROW";
     const finalText = `${finalMarker} ${"visible above composer with width reflow ".repeat(10)}`;
@@ -449,7 +451,7 @@ test("restores the true bottom when reopening a virtualized thread with oversize
 
     harness = await launchDesktop(userDataDir, { testMode: "background" });
     window = await harness.firstWindow();
-    await expect(window.locator(".topbar__session")).toHaveText(targetTitle);
+    await expect(window.locator(".chat-header__title")).toHaveText(targetTitle);
     await expect(
       window.locator(".timeline-item--assistant", { hasText: finalMarker }),
     ).toBeVisible();
@@ -458,7 +460,7 @@ test("restores the true bottom when reopening a virtualized thread with oversize
       .toBeLessThanOrEqual(16);
 
     await createTimelineSession(window, "Neighbor session");
-    await expect(window.locator(".topbar__session")).toHaveText("Neighbor session");
+    await expect(window.locator(".chat-header__title")).toHaveText("Neighbor session");
 
     await selectSession(window, targetTitle);
     const finalRow = window.locator(".timeline-item--assistant", { hasText: finalMarker });
@@ -501,10 +503,10 @@ test("keeps a virtualized thread off-bottom after switching sessions", async () 
     expect(preReopenMetrics.remainingFromBottom).toBeGreaterThan(500);
 
     await createTimelineSession(window, "Neighbor session");
-    await expect(window.locator(".topbar__session")).toHaveText("Neighbor session");
+    await expect(window.locator(".chat-header__title")).toHaveText("Neighbor session");
 
     await selectSession(window, targetTitle);
-    await expect(window.locator(".topbar__session")).toHaveText(targetTitle);
+    await expect(window.locator(".chat-header__title")).toHaveText(targetTitle);
     await expect
       .poll(async () => (await getTimelineScrollMetrics(window)).remainingFromBottom)
       .toBeGreaterThan(500);
@@ -528,9 +530,9 @@ test("restores a thread's saved off-bottom scroll position after switching sessi
     const neighborTitle = "Saved scroll neighbor";
     await createTimelineSession(window, targetTitle);
     await createTimelineSession(window, neighborTitle);
-    await expect(window.locator(".topbar__session")).toHaveText(neighborTitle);
+    await expect(window.locator(".chat-header__title")).toHaveText(neighborTitle);
     await selectSession(window, targetTitle);
-    await expect(window.locator(".topbar__session")).toHaveText(targetTitle);
+    await expect(window.locator(".chat-header__title")).toHaveText(targetTitle);
 
     const finalMarker = "SESSION_SWITCH_SCROLL_FINAL_ROW";
     await seedTranscriptMessages(harness, window, {
@@ -570,10 +572,10 @@ test("restores a thread's saved off-bottom scroll position after switching sessi
       .toBeGreaterThan(700);
 
     await selectSession(window, neighborTitle);
-    await expect(window.locator(".topbar__session")).toHaveText(neighborTitle);
+    await expect(window.locator(".chat-header__title")).toHaveText(neighborTitle);
 
     await selectSession(window, targetTitle);
-    await expect(window.locator(".topbar__session")).toHaveText(targetTitle);
+    await expect(window.locator(".chat-header__title")).toHaveText(targetTitle);
     await expect
       .poll(async () => (await getTimelineScrollMetrics(window)).remainingFromBottom)
       .toBeGreaterThan(300);
@@ -626,7 +628,7 @@ test("lands a reopened bottom-pinned thread without a smooth scroll from the top
       .toBeLessThanOrEqual(16);
 
     await createTimelineSession(window, "Open no smooth neighbor");
-    await expect(window.locator(".topbar__session")).toHaveText("Open no smooth neighbor");
+    await expect(window.locator(".chat-header__title")).toHaveText("Open no smooth neighbor");
     await selectSession(window, targetTitle);
     await expect(window.getByTestId("transcript")).toContainText(finalMarker);
     await expect
@@ -693,7 +695,7 @@ test("keeps a reopened virtualized long transcript stable", async () => {
 
     harness = await launchDesktop(userDataDir, { testMode: "background" });
     window = await harness.firstWindow();
-    await expect(window.locator(".topbar__session")).toHaveText(targetTitle);
+    await expect(window.locator(".chat-header__title")).toHaveText(targetTitle);
     const reopenedFinalRow = window.locator(".timeline-item--assistant", { hasText: finalMarker });
 
     await expectNoTimelineCollapseWindow(window, preReopenBaseline);
@@ -742,6 +744,8 @@ test("keeps the mid-thread viewport stable when the composer grows away from the
   try {
     const window = await harness.firstWindow();
     await createTimelineSession(window, "Mid-thread pinning session");
+    await window.getByTestId("toggle-side-panel").click();
+    await expect(window.getByTestId("workbench")).toHaveCount(0);
 
     const sentinelMarker = "MID_SENTINEL_ROW";
     const sentinelText = `${sentinelMarker} ${"should stay put during width reflow ".repeat(10)}`;

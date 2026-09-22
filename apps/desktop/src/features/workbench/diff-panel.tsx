@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { DiffPanelFileRequest, FileWorkbenchContext } from "./diff-panel-types";
+import type {
+  DiffPanelFileRequest,
+  DiffPanelSelection,
+  FileWorkbenchContext,
+} from "./diff-panel-types";
 import type {
   ChangedFileEntry,
   ChangedFilesResult,
@@ -29,6 +33,8 @@ interface DiffPanelProps {
   readonly sessionStatus: string | undefined;
   readonly fileRequest?: DiffPanelFileRequest | null;
   readonly contexts: readonly FileWorkbenchContext[];
+  readonly selection: DiffPanelSelection;
+  readonly onSelectionChange: (selection: DiffPanelSelection) => void;
 }
 
 export function DiffPanel({
@@ -38,20 +44,25 @@ export function DiffPanel({
   sessionStatus,
   fileRequest,
   contexts,
+  selection,
+  onSelectionChange,
 }: DiffPanelProps) {
-  const [filesByWorkspace, setFilesByWorkspace] = useState<
-    Readonly<Record<string, readonly string[]>>
-  >({});
   const [changedByWorkspace, setChangedByWorkspace] = useState<
     Readonly<Record<string, ChangedFilesResult>>
   >({});
-  const [activeWorkspaceId, setActiveWorkspaceId] = useState(workspaceId);
-  const [selectedFile, setSelectedFile] = useState<FileSelection | null>(null);
-  const [viewerMode, setViewerMode] = useState<"preview" | "diff">("preview");
+  const selectedFile = useMemo<FileSelection | null>(
+    () =>
+      selection.selectedPath === null
+        ? null
+        : { workspaceId: selection.workspaceId, path: selection.selectedPath },
+    [selection.selectedPath, selection.workspaceId],
+  );
+  const [viewerMode, setViewerMode] = useState<"preview" | "diff">("diff");
   const [diffText, setDiffText] = useState("");
   const [preview, setPreview] = useState<WorkspaceFilePreview | null>(null);
   const [viewerError, setViewerError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
   const [viewerLoading, setViewerLoading] = useState(false);
   const [reviewed, setReviewed] = useState<ReadonlySet<string>>(() =>
     loadReviewed(workspaceId, sessionId),
@@ -68,8 +79,7 @@ export function DiffPanel({
     () => new Set(contextIdsKey ? contextIdsKey.split("\n") : []),
     [contextIdsKey],
   );
-  const activeContext =
-    contexts.find((context) => context.workspace.id === activeWorkspaceId) ?? contexts[0];
+  const activeContext = contexts.find((context) => context.workspace.id === selection.workspaceId);
   const changedGroups = useMemo(
     () =>
       contexts.map((context) => {
@@ -100,10 +110,7 @@ export function DiffPanel({
     unavailableChangedGroupCount,
     pendingChangedGroupCount,
   );
-  const changedRowsRef = useRef(changedRows);
-  changedRowsRef.current = changedRows;
-  const filesByWorkspaceRef = useRef(filesByWorkspace);
-  filesByWorkspaceRef.current = filesByWorkspace;
+  const selectedChangedResult = changedByWorkspace[selection.workspaceId];
 
   useEffect(() => {
     setReviewed(loadReviewed(workspaceId, sessionId));
@@ -113,100 +120,75 @@ export function DiffPanel({
     contextsRef.current = contexts;
   }, [contexts]);
 
-  useEffect(() => {
-    if (knownContextIds.has(activeWorkspaceId)) {
+  const refresh = useCallback(() => {
+    const refreshContexts = contextsRef.current;
+    // Latest-request-wins: overlapping refreshes (e.g. running→idle firing alongside a
+    // context/mount refresh) must not let a slower earlier request overwrite newer state.
+    refreshRequestNonceRef.current += 1;
+    const requestNonce = refreshRequestNonceRef.current;
+    setRefreshError(null);
+    if (refreshContexts.length === 0) {
+      setChangedByWorkspace({});
+      setLoading(false);
       return;
     }
-    setActiveWorkspaceId(workspaceId);
-  }, [activeWorkspaceId, knownContextIds, workspaceId]);
 
-  const refresh = useCallback(
-    (options: { readonly force?: boolean } = {}) => {
-      const refreshContexts = contextsRef.current;
-      // Latest-request-wins: overlapping refreshes (e.g. running→idle firing alongside a
-      // context/mount refresh) must not let a slower earlier request overwrite newer state.
-      refreshRequestNonceRef.current += 1;
-      const requestNonce = refreshRequestNonceRef.current;
-      if (refreshContexts.length === 0) {
-        setFilesByWorkspace({});
-        setChangedByWorkspace({});
-        return;
-      }
-
-      setLoading(true);
-      void Promise.all(
-        refreshContexts.map(async (context) => {
-          const [workspaceFiles, changedFiles] = await Promise.all([
-            api.listWorkspaceFiles(context.workspace.id, { force: options.force ?? false }),
-            api.getChangedFiles(context.workspace.id),
-          ]);
-          return { workspaceId: context.workspace.id, workspaceFiles, changedFiles };
-        }),
-      )
-        .then((results) => {
-          if (refreshRequestNonceRef.current !== requestNonce) {
-            return;
-          }
-          const nextFilesByWorkspace: Record<string, readonly string[]> = {};
-          const nextChangedByWorkspace: Record<string, ChangedFilesResult> = {};
-          for (const result of results) {
-            nextFilesByWorkspace[result.workspaceId] = result.workspaceFiles;
-            nextChangedByWorkspace[result.workspaceId] = result.changedFiles;
-          }
-          setFilesByWorkspace(nextFilesByWorkspace);
-          setChangedByWorkspace(nextChangedByWorkspace);
-          setSelectedFile((current) => {
-            if (!current) {
-              return null;
-            }
-            const changedResult = nextChangedByWorkspace[current.workspaceId];
-            const changedFiles = changedResult?.state === "available" ? changedResult.files : [];
-            const availableFiles = new Set([
-              ...(nextFilesByWorkspace[current.workspaceId] ?? []),
-              ...changedFiles.map((file) => file.path),
-            ]);
-            return availableFiles.has(current.path) ? current : null;
-          });
-          setReviewed((current) => {
-            const unavailableWorkspaceIds = new Set(
-              results
-                .filter((result) => result.changedFiles.state === "unavailable")
-                .map((result) => result.workspaceId),
+    setLoading(true);
+    void Promise.all(
+      refreshContexts.map(async (context) => {
+        const changedFiles = await api.getChangedFiles(context.workspace.id);
+        return { workspaceId: context.workspace.id, changedFiles };
+      }),
+    )
+      .then((results) => {
+        if (refreshRequestNonceRef.current !== requestNonce) {
+          return;
+        }
+        const nextChangedByWorkspace: Record<string, ChangedFilesResult> = {};
+        for (const result of results) {
+          nextChangedByWorkspace[result.workspaceId] = result.changedFiles;
+        }
+        setChangedByWorkspace(nextChangedByWorkspace);
+        setReviewed((current) => {
+          const unavailableWorkspaceIds = new Set(
+            results
+              .filter((result) => result.changedFiles.state === "unavailable")
+              .map((result) => result.workspaceId),
+          );
+          const retainedUnavailableKeys = [...current].filter((key) => {
+            const reviewedWorkspaceId = workspaceIdFromReviewedFileKey(key);
+            return (
+              reviewedWorkspaceId !== undefined && unavailableWorkspaceIds.has(reviewedWorkspaceId)
             );
-            const retainedUnavailableKeys = [...current].filter((key) => {
-              const reviewedWorkspaceId = workspaceIdFromReviewedFileKey(key);
-              return (
-                reviewedWorkspaceId !== undefined &&
-                unavailableWorkspaceIds.has(reviewedWorkspaceId)
-              );
-            });
-            const pruned = pruneReviewed(current, [
-              ...results.flatMap((result) =>
-                result.changedFiles.state === "available"
-                  ? result.changedFiles.files.map((file) =>
-                      reviewedFileKey(result.workspaceId, file.path),
-                    )
-                  : [],
-              ),
-              ...retainedUnavailableKeys,
-            ]);
-            if (pruned !== current) {
-              saveReviewed(workspaceId, sessionId, pruned);
-            }
-            return pruned;
           });
-        })
-        .finally(() => {
-          if (refreshRequestNonceRef.current === requestNonce) {
-            setLoading(false);
+          const pruned = pruneReviewed(current, [
+            ...results.flatMap((result) =>
+              result.changedFiles.state === "available"
+                ? result.changedFiles.files.map((file) =>
+                    reviewedFileKey(result.workspaceId, file.path),
+                  )
+                : [],
+            ),
+            ...retainedUnavailableKeys,
+          ]);
+          if (pruned !== current) {
+            saveReviewed(workspaceId, sessionId, pruned);
           }
-        })
-        .catch((error: unknown) => {
-          console.error("[renderer] Promise.all failed", error);
+          return pruned;
         });
-    },
-    [api, contextIdsKey, sessionId, workspaceId],
-  );
+      })
+      .finally(() => {
+        if (refreshRequestNonceRef.current === requestNonce) {
+          setLoading(false);
+        }
+      })
+      .catch((error: unknown) => {
+        if (refreshRequestNonceRef.current === requestNonce) {
+          setRefreshError(error instanceof Error ? error.message : String(error));
+        }
+        console.error("[renderer] Promise.all failed", error);
+      });
+  }, [api, contextIdsKey, sessionId, workspaceId]);
 
   const prevStatusRef = useRef(sessionStatus);
   useEffect(() => {
@@ -219,37 +201,23 @@ export function DiffPanel({
 
   useEffect(() => {
     refresh();
+    return () => {
+      refreshRequestNonceRef.current += 1;
+    };
   }, [refresh]);
 
-  // Resolve the workspace/worktree a requested path actually belongs to, mirroring the in-list
-  // click path (which uses file.workspaceId). Falling back to the top-level workspaceId prop would
-  // query the wrong tree in multi-context (worktree) views.
-  const resolveWorkspaceIdForPath = useCallback(
-    (path: string): string => {
-      const changedMatch = changedRowsRef.current.find((file) => file.path === path);
-      if (changedMatch) {
-        return changedMatch.workspaceId;
-      }
-      for (const context of contextsRef.current) {
-        if ((filesByWorkspaceRef.current[context.workspace.id] ?? []).includes(path)) {
-          return context.workspace.id;
-        }
-      }
-      return workspaceId;
-    },
-    [workspaceId],
-  );
-
   useEffect(() => {
-    if (!fileRequest) {
+    if (
+      !fileRequest ||
+      fileRequest.workspaceId !== selection.workspaceId ||
+      fileRequest.path !== selection.selectedPath
+    ) {
       return;
     }
+    // The workbench handles the deliberate navigation. This request only chooses the viewer
+    // mode, so a saved request cannot overwrite a later selection when the tool remounts.
     setViewerMode("diff");
-    setSelectedFile({
-      workspaceId: resolveWorkspaceIdForPath(fileRequest.path),
-      path: fileRequest.path,
-    });
-  }, [fileRequest, resolveWorkspaceIdForPath]);
+  }, [fileRequest, selection.selectedPath, selection.workspaceId]);
 
   useEffect(() => {
     viewerRequestNonceRef.current += 1;
@@ -264,11 +232,34 @@ export function DiffPanel({
 
     setViewerLoading(true);
     setViewerError(null);
+    setDiffText("");
+    setPreview(null);
+    let unavailableReason = refreshError;
+    if (!knownContextIds.has(selectedFile.workspaceId)) {
+      unavailableReason = "The selected checkout is unavailable.";
+    } else if (viewerMode === "diff" && selectedChangedResult?.state === "unavailable") {
+      unavailableReason = selectedChangedResult.error.message;
+    }
+    if (unavailableReason) {
+      setViewerError(unavailableReason);
+      setViewerLoading(false);
+      return;
+    }
+    if (selectedChangedResult === undefined) {
+      return;
+    }
     if (viewerMode === "diff") {
-      setPreview(null);
       void api
         .getFileDiff(selectedFile.workspaceId, selectedFile.path)
-        .then((result) => {
+        .then(async (result) => {
+          if (viewerRequestNonceRef.current !== requestNonce) {
+            return;
+          }
+          // The legacy diff API also returns an empty string for a missing path. Check the
+          // exact file before displaying an empty diff; directory listings may be truncated.
+          if (!result.trim()) {
+            await api.readWorkspaceFile(selectedFile.workspaceId, selectedFile.path);
+          }
           if (viewerRequestNonceRef.current === requestNonce) {
             setDiffText(result);
           }
@@ -287,7 +278,6 @@ export function DiffPanel({
       return;
     }
 
-    setDiffText("");
     void api
       .readWorkspaceFile(selectedFile.workspaceId, selectedFile.path)
       .then((result) => {
@@ -306,7 +296,15 @@ export function DiffPanel({
           setViewerLoading(false);
         }
       });
-  }, [api, selectedFile, viewerMode]);
+  }, [
+    api,
+    fileRequest?.nonce,
+    knownContextIds,
+    refreshError,
+    selectedChangedResult,
+    selectedFile,
+    viewerMode,
+  ]);
 
   const fileListRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -314,7 +312,7 @@ export function DiffPanel({
       return;
     }
     const row = fileListRef.current?.querySelector<HTMLElement>(
-      `[data-file-path="${CSS.escape(selectedFile.path)}"]`,
+      `[data-workspace-id="${CSS.escape(selectedFile.workspaceId)}"][data-file-path="${CSS.escape(selectedFile.path)}"]`,
     );
     row?.scrollIntoView({ block: "nearest", behavior: "auto" });
   }, [selectedFile, changedRows]);
@@ -361,7 +359,9 @@ export function DiffPanel({
       <div className="diff-panel__header file-workbench__header">
         <div className="file-workbench__heading">
           <h2 className="diff-panel__title">Changes</h2>
-          <span className="file-workbench__subtitle">{buildSubtitle(activeContext)}</span>
+          <span className="file-workbench__subtitle">
+            {activeContext ? buildSubtitle(activeContext) : "Selected checkout unavailable"}
+          </span>
         </div>
         {showReviewCounter ? (
           <span className="diff-panel__counter" data-testid="diff-panel-counter">
@@ -371,7 +371,7 @@ export function DiffPanel({
         <button
           className="icon-button"
           type="button"
-          onClick={() => refresh({ force: true })}
+          onClick={refresh}
           aria-label="Refresh"
           disabled={loading}
         >
@@ -391,7 +391,9 @@ export function DiffPanel({
                 className={`file-workbench__context ${isActive ? "file-workbench__context--active" : ""}`}
                 key={context.workspace.id}
                 type="button"
-                onClick={() => setActiveWorkspaceId(context.workspace.id)}
+                onClick={() =>
+                  onSelectionChange({ workspaceId: context.workspace.id, selectedPath: null })
+                }
               >
                 <span>{contextLabel(context)}</span>
                 <strong>
@@ -416,7 +418,12 @@ export function DiffPanel({
             <span>Changed files</span>
             <span>{changedFilesSummary}</span>
           </div>
-          {changedRows.length === 0 && unavailableChangedGroupCount === 0 ? (
+          {refreshError ? (
+            <div className="diff-panel__empty diff-panel__unavailable" role="status">
+              {refreshError}
+            </div>
+          ) : null}
+          {changedRows.length === 0 && unavailableChangedGroupCount === 0 && !refreshError ? (
             <div className="diff-panel__empty">
               {pendingChangedGroupCount > 0 ? "Loading changes..." : "No changes"}
             </div>
@@ -459,6 +466,7 @@ export function DiffPanel({
                           <div
                             className={className}
                             key={`${file.workspaceId}:${file.path}`}
+                            data-workspace-id={file.workspaceId}
                             data-file-path={file.path}
                           >
                             <input
@@ -474,11 +482,10 @@ export function DiffPanel({
                               type="button"
                               onClick={() => {
                                 setViewerMode("diff");
-                                setSelectedFile(
-                                  isSelected
-                                    ? null
-                                    : { workspaceId: file.workspaceId, path: file.path },
-                                );
+                                onSelectionChange({
+                                  workspaceId: file.workspaceId,
+                                  selectedPath: isSelected ? null : file.path,
+                                });
                               }}
                             >
                               <span

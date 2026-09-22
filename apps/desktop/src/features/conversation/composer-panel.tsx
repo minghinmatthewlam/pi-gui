@@ -184,11 +184,7 @@ export function ComposerPanel({
           footer={
             <div className="composer__footer">
               <div className="composer__footer-row">
-                <div className="composer__hint">
-                  {selectedSession.status === "running"
-                    ? `${runningLabel} · Enter to queue · Cmd+Enter to steer`
-                    : "Enter to send · Shift+Enter for newline"}
-                  {" · "}
+                <div className="composer__config">
                   <ModelSelector
                     runtime={runtime}
                     provider={provider}
@@ -225,6 +221,11 @@ export function ComposerPanel({
                     {primaryActionIsStop ? <StopSquareIcon /> : <ArrowUpIcon />}
                   </button>
                 </div>
+              </div>
+              <div className="composer__hint">
+                {selectedSession.status === "running"
+                  ? `${runningLabel} · Enter to queue · Cmd+Enter to steer`
+                  : "Enter to send · Shift+Enter for newline"}
               </div>
             </div>
           }

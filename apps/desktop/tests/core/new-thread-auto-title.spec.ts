@@ -38,12 +38,12 @@ test("auto-titles a brand-new local thread after showing the placeholder first",
     const placeholderRow = window
       .locator(".session-row__select", { hasText: "New thread" })
       .first();
-    await expect(window.locator(".topbar__session")).toHaveText("New thread");
+    await expect(window.locator(".chat-header__title")).toHaveText("New thread");
     await expect(placeholderRow).toBeVisible();
 
     await resolveDeferredThreadTitleEventually(harness, "Refactor title flow");
 
-    await expect(window.locator(".topbar__session")).toHaveText("Refactor title flow");
+    await expect(window.locator(".chat-header__title")).toHaveText("Refactor title flow");
     await expect(
       window.locator(".session-row__select", { hasText: "Refactor title flow" }).first(),
     ).toBeVisible();
@@ -84,13 +84,13 @@ test("auto-titles a brand-new worktree thread after showing the placeholder firs
     const placeholderRow = window
       .locator(".session-row__select", { hasText: "New thread" })
       .first();
-    await expect(window.locator(".topbar__session")).toHaveText("New thread");
+    await expect(window.locator(".chat-header__title")).toHaveText("New thread");
     await expect(placeholderRow).toBeVisible();
 
     await resolveDeferredThreadTitle(harness, "Fix worktree rename");
     await waitForSessionByTitle(window, startedSession.workspaceId, "Fix worktree rename");
 
-    await expect(window.locator(".topbar__session")).toHaveText("Fix worktree rename");
+    await expect(window.locator(".chat-header__title")).toHaveText("Fix worktree rename");
     await expect(
       window.locator(".session-row__select", { hasText: "Fix worktree rename" }).first(),
     ).toBeVisible();
@@ -117,7 +117,7 @@ test("switching away does not cancel a pending auto-title", async () => {
       prompt: "Keep auto title alive after switching views",
     });
 
-    await expect(window.locator(".topbar__session")).toHaveText("New thread");
+    await expect(window.locator(".chat-header__title")).toHaveText("New thread");
     await waitForDeferredThreadTitleRequest(harness);
     await selectSession(window, "Existing thread");
     await expect
@@ -132,7 +132,7 @@ test("switching away does not cancel a pending auto-title", async () => {
       .first();
     await expect(autoTitledRow).toBeVisible({ timeout: 15_000 });
     await autoTitledRow.click();
-    await expect(window.locator(".topbar__session")).toHaveText("Keep title after nav");
+    await expect(window.locator(".chat-header__title")).toHaveText("Keep title after nav");
   } finally {
     await harness.close();
   }
@@ -155,7 +155,7 @@ test("manual rename beats a delayed auto-title result", async () => {
     });
 
     const composer = window.getByTestId("composer");
-    await expect(window.locator(".topbar__session")).toHaveText("New thread");
+    await expect(window.locator(".chat-header__title")).toHaveText("New thread");
     await expect(
       window.locator(".session-row__select", { hasText: "New thread" }).first(),
     ).toBeVisible();
@@ -164,7 +164,7 @@ test("manual rename beats a delayed auto-title result", async () => {
     await composer.fill("/name Manual title wins");
     await composer.press("Enter");
 
-    await expect(window.locator(".topbar__session")).toHaveText("Manual title wins", {
+    await expect(window.locator(".chat-header__title")).toHaveText("Manual title wins", {
       timeout: 15_000,
     });
     await expect(
@@ -173,7 +173,7 @@ test("manual rename beats a delayed auto-title result", async () => {
 
     await resolveDeferredThreadTitleEventually(harness, "Ignored generated title");
 
-    await expect(window.locator(".topbar__session")).toHaveText("Manual title wins");
+    await expect(window.locator(".chat-header__title")).toHaveText("Manual title wins");
     await expect(
       window.locator(".session-row__select", { hasText: "Manual title wins" }).first(),
     ).toBeVisible();
@@ -202,7 +202,7 @@ test("manual rename applies after the run is aborted via Stop", async () => {
     });
 
     const composer = window.getByTestId("composer");
-    await expect(window.locator(".topbar__session")).toHaveText("New thread");
+    await expect(window.locator(".chat-header__title")).toHaveText("New thread");
 
     // Abort the run while it is still active. The regression this covers: the
     // /name IPC response is built while abort-fallout events are still being
@@ -221,7 +221,7 @@ test("manual rename applies after the run is aborted via Stop", async () => {
     await composer.fill("/name Manual title wins");
     await composer.press("Enter");
 
-    await expect(window.locator(".topbar__session")).toHaveText("Manual title wins", {
+    await expect(window.locator(".chat-header__title")).toHaveText("Manual title wins", {
       timeout: 15_000,
     });
     await expect(
@@ -248,9 +248,9 @@ test("later sends do not retrigger auto-title generation", async () => {
       prompt: "Track a one-shot title request token",
     });
 
-    await expect(window.locator(".topbar__session")).toHaveText("New thread");
+    await expect(window.locator(".chat-header__title")).toHaveText("New thread");
     await resolveDeferredThreadTitleEventually(harness, "Track title token");
-    await expect(window.locator(".topbar__session")).toHaveText("Track title token");
+    await expect(window.locator(".chat-header__title")).toHaveText("Track title token");
     await expect(
       window.locator(".session-row__select", { hasText: "Track title token" }).first(),
     ).toBeVisible();
@@ -260,7 +260,7 @@ test("later sends do not retrigger auto-title generation", async () => {
     await composer.fill("/status");
     await composer.press("Enter");
 
-    await expect(window.locator(".topbar__session")).toHaveText("Track title token");
+    await expect(window.locator(".chat-header__title")).toHaveText("Track title token");
     await expect(
       window.locator(".session-row__select", { hasText: "Track title token" }).first(),
     ).toBeVisible();
@@ -293,9 +293,9 @@ test("reopen heals a stale placeholder catalog title after auto-title finished",
       prompt: "Verify the app heals stale placeholder titles on reopen",
     });
 
-    await expect(window.locator(".topbar__session")).toHaveText("New thread");
+    await expect(window.locator(".chat-header__title")).toHaveText("New thread");
     await resolveDeferredThreadTitleEventually(harness, generatedTitle);
-    await expect(window.locator(".topbar__session")).toHaveText(generatedTitle);
+    await expect(window.locator(".chat-header__title")).toHaveText(generatedTitle);
     await expect(
       window.locator(".session-row__select", { hasText: generatedTitle }).first(),
     ).toBeVisible();
@@ -325,7 +325,7 @@ test("reopen heals a stale placeholder catalog title after auto-title finished",
   try {
     const window = await secondRun.firstWindow();
     await waitForWorkspaceByPath(window, workspacePath);
-    await expect(window.locator(".topbar__session")).toHaveText(generatedTitle);
+    await expect(window.locator(".chat-header__title")).toHaveText(generatedTitle);
     await expect(
       window.locator(".session-row__select", { hasText: generatedTitle }).first(),
     ).toBeVisible();

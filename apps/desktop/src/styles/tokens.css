@@ -36,8 +36,8 @@
   --radius-2xl: 14px;
   --radius-3xl: 16px;
   --radius-4xl: 18px;
-  --radius-composer: 22px;
-  --radius-panel: 24px;
+  --radius-composer: 12px;
+  --radius-panel: 12px;
   --radius-pill: 999px;
   --radius-round: 50%;
 
@@ -123,10 +123,10 @@
   --elevation-modal: var(--elevation-hairline), var(--shadow-xl);
 
   /* ---- Code / diff / find / summary — distinct light/dark values --------- */
-  --code-inline-bg: #f2f4f8;
-  --code-block-bg: #eef2f8;
-  --code-ink: #25304a;
-  --code-border: #dfe3eb;
+  --code-inline-bg: #f3f3f0;
+  --code-block-bg: #f6f6f3;
+  --code-ink: #3b3b36;
+  --code-border: #e4e4df;
 
   --diff-added-bg: color-mix(in srgb, var(--success) 14%, transparent);
   --diff-removed-bg: color-mix(in srgb, var(--error) 14%, transparent);

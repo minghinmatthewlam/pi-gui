@@ -85,7 +85,7 @@ test("toggles the diff panel from the keyboard shortcut and renders changed file
 
     const topbarActions = window.locator(".topbar__actions");
     await expect(topbarActions.locator(".topbar__icon")).toHaveCount(1);
-    await expect(topbarActions.getByLabel("Open side panel")).toBeVisible();
+    await expect(topbarActions.getByLabel("Toggle side panel")).toBeVisible();
     await expect(topbarActions.getByLabel("Toggle terminal")).toHaveCount(0);
     await expect(topbarActions.getByLabel("Toggle changes")).toHaveCount(0);
     await expect(topbarActions.getByLabel("Toggle files")).toHaveCount(0);
@@ -93,6 +93,8 @@ test("toggles the diff panel from the keyboard shortcut and renders changed file
     await expect(topbarActions.getByLabel(/Evidence|Workbench|Open folder/i)).toHaveCount(0);
 
     const diffPanel = window.locator(".diff-panel");
+    await expect(diffPanel).toBeVisible();
+    await window.getByTestId("toggle-side-panel").click();
     await expect(diffPanel).toHaveCount(0);
 
     await window.keyboard.press(desktopShortcut("D"));
@@ -110,7 +112,7 @@ test("toggles the diff panel from the keyboard shortcut and renders changed file
     await expect(diffPanel.locator(".diff-inline")).toBeVisible();
     await expect(diffPanel.locator(".diff-line--added")).toHaveCount(1);
 
-    await window.keyboard.press(desktopShortcut("D"));
+    await window.getByTestId("toggle-side-panel").click();
     await expect(diffPanel).toHaveCount(0);
   } finally {
     await harness.close();

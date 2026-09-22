@@ -8,7 +8,6 @@ import { reviewedFilesKey } from "../../src/features/workbench/reviewed-files-st
 import {
   commitAllInGitRepo,
   createNamedThread,
-  desktopShortcut,
   selectSidePanel,
   emitTestSessionEvent,
   getDesktopState,
@@ -77,7 +76,7 @@ test("syntax-highlights known languages and leaves unknown extensions plain", as
   test.setTimeout(45_000);
   const { harness, window } = await launchSeeded("Review UX highlight");
   try {
-    await window.keyboard.press(desktopShortcut("D"));
+    await selectSidePanel(window, "Changes");
     const diffPanel = window.locator(".diff-panel");
     await expect(diffPanel).toBeVisible();
 
@@ -114,7 +113,7 @@ test("reviewed checkboxes update counter, prune on changes, and survive relaunch
   const sessionRef = await selectedSessionRef(firstWindow);
   const storageKey = reviewedFilesKey(sessionRef.workspaceId, sessionRef.sessionId);
 
-  await firstWindow.keyboard.press(desktopShortcut("D"));
+  await selectSidePanel(firstWindow, "Changes");
   const diffPanel = firstWindow.locator(".diff-panel");
   await expect(diffPanel).toBeVisible();
   await expect(diffPanel.locator(".diff-panel__file")).toHaveCount(3);
@@ -150,8 +149,8 @@ test("reviewed checkboxes update counter, prune on changes, and survive relaunch
   const reopened = await launchDesktop(userDataDir, { testMode: "background" });
   const window = await reopened.firstWindow();
   try {
-    await expect(window.locator(".topbar__session")).toBeVisible();
-    await window.keyboard.press(desktopShortcut("D"));
+    await expect(window.locator(".chat-header__title")).toBeVisible();
+    await selectSidePanel(window, "Changes");
     const reopenedPanel = window.locator(".diff-panel");
     await expect(reopenedPanel).toBeVisible();
     await expect(reopenedPanel.getByTestId("diff-panel-counter")).toHaveText("Reviewed 2 of 3");
@@ -176,7 +175,7 @@ test("Files mode shows a file browser and reader instead of the changes reviewer
   test.setTimeout(45_000);
   const { harness, window } = await launchSeeded("Review UX files mode");
   try {
-    await window.keyboard.press(desktopShortcut("D"));
+    await selectSidePanel(window, "Changes");
     const diffPanel = window.locator(".diff-panel");
     await expect(diffPanel).toBeVisible();
     await expect(diffPanel.locator(".diff-panel__title")).toHaveText("Changes");
@@ -222,6 +221,7 @@ test("view-in-changes button on a write tool row opens the diff panel without to
     const sessionRef = await selectedSessionRef(window);
 
     const diffPanel = window.locator(".diff-panel");
+    await window.getByTestId("toggle-side-panel").click();
     await expect(diffPanel).toHaveCount(0);
 
     const timestamp = new Date().toISOString();
@@ -269,7 +269,7 @@ test("highlighting tokens swap palettes when the dark class flips", async () => 
   test.setTimeout(45_000);
   const { harness, window } = await launchSeeded("Review UX theme");
   try {
-    await window.keyboard.press(desktopShortcut("D"));
+    await selectSidePanel(window, "Changes");
 
     const diffPanel = window.locator(".diff-panel");
     await diffPanel

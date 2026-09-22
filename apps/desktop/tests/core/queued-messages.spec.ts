@@ -309,7 +309,7 @@ test("queued edit and cancel keep their original session when navigation is alre
           args: operation === "edit" ? [queuedMessage.id, "Alpha scratch"] : [],
         },
       );
-      await expect(window.locator(".topbar__session")).toHaveText("Queue Bravo");
+      await expect(window.locator(".chat-header__title")).toHaveText("Queue Bravo");
       await expect(window.getByTestId("composer")).toHaveValue("Bravo draft");
       await expect(window.getByTestId("queued-composer-editing")).toHaveCount(0);
       await selectSession(window, "Queue Alpha");

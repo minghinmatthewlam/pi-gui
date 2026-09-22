@@ -1,6 +1,6 @@
 import type { AppView } from "../../contracts/desktop-state";
 
-export type ClosableSurface = "files" | "changes" | "terminal";
+export type ClosableSurface = "files" | "changes" | "terminal" | "workbench";
 
 export function closableSurfaceFromTarget(target: EventTarget | null): ClosableSurface | null {
   if (!(target instanceof Element)) {
@@ -14,6 +14,9 @@ export function closableSurfaceFromTarget(target: EventTarget | null): ClosableS
   }
   if (target.closest("[data-testid='file-workbench']")) {
     return "files";
+  }
+  if (target.closest("[data-testid='workbench']")) {
+    return "workbench";
   }
   return null;
 }

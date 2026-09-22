@@ -182,7 +182,7 @@ test("runs two sessions in parallel without sidebar status bleed", async () => {
     );
 
     await clickSession(window, "Session A");
-    await expect(window.locator(".topbar__session")).toHaveText("Session A");
+    await expect(window.locator(".chat-header__title")).toHaveText("Session A");
     await expect(window.getByTestId("composer")).toBeFocused();
     await expect(sessionARow).toHaveAttribute("data-sidebar-indicator", "none");
 

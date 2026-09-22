@@ -86,7 +86,7 @@ test("reopens persisted folders and thread state while a saved running session k
         selectedSessionId: sessionId,
         sessionTitle: "Reopen reliability session",
       });
-    await expect(window.locator(".topbar__session")).toHaveText("Reopen reliability session");
+    await expect(window.locator(".chat-header__title")).toHaveText("Reopen reliability session");
 
     await emitTestSessionEvent(secondRun, {
       type: "sessionUpdated",

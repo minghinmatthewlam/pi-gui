@@ -7,12 +7,12 @@ import { reviewedFilesKey } from "../../src/features/workbench/reviewed-files-st
 import {
   commitAllInGitRepo,
   createNamedThread,
-  desktopShortcut,
   getDesktopState,
   initGitRepo,
   launchDesktop,
   makeUserDataDir,
   makeWorkspace,
+  selectSidePanel,
 } from "../helpers/electron-app";
 
 const execFileAsync = promisify(execFile);
@@ -37,7 +37,7 @@ test("preserves an exact changed-file path through diff and stage actions", asyn
   try {
     const window = await harness.firstWindow();
     await createNamedThread(window, "Changed path test");
-    await window.keyboard.press(desktopShortcut("D"));
+    await selectSidePanel(window, "Changes");
 
     const diffPanel = window.locator(".diff-panel");
     const changedRows = diffPanel.locator(".diff-panel__file");
@@ -99,7 +99,7 @@ test("shows Git status as unavailable without losing reviewed files", async () =
     }
     const storageKey = reviewedFilesKey(state.selectedWorkspaceId, state.selectedSessionId);
 
-    await window.keyboard.press(desktopShortcut("D"));
+    await selectSidePanel(window, "Changes");
     const diffPanel = window.locator(".diff-panel");
     await diffPanel.getByTestId(`diff-panel-reviewed-${filePath}`).check();
     const reviewedBeforeFailure = await window.evaluate(
