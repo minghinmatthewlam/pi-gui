@@ -336,7 +336,10 @@ export function createDesktopCommandSubscription() {
 }
 
 /** Collapses a repeated keydown from one physical chord so a toggle stays open. */
-export function createChordToggleGate(windowMs = 200) {
+export const SEARCH_CHORD_TOGGLE_MS = 200;
+export const CHANGES_TOGGLE_DEDUPE_MS = 8;
+
+export function createChordToggleGate(windowMs = SEARCH_CHORD_TOGGLE_MS) {
   let last = Number.NEGATIVE_INFINITY;
   return (now: number): boolean => {
     if (now - last < windowMs) return false;

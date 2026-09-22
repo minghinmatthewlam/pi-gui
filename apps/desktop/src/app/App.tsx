@@ -37,6 +37,7 @@ import type { WorkspaceFileLine } from "../features/conversation/workspace-file-
 import { buildModelOptions } from "../features/conversation/composer-commands";
 import {
   createChordToggleGate,
+  CHANGES_TOGGLE_DEDUPE_MS,
   desktopCommands,
   earlyModifierChords,
   getDesktopCommandFromShortcut,
@@ -323,7 +324,7 @@ export default function App() {
   threadGroupingRef.current = snapshot?.threadGrouping ?? "time";
   const threadShortcutOrderRef = useRef<readonly ThreadListEntry[] | null>(null);
   const threadSearchGate = useRef(createChordToggleGate());
-  const changesPanelGate = useRef(createChordToggleGate());
+  const changesToggleGate = useRef(createChordToggleGate(CHANGES_TOGGLE_DEDUPE_MS));
   const handleCommandRef = useRef<(command: PiDesktopCommand) => boolean>(() => false);
   const handleRendererKeyDownRef = useRef<(event: globalThis.KeyboardEvent) => void>(() => {});
   const toggleThreadSearchRef = useRef<() => void>(() => {});
@@ -661,7 +662,10 @@ export default function App() {
       return true;
     }
     if (command === desktopCommands.toggleChanges) {
-      if (!changesPanelGate.current(performance.now())) return true;
+      // IPC and the renderer can both see one Cmd+D. Collapse that same-tick
+      // pair. Do not use the 200ms search gate: a real second press in
+      // side-panel-picker is closer than 200ms.
+      if (!changesToggleGate.current(performance.now())) return true;
       toggleChangesPanel();
       return true;
     }

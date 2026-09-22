@@ -6,6 +6,8 @@ import {
   desktopCommands,
   getDesktopCommandFromShortcut,
   platformShortcutModifier,
+  CHANGES_TOGGLE_DEDUPE_MS,
+  SEARCH_CHORD_TOGGLE_MS,
 } from "../../contracts/ipc";
 
 test("settings follows the platform modifier", () => {
@@ -93,9 +95,20 @@ test("replays search and settings chords that arrive before the listener is arme
 });
 
 test("collapses a second search keydown from the same chord", () => {
-  const allow = createChordToggleGate(200);
+  const allow = createChordToggleGate(SEARCH_CHORD_TOGGLE_MS);
   expect(allow(1_000)).toBe(true);
   expect(allow(1_010)).toBe(false);
   expect(allow(1_199)).toBe(false);
   expect(allow(1_200)).toBe(true);
+});
+
+test("search chord gate swallows a second press at 50ms, unlike Changes", () => {
+  const search = createChordToggleGate(SEARCH_CHORD_TOGGLE_MS);
+  expect(search(1_000)).toBe(true);
+  expect(search(1_050)).toBe(false);
+
+  const changes = createChordToggleGate(CHANGES_TOGGLE_DEDUPE_MS);
+  expect(changes(1_000)).toBe(true);
+  expect(changes(1_000 + CHANGES_TOGGLE_DEDUPE_MS - 1)).toBe(false);
+  expect(changes(1_000 + CHANGES_TOGGLE_DEDUPE_MS)).toBe(true);
 });
