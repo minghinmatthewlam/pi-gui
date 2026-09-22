@@ -31,6 +31,9 @@
      electron/main.ts). Every sidebar starts its first control here so they
      share one offset below the window buttons. */
   --titlebar-inset-top: 52px;
+  /* Height of that first control (New thread, Back to app), so their labels
+     line up as well as their top edges. */
+  --sidebar-first-control-height: 32px;
 
   /* ---- Radius ramp ------------------------------------------------------- */
   --radius-2xs: 2px;

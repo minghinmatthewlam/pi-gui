@@ -86,7 +86,7 @@
 .sidebar__new {
   -webkit-app-region: no-drag;
   width: 100%;
-  min-height: 32px;
+  min-height: var(--sidebar-first-control-height);
   padding: 7px 10px;
   border-radius: var(--radius-md);
   background: var(--theme-control-bg, var(--surface-muted));
