@@ -49,7 +49,7 @@
 }
 
 .sidebar__top {
-  padding-top: 52px;
+  padding-top: var(--titlebar-inset-top);
 }
 
 .sidebar__nav {

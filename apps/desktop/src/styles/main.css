@@ -1401,7 +1401,7 @@
   display: grid;
   align-content: start;
   gap: var(--space-4);
-  padding: var(--space-8) var(--space-3) var(--space-4);
+  padding: var(--titlebar-inset-top) var(--space-3) var(--space-4);
   border-right: 1px solid var(--border-default);
   background: var(--sidebar);
 }
