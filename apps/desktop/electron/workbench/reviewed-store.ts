@@ -41,12 +41,18 @@ export class ReviewedStore {
   }
 
   private load(): Promise<Set<string>> {
-    this.loaded ??= readJsonWithBackup(this.filePath).then((result) => {
-      if (result.corrupted && !result.recovered) {
-        throw new Error("Reviewed-file metadata is invalid; the original file was retained.");
-      }
-      return new Set(result.value === undefined ? [] : decodeReviewedState(result.value).marks);
-    });
+    this.loaded ??= readJsonWithBackup(this.filePath)
+      .then((result) => {
+        if (result.corrupted && !result.recovered) {
+          throw new Error("Reviewed-file metadata is invalid; the original file was retained.");
+        }
+        return new Set(result.value === undefined ? [] : decodeReviewedState(result.value).marks);
+      })
+      .catch((error: unknown) => {
+        // A transient read failure must not disable marks until restart.
+        this.loaded = undefined;
+        throw error;
+      });
     return this.loaded;
   }
 }

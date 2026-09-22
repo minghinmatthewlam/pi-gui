@@ -590,7 +590,11 @@ export class TurnCheckpointStore {
         } else this.records.set(record.checkpointId, record);
       }
       if (interrupted) await this.persist();
-    })();
+    })().catch((error: unknown) => {
+      // A transient read failure must not disable captures until restart.
+      this.loaded = undefined;
+      throw error;
+    });
     return this.loaded;
   }
 

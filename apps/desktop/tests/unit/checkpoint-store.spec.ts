@@ -475,6 +475,20 @@ test("unknown metadata is rejected without replacement", async () => {
   expect(await readFile(path, "utf8")).toBe(original);
 });
 
+test("a failed metadata read is retried instead of disabling captures until restart", async () => {
+  const { workspace, userData, store } = await fixture();
+  await mkdir(join(userData, "turn-checkpoints"), { recursive: true });
+  const path = join(userData, "turn-checkpoints", "checkpoints.json");
+  await writeFile(path, '{ "version":99, "records":[] }\n');
+  const signal = new AbortController().signal;
+  await expect(store.recordBoundary(boundary(workspace, "one", "opening"), signal)).rejects.toThrow(
+    /metadata/,
+  );
+  await unlink(path);
+  await store.recordBoundary(boundary(workspace, "one", "opening"), signal);
+  expect(JSON.parse(await readFile(path, "utf8")).records).toHaveLength(1);
+});
+
 test("reports measured capture cost for a 500-file checkout", async () => {
   const { workspace, store } = await fixture();
   await Promise.all(

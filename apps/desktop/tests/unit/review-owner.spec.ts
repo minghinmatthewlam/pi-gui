@@ -269,4 +269,10 @@ test("review metadata serializes concurrent acknowledgements and preserves inval
   await expect(invalid.snapshot()).rejects.toThrow("unsupported");
   await expect(invalid.set(first, true)).rejects.toThrow("unsupported");
   expect(await readFile(path, "utf8")).toBe(original);
+
+  // A failed read is not cached: once the file is readable again, marks work without a restart.
+  await writeFile(path, `${JSON.stringify({ version: 1, marks: [second] })}\n`);
+  expect(await invalid.snapshot()).toEqual(new Set([second]));
+  await invalid.set(first, true);
+  expect(await new ReviewedStore(invalidDir).snapshot()).toEqual(new Set([first, second]));
 });
