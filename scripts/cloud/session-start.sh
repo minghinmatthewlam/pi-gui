@@ -42,6 +42,8 @@ fi
 
 if [ -n "${CLAUDE_ENV_FILE:-}" ]; then
   {
+    # setup.sh installs a newer Node into /usr/local when the image's is too old.
+    [ -x /usr/local/bin/node ] && echo "export PATH=/usr/local/bin:\$PATH"
     echo "export DISPLAY=$display"
     echo "export PI_APP_REAL_AUTH=\${PI_APP_REAL_AUTH:-1}"
     echo "export PI_APP_REAL_AUTH_SOURCE_DIR=\${PI_APP_REAL_AUTH_SOURCE_DIR:-$agent_dir}"
