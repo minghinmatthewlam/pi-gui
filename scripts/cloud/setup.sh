@@ -22,17 +22,25 @@ apt-get install -y -q --no-install-recommends \
   libgtk-3-0t64 libasound2t64 libxss1 libxkbcommon0 libxcomposite1 \
   libxdamage1 libxrandr2 libxtst6 libpango-1.0-0 libcairo2 libsecret-1-0
 
-# pi-gui requires Node >=22.19. Install a newer Node 22 into /usr/local if the
-# image's default is older.
-current=$(node -p 'process.versions.node' 2>/dev/null || echo 0.0.0)
-if [ "$(printf '%s\n%s\n' "$NODE_MIN" "$current" | sort -V | head -1)" != "$NODE_MIN" ]; then
+# pi-gui requires Node >=22.19. The image has several Node installs and its
+# /usr/local/bin/node points at Node 20, so pin one satisfying install at
+# /opt/pi-node. session-start.sh puts /opt/pi-node/bin first on PATH.
+node_ok() {
+  v=$("$1" -p 'process.versions.node' 2>/dev/null) || return 1
+  [ "$(printf '%s\n%s\n' "$NODE_MIN" "$v" | sort -V | head -1)" = "$NODE_MIN" ] && [ "${v%%.*}" -lt 26 ]
+}
+if node_ok /opt/node22/bin/node; then
+  ln -sfn /opt/node22 /opt/pi-node
+else
   arch=$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/')
   base=https://nodejs.org/dist/latest-v22.x
   tarball=$(curl -fsSL "$base/SHASUMS256.txt" | awk -v a="linux-$arch.tar.xz" '$2 ~ a"$" {print $2}')
-  curl -fsSL "$base/$tarball" | tar -xJ -C /usr/local --strip-components=1
-  ln -sf /usr/local/bin/node /usr/bin/node
+  rm -rf /opt/pi-node && mkdir -p /opt/pi-node
+  curl -fsSL "$base/$tarball" | tar -xJ -C /opt/pi-node --strip-components=1
 fi
+node_ok /opt/pi-node/bin/node
 
+export PATH=/opt/pi-node/bin:$PATH
 npm install -g "pnpm@$PNPM_VERSION"
 node --version
 pnpm --version

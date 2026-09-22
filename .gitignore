@@ -30,3 +30,6 @@ index.html
 # Vite hashed build output (anywhere)
 *-[A-Za-z0-9][A-Za-z0-9][A-Za-z0-9][A-Za-z0-9][A-Za-z0-9][A-Za-z0-9][A-Za-z0-9][A-Za-z0-9].js
 *-[A-Za-z0-9][A-Za-z0-9][A-Za-z0-9][A-Za-z0-9][A-Za-z0-9][A-Za-z0-9][A-Za-z0-9][A-Za-z0-9].css
+
+# Local verification evidence (verify-pi-gui runs, proof workspaces)
+/.artifacts/
