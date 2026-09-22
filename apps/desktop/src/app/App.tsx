@@ -30,6 +30,7 @@ import type { DiffPanelFileRequest } from "../features/workbench/diff-panel-type
 import { FileWorkbench } from "../features/workbench/file-workbench";
 import {
   EMPTY_FILE_TABS,
+  openFile,
   openFileAtLine,
   type FileWorkbenchTabs,
 } from "../features/workbench/file-workbench-state";
@@ -42,10 +43,14 @@ import {
   earlyModifierChords,
   getDesktopCommandFromShortcut,
   isCloseFocusedSurfaceShortcut,
+  isPaletteCommand,
   getDesktopShortcutLabel,
+  platformShortcutModifier,
   recentThreadShortcutIndex,
   type PiDesktopCommand,
 } from "../../contracts/ipc";
+import { CommandPaletteSurface } from "../features/command-palette/command-palette-surface";
+import { buildPaletteActions, type PaletteMode } from "../features/command-palette/palette-actions";
 import { deriveModelOnboardingState } from "../features/settings/model-onboarding";
 import type { SettingsSection } from "../features/settings/settings-view";
 import { SecondarySurfaces } from "./secondary-surfaces";
@@ -111,6 +116,7 @@ export default function App() {
   const [fileTabs, setFileTabs] = useState<FileWorkbenchTabs>(EMPTY_FILE_TABS);
   const [scheduledEditor, setScheduledEditor] = useState<ScheduledEditorState | null>(null);
   const [threadMenuOpen, setThreadMenuOpen] = useState(false);
+  const [paletteMode, setPaletteMode] = useState<PaletteMode | null>(null);
   const api = window.piApp;
   const sidebarToggleStateRef = useRef<{
     readonly api: typeof window.piApp;
@@ -325,6 +331,12 @@ export default function App() {
   const threadShortcutOrderRef = useRef<readonly ThreadListEntry[] | null>(null);
   const threadSearchGate = useRef(createChordToggleGate());
   const changesToggleGate = useRef(createChordToggleGate(CHANGES_TOGGLE_DEDUPE_MS));
+  // IPC and the renderer can both deliver one chord. Collapse only that
+  // same-tick pair so a quick second press still toggles, as with Cmd+D.
+  const paletteGates = useRef({
+    commands: createChordToggleGate(CHANGES_TOGGLE_DEDUPE_MS),
+    files: createChordToggleGate(CHANGES_TOGGLE_DEDUPE_MS),
+  });
   const handleCommandRef = useRef<(command: PiDesktopCommand) => boolean>(() => false);
   const handleRendererKeyDownRef = useRef<(event: globalThis.KeyboardEvent) => void>(() => {});
   const toggleThreadSearchRef = useRef<() => void>(() => {});
@@ -676,6 +688,13 @@ export default function App() {
     if (command === desktopCommands.toggleSidebar) {
       return handleTogglePrimarySidebar();
     }
+    if (isPaletteCommand(command)) {
+      const mode = command === desktopCommands.openCommandPalette ? "commands" : "files";
+      if (paletteGates.current[mode](performance.now())) {
+        setPaletteMode((current) => (current === mode ? null : mode));
+      }
+      return true;
+    }
     const recentIndex = recentThreadShortcutIndex(command);
     if (recentIndex !== undefined) {
       const model = threadSidebarModelRef.current;
@@ -758,6 +777,15 @@ export default function App() {
       key: event.key,
       code: event.code,
     });
+    if (
+      isPaletteCommand(command) &&
+      !platformShortcutModifier(api?.platform ?? "linux", {
+        meta: event.metaKey,
+        control: event.ctrlKey,
+      })
+    ) {
+      return;
+    }
     if (command && handleCommandRef.current(command)) {
       event.preventDefault();
     }
@@ -1071,25 +1099,107 @@ export default function App() {
     handleSelectSession(target);
   };
 
+  const selectedThreadTarget =
+    snapshot.activeView === "threads" && selectedWorkspace && selectedSession
+      ? { workspaceId: selectedWorkspace.id, sessionId: selectedSession.id }
+      : undefined;
+  const selectedRootWorkspaceId = selectedWorkspace?.rootWorkspaceId ?? selectedWorkspace?.id;
+  const paletteModelOptions = selectedThreadTarget ? buildModelOptions(selectedModelRuntime) : [];
+  const commandPalette =
+    paletteMode && threadSidebarModel ? (
+      <CommandPaletteSurface
+        api={api}
+        mode={paletteMode}
+        onModeChange={setPaletteMode}
+        onClose={() => setPaletteMode(null)}
+        threads={threadSidebarModel.recencyOrder}
+        workspaces={threadSidebarModel.folders}
+        currentThread={selectedThreadTarget}
+        actions={buildPaletteActions({
+          platform: api.platform,
+          hasWorkspace: rootWorkspaceOptions.length > 0,
+          thread:
+            selectedThreadTarget && selectedSession
+              ? {
+                  pinned: Boolean(selectedSession.pinnedAt),
+                  canSwitchModel: paletteModelOptions.length > 0,
+                }
+              : undefined,
+          canToggleSidebar: primarySidebarToggleVisible,
+          newThread: () => newThread.openSurface(selectedRootWorkspaceId),
+          openFolder: () => {
+            void updateSnapshot(setSnapshot, () => api.pickWorkspace()).catch((error: unknown) => {
+              console.error("[renderer] pickWorkspace failed", error);
+            });
+          },
+          openSettings: (section) => openSettings(selectedRootWorkspaceId, section),
+          openSkills: () => openSkills(selectedRootWorkspaceId),
+          openExtensions: () => openExtensions(selectedRootWorkspaceId),
+          openScheduledTasks: () => setActiveView("scheduled"),
+          toggleSidebar: handleTogglePrimarySidebar,
+          toggleTerminal,
+          toggleChanges: toggleChangesPanel,
+          toggleFiles: () => toggleSidePanelMode("files"),
+          findInThread: threadSearch.open,
+          setThreadPinned: (pinned) => {
+            if (selectedThreadTarget) handleSetSessionPinned(selectedThreadTarget, pinned);
+          },
+          archiveThread: () => {
+            if (selectedThreadTarget) handleArchiveSession(selectedThreadTarget);
+          },
+          openPaletteMode: setPaletteMode,
+        })}
+        fileScope={
+          selectedThreadTarget && selectedWorkspace
+            ? {
+                workspaceId: selectedWorkspace.id,
+                label: selectedWorktree?.name ?? selectedWorkspace.name,
+                openTabs: fileTabs.tabs,
+              }
+            : undefined
+        }
+        modelScope={
+          selectedThreadTarget
+            ? {
+                options: paletteModelOptions,
+                currentProvider: resolvedSessionProvider,
+                currentModelId: resolvedSessionModelId,
+              }
+            : undefined
+        }
+        onOpenThread={handleSelectSession}
+        onOpenWorkspace={wsMenu.selectWorkspace}
+        onOpenFile={(path) => {
+          lastSidePanelModeRef.current = "files";
+          setSidePanelMode("files");
+          setFileTabs((current) => openFile(current, path));
+        }}
+        onSelectModel={handleSetSessionModel}
+      />
+    ) : null;
+
   if (secondarySurfaceView) {
     return (
-      <SecondarySurfaces
-        api={api}
-        snapshot={snapshot}
-        setSnapshot={setSnapshot}
-        activeView={secondarySurfaceView}
-        rootWorkspaceOptions={rootWorkspaceOptions}
-        settingsSection={settingsSection}
-        onSelectSettingsSection={setSettingsSection}
-        settingsWorkspaceId={settingsWorkspaceId}
-        onSelectSettingsWorkspace={setSettingsWorkspaceId}
-        skillsWorkspaceId={skillsWorkspaceId}
-        onSelectSkillsWorkspace={setSkillsWorkspaceId}
-        extensionsWorkspaceId={extensionsWorkspaceId}
-        onSelectExtensionsWorkspace={setExtensionsWorkspaceId}
-        onBack={() => setActiveView("threads")}
-        onTrySkill={handleTrySkill}
-      />
+      <>
+        <SecondarySurfaces
+          api={api}
+          snapshot={snapshot}
+          setSnapshot={setSnapshot}
+          activeView={secondarySurfaceView}
+          rootWorkspaceOptions={rootWorkspaceOptions}
+          settingsSection={settingsSection}
+          onSelectSettingsSection={setSettingsSection}
+          settingsWorkspaceId={settingsWorkspaceId}
+          onSelectSettingsWorkspace={setSettingsWorkspaceId}
+          skillsWorkspaceId={skillsWorkspaceId}
+          onSelectSkillsWorkspace={setSkillsWorkspaceId}
+          extensionsWorkspaceId={extensionsWorkspaceId}
+          onSelectExtensionsWorkspace={setExtensionsWorkspaceId}
+          onBack={() => setActiveView("threads")}
+          onTrySkill={handleTrySkill}
+        />
+        {commandPalette}
+      </>
     );
   }
 
@@ -1523,6 +1633,7 @@ export default function App() {
           onOpenChat={handleOpenScheduledChat}
         />
       ) : null}
+      {commandPalette}
     </div>
   );
 }

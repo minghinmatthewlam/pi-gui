@@ -165,6 +165,8 @@ export const desktopCommands = {
   toggleChanges: "toggle-changes",
   closeFocusedSurface: "close-focused-surface",
   toggleSidebar: "toggle-sidebar",
+  openCommandPalette: "open-command-palette",
+  openFilePalette: "open-file-palette",
   selectRecentThread1: "select-recent-thread-1",
   selectRecentThread2: "select-recent-thread-2",
   selectRecentThread3: "select-recent-thread-3",
@@ -398,6 +400,8 @@ export function getDesktopCommandFromShortcut(
   const isB = lowerKey === "b" || input.code === "KeyB";
   const isJ = lowerKey === "j" || input.code === "KeyJ";
   const isD = lowerKey === "d" || input.code === "KeyD";
+  const isK = lowerKey === "k" || input.code === "KeyK";
+  const isP = lowerKey === "p" || input.code === "KeyP";
   const isShiftO = input.shift && (lowerKey === "o" || input.code === "KeyO");
 
   if (input.alt) {
@@ -423,6 +427,14 @@ export function getDesktopCommandFromShortcut(
     return desktopCommands.toggleSidebar;
   }
 
+  if (!input.shift && isK) {
+    return desktopCommands.openCommandPalette;
+  }
+
+  if (!input.shift && isP) {
+    return desktopCommands.openFilePalette;
+  }
+
   if (isShiftO) {
     return desktopCommands.openNewThread;
   }
@@ -437,6 +449,16 @@ export function getDesktopCommandFromShortcut(
   }
 
   return undefined;
+}
+
+/**
+ * Palettes follow the platform modifier only. On macOS, Control+K and
+ * Control+P stay with text fields (kill line, previous line).
+ */
+export function isPaletteCommand(command: PiDesktopCommand | undefined): boolean {
+  return (
+    command === desktopCommands.openCommandPalette || command === desktopCommands.openFilePalette
+  );
 }
 
 export function isCloseFocusedSurfaceShortcut(input: {
