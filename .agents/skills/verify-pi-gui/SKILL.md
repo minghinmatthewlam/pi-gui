@@ -33,6 +33,8 @@ PI_GUI_MODEL=gpt-5.6-luna \
 
 That command starts threads from New thread, then checks Skills Try, pin while a run is going, Show more Today, a permanent worktree against `git worktree list`, and queued follow-up plus steer. Time grouping hides the folder row after those threads exist, so the worktree step switches Grouping to Workspace before it opens workspace actions. It is not a substitute for the default send/stream proof.
 
+In a Claude cloud session, the repository's SessionStart hook (`scripts/cloud/session-start.sh`) has already written `~/.pi/agent/auth.json` from the environment's `PI_AUTH_JSON_B64` variable, started Xvfb on `DISPLAY=:99`, and exported the real-auth variables above. Run `pnpm install --frozen-lockfile`, then `prove.sh` with no prefix. The environment must use `scripts/cloud/setup.sh` as its setup script and allow `chatgpt.com` and `auth.openai.com`. If the hook reports that auth is missing, or the provider rejects the credential, stop and ask the user for a fresh `PI_AUTH_JSON_B64`. Never print the auth file.
+
 For the secondary no-provider settings/navigation proof:
 
 ```sh
@@ -67,7 +69,7 @@ For product changes, use `apps/desktop/tests/AGENTS.md` and the current package 
 
 ## Evidence
 
-The helper prints the evidence directory. Conversation runs retain doctor JSON, screenshots and ARIA at each checkpoint, timestamped assistant streaming samples, scroll frame intervals, synthetic composer input/pre-close values, action traces, tool output file, Stop timing and cancellation evidence in `stop-proof.json`, build/run logs, exit code, progress/result JSON, and cleanup records. These recipes do not request Playwright Electron `recordVideo`. Inspect assistant-only content so a prompt containing the expected answer cannot make the test pass. Streaming requires observed growth during a run; a completed answer alone is insufficient. Persistence requires a second process using the same profile. Tool proof needs both visible output and the file side effect.
+The helper prints the evidence directory. Conversation runs retain doctor JSON, screenshots and ARIA at each checkpoint, timestamped assistant streaming samples, scroll frame intervals, synthetic composer input/pre-close values, action traces, tool output file, Stop timing and cancellation evidence in `stop-proof.json`, build/run logs, exit code, progress/result JSON, and cleanup records. These recipes do not request Playwright Electron `recordVideo`. For a UI change verified in a Claude cloud session, record the whole display with the `record-screen` skill: start it just before `prove.sh` and stop it after, then attach the MP4 to the result. `prove.sh` does not record video itself. Inspect assistant-only content so a prompt containing the expected answer cannot make the test pass. Streaming requires observed growth during a run; a completed answer alone is insufficient. Persistence requires a second process using the same profile. Tool proof needs both visible output and the file side effect.
 
 Open the actual `conversation.zip` or `restart.zip` from the printed directory with `pnpm exec playwright show-trace`. The settings smoke instead uses `change.zip` and `restart.zip`. Maintenance uses `surfaces.zip` and `follow-ups.zip`. Inspect screenshots and traces as well as assertions. Keep credentials outside artifacts shared with reviewers; trace source includes test code and prompts, so use synthetic prompts only.
 
