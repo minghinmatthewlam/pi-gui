@@ -1,3 +1,11 @@
+import type {
+  ExtensionViewOpenFile,
+  DesktopExtensionViewInfo,
+  OpenExtensionViewInput,
+  ExtensionViewConnection,
+  ExtensionViewMessage,
+  ExtensionViewCatalogChange,
+} from "../contracts/extension-views";
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 import { PRELOAD_DEV_RELOAD_MARKER } from "./dev-reload-preload-probe";
 import {
@@ -18,6 +26,20 @@ import {
   type TerminalSize,
 } from "../contracts/ipc";
 import type { ClipboardImageRead } from "../contracts/composer-attachments";
+import type { SaveTaskWorkbenchTemplateInput, TaskWorkbenchTemplate } from "../contracts/workbench";
+import type {
+  ResolveTurnReviewInput,
+  ResolveTurnReviewResult,
+  GetReviewInput,
+  ReviewResult,
+  ReviewFileInput,
+  ReviewFileResult,
+  SetReviewFileReviewedInput,
+  SetReviewFileReviewedResult,
+  ChangeReviewFileStageInput,
+  ChangeReviewFileStageResult,
+} from "../contracts/review";
+import type { SessionRef } from "@pi-gui/session-driver/types";
 import type {
   NavigateSessionTreeOptions,
   NavigateSessionTreeResult,
@@ -81,6 +103,45 @@ contextBridge.exposeInMainWorld("piApp", {
   versions: process.versions,
   ping: () => ipcRenderer.invoke(desktopIpc.ping) as Promise<string>,
   getState: () => ipcRenderer.invoke(desktopIpc.stateRequest) as Promise<DesktopAppState>,
+  getTaskWorkbenchTemplate: (target: SessionRef) =>
+    ipcRenderer.invoke(
+      desktopIpc.getTaskWorkbenchTemplate,
+      target,
+    ) as Promise<TaskWorkbenchTemplate | null>,
+  saveTaskWorkbenchTemplate: (input: SaveTaskWorkbenchTemplateInput) =>
+    ipcRenderer.invoke(desktopIpc.saveTaskWorkbenchTemplate, input) as Promise<void>,
+  listExtensionViews: (target: SessionRef) =>
+    ipcRenderer.invoke(desktopIpc.listExtensionViews, target) as Promise<
+      readonly DesktopExtensionViewInfo[]
+    >,
+  openExtensionView: (input: OpenExtensionViewInput) =>
+    ipcRenderer.invoke(desktopIpc.openExtensionView, input) as Promise<ExtensionViewConnection>,
+  sendExtensionViewMessage: (input: ExtensionViewMessage) =>
+    ipcRenderer.invoke(desktopIpc.sendExtensionViewMessage, input) as Promise<void>,
+  closeExtensionView: (connectionId: string) =>
+    ipcRenderer.invoke(desktopIpc.closeExtensionView, connectionId) as Promise<void>,
+  onExtensionViewMessage: (listener: (event: ExtensionViewMessage) => void) =>
+    subscribeIpc(desktopIpc.extensionViewMessage, listener),
+  onExtensionViewCatalogChanged: (listener: (event: ExtensionViewCatalogChange) => void) =>
+    subscribeIpc(desktopIpc.extensionViewCatalogChanged, listener),
+  onExtensionViewOpenFile: (listener: (event: ExtensionViewOpenFile) => void) =>
+    subscribeIpc(desktopIpc.extensionViewOpenFile, listener),
+  resolveTurnReview: (input: ResolveTurnReviewInput) =>
+    ipcRenderer.invoke(desktopIpc.resolveTurnReview, input) as Promise<ResolveTurnReviewResult>,
+  getReview: (input: GetReviewInput) =>
+    ipcRenderer.invoke(desktopIpc.getReview, input) as Promise<ReviewResult>,
+  getReviewFile: (input: ReviewFileInput) =>
+    ipcRenderer.invoke(desktopIpc.getReviewFile, input) as Promise<ReviewFileResult>,
+  setReviewFileReviewed: (input: SetReviewFileReviewedInput) =>
+    ipcRenderer.invoke(
+      desktopIpc.setReviewFileReviewed,
+      input,
+    ) as Promise<SetReviewFileReviewedResult>,
+  changeReviewFileStage: (input: ChangeReviewFileStageInput) =>
+    ipcRenderer.invoke(
+      desktopIpc.changeReviewFileStage,
+      input,
+    ) as Promise<ChangeReviewFileStageResult>,
   onStateChanged: (listener: (state: DesktopAppState) => void) => {
     const handle = (_event: Electron.IpcRendererEvent, state: DesktopAppState) => {
       listener(state);
@@ -431,6 +492,8 @@ contextBridge.exposeInMainWorld("piApp", {
       desktopIpc.steerQueuedComposerMessage,
       messageId,
     ) as Promise<DesktopAppState>,
+  persistComposerDraft: (input: { readonly target: SessionRef; readonly draft: string }) =>
+    ipcRenderer.invoke(desktopIpc.persistComposerDraft, input) as Promise<void>,
   updateComposerDraft: (composerDraft: string) =>
     ipcRenderer.invoke(desktopIpc.updateComposerDraft, composerDraft) as Promise<DesktopAppState>,
   submitComposer: (text: string, options?: { readonly deliverAs?: "steer" | "followUp" }) =>

@@ -74,7 +74,7 @@ test("switches threads promptly while sessions are already running", async () =>
     const sessionBRow = window.locator(".session-row", { hasText: "Session B" });
 
     await clickSession(window, "Session A");
-    await expect(window.locator(".topbar__session")).toHaveText("Session A", { timeout: 1_000 });
+    await expect(window.locator(".chat-header__title")).toHaveText("Session A", { timeout: 1_000 });
     await expect(window.locator(".session-row--active")).toContainText("Session A", {
       timeout: 1_000,
     });
@@ -95,7 +95,7 @@ test("switches threads promptly while sessions are already running", async () =>
       .toBe("running");
 
     await clickSession(window, "Session B");
-    await expect(window.locator(".topbar__session")).toHaveText("Session B", { timeout: 1_000 });
+    await expect(window.locator(".chat-header__title")).toHaveText("Session B", { timeout: 1_000 });
     await expect(window.locator(".session-row--active")).toContainText("Session B", {
       timeout: 1_000,
     });

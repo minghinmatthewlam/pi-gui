@@ -47,9 +47,9 @@ test("relaunches a packaged release-zip build with a new auto-titled thread and 
       workspaceName: basename(workspacePath),
     });
 
-    await expect(window.locator(".topbar__session")).toHaveText("New thread");
+    await expect(window.locator(".chat-header__title")).toHaveText("New thread");
     await resolveDeferredThreadTitleEventually(firstRun, generatedTitle);
-    await expect(window.locator(".topbar__session")).toHaveText(generatedTitle);
+    await expect(window.locator(".chat-header__title")).toHaveText(generatedTitle);
     await expect(
       window.locator(".session-row__select", { hasText: generatedTitle }).first(),
     ).toBeVisible();
@@ -73,7 +73,7 @@ test("relaunches a packaged release-zip build with a new auto-titled thread and 
     const window = await secondRun.firstWindow();
     await waitForWorkspaceByPath(window, workspacePath);
     await expect(window.getByTestId("workspace-list")).toContainText(basename(workspacePath));
-    await expect(window.locator(".topbar__session")).toHaveText(generatedTitle);
+    await expect(window.locator(".chat-header__title")).toHaveText(generatedTitle);
     await expect(
       window.locator(".session-row__select", { hasText: generatedTitle }).first(),
     ).toBeVisible();
@@ -124,7 +124,7 @@ test("relaunches a packaged release-zip build with multiple new threads and rest
       workspaceName: basename(workspacePath),
     });
     await resolveDeferredThreadTitleEventually(firstRun, firstTitle);
-    await expect(window.locator(".topbar__session")).toHaveText(firstTitle);
+    await expect(window.locator(".chat-header__title")).toHaveText(firstTitle);
     const firstSession = await waitForSessionByTitle(window, workspace.id, firstTitle);
     firstSessionId = firstSession.id;
     await streamAssistantDeltas(firstRun, window, [firstResponse]);
@@ -137,7 +137,7 @@ test("relaunches a packaged release-zip build with multiple new threads and rest
       workspaceName: basename(workspacePath),
     });
     await resolveDeferredThreadTitleEventually(firstRun, secondTitle);
-    await expect(window.locator(".topbar__session")).toHaveText(secondTitle);
+    await expect(window.locator(".chat-header__title")).toHaveText(secondTitle);
     await waitForSessionByTitle(window, workspace.id, secondTitle);
     await streamAssistantDeltas(firstRun, window, [secondResponse]);
     await expect(window.getByTestId("transcript")).toContainText(secondResponse);
@@ -174,7 +174,7 @@ test("relaunches a packaged release-zip build with multiple new threads and rest
     const window = await secondRun.firstWindow();
     await waitForWorkspaceByPath(window, workspacePath);
 
-    await expect(window.locator(".topbar__session")).toHaveText(firstTitle);
+    await expect(window.locator(".chat-header__title")).toHaveText(firstTitle);
     await expect(window.getByTestId("transcript")).toContainText(firstResponse);
     await expect(window.getByTestId("transcript")).not.toContainText("Loading transcript");
     await expect

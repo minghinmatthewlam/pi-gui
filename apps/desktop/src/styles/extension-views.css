@@ -1,0 +1,55 @@
+.extension-view-panel {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.extension-view-panel__header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+  font-weight: var(--font-medium);
+}
+
+.extension-view-panel__header .button {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.extension-view-panel__status {
+  flex: none;
+  padding: 16px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.extension-view-panel__status h3 {
+  margin: 0 0 8px;
+  color: var(--text-strong);
+  font-size: 14px;
+}
+
+.extension-view-panel__frame {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  border: 0;
+  background: var(--main);
+}
+
+.workbench__extension-heading {
+  margin: 16px 0 4px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: var(--font-medium);
+}

@@ -1,16 +1,7 @@
-export interface FileLineMark {
-  readonly start: number;
-  readonly end: number;
-}
+import type { TaskWorkbenchTemplate } from "../../../contracts/workbench";
 
-export interface FileWorkbenchTabs {
-  readonly tabs: readonly string[];
-  readonly active: string | null;
-  readonly line: FileLineMark | null;
-  readonly lineNonce: number;
-  /** Readable paths opened from a link that may be absent from the file list. */
-  readonly retained: readonly string[];
-}
+export type FileWorkbenchTabs = TaskWorkbenchTemplate["files"]["tabs"];
+export type FileLineMark = NonNullable<FileWorkbenchTabs["line"]>;
 
 export const EMPTY_FILE_TABS: FileWorkbenchTabs = {
   tabs: [],

@@ -7,14 +7,14 @@ import {
   getAgentDir,
   type AgentSessionRuntime,
   type CreateAgentSessionOptions,
+  type CreateAgentSessionServicesOptions,
   type CreateAgentSessionRuntimeResult,
-  type ExtensionFactory,
   type ModelRuntime,
 } from "@earendil-works/pi-coding-agent";
 
-export interface PiResourceLoaderOptions {
-  readonly extensionFactories?: ExtensionFactory[];
-}
+export type PiResourceLoaderOptions = NonNullable<
+  CreateAgentSessionServicesOptions["resourceLoaderOptions"]
+>;
 
 /** `ModelInfo` is not exported from the package, so derive it from the session options. */
 export type PiModelInfo = NonNullable<CreateAgentSessionOptions["model"]>;

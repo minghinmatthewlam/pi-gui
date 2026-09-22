@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { SessionTranscriptMessage } from "@pi-gui/session-driver";
 import type {
   DisplayTimelineItem,
@@ -28,6 +29,7 @@ export function TimelineItem({
   onViewFileInDiff,
   sourceMessageIndex,
   onForkFromMessage,
+  onReviewTurn,
   scheduledOrigin,
   workspacePath,
   onOpenWorkspaceFileLine,
@@ -38,6 +40,7 @@ export function TimelineItem({
   readonly onViewFileInDiff?: (path: string) => void;
   readonly sourceMessageIndex?: number;
   readonly onForkFromMessage?: (messageIndex: number, preview?: string) => void;
+  readonly onReviewTurn?: (messageId: string) => Promise<void>;
   readonly scheduledOrigin?: ScheduledTaskOrigin;
   readonly workspacePath?: string;
   readonly onOpenWorkspaceFileLine?: (target: WorkspaceFileLine) => void;
@@ -51,6 +54,7 @@ export function TimelineItem({
           item={item}
           sourceMessageIndex={sourceMessageIndex}
           onForkFromMessage={onForkFromMessage}
+          onReviewTurn={onReviewTurn}
           onOpenWorkspaceFileLine={onOpenWorkspaceFileLine}
           scheduledOrigin={scheduledOrigin}
           workspacePath={workspacePath}
@@ -78,6 +82,7 @@ function TimelineMessage({
   item,
   sourceMessageIndex,
   onForkFromMessage,
+  onReviewTurn,
   scheduledOrigin,
   workspacePath,
   onOpenWorkspaceFileLine,
@@ -85,10 +90,13 @@ function TimelineMessage({
   readonly item: SessionTranscriptMessage;
   readonly sourceMessageIndex?: number;
   readonly onForkFromMessage?: (messageIndex: number, preview?: string) => void;
+  readonly onReviewTurn?: (messageId: string) => Promise<void>;
   readonly scheduledOrigin?: ScheduledTaskOrigin;
   readonly workspacePath?: string;
   readonly onOpenWorkspaceFileLine?: (target: WorkspaceFileLine) => void;
 }) {
+  const [reviewError, setReviewError] = useState("");
+  const [reviewPending, setReviewPending] = useState(false);
   if (item.role === "user") {
     return (
       <article className="timeline-item timeline-item--user">
@@ -150,20 +158,57 @@ function TimelineMessage({
         text={item.text}
         workspacePath={workspacePath}
       />
-      {canFork ? (
+      {canFork || onReviewTurn ? (
         <div className="timeline-item__actions">
-          <button
-            type="button"
-            className="timeline-item__action"
-            title="Fork conversation from this point"
-            aria-label="Fork conversation from this point"
-            data-testid="fork-from-message"
-            onClick={() => onForkFromMessage(sourceMessageIndex, item.text)}
-          >
-            <ForkIcon />
-            <span className="timeline-item__action-label">Fork</span>
-          </button>
+          {canFork ? (
+            <button
+              type="button"
+              className="timeline-item__action"
+              title="Fork conversation from this point"
+              aria-label="Fork conversation from this point"
+              data-testid="fork-from-message"
+              onClick={() => onForkFromMessage(sourceMessageIndex, item.text)}
+            >
+              <ForkIcon />
+              <span className="timeline-item__action-label">Fork</span>
+            </button>
+          ) : null}
+          {onReviewTurn ? (
+            <button
+              type="button"
+              className="timeline-item__action"
+              aria-label="Review changes from this response"
+              title={
+                item.sourceMessageId
+                  ? "Review changes captured during this turn"
+                  : "Review becomes available when this response is saved"
+              }
+              disabled={reviewPending || !item.sourceMessageId}
+              onClick={() => {
+                if (!item.sourceMessageId) return;
+                setReviewPending(true);
+                setReviewError("");
+                onReviewTurn(item.sourceMessageId)
+                  .catch((error: unknown) => {
+                    setReviewError(
+                      error instanceof Error ? error.message : "This turn could not be reviewed.",
+                    );
+                  })
+                  .finally(() => setReviewPending(false));
+              }}
+            >
+              <DiffIcon />
+              <span className="timeline-item__action-label">
+                {reviewPending ? "Opening…" : "Review"}
+              </span>
+            </button>
+          ) : null}
         </div>
+      ) : null}
+      {reviewError ? (
+        <p className="timeline-item__review-error" role="status">
+          {reviewError}
+        </p>
       ) : null}
     </article>
   );

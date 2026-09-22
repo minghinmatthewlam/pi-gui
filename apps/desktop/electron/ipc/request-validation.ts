@@ -33,6 +33,31 @@ import {
   type UpdateScheduledTaskInput,
 } from "../../contracts/scheduled-tasks";
 import { assertComposerAttachmentsAccepted } from "../../contracts/composer-attachments";
+import {
+  decodeTaskWorkbenchTemplate,
+  type SaveTaskWorkbenchTemplateInput,
+} from "../../contracts/workbench";
+
+export function expectSaveTaskWorkbenchTemplateInput(
+  value: unknown,
+): SaveTaskWorkbenchTemplateInput {
+  const input = expectRecord(value, "workbench save");
+  if (Object.keys(input).some((key) => !["target", "template", "sequence"].includes(key))) {
+    throw new TypeError("workbench save contains an unsupported field");
+  }
+  if (
+    typeof input.sequence !== "number" ||
+    !Number.isSafeInteger(input.sequence) ||
+    input.sequence < 1
+  ) {
+    throw new TypeError("workbench sequence must be a positive safe integer");
+  }
+  return {
+    target: expectSessionTarget(input.target),
+    template: decodeTaskWorkbenchTemplate(input.template),
+    sequence: input.sequence,
+  };
+}
 
 export function expectString(value: unknown, name: string): string {
   if (typeof value !== "string") {

@@ -86,6 +86,20 @@ test("Cmd/Ctrl+K finds chats and actions, Cmd/Ctrl+P opens files", async () => {
     // Off macOS, Ctrl+K in the focused terminal stays with the shell.
     await window.getByTestId("composer").click();
 
+    // Side panel tools open from the palette; the same action hides the panel again.
+    const tools = window.getByRole("tablist", { name: "Workspace tools" });
+    await openPalette(window, "K");
+    await window.keyboard.type("toggle worktrees");
+    await window.keyboard.press("Enter");
+    await expect(tools.getByRole("tab", { name: "Worktrees" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await openPalette(window, "K");
+    await window.keyboard.type("toggle worktrees");
+    await window.keyboard.press("Enter");
+    await expect(tools).toHaveCount(0);
+
     // Actions run from the palette, and the palette also works over Settings.
     await openPalette(window, "K");
     await window.keyboard.type("appearance");

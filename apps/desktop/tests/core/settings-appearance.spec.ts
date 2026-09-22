@@ -413,8 +413,9 @@ async function expectThemedAppSurface(window: Page): Promise<void> {
   const sidebarBackground = await elementCssProperty(window, ".sidebar", "background-color");
   await expect.poll(() => rootCssVariableAsColor(window, "--sidebar")).toBe(sidebarBackground);
 
+  // The compact task header shares the conversation surface.
   const topbarBackground = await elementCssProperty(window, ".topbar", "background-color");
-  await expect.poll(() => rootCssVariableAsColor(window, "--surface")).toBe(topbarBackground);
+  await expect.poll(() => rootCssVariableAsColor(window, "--main")).toBe(topbarBackground);
 
   const codeBlockBackground = await elementCssProperty(
     window,

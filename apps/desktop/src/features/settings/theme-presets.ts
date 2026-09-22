@@ -706,7 +706,7 @@ export const themePresets: readonly ThemePreset[] = [
     id: "default",
     name: "Default",
     description: "The current pi-gui palette.",
-    swatches: ["#f8f8fb", "#ffffff", "#6a55f2", "#1f2638"],
+    swatches: ["#f6f6f4", "#ffffff", "#526795", "#282825"],
     variants: {
       light: { label: "Default light", tokens: {} },
       dark: { label: "Default dark", tokens: {} },

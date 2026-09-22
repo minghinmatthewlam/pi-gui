@@ -17,6 +17,7 @@ export async function writeFileAtomicQueued(
   filePath: string,
   contents: string,
   validateExisting: (value: unknown) => unknown,
+  options?: { readonly preserveExistingAs: (validatedValue: unknown) => string | undefined },
 ): Promise<void> {
   await enqueueWrite(filePath, async () => {
     const existing = await readJsonWithBackup(filePath);
@@ -25,9 +26,23 @@ export async function writeFileAtomicQueued(
         `Cannot overwrite invalid saved data at ${filePath}; repair or restore it first.`,
       );
     }
-    if (existing.value !== undefined) validateExisting(existing.value);
+    const validated = existing.value === undefined ? undefined : validateExisting(existing.value);
     const dir = dirname(filePath);
     await mkdir(dir, { recursive: true });
+    const preservedPath =
+      validated === undefined ? undefined : options?.preserveExistingAs(validated);
+    if (preservedPath && existing.contents !== undefined) {
+      // A migration copy is immutable and distinct from the rotating recovery backup.
+      // Retain the successfully validated source bytes before any primary-file promotion.
+      const preserved = await open(preservedPath, "wx");
+      try {
+        await preserved.writeFile(existing.contents);
+        await preserved.sync();
+      } finally {
+        await preserved.close();
+      }
+      await fsyncDir(dir);
+    }
     const tmpPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
 
     const handle = await open(tmpPath, "w");
@@ -56,6 +71,8 @@ export interface AtomicReadResult<T> {
   readonly corrupted: boolean;
   /** The value was recovered from the `.bak` sibling because the primary was missing or corrupt. */
   readonly recovered: boolean;
+  /** Exact bytes belonging to value, including when it came from the recovery backup. */
+  readonly contents?: Buffer;
 }
 
 /**
@@ -69,12 +86,17 @@ export interface AtomicReadResult<T> {
 export async function readJsonWithBackup(filePath: string): Promise<AtomicReadResult<unknown>> {
   const primary = await tryReadParse(filePath);
   if (primary.status === "ok") {
-    return { value: primary.value, corrupted: false, recovered: false };
+    return { value: primary.value, contents: primary.contents, corrupted: false, recovered: false };
   }
 
   const backup = await tryReadParse(`${filePath}.bak`);
   if (backup.status === "ok") {
-    return { value: backup.value, corrupted: primary.status === "corrupt", recovered: true };
+    return {
+      value: backup.value,
+      contents: backup.contents,
+      corrupted: primary.status === "corrupt",
+      recovered: true,
+    };
   }
 
   return {
@@ -85,21 +107,21 @@ export async function readJsonWithBackup(filePath: string): Promise<AtomicReadRe
 }
 
 type ReadParseResult =
-  | { readonly status: "ok"; readonly value: unknown }
+  | { readonly status: "ok"; readonly value: unknown; readonly contents: Buffer }
   | { readonly status: "missing" }
   | { readonly status: "corrupt" };
 
 async function tryReadParse(filePath: string): Promise<ReadParseResult> {
-  let raw: string;
+  let raw: Buffer;
   try {
-    raw = await readFile(filePath, "utf8");
+    raw = await readFile(filePath);
   } catch (error) {
     if (isMissingFileError(error)) return { status: "missing" };
     throw error;
   }
 
   try {
-    return { status: "ok", value: JSON.parse(raw) as unknown };
+    return { status: "ok", value: JSON.parse(raw.toString("utf8")) as unknown, contents: raw };
   } catch {
     return { status: "corrupt" };
   }

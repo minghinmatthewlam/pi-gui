@@ -17,9 +17,25 @@ import {
   SidePanelIcon,
   SkillIcon,
   TerminalIcon,
+  WorktreeIcon,
 } from "../../ui/icons";
 
 export type PaletteMode = "commands" | "files" | "models";
+
+export type BuiltinToolKind = "files" | "changes" | "worktrees" | "terminal";
+
+/** Side panel tools in the order the tool chooser lists them. */
+const TOOL_ACTIONS: readonly {
+  readonly kind: BuiltinToolKind;
+  readonly title: string;
+  readonly icon: ReactNode;
+  readonly key?: string;
+}[] = [
+  { kind: "files", title: "Toggle files", icon: <FileIcon /> },
+  { kind: "changes", title: "Toggle changes", icon: <DiffIcon />, key: "D" },
+  { kind: "worktrees", title: "Toggle worktrees", icon: <WorktreeIcon /> },
+  { kind: "terminal", title: "Toggle terminal", icon: <TerminalIcon />, key: "J" },
+];
 
 export interface PaletteAction {
   readonly id: string;
@@ -64,9 +80,15 @@ export interface PaletteActionContext {
   readonly openExtensions: () => void;
   readonly openScheduledTasks: () => void;
   readonly toggleSidebar: () => void;
-  readonly toggleTerminal: () => void;
-  readonly toggleChanges: () => void;
-  readonly toggleFiles: () => void;
+  /** Shows the tool in the side panel, or hides the panel when that tool is already showing. */
+  readonly toggleTool: (kind: BuiltinToolKind) => void;
+  readonly toggleSidePanel: () => void;
+  /** Extension views the side panel can open for this thread. */
+  readonly extensionViews: readonly {
+    readonly id: string;
+    readonly title: string;
+    readonly open: () => void;
+  }[];
   readonly findInThread: () => void;
   readonly setThreadPinned: (pinned: boolean) => void;
   readonly archiveThread: () => void;
@@ -118,27 +140,31 @@ export function buildPaletteActions(context: PaletteActionContext): readonly Pal
         run: () => context.openPaletteMode("models"),
       });
     }
+    for (const tool of TOOL_ACTIONS) {
+      actions.push({
+        id: `toggle-${tool.kind}`,
+        title: tool.title,
+        icon: tool.icon,
+        hint: tool.key ? formatShortcut(platform, tool.key) : undefined,
+        run: () => context.toggleTool(tool.kind),
+      });
+    }
+    actions.push({
+      id: "toggle-side-panel",
+      title: "Toggle side panel",
+      icon: <SidePanelIcon />,
+      hint: formatShortcut(platform, "B", { alt: true }),
+      run: context.toggleSidePanel,
+    });
+    for (const view of context.extensionViews) {
+      actions.push({
+        id: `extension-view:${view.id}`,
+        title: `Open ${view.title}`,
+        icon: <ExtensionIcon />,
+        run: view.open,
+      });
+    }
     actions.push(
-      {
-        id: "toggle-terminal",
-        title: "Toggle terminal",
-        icon: <TerminalIcon />,
-        hint: formatShortcut(platform, "J"),
-        run: context.toggleTerminal,
-      },
-      {
-        id: "toggle-changes",
-        title: "Toggle changes",
-        icon: <DiffIcon />,
-        hint: formatShortcut(platform, "D"),
-        run: context.toggleChanges,
-      },
-      {
-        id: "toggle-files",
-        title: "Toggle files",
-        icon: <SidePanelIcon />,
-        run: context.toggleFiles,
-      },
       {
         id: "pin-thread",
         title: thread.pinned ? "Unpin thread" : "Pin thread",
