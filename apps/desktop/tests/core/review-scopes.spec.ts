@@ -346,16 +346,21 @@ test("large changed-file lists scroll with bounded row layout and expandable cov
     for (let index = 0; index < 12; index += 1) await window.mouse.wheel(0, 160);
     await expect.poll(() => list.evaluate((element) => element.scrollTop)).toBeGreaterThan(500);
     await window.screenshot({ path: testInfo.outputPath("large-review-scroll.png") });
-    // Keyboard navigation must still reach off-screen actions.
-    await fileRow(panel, "file-1999.txt").locator(".diff-panel__file-name").focus();
+    // Keyboard navigation must still reach off-screen actions. Find the row by path, not
+    // through fileRow(): a role query runs Chromium's checkVisibility() on every checkbox,
+    // which forces layout of each skipped content-visibility row and takes ~30s for 2000 rows.
+    const lastRow = rows.and(panel.locator('[data-file-path="file-1999.txt"]'));
+    const lastReviewed = panel.getByTestId("diff-panel-reviewed-file-1999.txt");
+    await expect(lastReviewed).toHaveAccessibleName("Mark file-1999.txt reviewed");
+    await lastRow.locator(".diff-panel__file-name").focus();
     await window.keyboard.press("Enter");
     await expect(
       panel.getByRole("region", { name: "Combined changes", exact: true }),
     ).toContainText("source 1999");
-    await expect(fileRow(panel, "file-1999.txt")).toBeInViewport();
-    await panel.getByTestId("diff-panel-reviewed-file-1999.txt").click();
+    await expect(lastRow).toBeInViewport();
+    await lastReviewed.click();
     try {
-      await expect(panel.getByTestId("diff-panel-reviewed-file-1999.txt")).toBeChecked();
+      await expect(lastReviewed).toBeChecked();
     } finally {
       await window.screenshot({ path: testInfo.outputPath("large-review-mark.png") });
       await writeFile(testInfo.outputPath("review-status.txt"), await panel.innerText());
