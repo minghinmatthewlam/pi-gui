@@ -64,7 +64,10 @@ interface FileSource {
 }
 
 export interface GitReviewFile extends Omit<ReviewFileEntry, "reviewed"> {
+  /** Everything the comparison read, including the index; any change makes actions stale. */
   readonly fingerprint: string;
+  /** The reviewed content only. Staging moves it into the index without changing it. */
+  readonly contentFingerprint: string;
   readonly source: FileSource;
 }
 
@@ -314,13 +317,20 @@ function parseStatus(output: string): StatusFile[] {
   return [...files.values()];
 }
 
+function workingIdentity(working: WorkingFile | undefined) {
+  return working ? { mode: working.mode, digest: working.digest } : undefined;
+}
+
 function fingerprint(source: FileSource): string {
+  return digest(JSON.stringify({ ...source, working: workingIdentity(source.working) }));
+}
+
+function contentFingerprint(source: FileSource): string {
   return digest(
     JSON.stringify({
-      ...source,
-      working: source.working
-        ? { mode: source.working.mode, digest: source.working.digest }
-        : undefined,
+      base: source.base,
+      head: source.head,
+      working: workingIdentity(source.working),
     }),
   );
 }
@@ -395,7 +405,13 @@ export async function createGitReview(
           statusRecords: entry.records,
         };
         const { records: _records, ...fields } = entry;
-        files.push({ ...fields, id: digest(entry.path), fingerprint: fingerprint(source), source });
+        files.push({
+          ...fields,
+          id: digest(entry.path),
+          fingerprint: fingerprint(source),
+          contentFingerprint: contentFingerprint(source),
+          source,
+        });
       }
       if (
         headOid !== (await resolveRevision(checkoutPath, "HEAD")) ||
@@ -548,6 +564,7 @@ export async function createGitReview(
         conflicted: false,
         source,
         fingerprint: fingerprint(source),
+        contentFingerprint: contentFingerprint(source),
       });
     }
     const coverage = combineCoverage([

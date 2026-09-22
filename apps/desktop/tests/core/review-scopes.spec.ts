@@ -85,6 +85,41 @@ test("Uncommitted preserves staged and unstaged changes that cancel each other",
   }
 });
 
+test("Uncommitted keeps a reviewed mark through stage and unstage until the file changes", async () => {
+  const workspacePath = await makeWorkspace("review-mark-staging");
+  await initGitRepo(workspacePath);
+  await writeFile(join(workspacePath, "result.txt"), "baseline content\n");
+  await commitAllInGitRepo(workspacePath, "Baseline");
+  await writeFile(join(workspacePath, "result.txt"), "reviewed content\n");
+  const { harness, panel } = await openReview(workspacePath);
+  try {
+    const row = fileRow(panel, "result.txt");
+    const mark = row.getByRole("checkbox");
+    await mark.click();
+    await expect(mark).toBeChecked();
+
+    await row.getByRole("button", { name: "Stage", exact: true }).click();
+    await expect(row.getByRole("button", { name: "Unstage", exact: true })).toBeEnabled();
+    expect(await git(workspacePath, "diff", "--cached", "--name-only")).toBe("result.txt\n");
+    await expect(mark).toBeChecked();
+
+    await row.getByRole("button", { name: "Unstage", exact: true }).click();
+    await expect(row.getByRole("button", { name: "Stage", exact: true })).toBeEnabled();
+    expect(await git(workspacePath, "diff", "--cached", "--name-only")).toBe("");
+    await expect(mark).toBeChecked();
+
+    await writeFile(join(workspacePath, "result.txt"), "edited after review\n");
+    await panel.getByRole("button", { name: "Refresh", exact: true }).click();
+    await openFile(panel, "result.txt");
+    await expect(
+      panel.getByRole("region", { name: "Combined changes", exact: true }),
+    ).toContainText("edited after review");
+    await expect(mark).not.toBeChecked();
+  } finally {
+    await harness.close();
+  }
+});
+
 test("Branch compares committed revisions and reports a missing base explicitly", async () => {
   const workspacePath = await makeWorkspace("review-branch");
   await initGitRepo(workspacePath);

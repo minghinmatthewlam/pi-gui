@@ -112,6 +112,47 @@ test("review acknowledgements survive new comparisons and restart but do not cro
   expect(changed.files[0]?.reviewed).toBe(false);
 });
 
+test("staging and unstaging keep a reviewed mark until the content changes", async () => {
+  const { checkoutPath, owner } = await fixture();
+  const input = {
+    target: firstTask,
+    checkoutId: "checkout",
+    scope: { kind: "uncommitted" as const },
+  };
+  const reviewedFile = async () => {
+    const review = available(await owner.getReview(input));
+    const file = review.files.find((entry) => entry.path === "example.txt");
+    if (!file) throw new Error("Expected changed example.txt");
+    return { review, file };
+  };
+  const first = await reviewedFile();
+  await owner.setReviewFileReviewed({
+    reviewId: first.review.reviewId,
+    fileId: first.file.id,
+    reviewed: true,
+  });
+  await expect(
+    owner.changeReviewFileStage({
+      reviewId: first.review.reviewId,
+      fileId: first.file.id,
+      action: "stage",
+    }),
+  ).resolves.toEqual({ state: "applied" });
+  const staged = await reviewedFile();
+  expect(staged.file).toMatchObject({ hasStagedChanges: true, reviewed: true });
+  await expect(
+    owner.changeReviewFileStage({
+      reviewId: staged.review.reviewId,
+      fileId: staged.file.id,
+      action: "unstage",
+    }),
+  ).resolves.toEqual({ state: "applied" });
+  expect((await reviewedFile()).file).toMatchObject({ hasStagedChanges: false, reviewed: true });
+
+  await writeFile(join(checkoutPath, "example.txt"), "edited after review\n");
+  expect((await reviewedFile()).file.reviewed).toBe(false);
+});
+
 test("expired, removed-task and remapped-checkout comparisons never target the current task", async () => {
   const { options } = await fixture();
   let valid = true;
