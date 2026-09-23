@@ -133,6 +133,10 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends xvfb openbox libnotify4
+          # The runner pipes crashes to systemd-coredump with an unlimited size, ignoring
+          # ulimit. A test that crashes a renderer then stalls quit while its multi-terabyte
+          # sparse address space is streamed out, so write plain core files, which ulimit -c 0 blocks.
+          sudo sysctl -w kernel.core_pattern=core
 
       - name: Desktop Core (Linux)
         if: ${{ runner.os == 'Linux' }}
