@@ -681,7 +681,8 @@ export interface PiDesktopApi {
     readonly target: SessionRef;
     readonly draft: string;
   }): Promise<void>;
-  updateComposerDraft(composerDraft: string): Promise<DesktopAppState>;
+  /** Saves the draft typed in `target`, even if another task is selected by the time it lands. */
+  updateComposerDraft(composerDraft: string, target: SessionRef): Promise<DesktopAppState>;
   submitComposer(
     text: string,
     options?: { readonly deliverAs?: "steer" | "followUp" },

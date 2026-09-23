@@ -17,13 +17,15 @@ export function shouldAdoptComposerSnapshot(
 interface UseComposerDraftSyncParams {
   readonly api: PiDesktopApi | undefined;
   readonly snapshot: DesktopAppState | null;
-  readonly selectedSessionKey: string;
+  /** The task whose draft the composer shows. */
+  readonly selectedSession: SessionRef | null;
 }
 
 interface PendingComposerDraftWrite {
   readonly draft: string;
   readonly generation: number;
   readonly sessionKey: string;
+  readonly target: SessionRef;
 }
 
 /**
@@ -32,7 +34,10 @@ interface PendingComposerDraftWrite {
  * flush so a pending write lands before the active session changes.
  */
 export function useComposerDraftSync(params: UseComposerDraftSyncParams) {
-  const { api, snapshot, selectedSessionKey } = params;
+  const { api, snapshot, selectedSession } = params;
+  const selectedSessionKey = selectedSession
+    ? `${selectedSession.workspaceId}:${selectedSession.sessionId}`
+    : "";
   const [composerDraft, setComposerDraftState] = useState("");
   const composerDraftRef = useRef("");
   const hydratedComposerSessionKeyRef = useRef("");
@@ -102,7 +107,7 @@ export function useComposerDraftSync(params: UseComposerDraftSyncParams) {
     if (!api) {
       return;
     }
-    const completion = api.updateComposerDraft(write.draft).then(
+    const completion = api.updateComposerDraft(write.draft, write.target).then(
       (state) => {
         inFlightComposerDraftWritesRef.current.delete(write);
         const hasOtherWriteForSession = [...inFlightComposerDraftWritesRef.current.keys()].some(
@@ -130,7 +135,7 @@ export function useComposerDraftSync(params: UseComposerDraftSyncParams) {
       pendingComposerDraftRef.current = null;
       return undefined;
     }
-    if (!api) {
+    if (!api || !selectedSession) {
       return undefined;
     }
 
@@ -155,6 +160,7 @@ export function useComposerDraftSync(params: UseComposerDraftSyncParams) {
       draft: composerDraft,
       generation,
       sessionKey: selectedSessionKey,
+      target: selectedSession,
     } satisfies PendingComposerDraftWrite;
     pendingComposerDraftRef.current = pendingWrite;
     const timeout = window.setTimeout(() => {
@@ -172,7 +178,7 @@ export function useComposerDraftSync(params: UseComposerDraftSyncParams) {
       window.clearTimeout(timeout);
       composerDraftWriteTimerRef.current = null;
     };
-  }, [api, composerDraft, persistedComposerDraft, selectedSessionKey]);
+  }, [api, composerDraft, persistedComposerDraft, selectedSession, selectedSessionKey]);
 
   useEffect(() => () => flushComposerDraftRef.current(), []);
 
@@ -218,6 +224,7 @@ export function useComposerDraftSync(params: UseComposerDraftSyncParams) {
           draft: composerDraftRef.current,
           generation: localEditGenerationRef.current,
           sessionKey,
+          target,
         };
         const earlierWrites = [...inFlightComposerDraftWritesRef.current.entries()]
           .filter(([write]) => write.sessionKey === sessionKey)
@@ -227,7 +234,7 @@ export function useComposerDraftSync(params: UseComposerDraftSyncParams) {
         cancelPendingWrite();
         const generation = localEditGenerationRef.current;
         const draft = composerDraftRef.current;
-        const pendingWrite = { draft, generation, sessionKey };
+        const pendingWrite = { draft, generation, sessionKey, target };
         pendingComposerDraftRef.current = pendingWrite;
         const completion = api.persistComposerDraft({ target, draft });
         inFlightComposerDraftWritesRef.current.set(pendingWrite, completion);

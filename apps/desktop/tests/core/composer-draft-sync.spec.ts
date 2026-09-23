@@ -43,7 +43,12 @@ test("ignores stale persisted draft acknowledgements while typing", async () => 
           await new Promise<void>((resolve) => globalThis.window.setTimeout(resolve, 50));
           const app = globalThis.window.piApp;
           if (!app) throw new Error("piApp IPC bridge is unavailable");
-          await app.updateComposerDraft(stale);
+          const { selectedWorkspaceId, selectedSessionId } = await app.getState();
+          if (!selectedWorkspaceId || !selectedSessionId) throw new Error("No selected session");
+          await app.updateComposerDraft(stale, {
+            workspaceId: selectedWorkspaceId,
+            sessionId: selectedSessionId,
+          });
         },
         { stale: staleDraft },
       ),
@@ -92,7 +97,12 @@ test("adopts a persisted draft when no local edit is pending", async () => {
       if (!app) {
         throw new Error("piApp IPC bridge is unavailable");
       }
-      await app.updateComposerDraft(draft);
+      const { selectedWorkspaceId, selectedSessionId } = await app.getState();
+      if (!selectedWorkspaceId || !selectedSessionId) throw new Error("No selected session");
+      await app.updateComposerDraft(draft, {
+        workspaceId: selectedWorkspaceId,
+        sessionId: selectedSessionId,
+      });
     }, persistedDraft);
 
     const composer = window.getByTestId("composer");
@@ -303,7 +313,11 @@ for (const operation of ["draft", "command"] as const) {
           if (!select || !act || !sender) throw new Error("Expected desktop IPC handlers");
           const event = { sender };
           const selection = select(event, payload.target);
-          const action = act(event, payload.text);
+          // A draft write names the task it was typed in; a command uses the window's view.
+          const action =
+            payload.draftTarget === undefined
+              ? act(event, payload.text)
+              : act(event, payload.text, payload.draftTarget);
           await Promise.all([selection, action]);
         },
         {
@@ -311,6 +325,10 @@ for (const operation of ["draft", "command"] as const) {
           actionChannel:
             operation === "draft" ? desktopIpc.updateComposerDraft : desktopIpc.submitComposer,
           target: { workspaceId: workspace.id, sessionId: bravo.id },
+          draftTarget:
+            operation === "draft"
+              ? { workspaceId: workspace.id, sessionId: state.selectedSessionId }
+              : undefined,
           text: operation === "draft" ? "Alpha owns this queued draft" : "/status",
         },
       );
@@ -334,3 +352,30 @@ for (const operation of ["draft", "command"] as const) {
     }
   });
 }
+
+test("Cmd/Ctrl+number keeps a draft typed just before switching on its own thread", async () => {
+  test.setTimeout(60_000);
+  const harness = await launchDesktop(await makeUserDataDir(), {
+    initialWorkspaces: [await makeWorkspace("composer-draft-number-switch")],
+    testMode: "background",
+  });
+  const modifier = process.platform === "darwin" ? "Meta" : "Control";
+  try {
+    const window = await harness.firstWindow();
+    const title = window.locator(".chat-header__title");
+    const composer = window.getByTestId("composer");
+    await createNamedThread(window, "Number Alpha");
+    await createNamedThread(window, "Number Bravo");
+    // Newest first: 1 opens Bravo, 2 opens Alpha.
+    await composer.click();
+    await composer.pressSequentially("typed right before switching");
+    await window.keyboard.press(`${modifier}+2`);
+    await expect(title).toHaveText("Number Alpha");
+    await expect(composer).toHaveValue("");
+    await window.keyboard.press(`${modifier}+1`);
+    await expect(title).toHaveText("Number Bravo");
+    await expect(composer).toHaveValue("typed right before switching");
+  } finally {
+    await harness.close();
+  }
+});

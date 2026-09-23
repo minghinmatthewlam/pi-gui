@@ -197,17 +197,6 @@ export default function App() {
   );
   const selectedSessionKey =
     selectedWorkspace && selectedSession ? `${selectedWorkspace.id}:${selectedSession.id}` : "";
-  const {
-    composerDraft,
-    setComposerDraft,
-    composerDraftRef,
-    flushComposerDraft,
-    flushComposerDraftAsync,
-  } = useComposerDraftSync({
-    api,
-    snapshot,
-    selectedSessionKey,
-  });
   const workbenchTarget = useMemo(
     () =>
       selectedWorkspace && selectedSession
@@ -215,6 +204,13 @@ export default function App() {
         : null,
     [selectedWorkspace?.id, selectedSession?.id],
   );
+  const {
+    composerDraft,
+    setComposerDraft,
+    composerDraftRef,
+    flushComposerDraft,
+    flushComposerDraftAsync,
+  } = useComposerDraftSync({ api, snapshot, selectedSession: workbenchTarget });
   const extensionViews = useExtensionViews({ api, target: workbenchTarget });
   const workbench = useWorkbench({ api, target: workbenchTarget });
   const workbenchTargetRef = useRef(workbenchTarget);
@@ -701,6 +697,7 @@ export default function App() {
         : undefined,
     threadSidebarModel,
     threadShortcutOrderRef,
+    selectThread: (target) => selectThreadRef.current(target),
     threadSearch,
     workbench,
     sidePanelAvailable,

@@ -226,11 +226,11 @@ export function ComposerPanel({
                   </button>
                 </div>
               </div>
-              <div className="composer__hint">
-                {selectedSession.status === "running"
-                  ? `${runningLabel} · Enter to queue · Cmd+Enter to steer`
-                  : "Enter to send · Shift+Enter for newline"}
-              </div>
+              {selectedSession.status === "running" ? (
+                <div className="composer__hint">
+                  {`${runningLabel} · Enter to queue · Cmd+Enter to steer`}
+                </div>
+              ) : null}
             </div>
           }
         />

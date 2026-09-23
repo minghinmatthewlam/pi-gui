@@ -67,6 +67,8 @@ interface DesktopCommandsInput {
     | undefined;
   readonly threadSidebarModel: ThreadSidebarModel | undefined;
   readonly threadShortcutOrderRef: RefObject<readonly ThreadListEntry[] | null>;
+  /** Opens a thread the way a sidebar click does, saving the current draft and scroll first. */
+  readonly selectThread: (target: WorkspaceSessionTarget) => void;
   readonly threadSearch: {
     readonly isOpen: boolean;
     readonly open: () => void;
@@ -180,12 +182,8 @@ export function useDesktopCommands(input: DesktopCommandsInput) {
           })
         : []);
     const thread = threads[index];
-    if (!thread || !api) return;
-    void updateSnapshot(setSnapshot, () =>
-      api.selectSession({ workspaceId: thread.workspaceId, sessionId: thread.session.id }),
-    ).catch((error: unknown) => {
-      console.error("[renderer] selectSession failed", error);
-    });
+    if (thread)
+      input.selectThread({ workspaceId: thread.workspaceId, sessionId: thread.session.id });
   };
 
   const handlers: Record<PiDesktopCommand, CommandHandler> = {

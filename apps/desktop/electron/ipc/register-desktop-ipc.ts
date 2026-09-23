@@ -782,8 +782,9 @@ export function registerDesktopIpc({
       );
     },
   );
-  ipcMain.handle(desktopIpc.updateComposerDraft, (event, rawDraft: unknown) => {
-    const target = windows.targetForSender(event.sender);
+  ipcMain.handle(desktopIpc.updateComposerDraft, (event, rawDraft: unknown, rawTarget: unknown) => {
+    // A debounced write can arrive after the window selected another task, so it names its own.
+    const target = expectSessionTarget(rawTarget);
     return run(event, () =>
       windows.withComposerDraftPersistOrigin(event.sender, () =>
         owners.conversation.updateComposerDraft(target, expectString(rawDraft, "composerDraft")),

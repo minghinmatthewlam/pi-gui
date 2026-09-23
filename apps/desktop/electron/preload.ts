@@ -494,8 +494,12 @@ contextBridge.exposeInMainWorld("piApp", {
     ) as Promise<DesktopAppState>,
   persistComposerDraft: (input: { readonly target: SessionRef; readonly draft: string }) =>
     ipcRenderer.invoke(desktopIpc.persistComposerDraft, input) as Promise<void>,
-  updateComposerDraft: (composerDraft: string) =>
-    ipcRenderer.invoke(desktopIpc.updateComposerDraft, composerDraft) as Promise<DesktopAppState>,
+  updateComposerDraft: (composerDraft: string, target: SessionRef) =>
+    ipcRenderer.invoke(
+      desktopIpc.updateComposerDraft,
+      composerDraft,
+      target,
+    ) as Promise<DesktopAppState>,
   submitComposer: (text: string, options?: { readonly deliverAs?: "steer" | "followUp" }) =>
     ipcRenderer.invoke(desktopIpc.submitComposer, text, options) as Promise<DesktopAppState>,
   getSessionTree: (target: WorkspaceSessionTarget) =>
