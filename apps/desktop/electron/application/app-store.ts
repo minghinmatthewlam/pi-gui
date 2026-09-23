@@ -674,9 +674,15 @@ export class DesktopAppStore {
               state.composerDraftSyncSource !== "queued-message-edit")
           ? state.composerDraftSyncSource
           : "state",
-      composerDraftSyncNonce: selectionChanged
-        ? this.allocateComposerDraftSyncNonce(state.composerDraftSyncNonce)
-        : state.composerDraftSyncNonce,
+      // A switch already carries its own selection sync. Reuse its nonce so the
+      // push during the switch and the switch's IPC reply agree; a second nonce
+      // made the reply re-apply the empty draft over text typed in between.
+      // Reuse is safe: the renderer re-hydrates the draft whenever the thread changes.
+      composerDraftSyncNonce:
+        selectionChanged &&
+        !(matchesStateSelection && state.composerDraftSyncSource === "selection")
+          ? this.allocateComposerDraftSyncNonce(state.composerDraftSyncNonce)
+          : state.composerDraftSyncNonce,
       composerAttachments: this.resolveComposerAttachments(selectedWorkspaceId, selectedSessionId),
       queuedComposerMessages: this.resolveQueuedComposerMessages(
         selectedWorkspaceId,
