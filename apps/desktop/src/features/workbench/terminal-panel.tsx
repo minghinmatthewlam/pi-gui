@@ -5,7 +5,6 @@ import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import "@xterm/xterm/css/xterm.css";
 import type { WorkspaceRecord } from "../../../contracts/desktop-state";
-import { desktopCommands, getDesktopCommandFromShortcut } from "../../../contracts/ipc";
 import { CloseIcon, PlusIcon, RefreshIcon } from "../../ui/icons";
 import type {
   TerminalPanelSnapshot,
@@ -243,24 +242,13 @@ export function TerminalPanel({ workspace, sessionId, onHide }: TerminalPanelPro
         });
         return false;
       }
-      if (api.platform !== "darwin" && event.ctrlKey && !event.metaKey && !event.shiftKey) {
-        // Off macOS, Ctrl is the app's command key. Leave Ctrl+V to the browser's
-        // paste event and let app chords bubble to the window shortcut listener,
-        // instead of xterm turning them into control characters.
-        if (key === "v" && !event.altKey) {
-          return false;
-        }
-        const command = getDesktopCommandFromShortcut({
-          modifier: true,
-          alt: event.altKey,
-          shift: false,
-          key: event.key,
-          code: event.code,
-        });
-        if (
-          command === desktopCommands.toggleTerminal ||
-          command === desktopCommands.toggleSidePanel
-        ) {
+      if (api.platform !== "darwin" && event.ctrlKey && !event.metaKey && !event.altKey) {
+        // Hand these chords back to the browser instead of letting xterm turn them into
+        // control characters: paste (Ctrl+V on Windows, Ctrl+Shift+V on Linux, where
+        // shells keep Ctrl+V) and Ctrl+J, which App's window listener routes to the terminal
+        // toggle. Match the typed letter, not the physical key, so other layouts keep theirs.
+        const pasteChord = api.platform === "win32" ? !event.shiftKey : event.shiftKey;
+        if ((key === "v" && pasteChord) || (key === "j" && !event.shiftKey)) {
           return false;
         }
       }

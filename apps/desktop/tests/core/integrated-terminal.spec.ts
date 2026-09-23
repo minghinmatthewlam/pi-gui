@@ -13,6 +13,10 @@ import {
   waitForWorkspaceByPath,
 } from "../helpers/electron-app";
 
+// Linux terminals keep Ctrl+V for the shell and paste with Ctrl+Shift+V.
+const TERMINAL_PASTE_SHORTCUT =
+  process.platform === "linux" ? "Control+Shift+V" : desktopShortcut("V");
+
 test("opens task terminals with persistent output and independent shell tabs", async () => {
   test.setTimeout(90_000);
 
@@ -77,7 +81,7 @@ test("opens task terminals with persistent output and independent shell tabs", a
     await harness.electronApp.evaluate(({ clipboard, nativeImage }, pngBase64) => {
       clipboard.writeImage(nativeImage.createFromDataURL(`data:image/png;base64,${pngBase64}`));
     }, TINY_PNG_BASE64);
-    await window.keyboard.press(desktopShortcut("V"));
+    await window.keyboard.press(TERMINAL_PASTE_SHORTCUT);
     await expect
       .poll(async () => (await getDesktopState(window)).composerAttachments.length)
       .toBe(0);
@@ -151,7 +155,7 @@ test("pastes clipboard text into the integrated terminal once", async () => {
     await harness.electronApp.evaluate(({ clipboard }) => {
       clipboard.writeText("PI_TERMINAL_PASTE_ONCE");
     });
-    await window.keyboard.press(desktopShortcut("V"));
+    await window.keyboard.press(TERMINAL_PASTE_SHORTCUT);
 
     // Join rows so a paste that soft-wraps after a long prompt still counts once.
     await expect
@@ -215,7 +219,7 @@ test("writes an oversized terminal paste in chunks instead of dropping it", asyn
     await harness.electronApp.evaluate(({ clipboard }, text) => {
       clipboard.writeText(text);
     }, payload);
-    await window.keyboard.press(desktopShortcut("V"));
+    await window.keyboard.press(TERMINAL_PASTE_SHORTCUT);
     await expect(terminal.locator(".xterm-rows")).toContainText("ENDMARKER", { timeout: 30_000 });
 
     await window.keyboard.press("Control+D");
