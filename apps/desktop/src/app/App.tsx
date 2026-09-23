@@ -13,11 +13,8 @@ import {
 import { updateSnapshot, useDesktopAppState } from "./desktop-app-state";
 import { DesktopStartupSurface, toStartupSurfaceState } from "./desktop-recovery";
 import { buildFileWorkbenchContexts } from "./file-workbench-contexts";
-import {
-  canTogglePrimarySidebar,
-  closableSurfaceFromTarget,
-  isEventInsideTerminal,
-} from "./app-shell-utils";
+import { canTogglePrimarySidebar } from "./app-shell-utils";
+import { useDesktopCommands } from "./use-desktop-commands";
 import { useRunningLabel } from "../features/conversation/hooks/use-running-label";
 import { useTimelineViewport } from "../features/conversation/hooks/use-timeline-viewport";
 import { buildDisplayTimelineItems } from "../features/conversation/timeline-turns";
@@ -39,39 +36,14 @@ import { useWorkbenchWidth } from "../features/workbench/use-workbench-width";
 import { WorktreesPanel } from "../features/workbench/worktrees-panel";
 import type { WorkspaceFileLine } from "../features/conversation/workspace-file-line";
 import { buildModelOptions } from "../features/conversation/composer-commands";
-import {
-  createChordPairGate,
-  createChordToggleGate,
-  CHANGES_TOGGLE_DEDUPE_MS,
-  desktopCommands,
-  earlyModifierChords,
-  getDesktopCommandFromShortcut,
-  isCloseFocusedSurfaceShortcut,
-  isPaletteCommand,
-  getDesktopShortcutLabel,
-  platformShortcutModifier,
-  recentThreadShortcutIndex,
-  type ChordSource,
-  type PiDesktopCommand,
-} from "../../contracts/ipc";
-import { toolRefId } from "../../contracts/workbench";
+import { getDesktopShortcutLabel } from "../../contracts/ipc";
 import { CommandPaletteSurface } from "../features/command-palette/command-palette-surface";
-import {
-  buildPaletteActions,
-  type BuiltinToolKind,
-  type PaletteMode,
-} from "../features/command-palette/palette-actions";
 import { deriveModelOnboardingState } from "../features/settings/model-onboarding";
 import type { SettingsSection } from "../features/settings/settings-view";
 import { SecondarySurfaces } from "./secondary-surfaces";
 import { NewThreadView } from "../features/threads/new-thread-view";
-import {
-  buildThreadSidebarModel,
-  visibleThreadShortcutOrder,
-  type ThreadListEntry,
-} from "../features/threads/thread-groups";
+import { buildThreadSidebarModel, type ThreadListEntry } from "../features/threads/thread-groups";
 import { Sidebar } from "../features/threads/sidebar";
-import { dismissThreadShortcutHints } from "../features/threads/thread-shortcut-hints";
 import { SidebarToggleButton } from "../features/threads/sidebar-toggle-button";
 import { Topbar } from "./topbar";
 import { TerminalPanel } from "../features/workbench/terminal-panel";
@@ -130,22 +102,7 @@ export default function App() {
   } | null>(null);
   const [scheduledEditor, setScheduledEditor] = useState<ScheduledEditorState | null>(null);
   const [threadMenuOpen, setThreadMenuOpen] = useState(false);
-  const [paletteMode, setPaletteMode] = useState<PaletteMode | null>(null);
   const api = window.piApp;
-  const sidebarToggleStateRef = useRef<{
-    readonly api: typeof window.piApp;
-    readonly activeView: AppView | undefined;
-    readonly sidebarCollapsed: boolean;
-  }>({
-    api,
-    activeView: undefined,
-    sidebarCollapsed: false,
-  });
-  sidebarToggleStateRef.current = {
-    api,
-    activeView: snapshot?.activeView,
-    sidebarCollapsed: snapshot?.sidebarCollapsed ?? false,
-  };
 
   useEffect(() => {
     const piApi = window.piApp;
@@ -202,7 +159,8 @@ export default function App() {
   const selectedWorktree = selectedWorkspace
     ? linkedWorktreeByWorkspaceId.get(selectedWorkspace.id)
     : undefined;
-  const selectedDefaultEnabled = buildModelOptions(selectedModelRuntime).some(
+  const selectedModelOptions = buildModelOptions(selectedModelRuntime);
+  const selectedDefaultEnabled = selectedModelOptions.some(
     (m) =>
       m.providerId === selectedModelRuntime?.settings.defaultProvider &&
       m.modelId === selectedModelRuntime?.settings.defaultModelId,
@@ -356,24 +314,7 @@ export default function App() {
     () => (snapshot ? buildThreadSidebarModel(snapshot) : undefined),
     [snapshot],
   );
-  const threadSidebarModelRef = useRef(threadSidebarModel);
-  threadSidebarModelRef.current = threadSidebarModel;
-  const threadGroupingRef = useRef(snapshot?.threadGrouping ?? "time");
-  threadGroupingRef.current = snapshot?.threadGrouping ?? "time";
   const threadShortcutOrderRef = useRef<readonly ThreadListEntry[] | null>(null);
-  const threadSearchGate = useRef(createChordToggleGate());
-  const changesToggleGate = useRef(createChordToggleGate(CHANGES_TOGGLE_DEDUPE_MS));
-  // IPC and the renderer can both deliver one chord. Collapse only that pair so
-  // a quick second press still toggles.
-  const paletteGates = useRef({
-    commands: createChordPairGate(),
-    files: createChordPairGate(),
-  });
-  const handleCommandRef = useRef<(command: PiDesktopCommand, source?: ChordSource) => boolean>(
-    () => false,
-  );
-  const handleRendererKeyDownRef = useRef<(event: globalThis.KeyboardEvent) => void>(() => {});
-  const toggleThreadSearchRef = useRef<() => void>(() => {});
   const focusComposer = () => {
     window.requestAnimationFrame(() => {
       if (restoreTopmostDialogFocus()) {
@@ -382,28 +323,6 @@ export default function App() {
       composerRef.current?.focus();
     });
   };
-  const toggleWorkbenchTool = useCallback(
-    (kind: BuiltinToolKind) => {
-      if (!sidePanelAvailable) return;
-      if (sidePanelVisible && selectedToolId === kind) workbench.setVisibility("hidden");
-      else workbench.openTool({ kind });
-    },
-    [sidePanelAvailable, sidePanelVisible, selectedToolId, workbench],
-  );
-  const toggleTerminal = useCallback(() => toggleWorkbenchTool("terminal"), [toggleWorkbenchTool]);
-  const closeFocusedSurface = useCallback(() => {
-    if (!closableSurfaceFromTarget(document.activeElement)) return;
-    const current = workbenchRef.current;
-    if (current.view.selection.kind === "tool") current.closeTool(current.view.selection.toolId);
-    else current.setVisibility("hidden");
-    window.requestAnimationFrame(() => {
-      document
-        .querySelector<HTMLElement>(
-          '#task-workbench [role="tab"][aria-selected="true"], #task-workbench [data-testid="workbench-add-tab"]',
-        )
-        ?.focus();
-    });
-  }, []);
   const handleViewFileInDiff = useCallback((path: string) => {
     const workspace = selectedWorkspaceRef.current;
     if (!workspace) return;
@@ -480,15 +399,6 @@ export default function App() {
       return next;
     });
   }, []);
-
-  const toggleSidePanel = useCallback(() => {
-    if (sidePanelAvailable) workbench.toggleVisibility();
-  }, [sidePanelAvailable, workbench]);
-
-  const toggleChangesPanel = useCallback(
-    () => toggleWorkbenchTool("changes"),
-    [toggleWorkbenchTool],
-  );
 
   const openSettings = (workspaceId?: string, section?: SettingsSection) => {
     if (!api) {
@@ -677,196 +587,91 @@ export default function App() {
   }, [rootWorkspaceOptions]);
 
   const primarySidebarToggleVisible = canTogglePrimarySidebar(snapshot?.activeView);
-  const handleTogglePrimarySidebar = useCallback(() => {
-    const sidebarState = sidebarToggleStateRef.current;
-    const sidebarApi = sidebarState.api;
-    if (!sidebarApi || !canTogglePrimarySidebar(sidebarState.activeView)) {
-      return false;
-    }
-    void updateSnapshot(setSnapshot, () =>
-      sidebarApi.setSidebarCollapsed(!sidebarState.sidebarCollapsed),
-    ).catch((error: unknown) => {
-      console.error("[renderer] updateSnapshot failed", error);
-    });
-    return true;
-  }, []);
   const sidebarToggleShortcutLabel = api ? getDesktopShortcutLabel(api.platform, "B") : "";
 
-  const handleCommand = (command: PiDesktopCommand, source: ChordSource = "renderer"): boolean => {
-    // Any other shortcut acts on the app behind the palette, so close it first.
-    if (paletteMode && !isPaletteCommand(command)) {
-      setPaletteMode(null);
-    }
-    if (command === desktopCommands.openSettings) {
-      openSettings(selectedWorkspace?.rootWorkspaceId ?? selectedWorkspace?.id);
-      return true;
-    }
-    if (command === desktopCommands.openNewThread) {
-      newThread.openSurface(selectedWorkspace?.rootWorkspaceId ?? selectedWorkspace?.id);
-      return true;
-    }
-    if (command === desktopCommands.toggleTerminal) {
-      toggleTerminal();
-      return true;
-    }
-    if (command === desktopCommands.toggleSidePanel) {
-      toggleSidePanel();
-      return true;
-    }
-    if (command === desktopCommands.toggleChanges) {
-      // IPC and the renderer can both see one Cmd+D. Collapse that same-tick
-      // pair while preserving a deliberate second press.
-      if (!changesToggleGate.current(performance.now())) return true;
-      toggleChangesPanel();
-      return true;
-    }
-    if (command === desktopCommands.closeFocusedSurface) {
-      closeFocusedSurface();
-      return true;
-    }
-    if (command === desktopCommands.toggleSidebar) {
-      return handleTogglePrimarySidebar();
-    }
-    if (isPaletteCommand(command)) {
-      const mode = command === desktopCommands.openCommandPalette ? "commands" : "files";
-      if (threadSidebarModel && paletteGates.current[mode](source, performance.now())) {
-        setPaletteMode((current) => (current === mode ? null : mode));
-      }
-      return true;
-    }
-    const recentIndex = recentThreadShortcutIndex(command);
-    if (recentIndex !== undefined) {
-      const model = threadSidebarModelRef.current;
-      const threads =
-        threadShortcutOrderRef.current ??
-        (model
-          ? visibleThreadShortcutOrder({
-              grouping: threadGroupingRef.current,
-              model,
-            })
-          : []);
-      const thread = threads[recentIndex];
-      if (!thread || !api) {
-        return true;
-      }
-      void updateSnapshot(setSnapshot, () =>
-        api.selectSession({
-          workspaceId: thread.workspaceId,
-          sessionId: thread.session.id,
-        }),
-      ).catch((error: unknown) => {
-        console.error("[renderer] selectSession failed", error);
-      });
-      return true;
-    }
-    return false;
-  };
-  handleCommandRef.current = handleCommand;
-  toggleThreadSearchRef.current = () => {
-    if (!threadSearchGate.current(performance.now())) return;
-    setPaletteMode(null);
-    if (threadSearch.isOpen) threadSearch.close();
-    else threadSearch.open();
-  };
-  handleRendererKeyDownRef.current = (event: globalThis.KeyboardEvent) => {
-    const closeSurfaceShortcut = isCloseFocusedSurfaceShortcut({
-      meta: event.metaKey,
-      control: event.ctrlKey,
-      alt: event.altKey,
-      shift: event.shiftKey,
-      key: event.key,
-      code: event.code,
-      platform: api?.platform ?? "linux",
+  const setActiveView = (view: AppView) => {
+    if (!api) return;
+    void updateSnapshot(setSnapshot, () => api.setActiveView(view)).catch((error: unknown) => {
+      console.error("[renderer] setActiveView failed", error);
     });
-    if (closeSurfaceShortcut && closableSurfaceFromTarget(event.target)) {
-      event.preventDefault();
-      closeFocusedSurface();
-      return;
-    }
-    if (isEventInsideTerminal(event)) {
-      const command = getDesktopCommandFromShortcut({
-        modifier: event.metaKey || event.ctrlKey,
-        alt: event.altKey,
-        shift: event.shiftKey,
-        key: event.key,
-        code: event.code,
-      });
-      if (
-        command === desktopCommands.toggleTerminal ||
-        command === desktopCommands.toggleSidePanel
-      ) {
-        event.preventDefault();
-        handleCommandRef.current(command);
-      }
-      return;
-    }
-    if (
-      (event.metaKey || event.ctrlKey) &&
-      !event.shiftKey &&
-      !event.repeat &&
-      (event.key.toLowerCase() === "f" || event.code === "KeyF")
-    ) {
-      event.preventDefault();
-      toggleThreadSearchRef.current();
-      return;
-    }
-    const command = getDesktopCommandFromShortcut({
-      modifier: event.metaKey || event.ctrlKey,
-      alt: event.altKey,
-      shift: event.shiftKey,
-      key: event.key,
-      code: event.code,
-    });
-    if (isPaletteCommand(command)) {
-      if (
-        !platformShortcutModifier(api?.platform ?? "linux", {
-          meta: event.metaKey,
-          control: event.ctrlKey,
-        })
-      ) {
-        return;
-      }
-      if (event.repeat) {
-        event.preventDefault();
-        return;
-      }
-    }
-    if (command && handleCommandRef.current(command)) {
-      event.preventDefault();
-    }
   };
 
-  useEffect(() => {
-    // Bind once. Re-subscribing when session or search identity changes drops
-    // Cmd+D and 1-9 in the gap after a thread switch or relaunch.
-    const dispatch = (command: PiDesktopCommand, source: ChordSource) => {
-      dismissThreadShortcutHints();
-      handleCommandRef.current(command, source);
-    };
-    const removeCommandListener = window.piApp?.onCommand?.((command) => dispatch(command, "main"));
-    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
-      handleRendererKeyDownRef.current(event);
-    };
-    for (const chord of earlyModifierChords.arm()) {
-      const key = chord.key.toLowerCase();
-      if (key === "f" || chord.code === "KeyF") {
-        toggleThreadSearchRef.current();
-        continue;
-      }
-      const command = getDesktopCommandFromShortcut({
-        modifier: true,
-        shift: false,
-        key: chord.key,
-        code: chord.code,
-      });
-      if (command) dispatch(command, "renderer");
+  const openSkills = (workspaceId?: string) => {
+    const nextWorkspaceId =
+      workspaceId && rootWorkspaceOptions.some((workspace) => workspace.id === workspaceId)
+        ? workspaceId
+        : skillsWorkspaceId || rootWorkspaceOptions[0]?.id || "";
+    if (nextWorkspaceId) {
+      setSkillsWorkspaceId(nextWorkspaceId);
     }
-    window.addEventListener("keydown", handleKeyDown);
-    return () => {
-      removeCommandListener?.();
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, []);
+    setActiveView("skills");
+  };
+
+  const openExtensions = (workspaceId?: string) => {
+    const nextWorkspaceId =
+      workspaceId && rootWorkspaceOptions.some((workspace) => workspace.id === workspaceId)
+        ? workspaceId
+        : extensionsWorkspaceId || rootWorkspaceOptions[0]?.id || "";
+    if (nextWorkspaceId) {
+      setExtensionsWorkspaceId(nextWorkspaceId);
+    }
+    setActiveView("extensions");
+  };
+
+  const handleArchiveSession = (target: { workspaceId: string; sessionId: string }) => {
+    if (!api) return;
+    void updateSnapshot(setSnapshot, () => api.archiveSession(target)).catch((error: unknown) => {
+      console.error("[renderer] archiveSession failed", error);
+    });
+  };
+
+  const handleSetSessionPinned = (
+    target: { workspaceId: string; sessionId: string },
+    pinned: boolean,
+  ) => {
+    if (!api) return;
+    void updateSnapshot(setSnapshot, () => api.setSessionPinned(target, pinned)).catch(
+      (error: unknown) => {
+        console.error("[renderer] setSessionPinned failed", error);
+      },
+    );
+  };
+
+  const selectedThreadTarget =
+    snapshot?.activeView === "threads" && selectedWorkspace && selectedSession
+      ? { workspaceId: selectedWorkspace.id, sessionId: selectedSession.id }
+      : undefined;
+  const selectedRootWorkspaceId = selectedWorkspace?.rootWorkspaceId ?? selectedWorkspace?.id;
+  const commands = useDesktopCommands({
+    api,
+    snapshot,
+    setSnapshot,
+    hasWorkspace: rootWorkspaceOptions.length > 0,
+    selectedRootWorkspaceId,
+    selectedThread:
+      selectedThreadTarget && selectedSession
+        ? {
+            target: selectedThreadTarget,
+            pinned: Boolean(selectedSession.pinnedAt),
+            canSwitchModel: selectedModelOptions.length > 0,
+          }
+        : undefined,
+    threadSidebarModel,
+    threadShortcutOrderRef,
+    threadSearch,
+    workbench,
+    sidePanelAvailable,
+    sidePanelVisible,
+    selectedToolId,
+    extensionViews: extensionViews.views,
+    openNewThread: newThread.openSurface,
+    openSettings,
+    openSkills,
+    openExtensions,
+    setActiveView,
+    setThreadPinned: handleSetSessionPinned,
+    archiveThread: handleArchiveSession,
+  });
 
   useEffect(() => {
     const removeWorkspacePickedListener = window.piApp?.onWorkspacePicked?.((workspaceId) => {
@@ -889,34 +694,6 @@ export default function App() {
     if (!restoreTopmostDialogFocus()) composerRef.current?.focus();
   }, [selectedSessionKey, snapshot?.activeView]);
 
-  useEffect(() => {
-    const desktopApi = window.piApp;
-    if (!desktopApi) {
-      return undefined;
-    }
-    let armed = false;
-    const sync = () => {
-      const surface = closableSurfaceFromTarget(document.activeElement);
-      const next = surface !== null && surface !== "terminal";
-      if (next === armed) {
-        return;
-      }
-      armed = next;
-      desktopApi.setSidePanelFocused(next).catch((error: unknown) => {
-        console.error("[renderer] setSidePanelFocused failed", error);
-      });
-    };
-    document.addEventListener("focusin", sync);
-    sync();
-    return () => {
-      document.removeEventListener("focusin", sync);
-      if (armed) {
-        desktopApi.setSidePanelFocused(false).catch((error: unknown) => {
-          console.error("[renderer] setSidePanelFocused failed", error);
-        });
-      }
-    };
-  }, []);
   if (!api || desktop.view.kind !== "ready" || !snapshot) {
     return (
       <DesktopStartupSurface
@@ -946,34 +723,6 @@ export default function App() {
   ]
     .filter(Boolean)
     .join(" ");
-  const setActiveView = (view: AppView) => {
-    void updateSnapshot(setSnapshot, () => api.setActiveView(view)).catch((error: unknown) => {
-      console.error("[renderer] setActiveView failed", error);
-    });
-  };
-
-  const openSkills = (workspaceId?: string) => {
-    const nextWorkspaceId =
-      workspaceId && rootWorkspaceOptions.some((workspace) => workspace.id === workspaceId)
-        ? workspaceId
-        : skillsWorkspaceId || rootWorkspaceOptions[0]?.id || "";
-    if (nextWorkspaceId) {
-      setSkillsWorkspaceId(nextWorkspaceId);
-    }
-    setActiveView("skills");
-  };
-
-  const openExtensions = (workspaceId?: string) => {
-    const nextWorkspaceId =
-      workspaceId && rootWorkspaceOptions.some((workspace) => workspace.id === workspaceId)
-        ? workspaceId
-        : extensionsWorkspaceId || rootWorkspaceOptions[0]?.id || "";
-    if (nextWorkspaceId) {
-      setExtensionsWorkspaceId(nextWorkspaceId);
-    }
-    setActiveView("extensions");
-  };
-
   const handleSetSessionModel = (provider: string, modelId: string) => {
     if (!selectedWorkspace || !selectedSession) {
       return;
@@ -1005,12 +754,6 @@ export default function App() {
       console.error("[renderer] setActiveView failed", error);
     });
     slashMenu.fillComposerFromSlash(command);
-  };
-
-  const handleArchiveSession = (target: { workspaceId: string; sessionId: string }) => {
-    void updateSnapshot(setSnapshot, () => api.archiveSession(target)).catch((error: unknown) => {
-      console.error("[renderer] archiveSession failed", error);
-    });
   };
 
   const handleSelectSession = (target: { workspaceId: string; sessionId: string }) => {
@@ -1066,17 +809,6 @@ export default function App() {
     });
   };
 
-  const handleSetSessionPinned = (
-    target: { workspaceId: string; sessionId: string },
-    pinned: boolean,
-  ) => {
-    void updateSnapshot(setSnapshot, () => api.setSessionPinned(target, pinned)).catch(
-      (error: unknown) => {
-        console.error("[renderer] setSessionPinned failed", error);
-      },
-    );
-  };
-
   const handleCreateScheduledTaskWithPi = () => {
     void updateSnapshot(setSnapshot, () => api.beginScheduledTaskInterview()).catch(
       (error: unknown) => {
@@ -1106,71 +838,18 @@ export default function App() {
     handleSelectSession(target);
   };
 
-  const selectedThreadTarget =
-    snapshot.activeView === "threads" && selectedWorkspace && selectedSession
-      ? { workspaceId: selectedWorkspace.id, sessionId: selectedSession.id }
-      : undefined;
-  const selectedRootWorkspaceId = selectedWorkspace?.rootWorkspaceId ?? selectedWorkspace?.id;
-  const paletteModelOptions =
-    paletteMode && selectedThreadTarget ? buildModelOptions(selectedModelRuntime) : [];
   const commandPalette =
-    paletteMode && threadSidebarModel ? (
+    commands.paletteMode && threadSidebarModel ? (
       <CommandPaletteSurface
-        key={paletteMode}
+        key={commands.paletteMode}
         api={api}
-        mode={paletteMode}
-        onModeChange={setPaletteMode}
-        onClose={() => setPaletteMode(null)}
+        mode={commands.paletteMode}
+        onModeChange={commands.setPaletteMode}
+        onClose={() => commands.setPaletteMode(null)}
         threads={threadSidebarModel.recencyOrder}
         workspaces={threadSidebarModel.folders}
         currentThread={selectedThreadTarget}
-        actions={buildPaletteActions({
-          platform: api.platform,
-          hasWorkspace: rootWorkspaceOptions.length > 0,
-          thread:
-            selectedThreadTarget && selectedSession
-              ? {
-                  pinned: Boolean(selectedSession.pinnedAt),
-                  canSwitchModel: paletteModelOptions.length > 0,
-                }
-              : undefined,
-          canToggleSidebar: primarySidebarToggleVisible,
-          newThread: () => newThread.openSurface(selectedRootWorkspaceId),
-          openFolder: () => {
-            void updateSnapshot(setSnapshot, () => api.pickWorkspace()).catch((error: unknown) => {
-              console.error("[renderer] pickWorkspace failed", error);
-            });
-          },
-          openSettings: (section) => openSettings(selectedRootWorkspaceId, section),
-          openSkills: () => openSkills(selectedRootWorkspaceId),
-          openExtensions: () => openExtensions(selectedRootWorkspaceId),
-          openScheduledTasks: () => setActiveView("scheduled"),
-          toggleSidebar: handleTogglePrimarySidebar,
-          toggleTool: toggleWorkbenchTool,
-          toggleSidePanel,
-          extensionViews: extensionViews.views
-            .filter((view) => view.state === "ready")
-            .map((view) => {
-              const tool = {
-                kind: "extension",
-                extensionId: view.extensionId,
-                viewId: view.id,
-              } as const;
-              return {
-                id: toolRefId(tool),
-                title: view.title,
-                open: () => workbench.openTool(tool),
-              };
-            }),
-          findInThread: threadSearch.open,
-          setThreadPinned: (pinned) => {
-            if (selectedThreadTarget) handleSetSessionPinned(selectedThreadTarget, pinned);
-          },
-          archiveThread: () => {
-            if (selectedThreadTarget) handleArchiveSession(selectedThreadTarget);
-          },
-          openPaletteMode: setPaletteMode,
-        })}
+        actions={commands.paletteActions}
         fileScope={
           selectedThreadTarget && selectedWorkspace
             ? {
@@ -1186,7 +865,7 @@ export default function App() {
         modelScope={
           selectedThreadTarget
             ? {
-                options: paletteModelOptions,
+                options: selectedModelOptions,
                 currentProvider: resolvedSessionProvider,
                 currentModelId: resolvedSessionModelId,
               }
@@ -1239,7 +918,7 @@ export default function App() {
         <SidebarToggleButton
           collapsed={snapshot.sidebarCollapsed}
           shortcutLabel={sidebarToggleShortcutLabel}
-          onToggle={handleTogglePrimarySidebar}
+          onToggle={commands.togglePrimarySidebar}
         />
       ) : null}
       {!snapshot.sidebarCollapsed ? (
@@ -1279,7 +958,7 @@ export default function App() {
           api={api}
           panelAvailable={sidePanelAvailable}
           panelVisible={sidePanelVisible}
-          onTogglePanel={toggleSidePanel}
+          onTogglePanel={commands.toggleSidePanel}
           sessionTitle={
             snapshot.activeView === "threads" && selectedSession ? displayedSessionTitle : undefined
           }
@@ -1606,7 +1285,7 @@ export default function App() {
           <Workbench
             view={workbench.view}
             onResize={workbenchWidth.setWidth}
-            onTogglePanel={toggleSidePanel}
+            onTogglePanel={commands.toggleSidePanel}
             extensionViews={extensionViews.views}
             extensionViewsLoading={extensionViews.loading}
             extensionViewsError={extensionViews.error}
