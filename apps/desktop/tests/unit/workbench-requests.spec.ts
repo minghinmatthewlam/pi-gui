@@ -5,6 +5,7 @@ import {
   toolRefId,
   type TaskWorkbenchTemplate,
 } from "../../contracts/workbench";
+import { expectSaveTaskWorkbenchTemplateInput } from "../../electron/ipc/request-validation";
 import { WorkbenchRequests, type WorkbenchOwner } from "../../electron/ipc/workbench-requests";
 
 const firstTask = { workspaceId: "repo", sessionId: "first" };
@@ -157,15 +158,24 @@ test("workbench boundary accepts unavailable extension references but rejects co
   expect(decodeTaskWorkbenchTemplate(extensionTemplate)).toEqual(extensionTemplate);
   const { requests } = ownerFixture();
   for (const sequence of [0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
-    expect(() => requests.save({}, { target: firstTask, template: template(), sequence })).toThrow(
-      /positive safe integer/,
-    );
+    expect(() =>
+      expectSaveTaskWorkbenchTemplateInput({ target: firstTask, template: template(), sequence }),
+    ).toThrow(/positive safe integer/);
   }
   expect(() =>
-    requests.save({}, { target: { workspaceId: "repo" }, template: template(), sequence: 1 }),
+    expectSaveTaskWorkbenchTemplateInput({
+      target: { workspaceId: "repo" },
+      template: template(),
+      sequence: 1,
+    }),
   ).toThrow(/sessionId/);
   expect(() =>
-    requests.save({}, { target: firstTask, template: template(), sequence: 1, content: "bytes" }),
+    expectSaveTaskWorkbenchTemplateInput({
+      target: firstTask,
+      template: template(),
+      sequence: 1,
+      content: "bytes",
+    }),
   ).toThrow(/unsupported field/);
   expect(() =>
     decodeTaskWorkbenchTemplate({ ...template(), tools: [{ kind: "terminal", ptyId: "live" }] }),

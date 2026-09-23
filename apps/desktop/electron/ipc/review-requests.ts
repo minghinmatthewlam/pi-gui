@@ -1,4 +1,3 @@
-import { ipcMain, type IpcMainInvokeEvent } from "electron";
 import { desktopIpc } from "../../contracts/ipc";
 import {
   decodeResolveTurnReviewInput,
@@ -8,7 +7,7 @@ import {
   decodeChangeReviewFileStageInput,
 } from "../../contracts/review";
 import type { ReviewOwner } from "../workbench/review-owner";
-import type { WindowOwner } from "../windows/window-owner";
+import type { MainFrameHandler } from "./main-frame-ipc";
 
 export type ReviewRequestsOwner = Pick<
   ReviewOwner,
@@ -19,31 +18,16 @@ export type ReviewRequestsOwner = Pick<
   | "changeReviewFileStage"
 >;
 
-export function registerReviewRequests(windows: WindowOwner, owner: ReviewRequestsOwner): void {
-  const validateSender = (event: IpcMainInvokeEvent) => {
-    const sender = windows.windowForSender(event.sender).webContents;
-    if (!event.senderFrame || event.senderFrame !== sender.mainFrame) {
-      throw new Error("Review requests must originate from the window's main frame.");
-    }
-  };
-  ipcMain.handle(desktopIpc.resolveTurnReview, (event, raw: unknown) => {
-    validateSender(event);
-    return owner.resolveTurnReview(decodeResolveTurnReviewInput(raw));
-  });
-  ipcMain.handle(desktopIpc.getReview, (event, raw: unknown) => {
-    validateSender(event);
-    return owner.getReview(decodeGetReviewInput(raw));
-  });
-  ipcMain.handle(desktopIpc.getReviewFile, (event, raw: unknown) => {
-    validateSender(event);
-    return owner.getReviewFile(decodeReviewFileInput(raw));
-  });
-  ipcMain.handle(desktopIpc.setReviewFileReviewed, (event, raw: unknown) => {
-    validateSender(event);
-    return owner.setReviewFileReviewed(decodeSetReviewFileReviewedInput(raw));
-  });
-  ipcMain.handle(desktopIpc.changeReviewFileStage, (event, raw: unknown) => {
-    validateSender(event);
-    return owner.changeReviewFileStage(decodeChangeReviewFileStageInput(raw));
-  });
+export function registerReviewRequests(handle: MainFrameHandler, owner: ReviewRequestsOwner): void {
+  handle(desktopIpc.resolveTurnReview, decodeResolveTurnReviewInput, (input) =>
+    owner.resolveTurnReview(input),
+  );
+  handle(desktopIpc.getReview, decodeGetReviewInput, (input) => owner.getReview(input));
+  handle(desktopIpc.getReviewFile, decodeReviewFileInput, (input) => owner.getReviewFile(input));
+  handle(desktopIpc.setReviewFileReviewed, decodeSetReviewFileReviewedInput, (input) =>
+    owner.setReviewFileReviewed(input),
+  );
+  handle(desktopIpc.changeReviewFileStage, decodeChangeReviewFileStageInput, (input) =>
+    owner.changeReviewFileStage(input),
+  );
 }
