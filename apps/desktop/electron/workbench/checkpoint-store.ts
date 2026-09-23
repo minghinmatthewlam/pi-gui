@@ -59,6 +59,7 @@ const RACY_WINDOW_MS = 2_000;
 const MAX_CACHED_CHECKOUTS = 16;
 /** Budget for building a checkout's first inventory in the background. */
 const WARM_TIMEOUT_MS = 60_000;
+const WARM_RETRY_MS = 15 * 60 * 1000;
 const SNAPSHOT_REF_PREFIX = "refs/pi-gui/snapshots/";
 
 interface FileVersion {
@@ -78,6 +79,8 @@ interface CachedFile extends FileVersion {
 
 interface CheckoutInventory {
   readonly treeOid: string;
+  /** Entries in `treeOid`; recently changed files are in the tree but not in `files`. */
+  readonly entryCount: number;
   readonly files: ReadonlyMap<string, CachedFile>;
 }
 
@@ -157,9 +160,11 @@ export class TurnCheckpointStore {
   private readonly inventories = new Map<string, CheckoutInventory>();
   private inventoryGeneration = 0;
   private readonly warming = new Set<string>();
+  private readonly warmRetryAfter = new Map<string, number>();
   private readonly activeCaptures = new Set<Promise<unknown>>();
   private maintenanceRun: Promise<void> | undefined;
-  private lastMaintenanceAt = 0;
+  /** The first pass also waits one interval, keeping gc away from startup. */
+  private lastMaintenanceAt = Date.now();
   private boundariesSinceMaintenance = 0;
   private droppedSinceMaintenance = 0;
 
@@ -191,117 +196,11 @@ export class TurnCheckpointStore {
    * when this boundary's own capture starts.
    */
   recordBoundary(boundary: TurnCaptureBoundary, signal: AbortSignal): Promise<void> {
-    const operation = this.enqueue(resolve(boundary.workspace.path), async () => {
-      await this.load();
-      const { opening, closing } = boundary;
-      if (!opening && !closing) return;
-      // Validate the entire transition before changing either interval. A late/replayed
-      // observer must never replace an original baseline or a finalized comparison.
-      if (
-        opening &&
-        (this.records.has(opening.checkpointId) || opening.checkpointId === closing?.checkpointId)
-      ) {
-        throw new Error("Checkpoint opening identity was already used.");
-      }
-      if (closing) {
-        const existing = this.records.get(closing.checkpointId);
-        if (existing && existing.outcome !== "open")
-          throw new Error("Checkpoint interval was already finalized.");
-      }
-      let checkoutPath: string;
-      try {
-        checkoutPath = await realpath(boundary.workspace.path);
-      } catch {
-        checkoutPath = resolve(boundary.workspace.path);
-      }
-      const makeRecord = (anchor: NonNullable<typeof opening>): StoredTurnCheckpoint => ({
-        checkpointId: anchor.checkpointId,
-        target: { ...boundary.sessionRef },
-        checkoutId: boundary.workspace.workspaceId,
-        checkoutPath,
-        runtimeGeneration: boundary.runtimeGeneration,
-        runId: boundary.runId,
-        startedAt: anchor.startedAt,
-        updatedAt: boundary.timestamp,
-        beforeEntryId: anchor.beforeEntryId,
-        userEntryIds: [],
-        assistantEntryIds: [],
-        lastEntryId: null,
-        outcome: "open",
-        before: unavailableCapture("capture-pending", "The before capture did not finish."),
-        after: null,
-        overlaps: [],
-      });
-      for (const anchor of [opening, closing]) {
-        if (!anchor) continue;
-        const existing = this.records.get(anchor.checkpointId);
-        if (
-          existing &&
-          (!sameTarget(existing.target, boundary.sessionRef) ||
-            existing.checkoutId !== boundary.workspace.workspaceId ||
-            existing.runtimeGeneration !== boundary.runtimeGeneration ||
-            existing.runId !== boundary.runId)
-        )
-          throw new Error("Checkpoint identity belongs to another runtime interval.");
-      }
-      if (closing && !this.records.has(closing.checkpointId)) {
-        this.records.set(closing.checkpointId, makeRecord(closing));
-      }
-      if (opening && !this.records.has(opening.checkpointId)) {
-        let next = makeRecord(opening);
-        for (const [id, active] of this.records) {
-          if (
-            active.outcome !== "open" ||
-            id === closing?.checkpointId ||
-            active.checkoutPath !== checkoutPath
-          )
-            continue;
-          next = { ...next, overlaps: [...next.overlaps, id] };
-          this.records.set(id, {
-            ...active,
-            overlaps: [...new Set([...active.overlaps, next.checkpointId])],
-          });
-        }
-        this.records.set(next.checkpointId, next);
-      }
-      // Metadata is written once, after the capture. An app exit before then leaves any
-      // interval this boundary closes durably open (restart marks it interrupted); an opening
-      // that never finished its baseline simply has no record.
-      const capture = await this.capture(boundary.workspace.path, signal);
-      const safeCapture = signal.aborted
-        ? unavailableCapture(
-            "capture-aborted",
-            "The capture was interrupted or exceeded its time limit.",
-          )
-        : capture;
-      if (safeCapture.state === "unavailable" && safeCapture.code === "capture-aborted")
-        this.warmInventory(checkoutPath);
-      if (closing) {
-        const current = this.records.get(closing.checkpointId)!;
-        this.records.set(closing.checkpointId, {
-          ...current,
-          outcome: closing.outcome,
-          updatedAt: boundary.timestamp,
-          userEntryIds: [...closing.userEntryIds],
-          assistantEntryIds: [...closing.assistantEntryIds],
-          lastEntryId: closing.lastEntryId,
-          after: closing.captureError
-            ? unavailableCapture("capture-boundary-failed", closing.captureError)
-            : safeCapture,
-        });
-      }
-      if (opening) {
-        const current = this.records.get(opening.checkpointId)!;
-        this.records.set(opening.checkpointId, { ...current, before: safeCapture });
-      }
-      // A capture whose deadline passed after its bytes were read still describes the
-      // checkout at this boundary; the adapter records the missed deadline itself.
-      const dropped = this.enforceRetention();
-      await this.persist();
-      this.boundariesSinceMaintenance += 1;
-      this.droppedSinceMaintenance += dropped;
-      this.scheduleMaintenance();
-    });
+    // Same-task boundaries never overlap (each is awaited), so resolving the queue key first
+    // cannot reorder them; paths reaching one checkout through symlinks share its queue.
+    const operation = checkoutRoot(boundary.workspace.path).then((checkoutPath) =>
+      this.enqueue(checkoutPath, () => this.recordInQueue(boundary, checkoutPath, signal)),
+    );
     const task = targetKey(boundary.sessionRef);
     const settled = operation.then(
       () => undefined,
@@ -315,6 +214,116 @@ export class TurnCheckpointStore {
       () => undefined,
     );
     return operation;
+  }
+
+  private async recordInQueue(
+    boundary: TurnCaptureBoundary,
+    checkoutPath: string,
+    signal: AbortSignal,
+  ): Promise<void> {
+    await this.load();
+    const { opening, closing } = boundary;
+    if (!opening && !closing) return;
+    // Validate the entire transition before changing either interval. A late/replayed
+    // observer must never replace an original baseline or a finalized comparison.
+    if (
+      opening &&
+      (this.records.has(opening.checkpointId) || opening.checkpointId === closing?.checkpointId)
+    ) {
+      throw new Error("Checkpoint opening identity was already used.");
+    }
+    if (closing) {
+      const existing = this.records.get(closing.checkpointId);
+      if (existing && existing.outcome !== "open")
+        throw new Error("Checkpoint interval was already finalized.");
+    }
+    const makeRecord = (anchor: NonNullable<typeof opening>): StoredTurnCheckpoint => ({
+      checkpointId: anchor.checkpointId,
+      target: { ...boundary.sessionRef },
+      checkoutId: boundary.workspace.workspaceId,
+      checkoutPath,
+      runtimeGeneration: boundary.runtimeGeneration,
+      runId: boundary.runId,
+      startedAt: anchor.startedAt,
+      updatedAt: boundary.timestamp,
+      beforeEntryId: anchor.beforeEntryId,
+      userEntryIds: [],
+      assistantEntryIds: [],
+      lastEntryId: null,
+      outcome: "open",
+      before: unavailableCapture("capture-pending", "The before capture did not finish."),
+      after: null,
+      overlaps: [],
+    });
+    for (const anchor of [opening, closing]) {
+      if (!anchor) continue;
+      const existing = this.records.get(anchor.checkpointId);
+      if (
+        existing &&
+        (!sameTarget(existing.target, boundary.sessionRef) ||
+          existing.checkoutId !== boundary.workspace.workspaceId ||
+          existing.runtimeGeneration !== boundary.runtimeGeneration ||
+          existing.runId !== boundary.runId)
+      )
+        throw new Error("Checkpoint identity belongs to another runtime interval.");
+    }
+    if (closing && !this.records.has(closing.checkpointId)) {
+      this.records.set(closing.checkpointId, makeRecord(closing));
+    }
+    if (opening && !this.records.has(opening.checkpointId)) {
+      let next = makeRecord(opening);
+      for (const [id, active] of this.records) {
+        if (
+          active.outcome !== "open" ||
+          id === closing?.checkpointId ||
+          active.checkoutPath !== checkoutPath
+        )
+          continue;
+        next = { ...next, overlaps: [...next.overlaps, id] };
+        this.records.set(id, {
+          ...active,
+          overlaps: [...new Set([...active.overlaps, next.checkpointId])],
+        });
+      }
+      this.records.set(next.checkpointId, next);
+    }
+    // This boundary writes metadata once, after the capture. If the app exits first, a closed
+    // interval stays durably open and an opening is absent or pending (another checkout's
+    // write may include it); restart marks either one interrupted, never complete.
+    const capture = await this.capture(boundary.workspace.path, signal);
+    const safeCapture = signal.aborted
+      ? unavailableCapture(
+          "capture-aborted",
+          "The capture was interrupted or exceeded its time limit.",
+        )
+      : capture;
+    if (safeCapture.state === "unavailable" && safeCapture.code === "capture-aborted")
+      this.warmInventory(checkoutPath);
+    if (closing) {
+      const current = this.records.get(closing.checkpointId)!;
+      this.records.set(closing.checkpointId, {
+        ...current,
+        outcome: closing.outcome,
+        updatedAt: boundary.timestamp,
+        userEntryIds: [...closing.userEntryIds],
+        assistantEntryIds: [...closing.assistantEntryIds],
+        lastEntryId: closing.lastEntryId,
+        after: closing.captureError
+          ? unavailableCapture("capture-boundary-failed", closing.captureError)
+          : safeCapture,
+      });
+    }
+    if (opening) {
+      const current = this.records.get(opening.checkpointId)!;
+      this.records.set(opening.checkpointId, { ...current, before: safeCapture });
+    }
+    // A capture whose deadline passed after its bytes were read still describes the
+    // checkout at this boundary; the adapter records the missed deadline itself.
+    const dropped = this.enforceRetention();
+    await this.persist();
+    this.boundariesSinceMaintenance += 1;
+    this.droppedSinceMaintenance += dropped;
+    this.scheduleMaintenance();
   }
 
   async list(target: SessionRef): Promise<readonly StoredTurnCheckpoint[]> {
@@ -477,10 +486,20 @@ export class TurnCheckpointStore {
    * boundaries alone. Build it off the capture path so later boundaries read only changes.
    */
   private warmInventory(checkoutPath: string): void {
-    if (this.inventories.has(checkoutPath) || this.warming.has(checkoutPath)) return;
+    if (
+      this.inventories.has(checkoutPath) ||
+      this.warming.has(checkoutPath) ||
+      (this.warmRetryAfter.get(checkoutPath) ?? 0) > Date.now()
+    )
+      return;
     this.warming.add(checkoutPath);
     const timer = setTimeout(() => {
       this.capture(checkoutPath, undefined, WARM_TIMEOUT_MS)
+        .then((capture) => {
+          // A checkout that cannot be read even with the longer budget is not retried soon.
+          if (capture.state === "available") this.warmRetryAfter.delete(checkoutPath);
+          else this.warmRetryAfter.set(checkoutPath, Date.now() + WARM_RETRY_MS);
+        })
         .finally(() => this.warming.delete(checkoutPath))
         .catch(() => undefined);
     }, 0);
@@ -648,7 +667,7 @@ export class TurnCheckpointStore {
           });
       });
       let treeOid: string;
-      if (previous && spooled.length === 0 && stored.length === previous.files.size) {
+      if (previous && spooled.length === 0 && stored.length === previous.entryCount) {
         // Every previously stored file is unchanged and nothing else exists: the same tree.
         // Its ref cannot have been pruned, because maintenance clears inventories first.
         treeOid = previous.treeOid;
@@ -688,7 +707,7 @@ export class TurnCheckpointStore {
       signal.throwIfAborted();
       if (generation === this.inventoryGeneration) {
         this.inventories.delete(root);
-        this.inventories.set(root, { treeOid, files });
+        this.inventories.set(root, { treeOid, entryCount: fileCount, files });
         for (const key of this.inventories.keys()) {
           if (this.inventories.size <= MAX_CACHED_CHECKOUTS) break;
           this.inventories.delete(key);
@@ -883,11 +902,12 @@ export class TurnCheckpointStore {
     this.lastMaintenanceAt = Date.now();
     this.boundariesSinceMaintenance = 0;
     this.droppedSinceMaintenance = 0;
-    // Stop reusing stored objects, then wait for captures that may already be reusing them.
+    // Stop reusing stored objects, then wait for captures that may already be reusing them
+    // and for boundaries to record the trees they captured, so those trees count as live.
     this.inventoryGeneration += 1;
     this.inventories.clear();
-    await Promise.allSettled([...this.activeCaptures]);
-    const signal = AbortSignal.timeout(5 * 60_000);
+    await Promise.allSettled([...this.activeCaptures, ...this.checkoutQueues.values()]);
+    const signal = AbortSignal.timeout(30 * 60_000);
     await this.prepareGit(signal);
     const live = new Set<string>();
     for (const record of this.records.values()) {
@@ -1153,6 +1173,14 @@ function nulRecords(buffer: Buffer): string[] {
 
 function isMissing(error: unknown): boolean {
   return typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT";
+}
+
+async function checkoutRoot(path: string): Promise<string> {
+  try {
+    return await realpath(path);
+  } catch {
+    return resolve(path);
+  }
 }
 
 function targetKey(target: SessionRef): string {

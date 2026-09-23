@@ -632,6 +632,16 @@ test("incremental captures reread only changed files and still see same-size rew
   expect(unchanged.byteCount).toBe(first.byteCount);
   expect(await snapshotRefs(store)).toHaveLength(1);
 
+  // A just-written file is in the tree but not trusted for reuse; deleting it must not
+  // let the previous tree stand in for the new one.
+  await writeFile(join(workspace, "fresh.txt"), "fresh");
+  const withFresh = await store.capture(workspace);
+  available(withFresh);
+  await unlink(join(workspace, "fresh.txt"));
+  const withoutFresh = await store.capture(workspace);
+  available(withoutFresh);
+  expect(withoutFresh.treeOid).toBe(first.treeOid);
+
   // Same size and restored mtime: only the change time reveals the rewrite.
   await writeFile(join(workspace, "edit.txt"), "edit.txt rewrites");
   await utimes(join(workspace, "edit.txt"), old, old);
@@ -721,6 +731,8 @@ test("retention caps records, deletes unneeded refs and prunes their objects", a
     "turn-2",
     "turn-3",
   ]);
+  // Automatic maintenance waits an interval after startup; run it now. A zero grace period
+  // is only safe here because no capture is in flight.
   await store.maintain();
   const records = [...(await store.list(target)), ...(await store.list(other.sessionRef))];
   const live = new Set(
