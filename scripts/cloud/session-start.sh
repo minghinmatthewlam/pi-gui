@@ -3,7 +3,7 @@
 # Local sessions exit immediately. In the cloud it:
 #   1. writes ~/.pi/agent/auth.json from the PI_AUTH_JSON_B64 environment
 #      variable, without printing it, unless an auth file already exists;
-#   2. starts a virtual X display for Electron;
+#   2. starts a virtual X display, with a window manager when installed;
 #   3. exports the verify-pi-gui real-auth defaults for later shell commands.
 # Credentials never go in the setup script, which is cached as a snapshot.
 set -uo pipefail
@@ -37,6 +37,19 @@ if ! pgrep -x Xvfb >/dev/null 2>&1; then
     echo "display: started Xvfb on $display"
   else
     echo "display: Xvfb missing; paste scripts/cloud/setup.sh into the environment setup script" >&2
+  fi
+fi
+if command -v openbox >/dev/null 2>&1 && ! pgrep -x openbox >/dev/null 2>&1; then
+  # X11 maximize is a request only a window manager answers.
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    [ -S "/tmp/.X11-unix/X${display#:}" ] && break
+    sleep 0.2
+  done
+  if [ -S "/tmp/.X11-unix/X${display#:}" ]; then
+    DISPLAY="$display" nohup openbox >/tmp/openbox.log 2>&1 &
+    echo "display: started openbox on $display"
+  else
+    echo "display: no X server on $display; openbox not started" >&2
   fi
 fi
 

@@ -770,7 +770,10 @@
 }
 
 .session-row .session-row__menu-button {
-  min-width: 20px;
+  /* Fixed width: the … glyph is 16px in SF Pro but 18px in DejaVu Sans (Linux), which
+     would push the cluster past the 74px trailing slot reserved on hover. */
+  width: 24px;
+  justify-content: center;
   padding-left: 6px;
   font-size: 18px;
   line-height: 1;
