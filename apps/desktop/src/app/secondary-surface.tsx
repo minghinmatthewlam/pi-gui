@@ -44,6 +44,12 @@ export function SecondarySurface({
     return () => window.removeEventListener("keydown", handleEscape);
   }, []);
 
+  // Each nav page starts at its top, as in Codex, instead of inheriting the last page's scroll.
+  const contentRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    contentRef.current?.scrollTo({ top: 0 });
+  }, [activeNavId]);
+
   return (
     <div className="secondary-surface" data-testid={testId}>
       <aside className="secondary-surface__sidebar">
@@ -63,7 +69,9 @@ export function SecondarySurface({
           <div className="secondary-surface__title">{title}</div>
         )}
       </aside>
-      <main className="secondary-surface__content">{children}</main>
+      <main className="secondary-surface__content" ref={contentRef}>
+        {children}
+      </main>
     </div>
   );
 }

@@ -403,7 +403,13 @@ export function SecondarySurfaces({
       ) : (
         <SettingsView
           workspace={settingsWorkspace}
-          runtime={settingsSection === "models" ? settingsModelRuntime : settingsRuntime}
+          runtime={
+            // Providers reads the default model to flag its provider, so it needs the same
+            // effective model settings as the Models page.
+            settingsSection === "models" || settingsSection === "providers"
+              ? settingsModelRuntime
+              : settingsRuntime
+          }
           platform={api.platform}
           headerAccessory={
             settingsSection === "providers" ||
@@ -421,6 +427,7 @@ export function SecondarySurfaces({
           themePresetId={snapshot.themePresetId}
           enableTransparency={snapshot.enableTransparency}
           onLoginProvider={handleLoginProvider}
+          onSelectSection={onSelectSettingsSection}
           onLogoutProvider={handleLogoutProvider}
           onSetProviderApiKey={handleSetProviderApiKey}
           onRemoveProviderApiKey={handleRemoveProviderApiKey}

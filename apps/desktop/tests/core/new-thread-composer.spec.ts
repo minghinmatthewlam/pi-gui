@@ -293,7 +293,7 @@ test("settings do not show stale enabled-model pills when no providers are conne
     await expect(enabledModelsSection).toContainText("No connected models available yet.");
     await expect(enabledModelsSection).not.toContainText("openai/gpt-5");
     await expect(enabledModelsSection).not.toContainText("openai/gpt-4o");
-    await expect(enabledModelsSection.locator(".settings-disclosure__summary")).toContainText("0");
+    await expect(enabledModelsSection.locator(".settings-section__title")).toContainText("0 of 0");
   } finally {
     await harness.close();
   }
