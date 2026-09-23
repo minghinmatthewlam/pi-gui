@@ -87,6 +87,7 @@ const isDev = Boolean(process.env.ELECTRON_RENDERER_URL);
 const appTestMode = resolveAppTestMode(process.env.PI_APP_TEST_MODE);
 const windowTestMode = appTestMode ?? "foreground";
 const devReloadMarkersEnabled = process.env.PI_APP_DEV_RELOAD_MARKERS === "1";
+const TURN_CAPTURE_BACKSTOP_MS = 10_000;
 let store: DesktopAppStore;
 let extensionViewOwner: DesktopExtensionViewOwner | undefined;
 let windowOwner: WindowOwner;
@@ -844,6 +845,9 @@ app
       ConstructorParameters<typeof DesktopAppStore>[0]["driverOptions"]
     > = {
       onTurnCaptureBoundary: (boundary, signal) => checkpoints.recordBoundary(boundary, signal),
+      // The store bounds each capture from when it starts; this only stops a stuck boundary,
+      // including one waiting behind another run's capture in the same checkout.
+      turnCaptureTimeoutMs: TURN_CAPTURE_BACKSTOP_MS,
       desktopExtensions: {
         onChanged: (runtime) => extensionViews.replaceRuntime(runtime),
         onInvalidated: ({ target, generation }) =>

@@ -32,6 +32,7 @@ import {
 import { useExtensionViews } from "../features/extensions/use-extension-views";
 import { useExtensionHostActions } from "../features/extensions/use-extension-host-actions";
 import { Workbench } from "../features/workbench/workbench";
+import { renderBuiltinToolPanel } from "../features/workbench/builtin-tools";
 import { useWorkbenchWidth } from "../features/workbench/use-workbench-width";
 import { WorktreesPanel } from "../features/workbench/worktrees-panel";
 import type { WorkspaceFileLine } from "../features/conversation/workspace-file-line";
@@ -1352,64 +1353,70 @@ export default function App() {
                   extensionHostActions.handlePrepareTaskDraftPendingChange
                 }
               />
-            ) : selectedToolId === "changes" ? (
-              <DiffPanel
-                key={selectedSessionKey}
-                workspaceId={selectedWorkspace.id}
-                sessionId={selectedSession.id}
-                api={api}
-                sessionStatus={selectedSession.status}
-                selection={workbench.view.changes}
-                onSelectionChange={workbench.setChanges}
-                onOpenFile={workbench.openFile}
-                fileRequest={
-                  diffFileRequest?.sessionKey === selectedSessionKey
-                    ? diffFileRequest.request
-                    : null
-                }
-                contexts={fileWorkbenchContexts}
-              />
-            ) : selectedToolId === "files" ? (
-              filesWorkspace ? (
-                <FileWorkbench
-                  key={selectedSessionKey}
-                  api={api}
-                  onTabsChange={workbench.setFiles}
-                  sessionStatus={selectedSession.status}
-                  tabs={workbench.view.files.tabs}
-                  worktree={filesWorktree}
-                  workspace={filesWorkspace}
-                />
-              ) : (
-                <p className="workbench__unavailable" role="status">
-                  This file checkout is unavailable.
-                </p>
-              )
-            ) : selectedToolId === "terminal" ? (
-              <TerminalPanel
-                key={selectedSessionKey}
-                workspace={selectedWorkspace}
-                sessionId={selectedSession.id}
-                onHide={() => workbench.closeTool("terminal")}
-              />
-            ) : selectedToolId === "worktrees" ? (
-              <WorktreesPanel
-                rootWorkspace={rootWorkspace ?? selectedWorkspace}
-                selectedWorkspace={selectedWorkspace}
-                activeWorktrees={activeWorktrees}
-                workspaces={snapshot.workspaces}
-                onOpenWorkspace={(workspaceId) => {
-                  flushComposerDraft();
-                  viewport.savePosition();
-                  wsMenu.selectWorkspace(workspaceId);
-                }}
-                onNewWorktree={() => {
-                  if (!rootWorkspace) return;
-                  flushComposerDraft();
-                  viewport.savePosition();
-                  wsMenu.createWorktree(rootWorkspace.id);
-                }}
-              />
+            ) : activeTool && activeTool.kind !== "extension" ? (
+              renderBuiltinToolPanel(activeTool.kind, {
+                changes: () => (
+                  <DiffPanel
+                    key={selectedSessionKey}
+                    workspaceId={selectedWorkspace.id}
+                    sessionId={selectedSession.id}
+                    api={api}
+                    sessionStatus={selectedSession.status}
+                    selection={workbench.view.changes}
+                    onSelectionChange={workbench.setChanges}
+                    onOpenFile={workbench.openFile}
+                    fileRequest={
+                      diffFileRequest?.sessionKey === selectedSessionKey
+                        ? diffFileRequest.request
+                        : null
+                    }
+                    contexts={fileWorkbenchContexts}
+                  />
+                ),
+                files: () =>
+                  filesWorkspace ? (
+                    <FileWorkbench
+                      key={selectedSessionKey}
+                      api={api}
+                      onTabsChange={workbench.setFiles}
+                      sessionStatus={selectedSession.status}
+                      tabs={workbench.view.files.tabs}
+                      worktree={filesWorktree}
+                      workspace={filesWorkspace}
+                    />
+                  ) : (
+                    <p className="workbench__unavailable" role="status">
+                      This file checkout is unavailable.
+                    </p>
+                  ),
+                terminal: () => (
+                  <TerminalPanel
+                    key={selectedSessionKey}
+                    workspace={selectedWorkspace}
+                    sessionId={selectedSession.id}
+                    onHide={() => workbench.closeTool("terminal")}
+                  />
+                ),
+                worktrees: () => (
+                  <WorktreesPanel
+                    rootWorkspace={rootWorkspace ?? selectedWorkspace}
+                    selectedWorkspace={selectedWorkspace}
+                    activeWorktrees={activeWorktrees}
+                    workspaces={snapshot.workspaces}
+                    onOpenWorkspace={(workspaceId) => {
+                      flushComposerDraft();
+                      viewport.savePosition();
+                      wsMenu.selectWorkspace(workspaceId);
+                    }}
+                    onNewWorktree={() => {
+                      if (!rootWorkspace) return;
+                      flushComposerDraft();
+                      viewport.savePosition();
+                      wsMenu.createWorktree(rootWorkspace.id);
+                    }}
+                  />
+                ),
+              })
             ) : null}
           </Workbench>
         ) : null}

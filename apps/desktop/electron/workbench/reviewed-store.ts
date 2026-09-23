@@ -6,14 +6,24 @@ interface ReviewedState {
   readonly marks: readonly string[];
 }
 
-/** Review acknowledgements only. Comparison data and Git content never enter this file. */
+/** Enough for one maximal review list (2,000 files) plus recent history. */
+const DEFAULT_MAX_MARKS = 5_000;
+
+/**
+ * Review acknowledgements only. Comparison data and Git content never enter this file.
+ * Marks are kept oldest first; beyond the cap the oldest acknowledgements are forgotten.
+ */
 export class ReviewedStore {
   private readonly filePath: string;
+  private readonly maxMarks: number;
   private loaded: Promise<Set<string>> | undefined;
   private pending: Promise<void> = Promise.resolve();
 
-  constructor(userDataDir: string) {
+  constructor(userDataDir: string, options: { readonly maxMarks?: number } = {}) {
     this.filePath = join(userDataDir, "reviewed-files.json");
+    this.maxMarks = options.maxMarks ?? DEFAULT_MAX_MARKS;
+    if (!Number.isSafeInteger(this.maxMarks) || this.maxMarks < 1)
+      throw new Error("The reviewed-mark limit must be a positive safe integer.");
   }
 
   async snapshot(): Promise<ReadonlySet<string>> {
@@ -28,12 +38,12 @@ export class ReviewedStore {
       const next = new Set(previous);
       if (reviewed) next.add(key);
       else next.delete(key);
-      const state: ReviewedState = { version: 1, marks: [...next].sort() };
-      await writeFileAtomicQueued(
-        this.filePath,
-        `${JSON.stringify(state, null, 2)}\n`,
-        decodeReviewedState,
-      );
+      for (const mark of next) {
+        if (next.size <= this.maxMarks) break;
+        next.delete(mark);
+      }
+      const state: ReviewedState = { version: 1, marks: [...next] };
+      await writeFileAtomicQueued(this.filePath, `${JSON.stringify(state)}\n`, decodeReviewedState);
       this.loaded = Promise.resolve(next);
     });
     this.pending = write.catch(() => undefined);

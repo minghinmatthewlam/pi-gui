@@ -27,10 +27,9 @@ import {
   type PiDesktopApi,
   type PiDesktopCommand,
 } from "../../contracts/ipc";
-import { toolRefId } from "../../contracts/workbench";
+import { toolRefId, type BuiltinToolKind } from "../../contracts/workbench";
 import {
   buildPaletteActions,
-  type BuiltinToolKind,
   type PaletteAction,
   type PaletteMode,
 } from "../features/command-palette/palette-actions";

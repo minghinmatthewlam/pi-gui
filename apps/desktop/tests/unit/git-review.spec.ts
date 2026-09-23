@@ -415,3 +415,53 @@ test("inherited Git repository overrides cannot redirect review reads or staging
   expect(await git(cwd, "diff", "--cached", "--name-only")).toBe("file.txt\n");
   expect(await git(decoy, "diff", "--cached", "--name-only")).toBe("");
 });
+
+test("reviews list only changed paths, so a huge repository's full listings cannot exceed the cap", async () => {
+  const cwd = await repository();
+  const directory = join(cwd, "a-deep-directory", "with-long-names", "for-listing-output");
+  await mkdir(directory, { recursive: true });
+  const names = Array.from(
+    { length: 300 },
+    (_, index) => `a-deep-directory/with-long-names/for-listing-output/tracked-${index}.txt`,
+  );
+  await Promise.all(names.map((name, index) => writeFile(join(cwd, name), `tracked ${index}\n`)));
+  await git(cwd, "add", ".");
+  await git(cwd, "commit", "-m", "many files");
+  const limits = { maxGitBytes: 4_096 };
+  // Whole-index and whole-tree listings are several times larger than the cap.
+  expect(Buffer.byteLength(await git(cwd, "ls-files", "--stage", "-z"))).toBeGreaterThan(16_384);
+  expect(Buffer.byteLength(await git(cwd, "ls-tree", "-r", "-z", "HEAD"))).toBeGreaterThan(16_384);
+
+  await writeFile(join(cwd, names[0]!), "edited\n");
+  await git(cwd, "mv", "--", names[1]!, "renamed.txt");
+  await writeFile(join(cwd, "untracked.txt"), "new\n");
+  const review = await createGitReview(cwd, { kind: "uncommitted" }, limits);
+  expect(review, JSON.stringify(review)).toMatchObject({ state: "available" });
+  if (review.state !== "available") throw new Error(review.message);
+  expect(review.files.map((file) => [file.path, file.status]).sort()).toEqual(
+    [
+      [names[0], "modified"],
+      ["renamed.txt", "renamed"],
+      ["untracked.txt", "untracked"],
+    ].sort(),
+  );
+  const renamed = review.files.find((file) => file.path === "renamed.txt")!;
+  expect(renamed.source.base?.oid).toBe((await git(cwd, "rev-parse", `HEAD:${names[1]}`)).trim());
+  expect(renamed.source.index).toHaveLength(1);
+  const edited = await fileContent(review, names[0]!);
+  expect(edited.result.sections[0]?.patch).toContain("+edited");
+
+  await git(cwd, "switch", "-c", "feature");
+  await git(cwd, "add", "-A");
+  await git(cwd, "commit", "-m", "feature");
+  const branch = await createGitReview(cwd, { kind: "branch", baseRef: "trunk" }, limits);
+  expect(branch, JSON.stringify(branch)).toMatchObject({ state: "available" });
+  if (branch.state !== "available") throw new Error(branch.message);
+  expect(branch.files.map((file) => file.path).sort()).toEqual(
+    [names[0], "renamed.txt", "untracked.txt"].sort(),
+  );
+  const branchRename = branch.files.find((file) => file.path === "renamed.txt")!;
+  expect(branchRename.previousPath).toBe(names[1]);
+  expect(branchRename.source.base?.oid).toBe(renamed.source.base?.oid);
+  expect(branchRename.source.head).toBeDefined();
+});
