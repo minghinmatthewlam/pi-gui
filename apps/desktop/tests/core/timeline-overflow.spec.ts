@@ -178,6 +178,31 @@ async function expectNoHorizontalOverflow(window: Page, expanded: boolean): Prom
     });
 }
 
+// A long label must stay on the chevron's line instead of wrapping below it.
+async function expectToolLabelBesideChevron(window: Page): Promise<void> {
+  await expect
+    .poll(() =>
+      window.evaluate(() => {
+        const chevron = document.querySelector(".timeline-tool__chevron");
+        const label = document.querySelector(".timeline-tool__label");
+        if (!chevron || !label) {
+          throw new Error("Expected a tool chevron and label");
+        }
+        const chevronRect = chevron.getBoundingClientRect();
+        const labelRect = label.getBoundingClientRect();
+        const lineHeight = Number.parseFloat(getComputedStyle(label).lineHeight);
+        return {
+          sameLine:
+            Math.abs(
+              labelRect.top + labelRect.height / 2 - (chevronRect.top + chevronRect.height / 2),
+            ) <= 2,
+          singleLine: labelRect.height <= lineHeight + 1,
+        };
+      }),
+    )
+    .toEqual({ sameLine: true, singleLine: true });
+}
+
 async function saveProofScreenshot(
   window: Page,
   proofDir: string | undefined,
@@ -235,6 +260,7 @@ test("keeps long tool metadata and user rows inside the transcript at wide and n
     await expect(toolHeader).toHaveAttribute("aria-expanded", "false");
 
     await expectNoHorizontalOverflow(window, false);
+    await expectToolLabelBesideChevron(window);
     await saveProofScreenshot(window, proofDir, "wide-collapsed.png");
 
     await toolHeader.click();
@@ -249,6 +275,7 @@ test("keeps long tool metadata and user rows inside the transcript at wide and n
     await toolHeader.click();
     await expect(toolHeader).toHaveAttribute("aria-expanded", "false");
     await expectNoHorizontalOverflow(window, false);
+    await expectToolLabelBesideChevron(window);
     await saveProofScreenshot(window, proofDir, "narrow-collapsed.png");
   } finally {
     await harness.close();
