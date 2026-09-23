@@ -36,6 +36,8 @@ interface Options {
  * data-layout says whether that has finished, so tests can wait before clicking inside
  * the transcript: a press and release that straddle a move never reach the row.
  */
+const MAX_SYNC_LAYOUT_PASSES = 8;
+
 function markLayout(pane: HTMLDivElement | null, layout: "settling" | "settled"): void {
   if (pane && pane.dataset.layout !== layout) pane.dataset.layout = layout;
 }
@@ -62,6 +64,7 @@ export function useTimelineViewport({
     committedHeight: 0,
     generation: 0,
     frame: 0,
+    syncPasses: 0,
     userIntent: 0,
     activityMarker: "",
     newActivity: false,
@@ -260,11 +263,21 @@ export function useTimelineViewport({
     }
     // Rows placed from estimates measured themselves in this commit. Render again before
     // paint instead of on the next frame, or they visibly jump once. Rows that were already
-    // measured (a streaming reply growing) keep the frame-coalesced path.
-    if (placedFromEstimates && current.geometryRevision !== layoutRevision && current.frame) {
+    // measured (a streaming reply growing) keep the frame-coalesced path. The cap lets a
+    // layout whose estimates are far off converge over frames instead of hitting React's
+    // nested-update limit.
+    if (
+      placedFromEstimates &&
+      current.geometryRevision !== layoutRevision &&
+      current.frame &&
+      current.syncPasses < MAX_SYNC_LAYOUT_PASSES
+    ) {
+      current.syncPasses += 1;
       cancelAnimationFrame(current.frame);
       current.frame = 0;
       setVersion((value) => value + 1);
+    } else {
+      current.syncPasses = 0;
     }
     markLayout(pane, measured && !current.frame ? "settled" : "settling");
     if (current.key) saved.current.set(current.key, destination(current.state));
