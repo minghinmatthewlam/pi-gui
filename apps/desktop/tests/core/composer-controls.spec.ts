@@ -73,7 +73,7 @@ test("supports keyboard shortcuts, slash menus, and topbar controls through the 
     await expect(window.getByTestId("settings-surface")).toBeVisible();
     await expect(window.locator(".view-header__title")).toContainText("General");
 
-    await window.keyboard.press(desktopShortcut("Shift+O"));
+    await window.keyboard.press(desktopShortcut("N"));
     await expect(window.getByTestId("new-thread-composer")).toBeVisible();
     await expect(window.getByTestId("new-thread-composer")).toBeFocused();
 

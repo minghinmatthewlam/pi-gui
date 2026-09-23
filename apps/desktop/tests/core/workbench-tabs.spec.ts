@@ -83,7 +83,7 @@ async function openSecondWindow(harness: DesktopHarness): Promise<Page> {
       BrowserWindow.getAllWindows()[0]?.webContents.sendInputEvent({
         type: "keyDown",
         keyCode: "n",
-        modifiers: [modifier],
+        modifiers: [modifier, "shift"],
       });
     },
     process.platform === "darwin" ? "meta" : "control",

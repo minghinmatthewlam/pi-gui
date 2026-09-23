@@ -489,7 +489,7 @@ function createWindow(): BrowserWindow {
       dispatchCloseFocusedSurface(window, event);
       return;
     }
-    if (platformModifier && !input.shift && lowerKey === "n") {
+    if (platformModifier && input.shift && lowerKey === "n") {
       event.preventDefault();
       createAppWindow(windowOwner.viewForWindow(window));
       return;
@@ -727,9 +727,17 @@ function installApplicationMenu(): void {
       label: "File",
       submenu: [
         {
+          label: "New Thread",
+          accelerator: "CommandOrControl+N",
+          click: () => {
+            const window = BrowserWindow.getFocusedWindow() ?? mainWindow;
+            window?.webContents.send(desktopIpc.appCommand, desktopCommands.openNewThread);
+          },
+        },
+        {
           id: NEW_WINDOW_MENU_ITEM_ID,
           label: "New Window",
-          accelerator: "CommandOrControl+N",
+          accelerator: "CommandOrControl+Shift+N",
           click: () => {
             createAppWindow(windowOwner.foregroundView());
           },

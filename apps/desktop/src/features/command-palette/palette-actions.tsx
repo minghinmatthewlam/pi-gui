@@ -94,7 +94,7 @@ export function buildPaletteActions(context: PaletteActionContext): readonly Pal
       id: "new-thread",
       title: "New thread",
       icon: <PlusIcon />,
-      hint: formatShortcut(platform, "O", { shift: true }),
+      hint: formatShortcut(platform, "N"),
       run: context.newThread,
     });
   }

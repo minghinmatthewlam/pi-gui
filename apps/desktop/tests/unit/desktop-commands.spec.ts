@@ -31,6 +31,16 @@ test("settings follows the platform modifier", () => {
   ).toBeUndefined();
 });
 
+test("Cmd+N and Shift+Cmd+O open a new thread, Shift+Cmd+N does not", () => {
+  const press = (key: string, shift: boolean) =>
+    getDesktopCommandFromShortcut({ modifier: true, shift, key, code: `Key${key.toUpperCase()}` });
+  expect(press("n", false)).toBe(desktopCommands.openNewThread);
+  expect(press("O", true)).toBe(desktopCommands.openNewThread);
+  // Shift+Cmd+N is New Window, which main handles before commands.
+  expect(press("N", true)).toBeUndefined();
+  expect(press("o", false)).toBeUndefined();
+});
+
 test("keeps a shortcut that arrives before the renderer subscribes", () => {
   const commands = createDesktopCommandSubscription();
   commands.deliver(desktopCommands.openSettings);

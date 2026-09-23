@@ -80,7 +80,7 @@ async function openWindowViaShortcut(harness: DesktopHarness, source: Page): Pro
       BrowserWindow.getAllWindows()[payload.sourceIndex]?.webContents.sendInputEvent({
         type: "keyDown",
         keyCode: "n",
-        modifiers: [payload.modifier],
+        modifiers: [payload.modifier, "shift"],
       });
     },
     { sourceIndex, modifier: platformModifier },
@@ -88,7 +88,7 @@ async function openWindowViaShortcut(harness: DesktopHarness, source: Page): Pro
   await waitForWindowCount(harness, existing.size + 1);
   const opened = harness.electronApp.windows().find((candidate) => !existing.has(candidate));
   if (!opened) {
-    throw new Error("Expected Cmd+N to create another Electron window.");
+    throw new Error("Expected Shift+Cmd+N to create another Electron window.");
   }
   await waitForPiApp(opened);
   return opened;

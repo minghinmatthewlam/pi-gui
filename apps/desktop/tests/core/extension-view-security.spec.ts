@@ -159,7 +159,7 @@ test("two real windows share one task backend while their frame connections rema
         BrowserWindow.getAllWindows()[0]?.webContents.sendInputEvent({
           type: "keyDown",
           keyCode: "n",
-          modifiers: [modifier],
+          modifiers: [modifier, "shift"],
         });
       },
       process.platform === "darwin" ? "meta" : "control",

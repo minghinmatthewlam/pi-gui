@@ -273,6 +273,17 @@ export function useDesktopCommands(input: DesktopCommandsInput) {
       key: event.key,
       code: event.code,
     });
+    // macOS Control+N moves the caret down a line in text fields.
+    if (
+      command === desktopCommands.openNewThread &&
+      !event.shiftKey &&
+      !platformShortcutModifier(api?.platform ?? "linux", {
+        meta: event.metaKey,
+        control: event.ctrlKey,
+      })
+    ) {
+      return;
+    }
     if (isPaletteCommand(command)) {
       if (
         !platformShortcutModifier(api?.platform ?? "linux", {
