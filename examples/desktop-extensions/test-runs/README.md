@@ -49,8 +49,9 @@ current branch's records, and the view shows the 20 most recent runs. A saved
 start with no settled result is shown as interrupted with an unknown result.
 Reload/shutdown and tree navigation stop and await current work before replacing
 the runtime or branch. Closing the view only releases its subscription.
-Disposing the backend host also stops and awaits the process, including desktop
-quit paths that do not emit Pi's session shutdown event.
+Disposing the backend host also stops the run, including desktop quit paths that do not
+emit Pi's session shutdown event: it kills the command's whole process group and awaits the
+shell. Processes the command started may still be exiting when disposal resolves.
 
 The view reports raw command output and exit status. A zero exit is described as
 command completion; the example does not infer test counts or claim that tests
