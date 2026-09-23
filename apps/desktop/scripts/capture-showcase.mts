@@ -26,7 +26,7 @@ const capturesDir = path.join(publishingRoot, "video", "public", "captures");
 const evidenceRoot = path.join(repoRoot, ".artifacts", "marketing", "showcase-captures");
 
 // ---------------------------------------------------------------------------
-// Frame recording utilities (adapted from readme-demo.mts)
+// Frame recording utilities
 // ---------------------------------------------------------------------------
 
 function startFrameRecorder(page: Page, framesDir: string): () => Promise<number> {
@@ -316,7 +316,7 @@ async function withFreshApp(
     )}\n`,
     "utf8",
   );
-  // Launch without initial workspaces — matches readme-demo.mts pattern
+  // Launch without initial workspaces
   const harness = await launchDesktop(userDataDir, { agentDir });
   try {
     const page = await harness.firstWindow();

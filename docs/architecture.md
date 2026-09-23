@@ -124,7 +124,7 @@ A workspace command starts in renderer `features/threads`, crosses preload and v
 
 Desktop packaging and its test fixtures stay under `apps/desktop`; the marketing site stays under `apps/website`; repository policy and guard scripts stay at the root. Product captures are produced by desktop-owned scripts, while Remotion source and video rendering stay under `video`.
 
-The root commands make that ownership explicit: `marketing:demo` updates the README demo, `marketing:capture` produces showcase captures through the desktop app, and `marketing:render` renders the Remotion showcase. Generated historical media and user artifacts must not be removed as dependency cleanup. Packaging dependencies also require packaged-runtime verification before removal because bundling and pnpm staging can need packages that have no direct source import.
+The root commands make that ownership explicit: `marketing:media` records the README and website media, `marketing:capture` produces showcase captures through the desktop app, and `marketing:render` renders the Remotion showcase. Generated historical media and user artifacts must not be removed as dependency cleanup. Packaging dependencies also require packaged-runtime verification before removal because bundling and pnpm staging can need packages that have no direct source import.
 
 ## Proof
 
