@@ -42,8 +42,20 @@ import { deriveModelOnboardingState } from "../features/settings/model-onboardin
 import type { SettingsSection } from "../features/settings/settings-view";
 import { SecondarySurfaces } from "./secondary-surfaces";
 import { NewThreadView } from "../features/threads/new-thread-view";
-import { buildThreadSidebarModel, type ThreadListEntry } from "../features/threads/thread-groups";
+import {
+  buildThreadSidebarModel,
+  sessionThreadKey,
+  type ThreadListEntry,
+} from "../features/threads/thread-groups";
 import { Sidebar } from "../features/threads/sidebar";
+import { ThreadSwitcher } from "../features/threads/thread-switcher";
+import {
+  loadThreadSwitcherOrder,
+  orderThreadSwitcherEntries,
+  saveThreadSwitcherOrder,
+  touchThreadSwitcherOrder,
+} from "../features/threads/thread-switcher-order";
+import { useThreadSwitcher } from "../features/threads/hooks/use-thread-switcher";
 import { SidebarToggleButton } from "../features/threads/sidebar-toggle-button";
 import { Topbar } from "./topbar";
 import { TerminalPanel } from "../features/workbench/terminal-panel";
@@ -314,6 +326,36 @@ export default function App() {
     () => (snapshot ? buildThreadSidebarModel(snapshot) : undefined),
     [snapshot],
   );
+  const threadSidebarModelRef = useRef(threadSidebarModel);
+  threadSidebarModelRef.current = threadSidebarModel;
+  const threadOnScreenKey = snapshot?.activeView === "threads" ? selectedSessionKey : "";
+  const threadOnScreenKeyRef = useRef(threadOnScreenKey);
+  threadOnScreenKeyRef.current = threadOnScreenKey;
+  const selectThreadRef = useRef<(target: { workspaceId: string; sessionId: string }) => void>(
+    () => {},
+  );
+  useEffect(() => {
+    // Opening a thread is use; sending always happens in the thread on screen.
+    if (!threadOnScreenKey) return;
+    saveThreadSwitcherOrder(touchThreadSwitcherOrder(loadThreadSwitcherOrder(), threadOnScreenKey));
+  }, [threadOnScreenKey]);
+  const threadSwitcher = useThreadSwitcher({
+    readSource: () => {
+      const currentKey = threadOnScreenKeyRef.current;
+      const stored = loadThreadSwitcherOrder();
+      // Another window may have used a thread since this one did.
+      const order = currentKey ? touchThreadSwitcherOrder(stored, currentKey) : stored;
+      const recencyOrder = threadSidebarModelRef.current?.recencyOrder ?? [];
+      const entries = orderThreadSwitcherEntries(recencyOrder, order);
+      const first = entries[0];
+      return {
+        entries,
+        firstIsCurrent: first !== undefined && sessionThreadKey(first) === currentKey,
+      };
+    },
+    onSelect: (entry) =>
+      selectThreadRef.current({ workspaceId: entry.workspaceId, sessionId: entry.session.id }),
+  });
   const threadShortcutOrderRef = useRef<readonly ThreadListEntry[] | null>(null);
   const focusComposer = () => {
     window.requestAnimationFrame(() => {
@@ -767,6 +809,7 @@ export default function App() {
       console.error("[renderer] selectSession failed", error);
     });
   };
+  selectThreadRef.current = handleSelectSession;
 
   const handleRespondToExtensionDialog = (
     response:
@@ -1387,6 +1430,9 @@ export default function App() {
           onSubmit={handleSubmitScheduledTask}
           onOpenChat={handleOpenScheduledChat}
         />
+      ) : null}
+      {threadSwitcher.state?.overlayVisible ? (
+        <ThreadSwitcher state={threadSwitcher.state} onChoose={threadSwitcher.choose} />
       ) : null}
       {commandPalette}
     </div>
