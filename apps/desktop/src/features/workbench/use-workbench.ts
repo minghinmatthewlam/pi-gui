@@ -233,6 +233,9 @@ export function useWorkbench({ api, target }: UseWorkbenchOptions) {
       if (!ref || !desktopApi) return;
       // Host validation must succeed before a transcript link changes any tab state.
       await desktopApi.readWorkspaceFile(file.workspaceId, file.path);
+      // The link belongs to the task shown when it was opened; a task switch during the read cancels it.
+      const latest = current.current.target;
+      if (!latest || targetKey(latest) !== targetKey(ref)) return;
       apply(ref, [{ type: "open-file", file }]);
     },
     [apply],

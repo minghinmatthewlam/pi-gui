@@ -266,21 +266,41 @@ const invalidLayouts: readonly { name: string; value: unknown }[] = [
 ];
 
 for (const { name, value } of invalidLayouts) {
-  test(`rejects ${name} without replacing saved UI state`, async () => {
+  test(`drops a ${name} and keeps the rest of saved UI state`, async () => {
     const dir = await mkdtemp(join(tmpdir(), "workbench-invalid-layout-"));
     const path = join(dir, "ui-state.json");
-    const original = JSON.stringify({
-      version: 18,
-      composerDraft: "must survive",
-      taskWorkbenchTemplatesBySession: { "workspace-one:task-one": value },
-    });
-    await writeFile(path, original);
-
-    await expect(readPersistedUiState(path)).rejects.toThrow(/Invalid ui-state field/);
-    await expect(writePersistedUiState(path, { composerDraft: "replacement" })).rejects.toThrow(
-      /Invalid ui-state field/,
+    await writeFile(
+      path,
+      JSON.stringify({
+        version: 19,
+        composerDraft: "must survive",
+        taskWorkbenchTemplatesBySession: {
+          "workspace-one:task-one": value,
+          "workspace-one:task-two": workbenchTemplate(),
+        },
+      }),
     );
-    expect(await readFile(path, "utf8")).toBe(original);
-    expect(await readdir(dir)).toEqual(["ui-state.json"]);
+
+    const restored = await readPersistedUiState(path);
+    expect(restored.composerDraft).toBe("must survive");
+    expect(restored.taskWorkbenchTemplatesBySession).toEqual({
+      "workspace-one:task-two": workbenchTemplate(),
+    });
+    await writePersistedUiState(path, { ...restored, composerDraft: "replacement" });
+    const saved = await readPersistedUiState(path);
+    expect(saved.composerDraft).toBe("replacement");
+    expect(Object.keys(saved.taskWorkbenchTemplatesBySession ?? {})).toEqual([
+      "workspace-one:task-two",
+    ]);
   });
 }
+
+test("a malformed layout map is dropped without blocking saved UI state", () => {
+  const restored = decodePersistedUiState({
+    version: 19,
+    composerDraft: "must survive",
+    taskWorkbenchTemplatesBySession: ["not", "a", "map"],
+  });
+  expect(restored.composerDraft).toBe("must survive");
+  expect(restored.taskWorkbenchTemplatesBySession).toEqual({});
+});

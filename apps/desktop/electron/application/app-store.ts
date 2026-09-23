@@ -2290,7 +2290,14 @@ export class DesktopAppStore {
 
   /** Drop ui-state entries for sessions that no longer exist in the catalog. */
   private pruneOrphanedUiState(activeKeys: Set<string>, alreadyChanged = false): void {
-    if (this.sessionState.prunePersistedUiState(activeKeys) || alreadyChanged) {
+    let changed = this.sessionState.prunePersistedUiState(activeKeys) || alreadyChanged;
+    for (const key of this.taskWorkbenchTemplatesBySession.keys()) {
+      if (!activeKeys.has(key)) {
+        this.taskWorkbenchTemplatesBySession.delete(key);
+        changed = true;
+      }
+    }
+    if (changed) {
       this.schedulePersistUiState();
     }
   }
