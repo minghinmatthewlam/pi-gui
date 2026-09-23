@@ -1,14 +1,17 @@
 export const SITE_NAME = "pi-gui";
 export const SITE_URL = "https://www.pi-gui.com";
 export const OG_IMAGE_PATH = "/og.png";
-export const OG_IMAGE_ALT = "pi-gui desktop app preview";
-export const OG_IMAGE_WIDTH = 1480;
-export const OG_IMAGE_HEIGHT = 980;
+export const OG_IMAGE_ALT = "pi-gui reviewing an agent's change next to the thread that made it";
+export const OG_IMAGE_WIDTH = 1200;
+export const OG_IMAGE_HEIGHT = 630;
 
-export const SITE_TITLE = "pi-gui — A native desktop for AI coding agents";
+export const GITHUB_URL = "https://github.com/minghinmatthewlam/pi-gui";
+export const RELEASES_URL = `${GITHUB_URL}/releases/latest`;
+export const PI_URL = "https://github.com/earendil-works/pi";
+export const BREW_INSTALL = "brew install --cask minghinmatthewlam/tap/pi-gui";
+
+export const SITE_TITLE = "pi-gui: the desktop app for the pi coding agent";
 export const SITE_DESCRIPTION =
-  "pi-gui is a beta macOS and Linux desktop app for the pi coding agent. Install it from GitHub Releases, manage multiple workspaces, and keep persistent agent session history in a native desktop shell.";
+  "pi-gui is a free, open source desktop app for the pi coding agent. Run agents in parallel threads and git worktrees, review every change, and use the terminal and files in one window. Install it from GitHub Releases on macOS, Linux and Windows, or Homebrew on macOS.";
 export const SITE_SOCIAL_DESCRIPTION =
-  "A beta macOS and Linux desktop interface for AI coding agents with GitHub Releases, persistent workspaces, and real-time session review.";
-export const HERO_BETA_NOTE =
-  "Beta for macOS arm64 and Linux AppImage. Install from GitHub Releases on either platform, or Homebrew on macOS.";
+  "Run the pi coding agent in parallel threads, review every change, and ship from one window. macOS, Linux and Windows.";
