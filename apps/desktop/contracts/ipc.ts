@@ -202,6 +202,8 @@ export const desktopCommands = {
   toggleChanges: "toggle-changes",
   closeFocusedSurface: "close-focused-surface",
   toggleSidebar: "toggle-sidebar",
+  openCommandPalette: "open-command-palette",
+  openFilePalette: "open-file-palette",
   selectRecentThread1: "select-recent-thread-1",
   selectRecentThread2: "select-recent-thread-2",
   selectRecentThread3: "select-recent-thread-3",
@@ -227,6 +229,10 @@ const RECENT_THREAD_COMMANDS = [
 
 export const THREAD_SHORTCUT_SLOT_COUNT = RECENT_THREAD_COMMANDS.length;
 
+export function isRecentThreadCommand(command: PiDesktopCommand | undefined): boolean {
+  return (RECENT_THREAD_COMMANDS as readonly (PiDesktopCommand | undefined)[]).includes(command);
+}
+
 export function getDesktopShortcutLabel(platform: NodeJS.Platform, key: string): string {
   return `${platform === "darwin" ? "⌘" : "Ctrl+"}${key.toUpperCase()}`;
 }
@@ -240,11 +246,6 @@ export type PiDesktopSelectedTranscriptListener = (
   payload: SelectedTranscriptRecord | null,
 ) => void;
 export type PiDesktopCommand = (typeof desktopCommands)[keyof typeof desktopCommands];
-
-export function recentThreadShortcutIndex(command: PiDesktopCommand): number | undefined {
-  const index = (RECENT_THREAD_COMMANDS as readonly string[]).indexOf(command);
-  return index >= 0 ? index : undefined;
-}
 
 export type ChangedFileStatus =
   "added" | "copied" | "deleted" | "modified" | "renamed" | "untracked";
@@ -376,6 +377,24 @@ export function createDesktopCommandSubscription() {
 export const SEARCH_CHORD_TOGGLE_MS = 200;
 export const CHANGES_TOGGLE_DEDUPE_MS = 8;
 
+export type ChordSource = "main" | "renderer";
+
+/**
+ * Collapses one chord that reaches the renderer twice, once forwarded by the main
+ * process and once as a keydown. Repeats from the same source are separate presses.
+ */
+export function createChordPairGate(windowMs = CHANGES_TOGGLE_DEDUPE_MS) {
+  let last: { readonly source: ChordSource; readonly at: number } | undefined;
+  return (source: ChordSource, now: number): boolean => {
+    if (last && last.source !== source && now - last.at < windowMs) {
+      last = undefined;
+      return false;
+    }
+    last = { source, at: now };
+    return true;
+  };
+}
+
 export function createChordToggleGate(windowMs = SEARCH_CHORD_TOGGLE_MS) {
   let last = Number.NEGATIVE_INFINITY;
   return (now: number): boolean => {
@@ -435,6 +454,8 @@ export function getDesktopCommandFromShortcut(
   const isB = lowerKey === "b" || input.code === "KeyB";
   const isJ = lowerKey === "j" || input.code === "KeyJ";
   const isD = lowerKey === "d" || input.code === "KeyD";
+  const isK = lowerKey === "k" || input.code === "KeyK";
+  const isP = lowerKey === "p" || input.code === "KeyP";
   const isShiftO = input.shift && (lowerKey === "o" || input.code === "KeyO");
 
   if (input.alt) {
@@ -460,6 +481,14 @@ export function getDesktopCommandFromShortcut(
     return desktopCommands.toggleSidebar;
   }
 
+  if (!input.shift && isK) {
+    return desktopCommands.openCommandPalette;
+  }
+
+  if (!input.shift && isP) {
+    return desktopCommands.openFilePalette;
+  }
+
   if (isShiftO) {
     return desktopCommands.openNewThread;
   }
@@ -474,6 +503,16 @@ export function getDesktopCommandFromShortcut(
   }
 
   return undefined;
+}
+
+/**
+ * Callers accept palette commands only from the platform modifier, so macOS
+ * Control+K and Control+P stay with text fields, and only from a first press.
+ */
+export function isPaletteCommand(command: PiDesktopCommand | undefined): boolean {
+  return (
+    command === desktopCommands.openCommandPalette || command === desktopCommands.openFilePalette
+  );
 }
 
 export function isCloseFocusedSurfaceShortcut(input: {

@@ -1,26 +1,35 @@
-import { ipcMain, type IpcMainInvokeEvent } from "electron";
 import { parseDesktopHostAction } from "@pi-gui/extension-ui/browser";
 import { desktopIpc } from "../../contracts/ipc";
 import type { DesktopExtensionViewOwner } from "../extensions/extension-view-owner";
 import type { WindowOwner } from "../windows/window-owner";
-import { expectNonEmptyString, expectSessionTarget } from "./request-validation";
+import type { MainFrameHandler } from "./main-frame-ipc";
+import { expectNonEmptyString, expectRecord, expectSessionTarget } from "./request-validation";
 
-function object(value: unknown): Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value))
-    throw new Error("Invalid extension view request");
-  return value as Record<string, unknown>;
+function decodeOpenRequest(raw: unknown) {
+  const input = expectRecord(raw, "extension view request");
+  return {
+    target: expectSessionTarget(input.target),
+    extensionId: expectNonEmptyString(input.extensionId, "extensionId"),
+    viewId: expectNonEmptyString(input.viewId, "viewId"),
+  };
+}
+
+function decodeMessageRequest(raw: unknown) {
+  const input = expectRecord(raw, "extension view request");
+  return {
+    connectionId: expectNonEmptyString(input.connectionId, "connectionId"),
+    message: expectRecord(input.message, "extension view message"),
+  };
 }
 
 export function registerExtensionViewRequests(
-  windows: WindowOwner,
+  handle: MainFrameHandler,
+  windows: Pick<WindowOwner, "targetForSender">,
   owner: DesktopExtensionViewOwner,
 ): void {
   const senders = new Map<number, Electron.WebContents>();
   const pendingActions = new Map<string, Set<string>>();
-  const sender = (event: IpcMainInvokeEvent) => {
-    const contents = windows.windowForSender(event.sender).webContents;
-    if (event.senderFrame !== contents.mainFrame)
-      throw new Error("Extension view requests require the main frame");
+  const track = (contents: Electron.WebContents) => {
     if (!senders.has(contents.id)) {
       senders.set(contents.id, contents);
       contents.on("render-process-gone", () => owner.closeSender(contents.id));
@@ -41,14 +50,13 @@ export function registerExtensionViewRequests(
         contents.send(desktopIpc.extensionViewCatalogChanged, { target, views });
     }
   });
-  ipcMain.handle(desktopIpc.listExtensionViews, (event, raw: unknown) => {
-    sender(event);
-    return owner.listViews(expectSessionTarget(raw));
+  handle(desktopIpc.listExtensionViews, expectSessionTarget, (target, request) => {
+    track(request.contents);
+    return owner.listViews(target);
   });
-  ipcMain.handle(desktopIpc.openExtensionView, (event, raw: unknown) => {
-    const contents = sender(event);
-    const input = object(raw);
-    const target = expectSessionTarget(input.target);
+  handle(desktopIpc.openExtensionView, decodeOpenRequest, (input, request) => {
+    const contents = track(request.contents);
+    const { target } = input;
     const selected = windows.targetForSender(contents);
     if (selected?.workspaceId !== target.workspaceId || selected.sessionId !== target.sessionId) {
       throw new Error("Open extension views from their selected task");
@@ -58,8 +66,8 @@ export function registerExtensionViewRequests(
       .openConnection(
         {
           target,
-          extensionId: expectNonEmptyString(input.extensionId, "extensionId"),
-          viewId: expectNonEmptyString(input.viewId, "viewId"),
+          extensionId: input.extensionId,
+          viewId: input.viewId,
           senderId: contents.id,
         },
         (message) => {
@@ -72,11 +80,9 @@ export function registerExtensionViewRequests(
         return connection;
       });
   });
-  ipcMain.handle(desktopIpc.sendExtensionViewMessage, async (event, raw: unknown) => {
-    const contents = sender(event);
-    const input = object(raw);
-    const connectionId = expectNonEmptyString(input.connectionId, "connectionId");
-    const message = object(input.message);
+  handle(desktopIpc.sendExtensionViewMessage, decodeMessageRequest, async (input, request) => {
+    const contents = track(request.contents);
+    const { connectionId, message } = input;
     if (message.type !== "host-action") {
       await owner.receive(connectionId, contents.id, message);
       return;
@@ -124,8 +130,11 @@ export function registerExtensionViewRequests(
     if (!contents.isDestroyed())
       contents.send(desktopIpc.extensionViewMessage, { connectionId, message: result });
   });
-  ipcMain.handle(desktopIpc.closeExtensionView, (event, raw: unknown) => {
-    const contents = sender(event);
-    owner.closeConnection(expectNonEmptyString(raw, "connectionId"), contents.id);
-  });
+  handle(
+    desktopIpc.closeExtensionView,
+    (raw) => expectNonEmptyString(raw, "connectionId"),
+    (connectionId, request) => {
+      owner.closeConnection(connectionId, track(request.contents).id);
+    },
+  );
 }
