@@ -6,6 +6,7 @@ import {
   useState,
   type MutableRefObject,
 } from "react";
+import { flushSync } from "react-dom";
 import type { DisplayTimelineItem } from "../../../../contracts/timeline-types";
 import {
   anchorAt,
@@ -149,6 +150,7 @@ export function useTimelineViewport({
     }
     return layoutRows(rows, current.heights, current.width, current.estimates);
   }, [rows, model.current.geometryRevision, sessionKey]);
+  const layoutRevision = model.current.geometryRevision;
   const totalHeight = totalRowHeight(layout);
   const current = model.current;
   let position = destination(current.state);
@@ -161,6 +163,7 @@ export function useTimelineViewport({
       ? Math.max(0, totalHeight - current.height)
       : (resolveAnchor(layout, position.anchor) ?? 0);
   const placements = searchMode ? layout : visibleRows(layout, target, current.height || 800);
+  const placedFromEstimates = placements.some((row) => !current.heights.has(row.item.id));
 
   useLayoutEffect(() => {
     if (!pane || !active) return;
@@ -170,17 +173,25 @@ export function useTimelineViewport({
         pane.clientWidth,
         pane.querySelector<HTMLElement>(".timeline")?.clientWidth ?? pane.clientWidth,
       );
-      if (width !== current.width) {
-        current.width = width;
-        current.heights.clear();
-        current.estimates.clear();
-        current.geometryRevision += 1;
-        current.generation += 1;
-        if (current.frame) cancelAnimationFrame(current.frame);
-        current.frame = 0;
-      }
       current.height = pane.clientHeight;
-      schedule();
+      if (width === current.width) {
+        schedule();
+        return;
+      }
+      current.width = width;
+      current.heights.clear();
+      current.estimates.clear();
+      // Mounted rows have already reflowed at the new width. Keep their real heights and
+      // place them before this frame paints, so no row shows at an old or estimated top.
+      for (const row of pane.querySelectorAll<HTMLElement>("[data-message-id]")) {
+        const id = row.dataset.messageId;
+        if (id) current.heights.set(id, Math.max(1, Math.ceil(row.getBoundingClientRect().height)));
+      }
+      current.geometryRevision += 1;
+      current.generation += 1;
+      if (current.frame) cancelAnimationFrame(current.frame);
+      current.frame = 0;
+      flushSync(() => setVersion((value) => value + 1));
     });
     observer.observe(pane);
     return () => observer.disconnect();
@@ -247,6 +258,14 @@ export function useTimelineViewport({
     if (measured) {
       current.state = destination(current.state);
     }
+    // Rows placed from estimates measured themselves in this commit. Render again before
+    // paint instead of on the next frame, or they visibly jump once. Rows that were already
+    // measured (a streaming reply growing) keep the frame-coalesced path.
+    if (placedFromEstimates && current.geometryRevision !== layoutRevision && current.frame) {
+      cancelAnimationFrame(current.frame);
+      current.frame = 0;
+      setVersion((value) => value + 1);
+    }
     markLayout(pane, measured && !current.frame ? "settled" : "settling");
     if (current.key) saved.current.set(current.key, destination(current.state));
     const last = rows.at(-1);
@@ -256,7 +275,18 @@ export function useTimelineViewport({
       current.newActivity = true;
     current.activityMarker = marker;
     setShowJumpToLatest(current.newActivity);
-  }, [active, transcriptReady, pane, layout, rows, target, placements, schedule]);
+  }, [
+    active,
+    transcriptReady,
+    pane,
+    layout,
+    layoutRevision,
+    placedFromEstimates,
+    rows,
+    target,
+    placements,
+    schedule,
+  ]);
 
   useLayoutEffect(() => {
     if (!pane || !active) return;
