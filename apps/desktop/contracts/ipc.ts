@@ -378,6 +378,24 @@ export function createDesktopCommandSubscription() {
 export const SEARCH_CHORD_TOGGLE_MS = 200;
 export const CHANGES_TOGGLE_DEDUPE_MS = 8;
 
+export type ChordSource = "main" | "renderer";
+
+/**
+ * Collapses one chord that reaches the renderer twice, once forwarded by the main
+ * process and once as a keydown. Repeats from the same source are separate presses.
+ */
+export function createChordPairGate(windowMs = CHANGES_TOGGLE_DEDUPE_MS) {
+  let last: { readonly source: ChordSource; readonly at: number } | undefined;
+  return (source: ChordSource, now: number): boolean => {
+    if (last && last.source !== source && now - last.at < windowMs) {
+      last = undefined;
+      return false;
+    }
+    last = { source, at: now };
+    return true;
+  };
+}
+
 export function createChordToggleGate(windowMs = SEARCH_CHORD_TOGGLE_MS) {
   let last = Number.NEGATIVE_INFINITY;
   return (now: number): boolean => {

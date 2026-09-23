@@ -40,6 +40,7 @@ import { WorktreesPanel } from "../features/workbench/worktrees-panel";
 import type { WorkspaceFileLine } from "../features/conversation/workspace-file-line";
 import { buildModelOptions } from "../features/conversation/composer-commands";
 import {
+  createChordPairGate,
   createChordToggleGate,
   CHANGES_TOGGLE_DEDUPE_MS,
   desktopCommands,
@@ -50,6 +51,7 @@ import {
   getDesktopShortcutLabel,
   platformShortcutModifier,
   recentThreadShortcutIndex,
+  type ChordSource,
   type PiDesktopCommand,
 } from "../../contracts/ipc";
 import { toolRefId } from "../../contracts/workbench";
@@ -414,13 +416,15 @@ export default function App() {
   const threadShortcutOrderRef = useRef<readonly ThreadListEntry[] | null>(null);
   const threadSearchGate = useRef(createChordToggleGate());
   const changesToggleGate = useRef(createChordToggleGate(CHANGES_TOGGLE_DEDUPE_MS));
-  // IPC and the renderer can both deliver one chord. Collapse only that
-  // same-tick pair so a quick second press still toggles, as with Cmd+D.
+  // IPC and the renderer can both deliver one chord. Collapse only that pair so
+  // a quick second press still toggles.
   const paletteGates = useRef({
-    commands: createChordToggleGate(CHANGES_TOGGLE_DEDUPE_MS),
-    files: createChordToggleGate(CHANGES_TOGGLE_DEDUPE_MS),
+    commands: createChordPairGate(),
+    files: createChordPairGate(),
   });
-  const handleCommandRef = useRef<(command: PiDesktopCommand) => boolean>(() => false);
+  const handleCommandRef = useRef<(command: PiDesktopCommand, source?: ChordSource) => boolean>(
+    () => false,
+  );
   const handleRendererKeyDownRef = useRef<(event: globalThis.KeyboardEvent) => void>(() => {});
   const toggleThreadSearchRef = useRef<() => void>(() => {});
   const focusComposer = () => {
@@ -741,7 +745,7 @@ export default function App() {
   }, []);
   const sidebarToggleShortcutLabel = api ? getDesktopShortcutLabel(api.platform, "B") : "";
 
-  const handleCommand = (command: PiDesktopCommand): boolean => {
+  const handleCommand = (command: PiDesktopCommand, source: ChordSource = "renderer"): boolean => {
     // Any other shortcut acts on the app behind the palette, so close it first.
     if (paletteMode && !isPaletteCommand(command)) {
       setPaletteMode(null);
@@ -778,7 +782,7 @@ export default function App() {
     }
     if (isPaletteCommand(command)) {
       const mode = command === desktopCommands.openCommandPalette ? "commands" : "files";
-      if (threadSidebarModel && paletteGates.current[mode](performance.now())) {
+      if (threadSidebarModel && paletteGates.current[mode](source, performance.now())) {
         setPaletteMode((current) => (current === mode ? null : mode));
       }
       return true;
@@ -888,11 +892,11 @@ export default function App() {
   useEffect(() => {
     // Bind once. Re-subscribing when session or search identity changes drops
     // Cmd+D and 1-9 in the gap after a thread switch or relaunch.
-    const dispatch = (command: PiDesktopCommand) => {
+    const dispatch = (command: PiDesktopCommand, source: ChordSource) => {
       dismissThreadShortcutHints();
-      handleCommandRef.current(command);
+      handleCommandRef.current(command, source);
     };
-    const removeCommandListener = window.piApp?.onCommand?.(dispatch);
+    const removeCommandListener = window.piApp?.onCommand?.((command) => dispatch(command, "main"));
     const handleKeyDown = (event: globalThis.KeyboardEvent) => {
       handleRendererKeyDownRef.current(event);
     };
@@ -908,7 +912,7 @@ export default function App() {
         key: chord.key,
         code: chord.code,
       });
-      if (command) dispatch(command);
+      if (command) dispatch(command, "renderer");
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => {
