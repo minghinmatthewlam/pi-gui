@@ -1,10 +1,11 @@
 import type { ReactNode } from "react";
+import type { BuiltinToolKind } from "../../../contracts/workbench";
+import { BUILTIN_TOOL_ENTRIES } from "../workbench/builtin-tools";
 import type { SettingsSection } from "../settings/settings-view";
 import { sectionTitle } from "../settings/settings-utils";
 import {
   ArchiveIcon,
   ClockIcon,
-  DiffIcon,
   ExtensionIcon,
   FileIcon,
   FolderIcon,
@@ -16,26 +17,15 @@ import {
   SidebarToggleIcon,
   SidePanelIcon,
   SkillIcon,
-  TerminalIcon,
-  WorktreeIcon,
 } from "../../ui/icons";
 
 export type PaletteMode = "commands" | "files" | "models";
 
-export type BuiltinToolKind = "files" | "changes" | "worktrees" | "terminal";
-
-/** Side panel tools in the order the tool chooser lists them. */
-const TOOL_ACTIONS: readonly {
-  readonly kind: BuiltinToolKind;
-  readonly title: string;
-  readonly icon: ReactNode;
-  readonly key?: string;
-}[] = [
-  { kind: "files", title: "Toggle files", icon: <FileIcon /> },
-  { kind: "changes", title: "Toggle changes", icon: <DiffIcon />, key: "D" },
-  { kind: "worktrees", title: "Toggle worktrees", icon: <WorktreeIcon /> },
-  { kind: "terminal", title: "Toggle terminal", icon: <TerminalIcon />, key: "J" },
-];
+/** Palette shortcut hints for the tools that have one. */
+const TOOL_SHORTCUT_KEYS: Partial<Record<BuiltinToolKind, string>> = {
+  changes: "D",
+  terminal: "J",
+};
 
 export interface PaletteAction {
   readonly id: string;
@@ -140,13 +130,14 @@ export function buildPaletteActions(context: PaletteActionContext): readonly Pal
         run: () => context.openPaletteMode("models"),
       });
     }
-    for (const tool of TOOL_ACTIONS) {
+    for (const { kind, label, Icon } of BUILTIN_TOOL_ENTRIES) {
+      const key = TOOL_SHORTCUT_KEYS[kind];
       actions.push({
-        id: `toggle-${tool.kind}`,
-        title: tool.title,
-        icon: tool.icon,
-        hint: tool.key ? formatShortcut(platform, tool.key) : undefined,
-        run: () => context.toggleTool(tool.kind),
+        id: `toggle-${kind}`,
+        title: `Toggle ${label.toLowerCase()}`,
+        icon: <Icon />,
+        hint: key ? formatShortcut(platform, key) : undefined,
+        run: () => context.toggleTool(kind),
       });
     }
     actions.push({

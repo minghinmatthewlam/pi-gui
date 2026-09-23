@@ -55,13 +55,9 @@ import {
   type ChordSource,
   type PiDesktopCommand,
 } from "../../contracts/ipc";
-import { toolRefId } from "../../contracts/workbench";
+import { toolRefId, type BuiltinToolKind } from "../../contracts/workbench";
 import { CommandPaletteSurface } from "../features/command-palette/command-palette-surface";
-import {
-  buildPaletteActions,
-  type BuiltinToolKind,
-  type PaletteMode,
-} from "../features/command-palette/palette-actions";
+import { buildPaletteActions, type PaletteMode } from "../features/command-palette/palette-actions";
 import { deriveModelOnboardingState } from "../features/settings/model-onboarding";
 import type { SettingsSection } from "../features/settings/settings-view";
 import { SecondarySurfaces } from "./secondary-surfaces";
