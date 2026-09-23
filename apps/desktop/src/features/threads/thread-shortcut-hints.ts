@@ -1,12 +1,20 @@
 import { useEffect, useSyncExternalStore } from "react";
+import { getDesktopCommandFromShortcut, isRecentThreadCommand } from "../../../contracts/ipc";
 
-type HintKeyEvent = Pick<KeyboardEvent, "type" | "key" | "shiftKey" | "altKey">;
+type ModifierState = Pick<KeyboardEvent, "metaKey" | "ctrlKey">;
+type HintKeyEvent = ModifierState &
+  Pick<KeyboardEvent, "type" | "key" | "code" | "shiftKey" | "altKey">;
+
+function modifierHeld(event: ModifierState, platform: NodeJS.Platform): boolean {
+  return platform === "darwin" ? event.metaKey : event.ctrlKey;
+}
 
 /**
  * Cmd+1-9 hints show from a press of the platform modifier (Command on macOS,
- * Control elsewhere) until it is released. Any other key ends them until the
- * modifier is pressed again: a chord was used, and macOS can drop the modifier
- * keyup after a chord the main process consumed.
+ * Control elsewhere) until it is released. A 1-9 thread switch keeps them up
+ * while the modifier stays held. Any other key ends them until the modifier is
+ * pressed again. Any event reporting the modifier up also ends them, because
+ * macOS can drop the modifier keyup after a chord the main process consumed.
  */
 export function nextThreadShortcutHintsVisible(
   current: boolean,
@@ -17,7 +25,18 @@ export function nextThreadShortcutHintsVisible(
   if (event.key === modifierKey) {
     return event.type === "keydown" && !event.shiftKey && !event.altKey;
   }
-  return event.type === "keydown" ? false : current;
+  const held = modifierHeld(event, platform);
+  if (!current || !held) return false;
+  if (event.type !== "keydown") return true;
+  return isRecentThreadCommand(
+    getDesktopCommandFromShortcut({
+      modifier: held,
+      alt: event.altKey,
+      shift: event.shiftKey,
+      key: event.key,
+      code: event.code,
+    }),
+  );
 }
 
 let visible = false;
@@ -43,15 +62,22 @@ export function dismissThreadShortcutHints(): void {
 
 export function useThreadShortcutHintsVisible(platform: NodeJS.Platform): boolean {
   useEffect(() => {
-    const sync = (event: KeyboardEvent) => {
+    const syncKey = (event: KeyboardEvent) => {
       setVisible(nextThreadShortcutHintsVisible(visible, event, platform));
     };
-    window.addEventListener("keydown", sync);
-    window.addEventListener("keyup", sync);
+    const syncPointer = (event: PointerEvent) => {
+      if (visible && !modifierHeld(event, platform)) dismissThreadShortcutHints();
+    };
+    window.addEventListener("keydown", syncKey);
+    window.addEventListener("keyup", syncKey);
+    window.addEventListener("pointermove", syncPointer);
+    window.addEventListener("pointerdown", syncPointer);
     window.addEventListener("blur", dismissThreadShortcutHints);
     return () => {
-      window.removeEventListener("keydown", sync);
-      window.removeEventListener("keyup", sync);
+      window.removeEventListener("keydown", syncKey);
+      window.removeEventListener("keyup", syncKey);
+      window.removeEventListener("pointermove", syncPointer);
+      window.removeEventListener("pointerdown", syncPointer);
       window.removeEventListener("blur", dismissThreadShortcutHints);
       dismissThreadShortcutHints();
     };

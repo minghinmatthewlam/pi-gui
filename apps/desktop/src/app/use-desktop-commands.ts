@@ -22,6 +22,7 @@ import {
   getDesktopCommandFromShortcut,
   isCloseFocusedSurfaceShortcut,
   isPaletteCommand,
+  isRecentThreadCommand,
   platformShortcutModifier,
   type ChordSource,
   type PiDesktopApi,
@@ -297,7 +298,8 @@ export function useDesktopCommands(input: DesktopCommandsInput) {
     // Bind once. Re-subscribing when session or search identity changes drops
     // Cmd+D and 1-9 in the gap after a thread switch or relaunch.
     const dispatch = (command: PiDesktopCommand, source: ChordSource) => {
-      dismissThreadShortcutHints();
+      // Thread switches keep the 1-9 hints up while the modifier stays held.
+      if (!isRecentThreadCommand(command)) dismissThreadShortcutHints();
       handleCommandRef.current(command, source);
     };
     const removeCommandListener = window.piApp?.onCommand?.((command) => dispatch(command, "main"));

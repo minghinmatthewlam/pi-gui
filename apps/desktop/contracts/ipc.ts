@@ -229,6 +229,10 @@ const RECENT_THREAD_COMMANDS = [
 
 export const THREAD_SHORTCUT_SLOT_COUNT = RECENT_THREAD_COMMANDS.length;
 
+export function isRecentThreadCommand(command: PiDesktopCommand | undefined): boolean {
+  return (RECENT_THREAD_COMMANDS as readonly (PiDesktopCommand | undefined)[]).includes(command);
+}
+
 export function getDesktopShortcutLabel(platform: NodeJS.Platform, key: string): string {
   return `${platform === "darwin" ? "⌘" : "Ctrl+"}${key.toUpperCase()}`;
 }
