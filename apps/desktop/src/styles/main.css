@@ -2409,6 +2409,14 @@
   font-size: 12.5px;
 }
 
+.custom-endpoint-model-list__item {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
 .settings-option-list {
   display: grid;
   gap: 8px;
@@ -3146,6 +3154,10 @@
 }
 
 @media (max-width: 980px) {
+  .settings-view .view-header {
+    align-items: stretch;
+  }
+
   .main--with-side-panel {
     grid-template-columns: minmax(0, 1fr);
   }

@@ -98,25 +98,6 @@ export function SettingsRow({
   );
 }
 
-export function SettingsInfoRow({
-  label,
-  value,
-}: {
-  readonly label: string;
-  readonly value: string;
-}) {
-  return (
-    <div className="settings-row">
-      <div className="settings-row__label">
-        <div className="settings-row__title">{label}</div>
-      </div>
-      <div className="settings-row__control">
-        <span className="settings-row__value">{value}</span>
-      </div>
-    </div>
-  );
-}
-
 export function ProviderRow({
   provider,
   onLoginProvider,

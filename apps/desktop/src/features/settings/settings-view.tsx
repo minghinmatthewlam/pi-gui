@@ -94,13 +94,33 @@ export function SettingsView({
   onSetEnableTransparency,
 }: SettingsViewProps) {
   const definition = settingsSectionDefinition(section);
+  const header = (
+    <header className="view-header">
+      <div>
+        <h1 className="view-header__title">{definition.title}</h1>
+        <p className="view-header__body">
+          {definition.description(workspace?.name ?? "this workspace")}
+        </p>
+      </div>
+      {headerAccessory ? <div className="view-header__actions">{headerAccessory}</div> : null}
+    </header>
+  );
+
   if (!workspace && definition.needsWorkspace) {
     return (
-      <section className="canvas canvas--empty">
-        <div className="empty-panel">
-          <div className="session-header__eyebrow">Settings</div>
-          <h1>Select a workspace</h1>
-          <p>Provider and model settings need a selected workspace.</p>
+      <section className="canvas">
+        <div className="conversation settings-view">
+          {header}
+          <div className="settings-group settings-empty">
+            <div className="settings-row">
+              <div className="settings-row__label">
+                <div className="settings-row__title">Select a workspace</div>
+                <div className="settings-row__description">
+                  Providers and models are set per workspace. Open a folder to manage them.
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
     );
@@ -109,15 +129,7 @@ export function SettingsView({
   return (
     <section className="canvas">
       <div className="conversation settings-view">
-        <header className="view-header">
-          <div>
-            <h1 className="view-header__title">{definition.title}</h1>
-            <p className="view-header__body">
-              {definition.description(workspace?.name ?? "this workspace")}
-            </p>
-          </div>
-          {headerAccessory ? <div className="view-header__actions">{headerAccessory}</div> : null}
-        </header>
+        {header}
 
         <div className="settings-grid">
           {section === "appearance" ? (

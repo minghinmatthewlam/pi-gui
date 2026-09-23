@@ -97,7 +97,7 @@ function SecondarySurfaceNav({
           value={query}
           onChange={(event) => setQuery(event.currentTarget.value)}
           onKeyDown={(event) => {
-            if (event.key === "Enter" && matches[0]) {
+            if (event.key === "Enter" && query.trim() && matches[0]) {
               onSelect(matches[0].id);
             }
             // The first Escape clears the search; the next one leaves the surface.
