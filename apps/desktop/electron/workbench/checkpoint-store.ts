@@ -33,6 +33,26 @@ const DEFAULT_LIMITS: CheckpointCaptureLimits = {
   maxFileBytes: 16 * 1024 * 1024,
 };
 
+export interface CheckpointRetention {
+  /** Finalized intervals kept per task; open intervals are never dropped. */
+  readonly maxRecordsPerTask: number;
+  /** Finalized intervals kept across all tasks. */
+  readonly maxRecords: number;
+  /** Unreferenced refs and objects younger than this survive maintenance. */
+  readonly pruneGraceMs: number;
+  /** Minimum spacing between background maintenance passes. */
+  readonly maintenanceIntervalMs: number;
+}
+
+const DEFAULT_RETENTION: CheckpointRetention = {
+  maxRecordsPerTask: 50,
+  maxRecords: 500,
+  pruneGraceMs: 60 * 60 * 1000,
+  maintenanceIntervalMs: 60 * 60 * 1000,
+};
+
+/** Boundaries between maintenance passes when no record was dropped. */
+const MAINTENANCE_BOUNDARIES = 200;
 /** Files modified this recently may still change within one timestamp tick; reread them. */
 const RACY_WINDOW_MS = 2_000;
 /** Checkouts whose last capture inventory is kept in memory for incremental captures. */
@@ -123,6 +143,7 @@ export class TurnCheckpointStore {
   private readonly directory: string;
   private readonly metadataPath: string;
   private readonly limits: CheckpointCaptureLimits;
+  private readonly retention: CheckpointRetention;
   private readonly records = new Map<string, StoredTurnCheckpoint>();
   private loaded: Promise<void> | undefined;
   private gitReady: Promise<void> | undefined;
@@ -132,17 +153,35 @@ export class TurnCheckpointStore {
   private readonly taskBoundaries = new Map<string, Promise<void>>();
   private writing: Promise<void> = Promise.resolve();
   private queuedWrite: Promise<void> | undefined;
-  /** Last successful inventory per checkout root. */
+  /** Last successful inventory per checkout root; cleared whenever objects may be pruned. */
   private readonly inventories = new Map<string, CheckoutInventory>();
+  private inventoryGeneration = 0;
   private readonly warming = new Set<string>();
+  private readonly activeCaptures = new Set<Promise<unknown>>();
+  private maintenanceRun: Promise<void> | undefined;
+  private lastMaintenanceAt = 0;
+  private boundariesSinceMaintenance = 0;
+  private droppedSinceMaintenance = 0;
 
-  constructor(userDataDir: string, limits: Partial<CheckpointCaptureLimits> = {}) {
+  constructor(
+    userDataDir: string,
+    limits: Partial<CheckpointCaptureLimits> = {},
+    retention: Partial<CheckpointRetention> = {},
+  ) {
     this.directory = join(userDataDir, "turn-checkpoints");
     this.repositoryPath = join(this.directory, "objects.git");
     this.metadataPath = join(this.directory, "checkpoints.json");
     this.limits = { ...DEFAULT_LIMITS, ...limits };
+    this.retention = { ...DEFAULT_RETENTION, ...retention };
     if (Object.values(this.limits).some((value) => !Number.isSafeInteger(value) || value < 1)) {
       throw new Error("Checkpoint capture limits must be positive safe integers.");
+    }
+    if (
+      Object.values(this.retention).some((value) => !Number.isSafeInteger(value) || value < 0) ||
+      this.retention.maxRecordsPerTask < 1 ||
+      this.retention.maxRecords < 1
+    ) {
+      throw new Error("Checkpoint retention limits must be safe integers.");
     }
   }
 
@@ -257,7 +296,11 @@ export class TurnCheckpointStore {
       }
       // A capture whose deadline passed after its bytes were read still describes the
       // checkout at this boundary; the adapter records the missed deadline itself.
+      const dropped = this.enforceRetention();
       await this.persist();
+      this.boundariesSinceMaintenance += 1;
+      this.droppedSinceMaintenance += dropped;
+      this.scheduleMaintenance();
     });
     const task = targetKey(boundary.sessionRef);
     const settled = operation.then(
@@ -280,6 +323,37 @@ export class TurnCheckpointStore {
     return structuredClone(
       [...this.records.values()].filter((record) => sameTarget(record.target, target)),
     );
+  }
+
+  /**
+   * Drops finalized intervals of tasks that are no longer in the catalog. Records written
+   * after `listedAt` are kept, so a task created while the catalog was being read survives.
+   */
+  async retainTasks(tasks: readonly SessionRef[], listedAt: string): Promise<void> {
+    await this.load();
+    const live = new Set(tasks.map(targetKey));
+    let dropped = 0;
+    for (const [id, record] of this.records) {
+      if (record.outcome === "open" || live.has(targetKey(record.target))) continue;
+      if (record.updatedAt >= listedAt) continue;
+      this.records.delete(id);
+      dropped += 1;
+    }
+    if (!dropped) return;
+    await this.persist();
+    this.droppedSinceMaintenance += dropped;
+    this.scheduleMaintenance();
+  }
+
+  /**
+   * Deletes refs that no retained interval needs and lets Git prune their objects. Refs and
+   * objects younger than the grace period survive, so a concurrent capture keeps its tree.
+   */
+  maintain(): Promise<void> {
+    this.maintenanceRun ??= this.runMaintenance().finally(() => {
+      this.maintenanceRun = undefined;
+    });
+    return this.maintenanceRun;
   }
 
   async resolve(input: {
@@ -383,12 +457,19 @@ export class TurnCheckpointStore {
       : result;
   }
 
-  capture(
+  async capture(
     workspacePath: string,
     parentSignal?: AbortSignal,
     timeoutMs = this.limits.timeoutMs,
   ): Promise<CheckpointCapture> {
-    return this.captureCheckout(workspacePath, parentSignal, timeoutMs);
+    // Maintenance waits for every capture that might still reuse objects it could prune.
+    const run = this.captureCheckout(workspacePath, parentSignal, timeoutMs);
+    this.activeCaptures.add(run);
+    try {
+      return await run;
+    } finally {
+      this.activeCaptures.delete(run);
+    }
   }
 
   /**
@@ -412,6 +493,7 @@ export class TurnCheckpointStore {
     timeoutMs: number,
   ): Promise<CheckpointCapture> {
     const started = Date.now();
+    const generation = this.inventoryGeneration;
     const timeout = AbortSignal.timeout(timeoutMs);
     const failure = new AbortController();
     const signal = AbortSignal.any([
@@ -568,6 +650,7 @@ export class TurnCheckpointStore {
       let treeOid: string;
       if (previous && spooled.length === 0 && stored.length === previous.files.size) {
         // Every previously stored file is unchanged and nothing else exists: the same tree.
+        // Its ref cannot have been pruned, because maintenance clears inventories first.
         treeOid = previous.treeOid;
       } else {
         const indexEntries = [
@@ -595,18 +678,21 @@ export class TurnCheckpointStore {
         if (!/^[a-f0-9]{40}$/.test(treeOid))
           throw new CaptureError("tree-invalid", "Git returned an invalid snapshot tree.");
         signal.throwIfAborted();
+        // The creation time in the name lets maintenance spare refs of in-flight captures.
         await git(
           this.repositoryPath,
-          ["update-ref", `${SNAPSHOT_REF_PREFIX}${snapshotId}`, treeOid],
+          ["update-ref", `${SNAPSHOT_REF_PREFIX}${Date.now()}-${snapshotId}`, treeOid],
           signal,
         );
       }
       signal.throwIfAborted();
-      this.inventories.delete(root);
-      this.inventories.set(root, { treeOid, files });
-      for (const key of this.inventories.keys()) {
-        if (this.inventories.size <= MAX_CACHED_CHECKOUTS) break;
-        this.inventories.delete(key);
+      if (generation === this.inventoryGeneration) {
+        this.inventories.delete(root);
+        this.inventories.set(root, { treeOid, files });
+        for (const key of this.inventories.keys()) {
+          if (this.inventories.size <= MAX_CACHED_CHECKOUTS) break;
+          this.inventories.delete(key);
+        }
       }
       return {
         state: "available",
@@ -753,6 +839,98 @@ export class TurnCheckpointStore {
       () => undefined,
     );
     return result;
+  }
+
+  /** Keeps the newest finalized intervals per task and overall. Returns the number dropped. */
+  private enforceRetention(): number {
+    const finalized = [...this.records.values()]
+      .filter((record) => record.outcome !== "open")
+      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+    const perTask = new Map<string, number>();
+    let kept = 0;
+    let dropped = 0;
+    for (const record of finalized) {
+      const key = targetKey(record.target);
+      const count = (perTask.get(key) ?? 0) + 1;
+      perTask.set(key, count);
+      if (count > this.retention.maxRecordsPerTask || kept >= this.retention.maxRecords) {
+        this.records.delete(record.checkpointId);
+        dropped += 1;
+      } else kept += 1;
+    }
+    return dropped;
+  }
+
+  private scheduleMaintenance(): void {
+    if (
+      this.maintenanceRun ||
+      (this.droppedSinceMaintenance === 0 &&
+        this.boundariesSinceMaintenance < MAINTENANCE_BOUNDARIES) ||
+      Date.now() - this.lastMaintenanceAt < this.retention.maintenanceIntervalMs
+    )
+      return;
+    // Off the capture path: the boundary that triggered this has already returned.
+    const timer = setTimeout(() => {
+      this.maintain().catch((error: unknown) =>
+        console.warn("[turn-checkpoints] maintenance failed", error),
+      );
+    }, 0);
+    timer.unref?.();
+  }
+
+  private async runMaintenance(): Promise<void> {
+    await this.load();
+    this.lastMaintenanceAt = Date.now();
+    this.boundariesSinceMaintenance = 0;
+    this.droppedSinceMaintenance = 0;
+    // Stop reusing stored objects, then wait for captures that may already be reusing them.
+    this.inventoryGeneration += 1;
+    this.inventories.clear();
+    await Promise.allSettled([...this.activeCaptures]);
+    const signal = AbortSignal.timeout(5 * 60_000);
+    await this.prepareGit(signal);
+    const live = new Set<string>();
+    for (const record of this.records.values()) {
+      for (const capture of [record.before, record.after]) {
+        if (capture?.state === "available") live.add(capture.treeOid);
+      }
+    }
+    const cutoff = Date.now() - this.retention.pruneGraceMs;
+    const refs = stripLine(
+      await git(
+        this.repositoryPath,
+        ["for-each-ref", "--format=%(objectname) %(refname)", SNAPSHOT_REF_PREFIX],
+        signal,
+      ),
+    )
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => {
+        const [oid = "", name = ""] = line.split(" ");
+        // Refs from before timestamped names have no age and count as old.
+        const created = /^(\d+)-/.exec(name.slice(SNAPSHOT_REF_PREFIX.length));
+        return { oid, name, young: created ? Number(created[1]) > cutoff : false };
+      });
+    // Keep every young ref and one ref per retained tree; delete the rest.
+    const kept = new Set(refs.filter((ref) => ref.young).map((ref) => ref.oid));
+    const deletions: string[] = [];
+    for (const ref of refs) {
+      if (ref.young) continue;
+      if (live.has(ref.oid) && !kept.has(ref.oid)) kept.add(ref.oid);
+      else deletions.push(`delete ${ref.name} ${ref.oid}\n`);
+    }
+    if (deletions.length)
+      await git(
+        this.repositoryPath,
+        ["update-ref", "--stdin"],
+        signal,
+        Buffer.from(deletions.join("")),
+      );
+    const expiry =
+      this.retention.pruneGraceMs === 0
+        ? "now"
+        : `${Math.ceil(this.retention.pruneGraceMs / 1000)}.seconds.ago`;
+    await git(this.repositoryPath, ["gc", "--quiet", `--prune=${expiry}`], signal);
   }
 }
 

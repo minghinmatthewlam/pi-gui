@@ -682,3 +682,101 @@ test("a checkout too slow for its first boundary builds its inventory in the bac
   expect(second.before).toMatchObject({ state: "available", treeOid: warmed });
   expect(await snapshotRefs(store)).toEqual([warmed]);
 });
+
+test("retention caps records, deletes unneeded refs and prunes their objects", async () => {
+  const { workspace, userData } = await fixture();
+  const store = new TurnCheckpointStore(
+    userData,
+    { timeoutMs: 10_000 },
+    { maxRecordsPerTask: 2, maxRecords: 3, pruneGraceMs: 0 },
+  );
+  const signal = new AbortController().signal;
+  const target = { workspaceId: "repo", sessionId: "task" };
+  const other = {
+    sessionRef: { workspaceId: "repo", sessionId: "other-task" },
+  };
+  const unique: string[] = [];
+  for (let turn = 0; turn < 4; turn += 1) {
+    const at = (second: number) => `2026-09-22T12:0${turn}:0${second}.000Z`;
+    await store.recordBoundary(
+      boundary(workspace, `turn-${turn}`, "opening", { timestamp: at(0) }),
+      signal,
+    );
+    await writeFile(join(workspace, "file.txt"), `unique contents of turn ${turn}`);
+    unique.push((await git(workspace, ["hash-object", "file.txt"])).toString().trim());
+    await store.recordBoundary(
+      boundary(workspace, `turn-${turn}`, "closing", { timestamp: at(1) }),
+      signal,
+    );
+  }
+  await store.recordBoundary(
+    boundary(workspace, "other", "opening", { ...other, timestamp: "2026-09-22T12:09:00.000Z" }),
+    signal,
+  );
+  await store.recordBoundary(
+    boundary(workspace, "other", "closing", { ...other, timestamp: "2026-09-22T12:09:01.000Z" }),
+    signal,
+  );
+  expect((await store.list(target)).map((record) => record.checkpointId).sort()).toEqual([
+    "turn-2",
+    "turn-3",
+  ]);
+  await store.maintain();
+  const records = [...(await store.list(target)), ...(await store.list(other.sessionRef))];
+  const live = new Set(
+    records.flatMap((record) =>
+      [record.before, record.after].flatMap((capture) =>
+        capture?.state === "available" ? [capture.treeOid] : [],
+      ),
+    ),
+  );
+  const refs = await snapshotRefs(store);
+  expect(new Set(refs)).toEqual(live);
+  expect(refs).toHaveLength(live.size);
+  // Blobs that only dropped turns referenced are gone; retained ones remain readable.
+  await expect(git(store.repositoryPath, ["cat-file", "-e", unique[0]!])).rejects.toThrow();
+  await git(store.repositoryPath, ["cat-file", "-e", unique[3]!]);
+  expect(await store.resolve({ target, checkoutId: "repo" })).toMatchObject({
+    state: "available",
+    checkpointId: "turn-3",
+  });
+
+  // Captures after maintenance cannot reuse pruned objects.
+  const after = await store.capture(workspace);
+  available(after);
+  expect(await git(store.repositoryPath, ["show", `${after.treeOid}:file.txt`])).toEqual(
+    Buffer.from("unique contents of turn 3"),
+  );
+});
+
+test("records of tasks removed from the catalog are dropped, but open and newer ones stay", async () => {
+  const { workspace, store, userData } = await fixture();
+  const signal = new AbortController().signal;
+  await writeFile(join(workspace, "file.txt"), "contents");
+  const removed = {
+    sessionRef: { workspaceId: "repo", sessionId: "removed" },
+  };
+  const running = {
+    sessionRef: { workspaceId: "repo", sessionId: "running" },
+    runId: "running-run",
+  };
+  await store.recordBoundary(boundary(workspace, "kept", "opening"), signal);
+  await store.recordBoundary(boundary(workspace, "kept", "closing"), signal);
+  await store.recordBoundary(boundary(workspace, "removed", "opening", removed), signal);
+  await store.recordBoundary(boundary(workspace, "removed", "closing", removed), signal);
+  await store.recordBoundary(boundary(workspace, "running", "opening", running), signal);
+  const late = {
+    sessionRef: { workspaceId: "repo", sessionId: "late" },
+    timestamp: "2099-01-01T00:00:00.000Z",
+  };
+  await store.recordBoundary(boundary(workspace, "late", "opening", late), signal);
+  await store.recordBoundary(boundary(workspace, "late", "closing", late), signal);
+
+  await store.retainTasks([{ workspaceId: "repo", sessionId: "task" }], new Date().toISOString());
+  const reopened = new TurnCheckpointStore(userData);
+  expect(await reopened.list(removed.sessionRef)).toEqual([]);
+  expect(await reopened.list({ workspaceId: "repo", sessionId: "task" })).toHaveLength(1);
+  expect(await reopened.list(late.sessionRef)).toHaveLength(1);
+  // The open interval survives; restart marks it interrupted rather than deleting it.
+  expect(await reopened.list(running.sessionRef)).toMatchObject([{ outcome: "interrupted" }]);
+});

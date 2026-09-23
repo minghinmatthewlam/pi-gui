@@ -171,6 +171,8 @@ export interface DesktopAppStoreOptions {
     workspace: WorkspaceRef,
     options: GenerateThreadTitleOptions,
   ) => Promise<string | null | undefined>;
+  /** Receives every catalog listing so owners of per-task data can drop removed tasks. */
+  readonly onSessionCatalogListed?: (sessions: readonly SessionRef[], listedAt: string) => void;
 }
 
 export class DesktopAppStore {
@@ -242,6 +244,7 @@ export class DesktopAppStore {
   private readonly initialWorkspacePaths: readonly string[];
   private readonly getWindow: () => BrowserWindow | null;
   private readonly shouldKeepSessionDialogs: (sessionRef: SessionRef) => boolean;
+  private readonly onSessionCatalogListed: DesktopAppStoreOptions["onSessionCatalogListed"];
   private composerDraftSyncTarget: SessionRef | undefined;
   private composerDraftProjectionNonce = 0;
   private persistUiStateTimer: NodeJS.Timeout | undefined;
@@ -280,6 +283,7 @@ export class DesktopAppStore {
     this.initialWorkspacePaths = options.initialWorkspacePaths;
     this.getWindow = options.getWindow ?? (() => null);
     this.shouldKeepSessionDialogs = options.shouldKeepSessionDialogs ?? (() => false);
+    this.onSessionCatalogListed = options.onSessionCatalogListed;
 
     this.conversationOwner = createConversationOwner({
       driver: this.driver,
@@ -2071,6 +2075,7 @@ export class DesktopAppStore {
     this.refreshStateDepth += 1;
     try {
       const previousSelectedKey = this.currentSelectedSessionKey();
+      const listedAt = new Date().toISOString();
       const [workspacesSnapshot, sessionsSnapshot] = await Promise.all([
         this.driver.listWorkspaces(),
         this.driver.listSessions(),
@@ -2080,6 +2085,10 @@ export class DesktopAppStore {
         : (await this.catalogStore.worktrees.listWorktrees()).worktrees;
 
       await this.pruneStaleSessionSubscriptions(sessionsSnapshot.sessions);
+      this.onSessionCatalogListed?.(
+        sessionsSnapshot.sessions.map((session) => session.sessionRef),
+        listedAt,
+      );
       await this.ensureSubscriptionsForSessions(sessionsSnapshot.sessions);
 
       const selectedWorkspaceId = resolveSelectedWorkspaceIdFromCatalog(

@@ -872,6 +872,13 @@ app
       driverOptions,
       generateThreadTitleOverride: async (workspace, options) =>
         generateThreadTitleOverride?.(workspace, options),
+      onSessionCatalogListed: (sessions, listedAt) => {
+        checkpoints
+          .retainTasks(sessions, listedAt)
+          .catch((error: unknown) =>
+            console.warn("[turn-checkpoints] could not drop removed tasks", error),
+          );
+      },
     });
     windowOwner = new WindowOwner(store, {
       onActiveWindowChanged: (window) => {
