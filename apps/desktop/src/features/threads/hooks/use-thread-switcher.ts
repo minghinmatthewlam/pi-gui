@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ThreadListEntry } from "../thread-groups";
+import { dismissThreadShortcutHints } from "../thread-shortcut-hints";
 
 /** A quick Ctrl-Tab tap swaps threads without flashing the overlay. */
 export const THREAD_SWITCHER_OVERLAY_DELAY_MS = 150;
@@ -93,7 +94,11 @@ export function useThreadSwitcher(options: UseThreadSwitcherOptions) {
         // Leave modal dialogs and an in-progress thread or folder rename alone.
         if (document.querySelector("[aria-modal='true']")) return;
         if (event.target instanceof Element && event.target.closest(".workspace-rename")) return;
-        if (open(event.shiftKey)) swallow(event);
+        if (open(event.shiftKey)) {
+          swallow(event);
+          // The swallowed Tab never reaches the hint listener, so end the Ctrl+1-9 badges here.
+          dismissThreadShortcutHints();
+        }
         return;
       }
       if (!current) return;

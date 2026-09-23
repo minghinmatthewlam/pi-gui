@@ -54,6 +54,8 @@ test("Ctrl-Tab switches threads in most-recently-used order and keeps it across 
     await window.keyboard.press("Tab");
     await expect(switcherRows(window)).toHaveText([/Thread three/, /Thread two/, /Thread one/]);
     await expectSwitcherSelection(window, "Thread two");
+    // Held Control (off macOS) no longer paints the Ctrl+1-9 badges under the list.
+    await expect(window.locator("[data-thread-shortcut]")).toHaveCount(0);
     await window.keyboard.press("Tab");
     await expectSwitcherSelection(window, "Thread one");
     await window.keyboard.press("Shift+Tab");
