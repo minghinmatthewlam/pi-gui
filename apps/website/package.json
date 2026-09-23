@@ -9,6 +9,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "geist": "^1.7.2",
     "next": "^15.3.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"

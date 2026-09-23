@@ -49,7 +49,12 @@ test("marketing commands delegate to scripts owned by their producer workspace",
   const desktopPackage = await readJson("apps/desktop/package.json");
   const videoPackage = await readJson("video/package.json");
   const delegations = [
-    ["marketing:demo", rootPackage.scripts["marketing:demo"], desktopPackage, "demo:readme"],
+    [
+      "marketing:media",
+      rootPackage.scripts["marketing:media"],
+      desktopPackage,
+      "demo:product-media",
+    ],
     [
       "marketing:capture",
       rootPackage.scripts["marketing:capture"],
@@ -69,12 +74,22 @@ test("marketing commands delegate to scripts owned by their producer workspace",
   }
 });
 
-test("the demo producer supports safe staged proof without real credentials or cleanup", async () => {
-  const source = await readFile(path.join(root, "apps/desktop/scripts/readme-demo.mts"), "utf8");
+test("marketing producers support staged proof and pass credentials only explicitly", async () => {
+  // Product media records a real run with one explicitly selected provider's saved credentials.
+  const source = await readFile(
+    path.join(root, "apps/desktop/scripts/product-media/capture.media.ts"),
+    "utf8",
+  );
   assert.match(source, /PI_GUI_MARKETING_STAGE_DIR/);
-  assert.doesNotMatch(source, /\brm\(/);
+  assert.match(source, /PI_GUI_MARKETING_PROVIDER/);
+  assert.match(source, /PI_GUI_MARKETING_MODEL/);
+  assert.match(source, /PI_APP_REAL_AUTH_SOURCE_DIR/);
   assert.match(source, /scrubProviderEnv: true/);
-  assert.doesNotMatch(source, /realAuthSourceDir/);
+  assert.match(source, /\{ \[provider\]: auth\[provider\] \}/);
+  // The only removal is the private credential copy; media and evidence are never deleted.
+  assert.deepEqual(source.match(/\brm\([^)]*\)/g), [
+    "rm(privateDir, { recursive: true, force: true })",
+  ]);
 
   const showcaseSource = await readFile(
     path.join(root, "apps/desktop/scripts/capture-showcase.mts"),

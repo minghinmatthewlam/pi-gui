@@ -1,21 +1,157 @@
-import { HERO_BETA_NOTE, OG_IMAGE_PATH, SITE_DESCRIPTION, SITE_NAME, SITE_URL } from "./site";
-
-const GITHUB_URL = "https://github.com/minghinmatthewlam/pi-gui";
-const RELEASES_URL = "https://github.com/minghinmatthewlam/pi-gui/releases/latest";
-const PI_MONO_URL = "https://github.com/mariozechner/pi";
+import { CopyCommand } from "./components/copy-command";
+import { DownloadButton } from "./components/download-button";
+import { ThemedShot } from "./components/themed-shot";
+import {
+  BREW_INSTALL,
+  GITHUB_URL,
+  OG_IMAGE_PATH,
+  PI_URL,
+  RELEASES_URL,
+  SITE_DESCRIPTION,
+  SITE_NAME,
+  SITE_URL,
+} from "./site";
 
 const softwareApplicationJsonLd = {
   "@context": "https://schema.org",
   "@type": "SoftwareApplication",
   name: SITE_NAME,
   applicationCategory: "DeveloperApplication",
-  operatingSystem: "macOS, Linux",
+  operatingSystem: "macOS, Linux, Windows",
   description: SITE_DESCRIPTION,
   url: SITE_URL,
   sameAs: [GITHUB_URL],
   image: `${SITE_URL}${OG_IMAGE_PATH}`,
   isAccessibleForFree: true,
+  offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
 };
+
+const showcase = [
+  {
+    eyebrow: "Threads",
+    title: "Run agents side by side",
+    body: "Every task gets its own thread. Start it in your checkout or in a fresh git worktree, then start the next one while it works. The sidebar shows what is running, what finished and what needs you.",
+    shot: "threads",
+    width: 1640,
+    height: 1026,
+    dark: false,
+    alt: "pi-gui running an agent thread while two other threads sit in the sidebar",
+  },
+  {
+    eyebrow: "Review",
+    title: "Review every change before it lands",
+    body: "The Changes tab shows exactly what the agent touched. Compare uncommitted work, a branch against its base, or a single turn, and stage it file by file.",
+    shot: "review",
+    width: 1240,
+    height: 758,
+    dark: true,
+    alt: "The Changes tab showing the diff an agent made to src/price.js",
+  },
+  {
+    eyebrow: "Workbench",
+    title: "Terminal and files in the same window",
+    body: "Open a real terminal, browse and edit files, or manage worktrees in tabs beside the conversation. Each task keeps its own layout.",
+    shot: "terminal",
+    width: 1240,
+    height: 992,
+    dark: true,
+    alt: "The integrated terminal running the test suite next to the thread",
+  },
+  {
+    eyebrow: "Keyboard",
+    title: "Everything is a keystroke away",
+    body: "⌘K searches chats, workspaces and actions. ⌘P jumps to any file. Ctrl-Tab flips between recent threads, and ⌘1 to ⌘9 jump to threads in the sidebar. On Linux and Windows, use Ctrl.",
+    shot: "palette",
+    width: 1440,
+    height: 1280,
+    dark: true,
+    alt: "The command palette listing recent chats and actions",
+  },
+] as const;
+
+const features = [
+  {
+    title: "Queue and steer",
+    body: "Line up follow-ups while a run is going, or steer the current run without stopping it.",
+  },
+  {
+    title: "Scheduled tasks",
+    body: "Have pi rerun a prompt on a schedule, such as a weekly dependency check, while the app is open.",
+  },
+  {
+    title: "Skills and extensions",
+    body: "Turn pi skills and extensions on and off, try them from the composer, and give extensions their own tabs.",
+  },
+  {
+    title: "Any provider",
+    body: "Sign in with OAuth, paste an API key, or point at a custom endpoint. Pick the model and thinking level per thread.",
+  },
+  {
+    title: "Your sessions, on disk",
+    body: "pi-gui reads and writes pi's own session files. Anything you set up with the pi CLI carries over.",
+  },
+  {
+    title: "Fork and rewind",
+    body: "Fork a thread from any message into the same checkout or a new worktree, and move around the session tree.",
+  },
+  {
+    title: "Notifications",
+    body: "Get told when a background thread finishes, fails or needs your attention.",
+  },
+  {
+    title: "Themes",
+    body: "Light and dark, plus presets like Catppuccin, Tokyo Night, Nord, Dracula and GitHub.",
+  },
+] as const;
+
+const installs = [
+  {
+    platform: "macOS",
+    detail: "Apple Silicon. Signed and notarized.",
+    steps:
+      "Download the .dmg from GitHub Releases and drag pi-gui into Applications, or install with Homebrew:",
+    command: BREW_INSTALL,
+  },
+  {
+    platform: "Linux",
+    detail: "x64 AppImage or .deb.",
+    steps: "Download the AppImage or the .deb package from GitHub Releases.",
+  },
+  {
+    platform: "Windows",
+    detail: "x64 installer or portable build.",
+    steps:
+      "Download the setup .exe or the portable .exe from GitHub Releases. Builds are not code-signed yet, so SmartScreen may ask you to confirm.",
+  },
+] as const;
+
+const faqs = [
+  {
+    q: "What is pi?",
+    a: (
+      <>
+        <a href={PI_URL}>pi</a> is an open source coding agent that runs in your terminal. pi-gui is
+        a desktop app on top of it: sessions, models, tools and auth all run through pi itself.
+      </>
+    ),
+  },
+  {
+    q: "Does it cost anything?",
+    a: "pi-gui is free and MIT licensed. You bring your own model provider, through a subscription sign-in or an API key.",
+  },
+  {
+    q: "Can I keep using the pi CLI?",
+    a: "Yes. pi-gui uses pi's own session files and settings, so threads, credentials and skills are shared between the two.",
+  },
+  {
+    q: "Where does my code go?",
+    a: "pi-gui runs on your machine. Your code goes only to the model provider you configure, the same way it does with the pi CLI. The app also checks GitHub for new releases.",
+  },
+  {
+    q: "How do updates work?",
+    a: "pi-gui tells you when a new release is out. Homebrew installs update with brew upgrade --cask pi-gui; other installs update from GitHub Releases.",
+  },
+] as const;
 
 function GitHubIcon() {
   return (
@@ -25,384 +161,178 @@ function GitHubIcon() {
   );
 }
 
-function FolderIcon() {
+function Logo() {
   return (
-    <svg
-      width="20"
-      height="20"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
-    </svg>
-  );
-}
-
-function BoltIcon() {
-  return (
-    <svg
-      width="20"
-      height="20"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-    </svg>
-  );
-}
-
-function ClockIcon() {
-  return (
-    <svg
-      width="20"
-      height="20"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <circle cx="12" cy="12" r="10" />
-      <polyline points="12 6 12 12 16 14" />
-    </svg>
-  );
-}
-
-function WrenchIcon() {
-  return (
-    <svg
-      width="20"
-      height="20"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z" />
-    </svg>
-  );
-}
-
-function ArrowIcon() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M3 13L13 3M13 3H6M13 3v7" />
-    </svg>
+    <a className="logo" href="#top" aria-label="pi-gui home">
+      <img src="/icon.svg" alt="" width={24} height={24} />
+      <span>pi-gui</span>
+    </a>
   );
 }
 
 export default function Page() {
   return (
     <>
-      {/* ===== Nav ===== */}
-      <nav className="nav">
-        <div className="nav-inner">
-          <span className="nav-logo">pi-gui</span>
-          <div className="nav-links">
-            <a href="#features" className="nav-link">
-              Features
-            </a>
-            <a href="#get-started" className="nav-link">
-              Setup
-            </a>
-            <a href="#architecture" className="nav-link">
-              Architecture
-            </a>
-            <a
-              href={GITHUB_URL}
-              className="nav-link nav-link--github"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
+      <header className="nav">
+        <div className="nav__inner">
+          <Logo />
+          <nav className="nav__links" aria-label="Main">
+            <a href="#features">Features</a>
+            <a href="#install">Install</a>
+            <a href="#faq">FAQ</a>
+            <a href={GITHUB_URL} className="nav__github">
               <GitHubIcon />
               GitHub
             </a>
-          </div>
+          </nav>
+          <DownloadButton className="button button--primary button--small" />
         </div>
-      </nav>
+      </header>
 
-      <main>
+      <main id="top">
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{
-            __html: JSON.stringify(softwareApplicationJsonLd),
-          }}
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(softwareApplicationJsonLd) }}
         />
-        {/* ===== Hero ===== */}
+
         <section className="hero">
           <div className="container">
-            <div className="hero-mark" aria-hidden="true">
-              &pi;
-            </div>
-            <h1 className="hero-heading">
-              A native desktop for
-              <br />
-              AI coding agents
-            </h1>
-            <p className="hero-subtitle">
-              pi-gui is a Codex-style macOS and Linux desktop app for the{" "}
-              <a
-                href={PI_MONO_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-link"
-              >
-                pi coding agent
-              </a>
-              . Manage workspaces, run sessions, and review agent work — all from a native
-              interface.
+            <a className="hero__badge" href={RELEASES_URL}>
+              Public beta for macOS, Linux and Windows
+              <span aria-hidden="true">→</span>
+            </a>
+            <h1>The desktop app for the pi coding agent</h1>
+            <p className="hero__lede">
+              Run agents in parallel threads, in your checkout or their own worktrees. Review every
+              change, then ship it without leaving the window.
             </p>
-            <p className="hero-note">{HERO_BETA_NOTE}</p>
-            <div className="hero-ctas">
-              <a
-                href={RELEASES_URL}
-                className="btn btn-primary btn-github"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <GitHubIcon />
-                Download Beta
-              </a>
-              <a href="#get-started" className="btn btn-secondary">
-                Install Options
+            <div className="hero__actions">
+              <DownloadButton className="button button--primary" />
+              <a className="button button--secondary" href={GITHUB_URL}>
+                View on GitHub
               </a>
             </div>
+            <p className="hero__note">Free and open source. Built on pi.</p>
           </div>
-          <div className="screenshot-wrapper">
-            <div className="screenshot-frame">
-              <div className="screenshot-titlebar">
-                <span className="screenshot-dot" />
-                <span className="screenshot-dot" />
-                <span className="screenshot-dot" />
-              </div>
+          <div className="container container--wide">
+            <div className="frame frame--hero">
               <video
                 autoPlay
                 loop
                 muted
                 playsInline
-                className="screenshot-img"
-                width={1480}
-                height={924}
+                preload="auto"
+                poster="/media/hero-poster.webp"
+                width={1920}
+                height={1200}
+                aria-label="An agent in pi-gui fixing a bug, running the tests, then the change open in the review tab"
               >
-                <source src="/demo.mp4" type="video/mp4" />
+                <source src="/media/hero.webm" type="video/webm" />
+                <source src="/media/hero.mp4" type="video/mp4" />
               </video>
             </div>
           </div>
         </section>
 
-        {/* ===== Value Prop ===== */}
-        <section className="value-prop">
+        <section id="features" className="showcase">
+          <div className="container">
+            {showcase.map((item, index) => (
+              <article
+                key={item.title}
+                className={`showcase__row${index % 2 === 1 ? " showcase__row--flip" : ""}`}
+              >
+                <div className="showcase__copy">
+                  <p className="eyebrow">{item.eyebrow}</p>
+                  <h2>{item.title}</h2>
+                  <p>{item.body}</p>
+                </div>
+                <div className="frame">
+                  <ThemedShot
+                    name={item.shot}
+                    alt={item.alt}
+                    width={item.width}
+                    height={item.height}
+                    dark={item.dark}
+                  />
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <section className="grid-section">
+          <div className="container">
+            <h2 className="section-title">And the rest of the workflow</h2>
+            <div className="feature-grid">
+              {features.map((feature) => (
+                <div key={feature.title} className="feature-grid__item">
+                  <h3>{feature.title}</h3>
+                  <p>{feature.body}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section id="install" className="install">
+          <div className="container">
+            <h2 className="section-title">Install the beta</h2>
+            <p className="section-lede">
+              Download the latest build from <a href={RELEASES_URL}>GitHub Releases</a>, or install
+              with Homebrew on macOS. Then connect a provider under Settings, add a project folder
+              and start a thread.
+            </p>
+            <div className="install__grid">
+              {installs.map((item) => (
+                <div key={item.platform} className="install__card">
+                  <h3>{item.platform}</h3>
+                  <p className="install__detail">{item.detail}</p>
+                  <p>{item.steps}</p>
+                  {"command" in item ? <CopyCommand command={item.command} /> : null}
+                </div>
+              ))}
+            </div>
+            <p className="install__source">
+              Building from source is for contributors: see the{" "}
+              <a href={`${GITHUB_URL}#development`}>development guide</a>.
+            </p>
+          </div>
+        </section>
+
+        <section id="faq" className="faq">
           <div className="container container--narrow">
-            <p>
-              From quick fixes to complex refactors, pi-gui gives you a persistent desktop workspace
-              for AI-powered coding sessions — with full visibility into what the agent is doing and
-              why.
-            </p>
+            <h2 className="section-title">Questions</h2>
+            {faqs.map((item) => (
+              <details key={item.q} className="faq__item">
+                <summary>{item.q}</summary>
+                <p>{item.a}</p>
+              </details>
+            ))}
           </div>
         </section>
 
-        {/* ===== Features ===== */}
-        <section id="features" className="features">
+        <section className="closing">
           <div className="container">
-            <p className="section-eyebrow">Features</p>
-            <h2 className="section-heading">Everything you need in one window</h2>
-            <p className="section-subtitle">
-              A desktop-native experience built for multi-project AI coding workflows.
-            </p>
-            <div className="features-grid">
-              <div className="feature-card">
-                <div className="feature-icon" aria-hidden="true">
-                  <FolderIcon />
-                </div>
-                <h3>Multi-workspace sessions</h3>
-                <p>
-                  Open project folders as workspaces, each with independent session histories.
-                  Context-switch between projects without losing state.
-                </p>
-              </div>
-              <div className="feature-card">
-                <div className="feature-icon" aria-hidden="true">
-                  <BoltIcon />
-                </div>
-                <h3>Real-time agent timeline</h3>
-                <p>
-                  Watch every tool execution, code change, and reasoning step in a scrollable
-                  timeline with full input and output detail.
-                </p>
-              </div>
-              <div className="feature-card">
-                <div className="feature-icon" aria-hidden="true">
-                  <ClockIcon />
-                </div>
-                <h3>Persistent session history</h3>
-                <p>
-                  Sessions survive restarts. Resume any previous conversation, review transcripts,
-                  and continue exactly where you left off.
-                </p>
-              </div>
-              <div className="feature-card">
-                <div className="feature-icon" aria-hidden="true">
-                  <WrenchIcon />
-                </div>
-                <h3>Skills &amp; slash commands</h3>
-                <p>
-                  Extend pi-gui with workspace-specific skills and slash commands for model
-                  switching, thinking levels, settings, and custom workflows.
-                </p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* ===== Architecture ===== */}
-        <section id="architecture" className="architecture">
-          <div className="container">
-            <p className="section-eyebrow">Architecture</p>
-            <h2 className="section-heading">Built for durability</h2>
-            <p className="architecture-desc">
-              The desktop shell is separated from the agent runtime through a durable SessionDriver
-              interface — making the frontend independent of backend changes and ready for future
-              runtime swaps. Built on top of{" "}
-              <a
-                href={PI_MONO_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-link"
-              >
-                @earendil-works/pi-coding-agent
-              </a>
-              .
-            </p>
-            <div className="tech-stack">
-              <span className="tech-chip">Electron 34</span>
-              <span className="tech-chip">React 19</span>
-              <span className="tech-chip">TypeScript</span>
-              <span className="tech-chip">Vite</span>
-              <span className="tech-chip">pi-coding-agent</span>
-            </div>
-            <div className="diagram">
-              <div className="diagram-row">
-                <span className="diagram-label">Renderer</span>
-                <span className="diagram-arrow">&rarr;</span>
-                React UI &middot; Session views &middot; Composer
-              </div>
-              <div className="diagram-row">
-                <span className="diagram-label">Preload</span>
-                <span className="diagram-arrow">&rarr;</span>
-                Secure IPC bridge
-              </div>
-              <div className="diagram-row">
-                <span className="diagram-label">Main</span>
-                <span className="diagram-arrow">&rarr;</span>
-                SessionDriver &middot; Catalogs &middot; Persistence
-              </div>
-              <div className="diagram-row">
-                <span className="diagram-label">Runtime</span>
-                <span className="diagram-arrow">&rarr;</span>
-                pi-coding-agent &middot; Model providers
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* ===== Get Started ===== */}
-        <section id="get-started" className="get-started">
-          <div className="container">
-            <p className="section-eyebrow">Get started</p>
-            <h2 className="section-heading">Install the beta your way</h2>
-            <div className="code-block">
-              <code>
-                <span className="code-comment"># Direct install from GitHub Releases</span>
-                {"\n"}
-                <span className="code-command">open</span> {RELEASES_URL}
-                {"\n\n"}
-                <span className="code-comment"># Or install with Homebrew</span>
-                {"\n"}
-                <span className="code-command">brew tap</span> minghinmatthewlam/tap
-                {"\n"}
-                <span className="code-command">brew install --cask</span> pi-gui
-                {"\n\n"}
-                <span className="code-comment"># Later, update the Homebrew install</span>
-                {"\n"}
-                <span className="code-command">brew upgrade --cask</span> pi-gui
-                {"\n\n"}
-                <span className="code-comment"># Source install is for local development</span>
-                {"\n"}
-                <span className="code-command">git clone</span> {GITHUB_URL}.git{"\n"}
-                <span className="code-command">cd</span> pi-gui{"\n\n"}
-                <span className="code-comment"># Install dependencies and run</span>
-                {"\n"}
-                <span className="code-command">pnpm install</span>
-                {"\n"}
-                <span className="code-command">pnpm dev</span>
-              </code>
-            </div>
-            <p className="section-subtitle">
-              DMG installs update from GitHub Releases. Homebrew installs update with{" "}
-              <code>brew upgrade --cask pi-gui</code>. During beta, Homebrew upgrades may require
-              re-confirming some macOS permissions or Dock placement after reinstall-style updates.
-            </p>
-            <div className="hero-ctas">
-              <a
-                href={RELEASES_URL}
-                className="btn btn-primary btn-github"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <GitHubIcon />
-                Open Releases
-                <ArrowIcon />
-              </a>
-              <a
-                href={GITHUB_URL}
-                className="btn btn-secondary"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                View Source
+            <h2>Give pi a desktop</h2>
+            <div className="hero__actions">
+              <DownloadButton className="button button--primary" />
+              <a className="button button--secondary" href={GITHUB_URL}>
+                View on GitHub
               </a>
             </div>
           </div>
         </section>
       </main>
 
-      {/* ===== Footer ===== */}
       <footer className="footer">
-        <div className="footer-inner">
-          <span>pi-gui</span>
-          <span className="footer-sep">&middot;</span>
-          <span>MIT License</span>
-          <span className="footer-sep">&middot;</span>
-          <a href={GITHUB_URL} target="_blank" rel="noopener noreferrer">
-            GitHub
-          </a>
-          <span className="footer-sep">&middot;</span>
-          <span className="footer-credit">
-            Built on{" "}
-            <a href={PI_MONO_URL} target="_blank" rel="noopener noreferrer">
-              pi
-            </a>
-          </span>
+        <div className="footer__inner">
+          <Logo />
+          <nav className="footer__links" aria-label="Footer">
+            <a href={GITHUB_URL}>GitHub</a>
+            <a href={RELEASES_URL}>Releases</a>
+            <a href={PI_URL}>pi</a>
+            <a href={`${GITHUB_URL}/blob/main/LICENSE`}>MIT License</a>
+          </nav>
         </div>
       </footer>
     </>

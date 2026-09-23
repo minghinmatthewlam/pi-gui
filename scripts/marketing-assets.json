@@ -1,34 +1,176 @@
 {
   "assets": [
     {
-      "path": "docs/assets/demo.gif",
-      "producer": "marketing:demo",
-      "consumers": [{ "path": "README.md", "reference": "./docs/assets/demo.gif" }]
+      "path": "apps/website/public/media/hero.mp4",
+      "producer": "marketing:media",
+      "consumers": [
+        {
+          "path": "apps/website/app/page.tsx",
+          "reference": "/media/hero.mp4"
+        },
+        {
+          "path": "README.md",
+          "reference": "./apps/website/public/media/hero.mp4"
+        }
+      ]
     },
     {
-      "path": "docs/assets/demo.mp4",
-      "producer": "marketing:demo",
-      "consumers": [{ "path": "README.md", "reference": "./docs/assets/demo.mp4" }]
+      "path": "apps/website/public/media/hero.webm",
+      "producer": "marketing:media",
+      "consumers": [
+        {
+          "path": "apps/website/app/page.tsx",
+          "reference": "/media/hero.webm"
+        }
+      ]
     },
     {
-      "path": "apps/website/public/demo.mp4",
-      "producer": "marketing:demo",
-      "consumers": [{ "path": "apps/website/app/page.tsx", "reference": "/demo.mp4" }]
+      "path": "apps/website/public/media/hero.gif",
+      "producer": "marketing:media",
+      "consumers": [
+        {
+          "path": "README.md",
+          "reference": "./apps/website/public/media/hero.gif"
+        }
+      ]
+    },
+    {
+      "path": "apps/website/public/media/hero-poster.webp",
+      "producer": "marketing:media",
+      "consumers": [
+        {
+          "path": "apps/website/app/page.tsx",
+          "reference": "/media/hero-poster.webp"
+        }
+      ]
+    },
+    {
+      "path": "apps/website/public/media/threads.webp",
+      "producer": "marketing:media",
+      "consumers": [
+        {
+          "path": "apps/website/app/page.tsx",
+          "reference": "shot: \"threads\""
+        },
+        {
+          "path": "README.md",
+          "reference": "./apps/website/public/media/threads.webp"
+        }
+      ]
+    },
+    {
+      "path": "apps/website/public/media/review-light.webp",
+      "producer": "marketing:media",
+      "consumers": [
+        {
+          "path": "apps/website/app/page.tsx",
+          "reference": "shot: \"review\""
+        },
+        {
+          "path": "README.md",
+          "reference": "./apps/website/public/media/review-light.webp"
+        }
+      ]
+    },
+    {
+      "path": "apps/website/public/media/review-dark.webp",
+      "producer": "marketing:media",
+      "consumers": [
+        {
+          "path": "apps/website/app/page.tsx",
+          "reference": "shot: \"review\""
+        },
+        {
+          "path": "README.md",
+          "reference": "./apps/website/public/media/review-dark.webp"
+        }
+      ]
+    },
+    {
+      "path": "apps/website/public/media/terminal-light.webp",
+      "producer": "marketing:media",
+      "consumers": [
+        {
+          "path": "apps/website/app/page.tsx",
+          "reference": "shot: \"terminal\""
+        },
+        {
+          "path": "README.md",
+          "reference": "./apps/website/public/media/terminal-light.webp"
+        }
+      ]
+    },
+    {
+      "path": "apps/website/public/media/terminal-dark.webp",
+      "producer": "marketing:media",
+      "consumers": [
+        {
+          "path": "apps/website/app/page.tsx",
+          "reference": "shot: \"terminal\""
+        },
+        {
+          "path": "README.md",
+          "reference": "./apps/website/public/media/terminal-dark.webp"
+        }
+      ]
+    },
+    {
+      "path": "apps/website/public/media/palette-light.webp",
+      "producer": "marketing:media",
+      "consumers": [
+        {
+          "path": "apps/website/app/page.tsx",
+          "reference": "shot: \"palette\""
+        },
+        {
+          "path": "README.md",
+          "reference": "./apps/website/public/media/palette-light.webp"
+        }
+      ]
+    },
+    {
+      "path": "apps/website/public/media/palette-dark.webp",
+      "producer": "marketing:media",
+      "consumers": [
+        {
+          "path": "apps/website/app/page.tsx",
+          "reference": "shot: \"palette\""
+        },
+        {
+          "path": "README.md",
+          "reference": "./apps/website/public/media/palette-dark.webp"
+        }
+      ]
     },
     {
       "path": "video/public/captures/parallel-sessions.mp4",
       "producer": "marketing:capture",
-      "consumers": [{ "path": "video/src/PiShowcase.tsx", "reference": "parallel-sessions.mp4" }]
+      "consumers": [
+        {
+          "path": "video/src/PiShowcase.tsx",
+          "reference": "parallel-sessions.mp4"
+        }
+      ]
     },
     {
       "path": "video/public/captures/slash-commands.mp4",
       "producer": "marketing:capture",
-      "consumers": [{ "path": "video/src/PiShowcase.tsx", "reference": "slash-commands.mp4" }]
+      "consumers": [
+        {
+          "path": "video/src/PiShowcase.tsx",
+          "reference": "slash-commands.mp4"
+        }
+      ]
     },
     {
       "path": "video/public/captures/skills-settings.mp4",
       "producer": "marketing:capture",
-      "consumers": [{ "path": "video/src/PiShowcase.tsx", "reference": "skills-settings.mp4" }]
+      "consumers": [
+        {
+          "path": "video/src/PiShowcase.tsx",
+          "reference": "skills-settings.mp4"
+        }
+      ]
     },
     {
       "path": "video/out/pi-showcase.mp4",
@@ -36,5 +178,5 @@
       "consumers": []
     }
   ],
-  "retention": "Keep existing media and captured evidence. Producers may replace only the outputs listed here. Demo and showcase captures retain their temporary profiles and frames under .artifacts. Use PI_GUI_MARKETING_STAGE_DIR for proof runs that must not replace tracked media."
+  "retention": "Keep existing media and captured evidence. Producers may replace only the outputs listed here. Product media and showcase captures retain their temporary profiles and frames under .artifacts. Use PI_GUI_MARKETING_STAGE_DIR for proof runs that must not replace tracked media."
 }
