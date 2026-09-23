@@ -1,4 +1,5 @@
-import { basename } from "node:path";
+import { readFile } from "node:fs/promises";
+import { basename, join } from "node:path";
 import { expect, test } from "@playwright/test";
 import {
   createNamedThread,
@@ -172,7 +173,7 @@ test("pastes clipboard text into the integrated terminal once", async () => {
 });
 
 test("writes an oversized terminal paste in chunks instead of dropping it", async () => {
-  test.setTimeout(90_000);
+  test.setTimeout(180_000);
   const userDataDir = await makeUserDataDir();
   const workspacePath = await makeWorkspace("terminal-paste-large");
   const harness = await launchDesktop(userDataDir, {
@@ -220,18 +221,17 @@ test("writes an oversized terminal paste in chunks instead of dropping it", asyn
       clipboard.writeText(text);
     }, payload);
     await window.keyboard.press(TERMINAL_PASTE_SHORTCUT);
-    await expect(terminal.locator(".xterm-rows")).toContainText("ENDMARKER", { timeout: 30_000 });
+    // Check the receiver's file, not the terminal: drawing 192 KB of echo lags far behind
+    // the PTY when several test apps share the machine.
+    const payloadPath = join(workspacePath, "payload.txt");
+    await expect
+      .poll(() => readFile(payloadPath, "utf8").catch(() => ""), { timeout: 60_000 })
+      .toContain("ENDMARKER");
 
     await window.keyboard.press("Control+D");
-    await expect(terminal.locator(".xterm-rows")).toContainText(receiverDone, { timeout: 15_000 });
-    await window.keyboard.type("wc -l payload.txt");
-    await window.keyboard.press("Enter");
-    await expect(terminal.locator(".xterm-rows")).toContainText(`${lineCount + 1} payload.txt`, {
-      timeout: 15_000,
-    });
-    await window.keyboard.type("tail -n 1 payload.txt");
-    await window.keyboard.press("Enter");
-    await expect(terminal.locator(".xterm-rows")).toContainText("ENDMARKER", { timeout: 15_000 });
+    // The done line prints only after xterm has drawn the echo ahead of it.
+    await expect(terminal.locator(".xterm-rows")).toContainText(receiverDone, { timeout: 60_000 });
+    expect(await readFile(payloadPath, "utf8")).toBe(payload);
   } finally {
     await harness.close();
   }
