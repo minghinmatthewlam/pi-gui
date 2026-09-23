@@ -3,7 +3,10 @@ import { getDesktopCommandFromShortcut, isRecentThreadCommand } from "../../../c
 
 type ModifierState = Pick<KeyboardEvent, "metaKey" | "ctrlKey">;
 type HintKeyEvent = ModifierState &
-  Pick<KeyboardEvent, "type" | "key" | "code" | "shiftKey" | "altKey">;
+  Pick<KeyboardEvent, "type" | "key" | "code" | "shiftKey" | "altKey"> & {
+    /** The terminal keeps Ctrl+1-9 for the shell, so they never switch threads there. */
+    readonly inTerminal: boolean;
+  };
 
 function modifierHeld(event: ModifierState, platform: NodeJS.Platform): boolean {
   return platform === "darwin" ? event.metaKey : event.ctrlKey;
@@ -13,8 +16,9 @@ function modifierHeld(event: ModifierState, platform: NodeJS.Platform): boolean 
  * Cmd+1-9 hints show from a press of the platform modifier (Command on macOS,
  * Control elsewhere) until it is released. A 1-9 thread switch keeps them up
  * while the modifier stays held. Any other key ends them until the modifier is
- * pressed again. Any event reporting the modifier up also ends them, because
- * macOS can drop the modifier keyup after a chord the main process consumed.
+ * pressed again. A key or pointer event reporting the modifier up also ends
+ * them, because macOS can drop the modifier keyup after a chord the main
+ * process consumed; until such an event or a window blur, they stay up.
  */
 export function nextThreadShortcutHintsVisible(
   current: boolean,
@@ -28,14 +32,17 @@ export function nextThreadShortcutHintsVisible(
   const held = modifierHeld(event, platform);
   if (!current || !held) return false;
   if (event.type !== "keydown") return true;
-  return isRecentThreadCommand(
-    getDesktopCommandFromShortcut({
-      modifier: held,
-      alt: event.altKey,
-      shift: event.shiftKey,
-      key: event.key,
-      code: event.code,
-    }),
+  return (
+    !event.inTerminal &&
+    isRecentThreadCommand(
+      getDesktopCommandFromShortcut({
+        modifier: held,
+        alt: event.altKey,
+        shift: event.shiftKey,
+        key: event.key,
+        code: event.code,
+      }),
+    )
   );
 }
 
@@ -63,7 +70,16 @@ export function dismissThreadShortcutHints(): void {
 export function useThreadShortcutHintsVisible(platform: NodeJS.Platform): boolean {
   useEffect(() => {
     const syncKey = (event: KeyboardEvent) => {
-      setVisible(nextThreadShortcutHintsVisible(visible, event, platform));
+      // KeyboardEvent fields are prototype getters, so copy them rather than spread.
+      const { type, key, code, metaKey, ctrlKey, shiftKey, altKey, target } = event;
+      const inTerminal = target instanceof Element && target.closest("[data-pi-terminal]") !== null;
+      setVisible(
+        nextThreadShortcutHintsVisible(
+          visible,
+          { type, key, code, metaKey, ctrlKey, shiftKey, altKey, inTerminal },
+          platform,
+        ),
+      );
     };
     const syncPointer = (event: PointerEvent) => {
       if (visible && !modifierHeld(event, platform)) dismissThreadShortcutHints();
