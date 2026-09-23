@@ -1,5 +1,6 @@
 import type { DesktopNotificationPermissionStatus } from "../../../contracts/ipc";
 import type { NotificationPreferences } from "../../../contracts/desktop-state";
+import { SettingsSwitch } from "./settings-controls";
 import { SettingsGroup, SettingsRow } from "./settings-utils";
 
 interface SettingsNotificationsSectionProps {
@@ -77,39 +78,30 @@ export function SettingsNotificationsSection({
           title="Background completion"
           description="Notify when a background session finishes."
         >
-          <input
-            aria-label="Background completion"
+          <SettingsSwitch
             checked={notificationPreferences.backgroundCompletion}
-            type="checkbox"
-            onChange={(event) =>
-              onSetNotificationPreferences({ backgroundCompletion: event.target.checked })
-            }
+            label="Background completion"
+            onChange={(checked) => onSetNotificationPreferences({ backgroundCompletion: checked })}
           />
         </SettingsRow>
         <SettingsRow
           title="Background failures"
           description="Notify when a background session fails."
         >
-          <input
-            aria-label="Background failures"
+          <SettingsSwitch
             checked={notificationPreferences.backgroundFailure}
-            type="checkbox"
-            onChange={(event) =>
-              onSetNotificationPreferences({ backgroundFailure: event.target.checked })
-            }
+            label="Background failures"
+            onChange={(checked) => onSetNotificationPreferences({ backgroundFailure: checked })}
           />
         </SettingsRow>
         <SettingsRow
           title="Needs input or approval"
           description="Notify when input is needed to continue."
         >
-          <input
-            aria-label="Needs input or approval"
+          <SettingsSwitch
             checked={notificationPreferences.attentionNeeded}
-            type="checkbox"
-            onChange={(event) =>
-              onSetNotificationPreferences({ attentionNeeded: event.target.checked })
-            }
+            label="Needs input or approval"
+            onChange={(checked) => onSetNotificationPreferences({ attentionNeeded: checked })}
           />
         </SettingsRow>
       </SettingsGroup>
