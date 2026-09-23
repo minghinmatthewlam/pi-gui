@@ -25,6 +25,7 @@ import { WorkbenchRequests, type WorkbenchOwner } from "./workbench-requests";
 import type { DesktopExtensionViewOwner } from "../extensions/extension-view-owner";
 import { registerExtensionViewRequests } from "./extension-view-requests";
 import { registerReviewRequests, type ReviewRequestsOwner } from "./review-requests";
+import { mainFrameHandler } from "./main-frame-ipc";
 import { assertComposerAttachmentPixels } from "./composer-attachment-pixels";
 import {
   expectAppView,
@@ -45,6 +46,7 @@ import {
   expectOptionalThinkingLevel,
   expectRemoveWorktreeInput,
   expectSendChildThreadFollowUpInput,
+  expectSaveTaskWorkbenchTemplateInput,
   expectSessionTarget,
   expectRecord,
   expectSetChildSupervisionLoopInput,
@@ -218,15 +220,12 @@ export function registerDesktopIpc({
   owners,
   capabilities,
 }: RegisterDesktopIpcOptions): void {
-  registerReviewRequests(windows, owners.review);
-  registerExtensionViewRequests(windows, owners.extensionViews);
+  const handleMainFrame = mainFrameHandler(windows);
+  registerReviewRequests(handleMainFrame, owners.review);
+  registerExtensionViewRequests(handleMainFrame, windows, owners.extensionViews);
   const workbench = new WorkbenchRequests(owners.workbench);
   const workbenchSenders = new WeakSet<Electron.WebContents>();
-  const workbenchSender = (event: IpcMainInvokeEvent) => {
-    const sender = windows.windowForSender(event.sender).webContents;
-    if (!event.senderFrame || event.senderFrame !== sender.mainFrame) {
-      throw new Error("Workbench requests must originate from the window's main frame.");
-    }
+  const trackWorkbenchSender = (sender: Electron.WebContents) => {
     if (!workbenchSenders.has(sender)) {
       workbenchSenders.add(sender);
       sender.on("did-start-navigation", (_event, _url, isInPlace, isMainFrame) => {
@@ -236,12 +235,14 @@ export function registerDesktopIpc({
     }
     return sender;
   };
-  ipcMain.handle(desktopIpc.getTaskWorkbenchTemplate, (event, rawTarget: unknown) => {
-    workbenchSender(event);
-    return workbench.get(rawTarget);
+  handleMainFrame(desktopIpc.getTaskWorkbenchTemplate, expectSessionTarget, (target, request) => {
+    trackWorkbenchSender(request.contents);
+    return workbench.get(target);
   });
-  ipcMain.handle(desktopIpc.saveTaskWorkbenchTemplate, (event, rawInput: unknown) =>
-    workbench.save(workbenchSender(event), rawInput),
+  handleMainFrame(
+    desktopIpc.saveTaskWorkbenchTemplate,
+    expectSaveTaskWorkbenchTemplateInput,
+    (input, request) => workbench.save(trackWorkbenchSender(request.contents), input),
   );
   const run = (event: IpcMainInvokeEvent, action: () => Promise<DesktopAppState>) =>
     windows.runStateAction(senderWindow(windows, event), action);
@@ -756,27 +757,31 @@ export function registerDesktopIpc({
       ),
     );
   });
-  ipcMain.handle(desktopIpc.persistComposerDraft, async (event, raw: unknown) => {
-    const window = senderWindow(windows, event);
-    if (event.senderFrame !== window.webContents.mainFrame)
-      throw new Error("Draft persistence requires the main frame");
-    const input = expectRecord(raw, "composer draft");
-    const target = expectSessionTarget(input.target);
-    const draft = expectString(input.draft, "draft");
-    const state = await owners.state.getStateForView(windows.viewForWindow(window));
-    if (
-      !state.workspaces.some(
-        (workspace) =>
-          workspace.id === target.workspaceId &&
-          workspace.sessions.some((session) => session.id === target.sessionId),
-      )
-    ) {
-      throw new Error("The draft's task is unavailable");
-    }
-    await windows.withComposerDraftPersistOrigin(event.sender, () =>
-      owners.conversation.updateComposerDraft(target, draft),
-    );
-  });
+  handleMainFrame(
+    desktopIpc.persistComposerDraft,
+    (raw) => {
+      const input = expectRecord(raw, "composer draft");
+      return {
+        target: expectSessionTarget(input.target),
+        draft: expectString(input.draft, "draft"),
+      };
+    },
+    async ({ target, draft }, { event, window }) => {
+      const state = await owners.state.getStateForView(windows.viewForWindow(window));
+      if (
+        !state.workspaces.some(
+          (workspace) =>
+            workspace.id === target.workspaceId &&
+            workspace.sessions.some((session) => session.id === target.sessionId),
+        )
+      ) {
+        throw new Error("The draft's task is unavailable");
+      }
+      await windows.withComposerDraftPersistOrigin(event.sender, () =>
+        owners.conversation.updateComposerDraft(target, draft),
+      );
+    },
+  );
   ipcMain.handle(desktopIpc.updateComposerDraft, (event, rawDraft: unknown) => {
     const target = windows.targetForSender(event.sender);
     return run(event, () =>

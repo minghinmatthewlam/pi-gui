@@ -211,3 +211,29 @@ test("checks unused contracts and permits pure contract reuse", () => {
   assert.deepEqual(result.failures, []);
   assert.equal(result.checkedFiles, 2);
 });
+
+for (const source of [
+  'import { createChordServerConnection } from "@pi-gui/extension-ui/transport";',
+  'import { parseDesktopHostAction } from "@pi-gui/extension-ui/browser";',
+  'export * from "@pi-gui/extension-ui/browser";',
+  'void import("@pi-gui/extension-ui/transport");',
+  'import { type DesktopHostAction } from "@pi-gui/extension-ui/browser";',
+  'import "../../../packages/extension-ui/src/transport.ts";',
+]) {
+  test(`rejects host-only extension-ui runtime import: ${source}`, () => {
+    const result = fixture(source, {
+      "packages/extension-ui/src/transport.ts": "export const createChordServerConnection = 1;",
+    });
+    assert.equal(result.failures.length, 1);
+    assert.match(result.failures[0], /src\/index.ts:1: Forbidden renderer runtime import/);
+  });
+}
+
+test("allows type-only imports from host-only extension-ui entry points", () => {
+  const result = fixture(`
+    import type { DesktopHostAction } from "@pi-gui/extension-ui/browser";
+    export type { ChordServerConnection } from "@pi-gui/extension-ui/transport";
+    type Parsed = import("@pi-gui/extension-ui/browser").DesktopHostAction;
+  `);
+  assert.deepEqual(result.failures, []);
+});

@@ -1,6 +1,7 @@
+import type { SessionRef } from "@pi-gui/session-driver";
+import type { SaveTaskWorkbenchTemplateInput } from "../../contracts/workbench";
 import type { DesktopAppStore } from "../application/app-store";
 import { SerializedActionQueue } from "../windows/action-queue";
-import { expectSaveTaskWorkbenchTemplateInput, expectSessionTarget } from "./request-validation";
 
 export type WorkbenchOwner = Pick<
   DesktopAppStore,
@@ -18,13 +19,12 @@ export class WorkbenchRequests {
     this.renderers.delete(sender);
   }
 
-  get(rawTarget: unknown) {
-    const target = expectSessionTarget(rawTarget);
+  /** Inputs are decoded at the IPC boundary (expectSessionTarget / expectSaveTaskWorkbenchTemplateInput). */
+  get(target: SessionRef) {
     return this.queue.run(() => this.owner.getTaskWorkbenchTemplate(target));
   }
 
-  save(sender: object, rawInput: unknown): Promise<void> {
-    const input = expectSaveTaskWorkbenchTemplateInput(rawInput);
+  save(sender: object, input: SaveTaskWorkbenchTemplateInput): Promise<void> {
     const renderer = this.renderers.get(sender) ?? { sequence: 0 };
     if (input.sequence <= renderer.sequence) return Promise.resolve();
     renderer.sequence = input.sequence;
