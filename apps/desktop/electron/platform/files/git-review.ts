@@ -435,19 +435,21 @@ export async function createGitReview(
         ),
       );
       const included = entries.slice(0, MAX_FILES);
-      const indexBlobs = await listBlobs(
-        checkoutPath,
-        ["ls-files", "--stage", "-z"],
-        included.map((entry) => entry.path),
-        true,
-        maxGitBytes,
-      );
-      const baseBlobs = await tree(
-        checkoutPath,
-        headOid,
-        included.map((entry) => entry.previousPath ?? entry.path),
-        maxGitBytes,
-      );
+      const [indexBlobs, baseBlobs] = await Promise.all([
+        listBlobs(
+          checkoutPath,
+          ["ls-files", "--stage", "-z"],
+          included.map((entry) => entry.path),
+          true,
+          maxGitBytes,
+        ),
+        tree(
+          checkoutPath,
+          headOid,
+          included.map((entry) => entry.previousPath ?? entry.path),
+          maxGitBytes,
+        ),
+      ]);
       const files: GitReviewFile[] = [];
       let remainingBytes = MAX_PREPARATION_BYTES;
       for (const entry of included) {
@@ -596,18 +598,20 @@ export async function createGitReview(
       changes.push({ code, first, path, renamed });
     }
     const included = changes.slice(0, MAX_FILES);
-    const baseBlobs = await tree(
-      checkoutPath,
-      baseOid,
-      included.map((change) => change.first),
-      maxGitBytes,
-    );
-    const headBlobs = await tree(
-      checkoutPath,
-      headOid,
-      included.map((change) => change.path),
-      maxGitBytes,
-    );
+    const [baseBlobs, headBlobs] = await Promise.all([
+      tree(
+        checkoutPath,
+        baseOid,
+        included.map((change) => change.first),
+        maxGitBytes,
+      ),
+      tree(
+        checkoutPath,
+        headOid,
+        included.map((change) => change.path),
+        maxGitBytes,
+      ),
+    ]);
     const files: GitReviewFile[] = [];
     for (const { code, first, path, renamed } of included) {
       const status: ReviewFileStatus =
