@@ -17,6 +17,7 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { SessionRef, TurnCaptureBoundary } from "@pi-gui/session-driver";
 import type { ReviewCoverage, ReviewIssue } from "../../contracts/review";
 import { readJsonWithBackup, writeFileAtomicQueued } from "../persistence/atomic-file-write";
+import { isolatedGitEnvironment } from "../platform/files/git-environment";
 
 export interface CheckpointCaptureLimits {
   readonly timeoutMs: number;
@@ -590,7 +591,12 @@ export class TurnCheckpointStore {
         } else this.records.set(record.checkpointId, record);
       }
       if (interrupted) await this.persist();
-    })();
+    })().catch((error: unknown) => {
+      // A transient read failure must not disable captures until restart.
+      this.records.clear();
+      this.loaded = undefined;
+      throw error;
+    });
     return this.loaded;
   }
 
@@ -742,8 +748,6 @@ function git(
   input?: Buffer,
   extraEnv: Record<string, string> = {},
 ): Promise<Buffer> {
-  const env = { ...process.env };
-  for (const key of Object.keys(env)) if (key.startsWith("GIT_")) delete env[key];
   return new Promise((accept, reject) => {
     const child = execFile(
       "git",
@@ -759,7 +763,7 @@ function git(
       {
         cwd,
         // Keep normal global/system exclude configuration, but never inherited Git repository overrides.
-        env: { ...env, GIT_OPTIONAL_LOCKS: "0", GIT_TERMINAL_PROMPT: "0", ...extraEnv },
+        env: isolatedGitEnvironment(extraEnv),
         encoding: "buffer",
         signal,
         killSignal: "SIGKILL",

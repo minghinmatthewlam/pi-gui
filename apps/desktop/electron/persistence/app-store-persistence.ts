@@ -152,18 +152,24 @@ export async function writePersistedUiState(
   });
 }
 
+/** Layouts are per-task conveniences: one bad layout must not block the rest of saved UI state. */
 function decodeWorkbenchTemplates(value: unknown): Record<string, TaskWorkbenchTemplate> {
   const records = objectRecord(value);
-  if (!records) throw new Error("Invalid ui-state field taskWorkbenchTemplatesBySession");
+  if (!records) {
+    console.warn("[app-store] dropped invalid ui-state taskWorkbenchTemplatesBySession");
+    return {};
+  }
   return Object.fromEntries(
-    Object.entries(records).map(([key, template]) => {
-      if (!key || key.length > 8192) throw new Error("Invalid ui-state workbench task reference");
+    Object.entries(records).flatMap(([key, template]) => {
       try {
-        return [key, decodeTaskWorkbenchTemplate(template)];
+        if (!key || key.length > 8192) throw new Error("Invalid workbench task reference");
+        return [[key, decodeTaskWorkbenchTemplate(template)] as const];
       } catch (error) {
-        throw new Error(`Invalid ui-state field taskWorkbenchTemplatesBySession.${key}`, {
-          cause: error,
-        });
+        console.warn(
+          `[app-store] dropped invalid ui-state workbench layout for ${key.slice(0, 200)}:`,
+          error instanceof Error ? error.message : error,
+        );
+        return [];
       }
     }),
   );
@@ -227,11 +233,12 @@ function validateUiState(value: unknown): Record<string, unknown> {
     return !!r && Object.values(r).every(string);
   };
   optional(root, "version", (v) => toPersistedVersion(v) !== undefined);
-  if (root.taskWorkbenchTemplatesBySession !== undefined) {
-    if (typeof root.version === "number" && root.version < 18)
-      fail("workbench templates before v18");
-    decodeWorkbenchTemplates(root.taskWorkbenchTemplatesBySession);
-  }
+  if (
+    root.taskWorkbenchTemplatesBySession !== undefined &&
+    typeof root.version === "number" &&
+    root.version < 18
+  )
+    fail("workbench templates before v18");
   for (const key of [
     "selectedWorkspaceId",
     "selectedSessionId",

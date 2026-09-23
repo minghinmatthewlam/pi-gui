@@ -312,7 +312,7 @@ function markKey(review: OwnedReview, file: GitReviewFile): string {
         scope.kind === "branch" ? scope.baseRef : scope.kind === "turn" ? scope.checkpointId : null,
         file.path,
         file.previousPath,
-        file.fingerprint,
+        file.contentFingerprint,
       ]),
     )
     .digest("hex");
