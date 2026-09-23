@@ -10,8 +10,16 @@ export default defineConfig({
   // CI runners are routinely 2-3x slower than dev machines; the default 5s
   // expect timeout flakes on UI convergence that is sub-second locally.
   expect: { timeout: process.env.CI ? 15_000 : 5_000 },
-  // Electron user-surface tests are materially more reliable when one app owns the input loop at a time.
-  workers: 1,
+  // Foreground Electron tests need one app to own the OS input loop, and CI sizes its own
+  // shards. Local Linux background runs keep windows hidden, so three apps run side by side.
+  // PI_APP_TEST_WORKERS overrides either default.
+  workers:
+    Number(process.env.PI_APP_TEST_WORKERS) ||
+    (process.platform === "linux" &&
+    process.env.PI_APP_TEST_MODE === "background" &&
+    !process.env.CI
+      ? 3
+      : 1),
   retries: process.env.PI_APP_TEST_MODE === "foreground" ? 1 : 0,
   use: {
     trace: "retain-on-failure",
