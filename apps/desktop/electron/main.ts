@@ -54,6 +54,7 @@ import {
   desktopCommands,
   desktopIpc,
   getDesktopCommandFromShortcut,
+  isPaletteCommand,
   isCloseFocusedSurfaceShortcut,
   platformShortcutModifier,
   type CustomProviderProbeInput,
@@ -470,7 +471,12 @@ function createWindow(): BrowserWindow {
       }) &&
       (terminalFocused || sidePanelFocusedWebContentsIds.has(webContentsId));
     if (terminalFocused) {
-      if (command === desktopCommands.toggleSidePanel) {
+      // Control+K and Control+P belong to the shell, so only macOS Command
+      // chords open a palette from the terminal.
+      if (
+        command === desktopCommands.toggleSidePanel ||
+        (process.platform === "darwin" && isPaletteCommand(command) && !input.isAutoRepeat)
+      ) {
         event.preventDefault();
         window.webContents.send(desktopIpc.appCommand, command);
       } else if (closeFocusedSurface) {
@@ -507,6 +513,10 @@ function createWindow(): BrowserWindow {
 
     if (command) {
       event.preventDefault();
+      // Holding a palette chord would open and close it at the repeat rate.
+      if (isPaletteCommand(command) && input.isAutoRepeat) {
+        return;
+      }
       window.webContents.send(desktopIpc.appCommand, command);
     }
   });
