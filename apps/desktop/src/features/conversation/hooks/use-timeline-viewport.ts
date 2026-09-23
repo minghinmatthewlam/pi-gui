@@ -30,6 +30,15 @@ interface Options {
   readonly paneRef: MutableRefObject<HTMLDivElement | null>;
 }
 
+/**
+ * Rows are placed from estimates and move once measured, on a later frame. The pane's
+ * data-layout says whether that has finished, so tests can wait before clicking inside
+ * the transcript: a press and release that straddle a move never reach the row.
+ */
+function markLayout(pane: HTMLDivElement | null, layout: "settling" | "settled"): void {
+  if (pane && pane.dataset.layout !== layout) pane.dataset.layout = layout;
+}
+
 /** The only writer of timeline scroll position. Size changes never select a new intent. */
 export function useTimelineViewport({
   sessionKey,
@@ -92,6 +101,7 @@ export function useTimelineViewport({
 
   const schedule = useCallback(() => {
     const current = model.current;
+    markLayout(paneRef.current, "settling");
     if (current.frame) return;
     const generation = current.generation;
     current.frame = requestAnimationFrame(() => {
@@ -99,7 +109,7 @@ export function useTimelineViewport({
       if (model.current !== current || current.generation !== generation) return;
       setVersion((value) => value + 1);
     });
-  }, []);
+  }, [paneRef]);
   const attachPane = useCallback(
     (node: HTMLDivElement | null) => {
       if (node && node !== paneRef.current) model.current.pendingNavigation = true;
@@ -178,7 +188,11 @@ export function useTimelineViewport({
 
   useLayoutEffect(() => {
     const current = model.current;
-    if (!active || !transcriptReady || !pane) return;
+    if (!pane) return;
+    if (!active || !transcriptReady) {
+      markLayout(pane, "settling");
+      return;
+    }
     const restoring = current.state.kind === "restoring";
     const before = destination(current.state);
     const previousAnchorTop =
@@ -229,9 +243,11 @@ export function useTimelineViewport({
       if (anchor) current.state = { kind: "reading", anchor };
       if (Math.abs(pane.scrollTop - target) > 0.5) schedule();
     }
-    if (placements.every((row) => current.heights.has(row.item.id))) {
+    const measured = placements.every((row) => current.heights.has(row.item.id));
+    if (measured) {
       current.state = destination(current.state);
     }
+    markLayout(pane, measured && !current.frame ? "settled" : "settling");
     if (current.key) saved.current.set(current.key, destination(current.state));
     const last = rows.at(-1);
     const marker = `${rows.length}:${last?.id ?? ""}:${last?.kind === "message" ? last.text.length : last?.kind === "tool" ? last.status : ""}`;

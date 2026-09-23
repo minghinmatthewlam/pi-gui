@@ -17,10 +17,10 @@ Users change app preferences in Settings and expect them to survive returning to
 
 Preconditions: isolated built app; no provider login needed.
 
-- **Persist preference:** run `.agents/skills/verify-pi-gui/scripts/prove.sh --smoke`. It clicks the exact Settings button, then the checkbox named `Enable skill slash commands`, and asserts the opposite value after a complete restart.
+- **Persist preference:** run `.agents/skills/verify-pi-gui/scripts/prove.sh --smoke`. It clicks the exact Settings button, then the switch named `Enable skill slash commands`, and asserts the opposite value after a complete restart.
 - **Shortcut entry:** run `pnpm --filter @pi-gui/desktop run test:e2e:runner -- apps/desktop/tests/core/composer-controls.spec.ts`; inspect the shortcut case and `settings-surface` visibility. The bundled smoke covers only the sidebar entry.
 - **Behavioral effect:** run `pnpm --filter @pi-gui/desktop run test:e2e:runner -- apps/desktop/tests/core/skills-settings.spec.ts`; disabling the preference hides `slash-menu` for `/skill`, enabling it restores the seeded skill in the menu.
-- **Proof:** inspect before/change/restart screenshots, action traces, restart ARIA snapshot, identity and cleanup JSON. The second process must read the changed checkbox value.
+- **Proof:** inspect before/change/restart screenshots, action traces, restart ARIA snapshot, identity and cleanup JSON. The second process must read the changed switch value.
 
 ## Gotchas
 

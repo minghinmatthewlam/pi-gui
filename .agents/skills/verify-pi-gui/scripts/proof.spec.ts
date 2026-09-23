@@ -65,17 +65,26 @@ test("visible app navigation and settings persistence without test hooks", async
         await page.getByRole("button", { name: "Settings", exact: true }).click();
       }
       if (phase === "change") {
-        for (const section of ["Appearance", "Providers", "Models", "Notifications", "General"]) {
+        for (const section of [
+          "Appearance",
+          "Notifications",
+          "Keyboard shortcuts",
+          "Providers",
+          "Models",
+          "General",
+        ]) {
           await test.step(`Open ${section} through the settings sidebar`, async () => {
             await page.getByRole("button", { name: section, exact: true }).click();
             await expect(page.locator(".view-header__title")).toHaveText(section);
-            await page.screenshot({ path: join(evidence, `surface-${section.toLowerCase()}.png`) });
+            await page.screenshot({
+              path: join(evidence, `surface-${section.toLowerCase().replace(/ /g, "-")}.png`),
+            });
             // Pacing makes the visible run followable; assertions determine readiness.
             await page.waitForTimeout(600);
           });
         }
       }
-      const toggle = page.getByRole("checkbox", { name: "Enable skill slash commands" });
+      const toggle = page.getByRole("switch", { name: "Enable skill slash commands" });
       await expect(toggle).toBeVisible();
       if (phase === "change") {
         original = await toggle.isChecked();
