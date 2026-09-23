@@ -1,7 +1,10 @@
+import { execFile } from "node:child_process";
 import { open, readdir, readFile } from "node:fs/promises";
 import path from "node:path";
+import { promisify } from "node:util";
 import ignore from "ignore";
 import type { WorkspaceFilePreview } from "../../../contracts/ipc";
+import { isolatedGitEnvironment } from "./git-environment";
 import { resolveExistingWorkspacePath } from "./workspace-paths";
 
 const fileCache = new Map<string, { files: string[]; timestamp: number }>();
@@ -10,6 +13,9 @@ const CACHE_MAX_ENTRIES = 20;
 const MAX_PREVIEW_BYTES = 200 * 1024;
 const DEFAULT_MAX_FILES = 20_000;
 const ALWAYS_IGNORED_NAMES = new Set([".git", "node_modules", ".DS_Store"]);
+const GIT_LIST_MAX_BUFFER = 64 * 1024 * 1024;
+const GIT_LIST_TIMEOUT_MS = 15_000;
+const execFileAsync = promisify(execFile);
 
 export interface ListWorkspaceFilesOptions {
   readonly force?: boolean;
@@ -27,7 +33,10 @@ export async function listWorkspaceFiles(
     return cached.files;
   }
 
-  const files = await walkWorkspaceFiles(workspacePath, options.maxFiles ?? DEFAULT_MAX_FILES);
+  const maxFiles = options.maxFiles ?? DEFAULT_MAX_FILES;
+  const files =
+    (await listGitCheckoutFiles(workspacePath, maxFiles)) ??
+    (await walkWorkspaceFiles(workspacePath, maxFiles));
   rememberListedFiles(workspacePath, files);
   return files;
 }
@@ -76,6 +85,71 @@ function rememberListedFiles(workspacePath: string, files: string[]): void {
     }
   }
   fileCache.set(workspacePath, { files, timestamp: Date.now() });
+}
+
+/**
+ * Git's own view of the checkout: tracked files still on disk plus untracked files no ignore
+ * source excludes (nested .gitignore, .git/info/exclude, core.excludesFile). Git does not
+ * descend into nested repositories or linked worktrees, and submodules stay a single gitlink,
+ * which is left out. Returns undefined when the folder is not usable as a Git checkout.
+ */
+async function listGitCheckoutFiles(
+  workspacePath: string,
+  maxFiles: number,
+): Promise<string[] | undefined> {
+  let outputs: string[];
+  try {
+    const [ignoredFolder, ...listings] = await Promise.all([
+      // A folder its enclosing repository ignores (e.g. inside a dotfiles repo) is not part of
+      // that checkout; list it from disk instead.
+      gitText(workspacePath, ["check-ignore", "-q", "."]).then(
+        () => true,
+        () => false,
+      ),
+      ...[
+        ["ls-files", "-z", "--stage"],
+        ["ls-files", "-z", "--deleted"],
+        ["ls-files", "-z", "--others", "--exclude-standard"],
+      ].map((args) => gitText(workspacePath, args)),
+    ]);
+    if (ignoredFolder) return undefined;
+    outputs = listings;
+  } catch {
+    return undefined;
+  }
+  const [staged = "", deleted = "", others = ""] = outputs;
+  const missing = new Set(nulRecords(deleted));
+  const files = new Set<string>();
+  for (const entry of nulRecords(staged)) {
+    // "<mode> <object> <stage>\t<path>"; mode 160000 is a submodule gitlink, not a file.
+    const tab = entry.indexOf("\t");
+    const filePath = entry.slice(tab + 1);
+    if (tab < 0 || entry.startsWith("160000 ") || missing.has(filePath)) continue;
+    files.add(filePath);
+  }
+  // A trailing slash marks a nested repository or worktree, which belongs to another checkout.
+  for (const filePath of nulRecords(others)) {
+    if (!filePath.endsWith("/")) files.add(filePath);
+  }
+  return [...files]
+    .filter((filePath) => !filePath.split("/").some((name) => ALWAYS_IGNORED_NAMES.has(name)))
+    .sort((left, right) => left.localeCompare(right))
+    .slice(0, maxFiles);
+}
+
+async function gitText(cwd: string, args: readonly string[]): Promise<string> {
+  const { stdout } = await execFileAsync("git", args, {
+    cwd,
+    env: isolatedGitEnvironment(),
+    maxBuffer: GIT_LIST_MAX_BUFFER,
+    timeout: GIT_LIST_TIMEOUT_MS,
+    windowsHide: true,
+  });
+  return stdout;
+}
+
+function nulRecords(output: string): string[] {
+  return output.split("\0").filter(Boolean);
 }
 
 async function walkWorkspaceFiles(workspacePath: string, maxFiles: number): Promise<string[]> {

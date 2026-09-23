@@ -4,7 +4,7 @@ Status: **implemented and verified within the documented macOS scope**, Septembe
 
 ## Recommendation
 
-The conversation remains the main surface. Files, Changes, Worktrees, Terminal, and optional extension views share one companion workspace with task-local tabs. The Pi 0.87.0 upgrade and built-in workspace foundation preceded review/capture and extension hosting, retaining the established desktop owners.
+The conversation remains the main surface. Files, Changes, Terminal, and optional extension views share one companion workspace with task-local tabs. The Pi 0.87.0 upgrade and built-in workspace foundation preceded review/capture and extension hosting, retaining the established desktop owners.
 
 The composer keeps both model and reasoning level visible. The side-workspace toggle is icon-only, with an accessible name, tooltip, pressed state, and existing keyboard shortcut. Appearance and density stay in Settings. There is no local/cloud picker when only local operation exists.
 
@@ -25,9 +25,9 @@ Baseline: `f06a5501dbcf1f39e105f0375ae7646bd9841c8f`. Current source: [shell](..
 
 ## Implemented workspace foundation
 
-The live layout now follows one [workbench controller](../apps/desktop/src/features/workbench/use-workbench.ts) and [reducer](../apps/desktop/src/features/workbench/workbench-state.ts). Files, Changes, Worktrees and Terminal share the outer tab strip and chooser. A single icon toggles visibility. Files keeps its document tabs; Terminal keeps its shell tabs and process owner. The old picker, bottom terminal drawer and independent visibility flags are removed.
+The live layout now follows one [workbench controller](../apps/desktop/src/features/workbench/use-workbench.ts) and [reducer](../apps/desktop/src/features/workbench/workbench-state.ts). Files, Changes and Terminal share the outer tab strip and chooser. A Worktrees tool was removed (2026-09-23); new threads choose Local or Worktree in the composer, and saved layouts that listed it drop that tab. A single icon toggles visibility. Files keeps its document tabs; Terminal keeps its shell tabs and process owner. The old picker, bottom terminal drawer and independent visibility flags are removed.
 
-Each task retains its ordered tools, selected tool, visibility, file references and selected Changes checkout/path. Settings does not clear that layout. File refresh no longer deletes saved document tabs; a missing file remains an explicit read error. Last-shell close callbacks are invalidated when their view unmounts, so they cannot close another task's tool tab. Worktrees uses the existing checkout/task navigation and creation operations.
+Each task retains its ordered tools, selected tool, visibility, file references and selected Changes checkout/path. Settings does not clear that layout. File refresh no longer deletes saved document tabs; a missing file remains an explicit read error. Last-shell close callbacks are invalidated when their view unmounts, so they cannot close another task's tool tab.
 
 The [browser-safe contract](../apps/desktop/contracts/workbench.ts) is also the strict persistence/IPC decoder. Main stores the last explicit layout template per task, outside broadcast snapshots. Windows restore once and keep independent live state. Early interactions are rebased onto the saved template after loading; failed restores offer Retry and do not overwrite unknown saved layout. Main serializes saves, rejects stale per-renderer sequence numbers and resets that sequence on renderer navigation. Schema v19 adds `changes.scope`; v18 layouts without it restore Uncommitted. Migration preserves a separate, immutable copy of the original validated pre-migration bytes, including a v18 source file.
 
@@ -70,7 +70,7 @@ Arrows describe requests/data flow. The renderer never imports the host or Pi im
 | App shell              | Startup/recovery, sidebar, app routes, composition                                 | Slim down `src/app/App.tsx`; keep Settings/Extensions/Skills/schedules reachable.                                                                                                |
 | Conversation screen    | Selected task's transcript/composer composition                                    | Currently composed in `src/app/App.tsx` using the existing draft, viewport, attachment and command controllers; a separate screen module is not required for the tab foundation. |
 | Workbench              | Current window's per-task tool order, active tool, visibility and view preferences | New `src/features/workbench/workbench.tsx`, `workbench-state.ts`, `use-workbench.ts`; replace the old picker and parallel visibility paths.                                      |
-| Tool content           | Files and inner document tabs, review, terminal shells, worktree navigation        | Reuse/adapt existing feature components. A small explicit built-in resolver is enough.                                                                                           |
+| Tool content           | Files and inner document tabs, review, terminal shells                             | Reuse/adapt existing feature components. A small explicit built-in resolver is enough.                                                                                           |
 | Durable layout storage | Validated last-saved layout template per task                                      | Extend `electron/persistence/app-store-persistence.ts`, narrow application-store operations, and IPC. No new renderer localStorage path.                                         |
 | Review owner           | Comparison identities, pinned revisions and revision-scoped reviewed marks         | `electron/workbench/review-owner.ts`, `reviewed-store.ts`, and `electron/platform/files/git-review.ts`.                                                                          |
 | Checkpoint store       | App-owned Git snapshots, interval metadata and transcript lookup                   | `electron/workbench/checkpoint-store.ts`; receives portable capture boundaries, never drives Pi or task selection.                                                               |
@@ -89,7 +89,6 @@ Use the existing `SessionRef` (`workspaceId`, `sessionId`) as task identity. A v
 type ToolRef =
   | { kind: "files" }
   | { kind: "changes" }
-  | { kind: "worktrees" }
   | { kind: "terminal" }
   | { kind: "extension"; extensionId: string; viewId: string };
 

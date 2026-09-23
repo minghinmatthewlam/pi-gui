@@ -10,15 +10,9 @@ import {
 import { SkillsView } from "../features/extensions/skills-view";
 import { ExtensionsView } from "../features/extensions/extensions-view";
 import { SettingsView, type SettingsSection } from "../features/settings/settings-view";
+import { SETTINGS_SECTIONS } from "../features/settings/settings-sections";
+import { SettingsSelect } from "../features/settings/settings-controls";
 import { SecondarySurface } from "./secondary-surface";
-
-const settingsNav = [
-  { id: "appearance", label: "Appearance" },
-  { id: "general", label: "General" },
-  { id: "providers", label: "Providers" },
-  { id: "models", label: "Models" },
-  { id: "notifications", label: "Notifications" },
-] as const;
 
 interface SecondarySurfacesProps {
   readonly api: NonNullable<typeof window.piApp>;
@@ -424,33 +418,34 @@ export function SecondarySurfaces({
   return (
     <SecondarySurface
       activeNavId={settingsSection}
-      navItems={settingsNav}
+      navItems={SETTINGS_SECTIONS}
       onBack={onBack}
-      onSelectNav={(section) => onSelectSettingsSection(section as SettingsSection)}
+      onSelectNav={(id) => {
+        const section = SETTINGS_SECTIONS.find((definition) => definition.id === id);
+        if (section) onSelectSettingsSection(section.id);
+      }}
       testId="settings-surface"
       title="Settings"
     >
-      {settingsSection === "providers" ||
-      (settingsSection === "models" && snapshot.modelSettingsScopeMode === "per-repo") ? (
-        <div className="surface-toolbar">
-          <label className="surface-toolbar__field">
-            <span>Workspace</span>
-            <select
-              value={settingsWorkspace?.id ?? ""}
-              onChange={(event) => onSelectSettingsWorkspace(event.target.value)}
-            >
-              {rootWorkspaceOptions.map((workspace) => (
-                <option key={workspace.id} value={workspace.id}>
-                  {workspace.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-      ) : null}
       <SettingsView
         workspace={settingsWorkspace}
         runtime={settingsSection === "models" ? settingsModelRuntime : settingsRuntime}
+        platform={api.platform}
+        headerAccessory={
+          rootWorkspaceOptions.length > 0 &&
+          (settingsSection === "providers" ||
+            (settingsSection === "models" && snapshot.modelSettingsScopeMode === "per-repo")) ? (
+            <SettingsSelect
+              label="Workspace"
+              options={rootWorkspaceOptions.map((workspace) => ({
+                value: workspace.id,
+                label: workspace.name,
+              }))}
+              value={settingsWorkspace?.id}
+              onChange={onSelectSettingsWorkspace}
+            />
+          ) : undefined
+        }
         section={settingsSection}
         notificationPreferences={snapshot.notificationPreferences}
         notificationPermissionStatus={notificationPermissionStatus}

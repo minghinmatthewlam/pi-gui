@@ -5,7 +5,9 @@ export const MAX_WORKBENCH_FILE_TABS = 100;
 export const MAX_WORKBENCH_TOOLS = 32;
 
 /** Every built-in tool; its presentation table must cover each kind. */
-export const BUILTIN_TOOL_KINDS = ["files", "changes", "worktrees", "terminal"] as const;
+export const BUILTIN_TOOL_KINDS = ["files", "changes", "terminal"] as const;
+/** Removed tools; a saved layout that lists one loses that tab, not the whole layout. */
+const RETIRED_TOOL_KINDS: readonly unknown[] = ["worktrees"];
 export type BuiltinToolKind = (typeof BUILTIN_TOOL_KINDS)[number];
 
 export function isBuiltinToolKind(value: unknown): value is BuiltinToolKind {
@@ -59,18 +61,25 @@ export function decodeTaskWorkbenchTemplate(value: unknown): TaskWorkbenchTempla
   const root = record(value, ["visibility", "tools", "selection", "files", "changes"]);
   if (root.visibility !== "visible" && root.visibility !== "hidden") fail("visibility");
   if (!Array.isArray(root.tools) || root.tools.length > MAX_WORKBENCH_TOOLS) fail("tools");
-  const tools: ToolRef[] = root.tools.map((value: unknown) => {
+  const retired = new Set<string>();
+  const tools: ToolRef[] = root.tools.flatMap((value: unknown): ToolRef[] => {
     const tool = record(value, ["kind", "extensionId", "viewId"]);
     if (tool.kind === "extension") {
-      return {
-        kind: "extension",
-        extensionId: text(tool.extensionId, 256),
-        viewId: text(tool.viewId, 256),
-      };
+      return [
+        {
+          kind: "extension",
+          extensionId: text(tool.extensionId, 256),
+          viewId: text(tool.viewId, 256),
+        },
+      ];
+    }
+    if (tool.extensionId !== undefined || tool.viewId !== undefined) fail("builtin tool fields");
+    if (RETIRED_TOOL_KINDS.includes(tool.kind)) {
+      retired.add(tool.kind as string);
+      return [];
     }
     if (!isBuiltinToolKind(tool.kind)) fail("tool kind");
-    if (tool.extensionId !== undefined || tool.viewId !== undefined) fail("builtin tool fields");
-    return { kind: tool.kind };
+    return [{ kind: tool.kind }];
   });
   const identities = new Set(tools.map(toolRefId));
   if (identities.size !== tools.length) fail("duplicate tool");
@@ -84,6 +93,12 @@ export function decodeTaskWorkbenchTemplate(value: unknown): TaskWorkbenchTempla
     identities.has(selected.toolId)
   ) {
     selection = { kind: "tool", toolId: selected.toolId };
+  } else if (
+    selected.kind === "tool" &&
+    typeof selected.toolId === "string" &&
+    retired.has(selected.toolId)
+  ) {
+    selection = tools[0] ? { kind: "tool", toolId: toolRefId(tools[0]) } : { kind: "chooser" };
   } else {
     fail("selection");
   }

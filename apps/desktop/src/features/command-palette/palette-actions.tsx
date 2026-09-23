@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import type { BuiltinToolKind } from "../../../contracts/workbench";
 import { BUILTIN_TOOL_ENTRIES } from "../workbench/builtin-tools";
 import type { SettingsSection } from "../settings/settings-view";
-import { sectionTitle } from "../settings/settings-utils";
+import { sectionTitle } from "../settings/settings-sections";
 import {
   ArchiveIcon,
   ClockIcon,
@@ -40,9 +40,10 @@ export interface PaletteAction {
 /** "Settings" itself opens General. */
 const SETTINGS_SECTIONS: readonly SettingsSection[] = [
   "appearance",
+  "notifications",
+  "shortcuts",
   "providers",
   "models",
-  "notifications",
 ];
 
 export function formatShortcut(

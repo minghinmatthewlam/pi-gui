@@ -1,4 +1,5 @@
 import type { ThemeMode, ThemePresetId } from "../../../contracts/desktop-state";
+import { SettingsSelect, SettingsSwitch } from "./settings-controls";
 import { SettingsGroup, SettingsRow } from "./settings-utils";
 import { themePresets } from "./theme-presets";
 
@@ -11,10 +12,10 @@ interface SettingsAppearanceSectionProps {
   readonly onSetEnableTransparency: (enabled: boolean) => void;
 }
 
-const THEME_OPTIONS: { mode: ThemeMode; label: string; description: string }[] = [
-  { mode: "system", label: "System", description: "Follow your OS appearance setting" },
-  { mode: "light", label: "Light", description: "Always use the light theme" },
-  { mode: "dark", label: "Dark", description: "Always use the dark theme" },
+const THEME_MODES: readonly { readonly mode: ThemeMode; readonly label: string }[] = [
+  { mode: "system", label: "System" },
+  { mode: "light", label: "Light" },
+  { mode: "dark", label: "Dark" },
 ];
 
 export function SettingsAppearanceSection({
@@ -25,62 +26,61 @@ export function SettingsAppearanceSection({
   enableTransparency,
   onSetEnableTransparency,
 }: SettingsAppearanceSectionProps) {
+  const activePreset = themePresets.find((preset) => preset.id === themePresetId);
   return (
     <>
-      <SettingsGroup title="Theme preset">
-        <div className="theme-preset-grid">
-          {themePresets.map((preset) => (
-            <label
-              className={`theme-preset-card${themePresetId === preset.id ? " theme-preset-card--active" : ""}`}
-              key={preset.id}
-            >
+      <SettingsGroup title="Theme" plain>
+        <div aria-label="Theme" className="theme-mode-tiles" role="radiogroup">
+          {THEME_MODES.map((option) => (
+            <label className="theme-mode-tile" key={option.mode}>
               <input
-                checked={themePresetId === preset.id}
-                name="theme-preset"
+                checked={themeMode === option.mode}
+                name="theme-mode"
                 type="radio"
-                onChange={() => onSetThemePresetId(preset.id)}
+                onChange={() => onSetThemeMode(option.mode)}
               />
-              <span className="theme-preset-card__preview" aria-hidden="true">
-                {preset.swatches.map((swatch) => (
-                  <span
-                    className="theme-preset-card__swatch"
-                    key={swatch}
-                    style={{ background: swatch }}
-                  />
-                ))}
+              <span
+                aria-hidden="true"
+                className={`theme-mode-tile__preview theme-mode-tile__preview--${option.mode}`}
+              >
+                <span className="theme-mode-tile__window">
+                  <span className="theme-mode-tile__line theme-mode-tile__line--title" />
+                  <span className="theme-mode-tile__line" />
+                  <span className="theme-mode-tile__line" />
+                </span>
               </span>
-              <span className="theme-preset-card__body">
-                <span className="theme-preset-card__title">{preset.name}</span>
-                <span className="theme-preset-card__description">{preset.description}</span>
-              </span>
+              <span className="theme-mode-tile__label">{option.label}</span>
             </label>
           ))}
         </div>
       </SettingsGroup>
 
-      <SettingsGroup title="Theme">
-        {THEME_OPTIONS.map((option) => (
-          <SettingsRow key={option.mode} title={option.label} description={option.description}>
-            <input
-              checked={themeMode === option.mode}
-              name="theme"
-              type="radio"
-              onChange={() => onSetThemeMode(option.mode)}
+      <SettingsGroup>
+        <SettingsRow title="Color preset" description={activePreset?.description}>
+          <span className="settings-preset-control">
+            {activePreset ? (
+              <span aria-hidden="true" className="settings-preset-swatches">
+                {activePreset.swatches.map((swatch) => (
+                  <span key={swatch} style={{ background: swatch }} />
+                ))}
+              </span>
+            ) : null}
+            <SettingsSelect
+              label="Color preset"
+              options={themePresets.map((preset) => ({ value: preset.id, label: preset.name }))}
+              value={themePresetId}
+              onChange={onSetThemePresetId}
             />
-          </SettingsRow>
-        ))}
-      </SettingsGroup>
-
-      <SettingsGroup title="Visuals">
+          </span>
+        </SettingsRow>
         <SettingsRow
           title="Window transparency"
           description="Let desktop colors show through supported surfaces."
         >
-          <input
-            aria-label="Window transparency"
-            type="checkbox"
+          <SettingsSwitch
             checked={enableTransparency}
-            onChange={(event) => onSetEnableTransparency(event.currentTarget.checked)}
+            label="Window transparency"
+            onChange={onSetEnableTransparency}
           />
         </SettingsRow>
       </SettingsGroup>
