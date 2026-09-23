@@ -645,6 +645,7 @@ export default function App() {
     composerDraft,
     setComposerDraft,
     composerDraftRef,
+    flushComposerDraft,
     composerRef,
     requiresModelSelection: selectedSessionModelOnboarding.requiresModelSelection,
     openTreeModal,
