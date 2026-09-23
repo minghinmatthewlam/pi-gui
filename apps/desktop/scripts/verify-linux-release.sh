@@ -66,7 +66,57 @@ done
 
 temporary_root="$(mktemp -d)"
 package_installed=false
+smoke_session=""
+
+# Prints the smoke session's live processes, plus any installed-app process that left it.
+smoke_processes() {
+  ps -e -o pid=,sid=,stat=,args= | awk -v session="$smoke_session" '
+    $3 !~ /^Z/ && ($2 == session || $4 ~ /^\/(opt\/pi-gui\/|usr\/bin\/pi-gui$)/) { print $1 }
+  '
+}
+
+wait_for_smoke_exit() {
+  local deadline=$((SECONDS + $1))
+  local repeat_signal="${2:-}"
+  local pids
+  while pids="$(smoke_processes)" && [[ -n "$pids" ]]; do
+    if ((SECONDS >= deadline)); then
+      return 1
+    fi
+    if [[ -n "$repeat_signal" ]]; then
+      # A dying process may still start another before SIGKILL lands.
+      # shellcheck disable=SC2086 # One PID per word.
+      kill -s "$repeat_signal" $pids 2>/dev/null || true
+    fi
+    sleep 0.2
+  done
+}
+
+show_smoke_processes() {
+  local pids
+  pids="$(smoke_processes | paste -sd, -)"
+  if [[ -n "$pids" ]]; then
+    ps -o pid=,sid=,stat=,args= -p "$pids" || true
+  fi
+}
+
+stop_smoke_processes() {
+  if [[ -z "$smoke_session" ]]; then
+    return 0
+  fi
+  show_smoke_processes
+  # timeout already sent SIGTERM to the session; a second one would skip the app's
+  # bounded quit flush, so wait for that quit before forcing anything left.
+  if wait_for_smoke_exit 10 || wait_for_smoke_exit 10 KILL; then
+    return 0
+  fi
+  echo "pi-gui smoke processes survived SIGKILL:" >&2
+  show_smoke_processes >&2
+  return 1
+}
+
 cleanup() {
+  stop_smoke_processes || true
   if $package_installed; then
     sudo env DEBIAN_FRONTEND=noninteractive apt-get purge -y pi-gui \
       >"$proof_dir/emergency-remove.log" 2>&1 || true
@@ -297,15 +347,22 @@ verify_install_upgrade_launch_remove() {
 
   local smoke_home="$temporary_root/smoke-home"
   mkdir -p "$smoke_home/.config" "$smoke_home/.cache"
+  # timeout returns once xvfb-run exits, while pi-gui can still be quitting. Run the
+  # smoke in its own session so everything it started can be stopped before purge.
   set +e
+  # shellcheck disable=SC2016 # The session leader records its own PID.
   HOME="$smoke_home" \
     XDG_CONFIG_HOME="$smoke_home/.config" \
     XDG_CACHE_HOME="$smoke_home/.cache" \
+    setsid --wait bash -c 'printf "%s\n" "$$" >"$1" && shift && exec "$@"' bash \
+    "$temporary_root/smoke-session" \
     timeout --signal=TERM --kill-after=5s 15s \
     xvfb-run -a /usr/bin/pi-gui --disable-gpu \
     >"$proof_dir/app-launch.log" 2>&1
   local launch_status=$?
   set -e
+  smoke_session="$(<"$temporary_root/smoke-session")"
+  stop_smoke_processes | tee "$proof_dir/app-shutdown.txt"
   if [[ "$launch_status" -ne 124 ]]; then
     cat "$proof_dir/app-launch.log" >&2
     echo "Installed pi-gui did not remain running under Xvfb (status $launch_status)." >&2
@@ -328,6 +385,7 @@ verify_install_upgrade_launch_remove() {
     /etc/apparmor.d/pi-gui; do
     if [[ -e "$removed_path" || -L "$removed_path" ]]; then
       echo "Debian package removal left behind: $removed_path" >&2
+      sudo find "$removed_path" -maxdepth 3 -ls >&2 || true
       exit 1
     fi
   done
