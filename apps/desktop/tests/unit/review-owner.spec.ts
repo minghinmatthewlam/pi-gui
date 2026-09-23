@@ -276,3 +276,15 @@ test("review metadata serializes concurrent acknowledgements and preserves inval
   await invalid.set(first, true);
   expect(await new ReviewedStore(invalidDir).snapshot()).toEqual(new Set([first, second]));
 });
+
+test("reviewed marks are bounded and forget the oldest acknowledgements first", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "pi-gui-reviewed-bounded-"));
+  const store = new ReviewedStore(dir, { maxMarks: 3 });
+  const marks = ["a", "b", "c", "d"].map((letter) => letter.repeat(64));
+  for (const mark of marks) await store.set(mark, true);
+  expect(await new ReviewedStore(dir).snapshot()).toEqual(new Set(marks.slice(1)));
+  // Re-marking an existing acknowledgement does not rewrite or reorder the file.
+  const before = await readFile(join(dir, "reviewed-files.json"), "utf8");
+  await store.set(marks[1]!, true);
+  expect(await readFile(join(dir, "reviewed-files.json"), "utf8")).toBe(before);
+});

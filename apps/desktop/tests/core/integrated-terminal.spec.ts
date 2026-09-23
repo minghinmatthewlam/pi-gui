@@ -1,4 +1,5 @@
-import { basename } from "node:path";
+import { readFile } from "node:fs/promises";
+import { basename, join } from "node:path";
 import { expect, test } from "@playwright/test";
 import {
   createNamedThread,
@@ -12,6 +13,10 @@ import {
   TINY_PNG_BASE64,
   waitForWorkspaceByPath,
 } from "../helpers/electron-app";
+
+// Linux terminals keep Ctrl+V for the shell and paste with Ctrl+Shift+V.
+const TERMINAL_PASTE_SHORTCUT =
+  process.platform === "linux" ? "Control+Shift+V" : desktopShortcut("V");
 
 test("opens task terminals with persistent output and independent shell tabs", async () => {
   test.setTimeout(90_000);
@@ -77,7 +82,7 @@ test("opens task terminals with persistent output and independent shell tabs", a
     await harness.electronApp.evaluate(({ clipboard, nativeImage }, pngBase64) => {
       clipboard.writeImage(nativeImage.createFromDataURL(`data:image/png;base64,${pngBase64}`));
     }, TINY_PNG_BASE64);
-    await window.keyboard.press(desktopShortcut("V"));
+    await window.keyboard.press(TERMINAL_PASTE_SHORTCUT);
     await expect
       .poll(async () => (await getDesktopState(window)).composerAttachments.length)
       .toBe(0);
@@ -151,12 +156,13 @@ test("pastes clipboard text into the integrated terminal once", async () => {
     await harness.electronApp.evaluate(({ clipboard }) => {
       clipboard.writeText("PI_TERMINAL_PASTE_ONCE");
     });
-    await window.keyboard.press(desktopShortcut("V"));
+    await window.keyboard.press(TERMINAL_PASTE_SHORTCUT);
 
+    // Join rows so a paste that soft-wraps after a long prompt still counts once.
     await expect
       .poll(async () =>
         countOccurrences(
-          (await terminal.locator(".xterm-rows").innerText()) ?? "",
+          ((await terminal.locator(".xterm-rows").innerText()) ?? "").replace(/\n/g, ""),
           "PI_TERMINAL_PASTE_ONCE",
         ),
       )
@@ -167,7 +173,7 @@ test("pastes clipboard text into the integrated terminal once", async () => {
 });
 
 test("writes an oversized terminal paste in chunks instead of dropping it", async () => {
-  test.setTimeout(90_000);
+  test.setTimeout(180_000);
   const userDataDir = await makeUserDataDir();
   const workspacePath = await makeWorkspace("terminal-paste-large");
   const harness = await launchDesktop(userDataDir, {
@@ -214,19 +220,18 @@ test("writes an oversized terminal paste in chunks instead of dropping it", asyn
     await harness.electronApp.evaluate(({ clipboard }, text) => {
       clipboard.writeText(text);
     }, payload);
-    await window.keyboard.press(desktopShortcut("V"));
-    await expect(terminal.locator(".xterm-rows")).toContainText("ENDMARKER", { timeout: 30_000 });
+    await window.keyboard.press(TERMINAL_PASTE_SHORTCUT);
+    // Check the receiver's file, not the terminal: drawing 192 KB of echo lags far behind
+    // the PTY when several test apps share the machine.
+    const payloadPath = join(workspacePath, "payload.txt");
+    await expect
+      .poll(() => readFile(payloadPath, "utf8").catch(() => ""), { timeout: 60_000 })
+      .toContain("ENDMARKER");
 
     await window.keyboard.press("Control+D");
-    await expect(terminal.locator(".xterm-rows")).toContainText(receiverDone, { timeout: 15_000 });
-    await window.keyboard.type("wc -l payload.txt");
-    await window.keyboard.press("Enter");
-    await expect(terminal.locator(".xterm-rows")).toContainText(`${lineCount + 1} payload.txt`, {
-      timeout: 15_000,
-    });
-    await window.keyboard.type("tail -n 1 payload.txt");
-    await window.keyboard.press("Enter");
-    await expect(terminal.locator(".xterm-rows")).toContainText("ENDMARKER", { timeout: 15_000 });
+    // The done line prints only after xterm has drawn the echo ahead of it.
+    await expect(terminal.locator(".xterm-rows")).toContainText(receiverDone, { timeout: 60_000 });
+    expect(await readFile(payloadPath, "utf8")).toBe(payload);
   } finally {
     await harness.close();
   }

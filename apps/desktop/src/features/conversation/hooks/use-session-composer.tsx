@@ -31,6 +31,8 @@ interface UseSessionComposerParams {
   readonly composerDraft: string;
   readonly setComposerDraft: Dispatch<SetStateAction<string>>;
   readonly composerDraftRef: MutableRefObject<string>;
+  /** Sends a debounced draft write now, so it cannot land after a host action that replaces the draft. */
+  readonly flushComposerDraft: () => void;
   readonly composerRef: MutableRefObject<HTMLTextAreaElement | null>;
   readonly requiresModelSelection: boolean;
   readonly openTreeModal: () => void;
@@ -50,6 +52,7 @@ export function useSessionComposer(params: UseSessionComposerParams) {
     composerDraft,
     setComposerDraft,
     composerDraftRef,
+    flushComposerDraft,
     composerRef,
     requiresModelSelection,
     openTreeModal,
@@ -159,6 +162,7 @@ export function useSessionComposer(params: UseSessionComposerParams) {
     if (!api) {
       return;
     }
+    flushComposerDraft();
     void updateSnapshot(setSnapshot, () => api.editQueuedComposerMessage(messageId, composerDraft))
       .then(() => {
         composerRef.current?.focus();
@@ -172,6 +176,7 @@ export function useSessionComposer(params: UseSessionComposerParams) {
     if (!api) {
       return;
     }
+    flushComposerDraft();
     void updateSnapshot(setSnapshot, () => api.cancelQueuedComposerEdit())
       .then(() => {
         composerRef.current?.focus();
@@ -185,6 +190,7 @@ export function useSessionComposer(params: UseSessionComposerParams) {
     if (!api) {
       return;
     }
+    flushComposerDraft();
     void updateSnapshot(setSnapshot, () => api.removeQueuedComposerMessage(messageId)).catch(
       (error: unknown) => {
         console.error("[renderer] removeQueuedComposerMessage failed", error);

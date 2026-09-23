@@ -133,7 +133,9 @@ function normalizeLaunchOptions(
 function electronCliArgs(entry?: string): string[] {
   const args = entry ? [entry] : [];
   if (process.platform === "linux") {
-    args.push("--disable-gpu", "--no-sandbox");
+    // A never-shown X11 window draws ~1.5 frames/s, which starves rAF-driven layout
+    // and native wheel scrolling in background test mode.
+    args.push("--disable-gpu", "--no-sandbox", "--disable-frame-rate-limit");
   }
   return args;
 }

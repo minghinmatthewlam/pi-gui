@@ -595,3 +595,25 @@ export function DiffIcon() {
     </Icon>
   );
 }
+
+export function ChatIcon() {
+  return (
+    <Icon>
+      <path
+        d="M4.2 5.6a1.9 1.9 0 0 1 1.9-1.9h7.8a1.9 1.9 0 0 1 1.9 1.9v5.2a1.9 1.9 0 0 1-1.9 1.9H9.1l-3.2 2.7v-2.7h.2a1.9 1.9 0 0 1-1.9-1.9V5.6Z"
+        stroke="currentColor"
+        strokeLinejoin="round"
+        strokeWidth="1.4"
+      />
+    </Icon>
+  );
+}
+
+export function SearchIcon() {
+  return (
+    <Icon>
+      <circle cx="8.75" cy="8.75" r="4.9" stroke="currentColor" strokeWidth="1.6" />
+      <path d="m12.4 12.4 3.6 3.6" stroke="currentColor" strokeLinecap="round" strokeWidth="1.6" />
+    </Icon>
+  );
+}

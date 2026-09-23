@@ -54,6 +54,7 @@ import {
   desktopCommands,
   desktopIpc,
   getDesktopCommandFromShortcut,
+  isPaletteCommand,
   isCloseFocusedSurfaceShortcut,
   platformShortcutModifier,
   type CustomProviderProbeInput,
@@ -86,6 +87,7 @@ const isDev = Boolean(process.env.ELECTRON_RENDERER_URL);
 const appTestMode = resolveAppTestMode(process.env.PI_APP_TEST_MODE);
 const windowTestMode = appTestMode ?? "foreground";
 const devReloadMarkersEnabled = process.env.PI_APP_DEV_RELOAD_MARKERS === "1";
+const TURN_CAPTURE_BACKSTOP_MS = 10_000;
 let store: DesktopAppStore;
 let extensionViewOwner: DesktopExtensionViewOwner | undefined;
 let windowOwner: WindowOwner;
@@ -384,6 +386,7 @@ function createWindow(): BrowserWindow {
     transparent: enableTransparency,
     vibrancy: process.platform === "darwin" && enableTransparency ? "under-window" : undefined,
     titleBarStyle: "hiddenInset",
+    autoHideMenuBar: process.platform !== "darwin",
     backgroundColor: enableTransparency ? "#00000000" : "#f3f4f8",
     trafficLightPosition: { x: 18, y: 18 },
     show: false,
@@ -469,7 +472,12 @@ function createWindow(): BrowserWindow {
       }) &&
       (terminalFocused || sidePanelFocusedWebContentsIds.has(webContentsId));
     if (terminalFocused) {
-      if (command === desktopCommands.toggleSidePanel) {
+      // Control+K and Control+P belong to the shell, so only macOS Command
+      // chords open a palette from the terminal.
+      if (
+        command === desktopCommands.toggleSidePanel ||
+        (process.platform === "darwin" && isPaletteCommand(command) && !input.isAutoRepeat)
+      ) {
         event.preventDefault();
         window.webContents.send(desktopIpc.appCommand, command);
       } else if (closeFocusedSurface) {
@@ -506,6 +514,10 @@ function createWindow(): BrowserWindow {
 
     if (command) {
       event.preventDefault();
+      // Holding a palette chord would open and close it at the repeat rate.
+      if (isPaletteCommand(command) && input.isAutoRepeat) {
+        return;
+      }
       window.webContents.send(desktopIpc.appCommand, command);
     }
   });
@@ -833,6 +845,9 @@ app
       ConstructorParameters<typeof DesktopAppStore>[0]["driverOptions"]
     > = {
       onTurnCaptureBoundary: (boundary, signal) => checkpoints.recordBoundary(boundary, signal),
+      // The store bounds each capture from when it starts; this only stops a stuck boundary,
+      // including one waiting behind another run's capture in the same checkout.
+      turnCaptureTimeoutMs: TURN_CAPTURE_BACKSTOP_MS,
       desktopExtensions: {
         onChanged: (runtime) => extensionViews.replaceRuntime(runtime),
         onInvalidated: ({ target, generation }) =>
@@ -1315,6 +1330,7 @@ async function promptForText(
     minimizable: false,
     maximizable: false,
     fullscreenable: false,
+    autoHideMenuBar: process.platform !== "darwin",
     title: "pi-gui",
     webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false },
   });
