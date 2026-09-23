@@ -1503,30 +1503,6 @@
   scrollbar-gutter: stable;
 }
 
-.surface-toolbar {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: var(--space-4);
-}
-
-.surface-toolbar__field {
-  display: grid;
-  gap: var(--space-1-5);
-  color: var(--muted-soft);
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-}
-
-.surface-toolbar__field select {
-  min-width: 240px;
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border-default);
-  background: var(--surface);
-  color: var(--text-strong);
-  font: inherit;
-}
-
 .slash-menu {
   display: grid;
   gap: 4px;

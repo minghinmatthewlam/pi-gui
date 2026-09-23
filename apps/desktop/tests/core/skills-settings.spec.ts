@@ -110,15 +110,24 @@ test("skills and extensions live inside settings as one tabbed page", async () =
     await rowSwitch.click();
     await expect(rowSwitch).not.toBeChecked();
 
-    await list.getByRole("button", { name: /Demo Skill/ }).click();
+    const row = list.getByRole("button", { name: /Demo Skill/ });
+    await row.click();
     await expect(window.locator(".skill-detail")).toContainText("/skill:demo-skill");
+    await expect(window.getByRole("button", { name: "All skills" })).toBeFocused();
     await expect(window.getByRole("switch", { name: "Enabled", exact: true })).not.toBeChecked();
     await window.keyboard.press("Escape");
     await expect(list).toBeVisible();
     await expect(surface).toBeVisible();
+    await expect(row).toBeFocused();
 
-    await surface.getByRole("tab", { name: /Extensions/ }).click();
-    await expect(window.getByTestId("extensions-surface")).toBeVisible();
+    const search = surface.getByLabel("Search skills");
+    await search.fill("demo");
+    await surface.getByRole("tab", { name: /Skills/ }).focus();
+    await window.keyboard.press("ArrowRight");
+    const extensionsSurface = window.getByTestId("extensions-surface");
+    await expect(extensionsSurface).toBeVisible();
+    await expect(extensionsSurface.getByRole("tab", { name: /Extensions/ })).toBeFocused();
+    await expect(extensionsSurface.getByLabel("Search extensions")).toHaveValue("");
 
     await window.getByRole("button", { name: "General", exact: true }).click();
     await expect(window.getByTestId("settings-surface")).toBeVisible();

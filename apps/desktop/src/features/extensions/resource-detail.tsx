@@ -24,6 +24,11 @@ export function ResourceDetail({
   readonly onBack: () => void;
   readonly children: ReactNode;
 }) {
+  const backButtonRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    // The row that opened this page is gone, so keyboard focus starts here instead of the body.
+    backButtonRef.current?.focus();
+  }, []);
   const backRef = useRef(onBack);
   backRef.current = onBack;
   useEffect(() => {
@@ -40,7 +45,7 @@ export function ResourceDetail({
 
   return (
     <div className="skill-detail resource-detail">
-      <button className="resource-detail__back" type="button" onClick={onBack}>
+      <button className="resource-detail__back" ref={backButtonRef} type="button" onClick={onBack}>
         <span aria-hidden="true">←</span>
         <span>{backLabel}</span>
       </button>

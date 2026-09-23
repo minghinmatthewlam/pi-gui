@@ -70,7 +70,12 @@ function ResourceGroup({
       <div className="settings-group">
         {visible.map((item) => (
           <div className="resource-row" key={item.id}>
-            <button className="resource-row__main" type="button" onClick={() => onOpen(item.id)}>
+            <button
+              className="resource-row__main"
+              data-resource-id={item.id}
+              type="button"
+              onClick={() => onOpen(item.id)}
+            >
               <span className="resource-row__icon" aria-hidden="true">
                 {icon}
               </span>

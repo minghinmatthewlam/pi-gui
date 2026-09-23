@@ -73,13 +73,13 @@ export function ExtensionsTab({
           >
             <span className="settings-row__value">{extensionGroupLabel(selected)}</span>
           </SettingsRow>
-          {manageable ? (
+          {extensionGroupLabel(selected) === "Built-in" ? null : (
             <SettingsRow title="Location">
               <code className="resource-detail__code" title={selected.path}>
                 {displayPath(selected.path, workspace.path)}
               </code>
             </SettingsRow>
-          ) : null}
+          )}
         </SettingsGroup>
         <ExtensionContributionSection title="Tools" items={selected.tools} />
         {selected.commands.length > 0 ? (

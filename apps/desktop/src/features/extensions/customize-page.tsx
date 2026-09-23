@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import type {
   RuntimeExtensionRecord,
   RuntimeSkillRecord,
@@ -53,6 +53,27 @@ export function CustomizePage({
 }: CustomizePageProps) {
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | undefined>();
+  // The palette and the workspace picker change what is listed without going through the tabs,
+  // so a search or open detail from the previous list must not carry over.
+  const listKey = `${tab}:${workspace?.id ?? ""}`;
+  const [shownListKey, setShownListKey] = useState(listKey);
+  if (shownListKey !== listKey) {
+    setShownListKey(listKey);
+    setQuery("");
+    setSelectedId(undefined);
+  }
+  const panelRef = useRef<HTMLDivElement>(null);
+  const returnFocusId = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (selectedId || !returnFocusId.current) return;
+    const id = returnFocusId.current;
+    returnFocusId.current = undefined;
+    panelRef.current?.querySelector<HTMLElement>(`[data-resource-id="${CSS.escape(id)}"]`)?.focus();
+  }, [selectedId]);
+  const selectItem = (id: string | undefined) => {
+    if (id === undefined) returnFocusId.current = selectedId;
+    setSelectedId(id);
+  };
   const skills = skillsRuntime?.skills ?? [];
   const extensions = extensionsRuntime?.extensions ?? [];
   const normalizedQuery = query.trim().toLowerCase();
@@ -68,10 +89,12 @@ export function CustomizePage({
     [extensions, normalizedQuery],
   );
 
-  const selectTab = (next: CustomizeTab) => {
-    setQuery("");
-    setSelectedId(undefined);
+  const handleTabKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    event.preventDefault();
+    const next: CustomizeTab = tab === "skills" ? "extensions" : "skills";
     onSelectTab(next);
+    document.getElementById(tabId(next))?.focus();
   };
 
   return (
@@ -109,18 +132,25 @@ export function CustomizePage({
         </header>
 
         <div className="resource-toolbar">
-          <div aria-label="Skills and extensions" className="resource-tabs" role="tablist">
+          <div
+            aria-label="Skills and extensions"
+            className="resource-tabs"
+            role="tablist"
+            onKeyDown={handleTabKeyDown}
+          >
             <ResourceTab
               count={skills.length}
               label="Skills"
               selected={tab === "skills"}
-              onSelect={() => selectTab("skills")}
+              tab="skills"
+              onSelect={() => onSelectTab("skills")}
             />
             <ResourceTab
               count={extensions.length}
               label="Extensions"
               selected={tab === "extensions"}
-              onSelect={() => selectTab("extensions")}
+              tab="extensions"
+              onSelect={() => onSelectTab("extensions")}
             />
           </div>
           <label className="resource-search">
@@ -139,7 +169,13 @@ export function CustomizePage({
           </label>
         </div>
 
-        <div className="settings-grid" role="tabpanel">
+        <div
+          aria-labelledby={tabId(tab)}
+          className="settings-grid"
+          id={TAB_PANEL_ID}
+          ref={panelRef}
+          role="tabpanel"
+        >
           {!workspace ? (
             <div className="settings-group resource-empty">
               <div className="resource-empty__title">Open a folder first</div>
@@ -154,7 +190,7 @@ export function CustomizePage({
               skills={filteredSkills}
               workspace={workspace}
               onOpenSkillFolder={onOpenSkillFolder}
-              onSelect={setSelectedId}
+              onSelect={selectItem}
               onToggleSkill={onToggleSkill}
               onTrySkill={(skill) => onTryCommand(`${skill.slashCommand} `)}
             />
@@ -166,7 +202,7 @@ export function CustomizePage({
               selected={extensions.find((extension) => extension.path === selectedId)}
               workspace={workspace}
               onOpenExtensionFolder={onOpenExtensionFolder}
-              onSelect={setSelectedId}
+              onSelect={selectItem}
               onToggleExtension={onToggleExtension}
             />
           )}
@@ -176,12 +212,20 @@ export function CustomizePage({
   );
 }
 
+const TAB_PANEL_ID = "customize-tab-panel";
+
+function tabId(tab: CustomizeTab): string {
+  return `customize-tab-${tab}`;
+}
+
 function ResourceTab({
+  tab,
   label,
   count,
   selected,
   onSelect,
 }: {
+  readonly tab: CustomizeTab;
   readonly label: string;
   readonly count: number;
   readonly selected: boolean;
@@ -189,9 +233,12 @@ function ResourceTab({
 }) {
   return (
     <button
+      aria-controls={TAB_PANEL_ID}
       aria-selected={selected}
       className="resource-tabs__tab"
+      id={tabId(tab)}
       role="tab"
+      tabIndex={selected ? 0 : -1}
       type="button"
       onClick={onSelect}
     >
