@@ -7,6 +7,7 @@ import {
   getDesktopCommandFromShortcut,
   platformShortcutModifier,
   CHANGES_TOGGLE_DEDUPE_MS,
+  createChordPairGate,
   SEARCH_CHORD_TOGGLE_MS,
 } from "../../contracts/ipc";
 
@@ -111,4 +112,14 @@ test("search chord gate swallows a second press at 50ms, unlike Changes", () => 
   expect(changes(1_000)).toBe(true);
   expect(changes(1_000 + CHANGES_TOGGLE_DEDUPE_MS - 1)).toBe(false);
   expect(changes(1_000 + CHANGES_TOGGLE_DEDUPE_MS)).toBe(true);
+});
+
+test("chord pair gate collapses one chord seen by main and renderer, not two quick presses", () => {
+  const allow = createChordPairGate();
+  expect(allow("main", 1_000)).toBe(true);
+  expect(allow("renderer", 1_002)).toBe(false);
+  // A second physical press, however quick, arrives from the same source.
+  expect(allow("main", 1_004)).toBe(true);
+  expect(allow("main", 1_005)).toBe(true);
+  expect(allow("renderer", 1_000 + 5 + CHANGES_TOGGLE_DEDUPE_MS)).toBe(true);
 });

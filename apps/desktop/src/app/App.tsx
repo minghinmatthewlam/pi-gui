@@ -40,26 +40,47 @@ import { WorktreesPanel } from "../features/workbench/worktrees-panel";
 import type { WorkspaceFileLine } from "../features/conversation/workspace-file-line";
 import { buildModelOptions } from "../features/conversation/composer-commands";
 import {
+  createChordPairGate,
   createChordToggleGate,
   CHANGES_TOGGLE_DEDUPE_MS,
   desktopCommands,
   earlyModifierChords,
   getDesktopCommandFromShortcut,
   isCloseFocusedSurfaceShortcut,
+  isPaletteCommand,
   getDesktopShortcutLabel,
+  platformShortcutModifier,
   recentThreadShortcutIndex,
+  type ChordSource,
   type PiDesktopCommand,
 } from "../../contracts/ipc";
+import { toolRefId } from "../../contracts/workbench";
+import { CommandPaletteSurface } from "../features/command-palette/command-palette-surface";
+import {
+  buildPaletteActions,
+  type BuiltinToolKind,
+  type PaletteMode,
+} from "../features/command-palette/palette-actions";
 import { deriveModelOnboardingState } from "../features/settings/model-onboarding";
 import type { SettingsSection } from "../features/settings/settings-view";
 import { SecondarySurfaces } from "./secondary-surfaces";
 import { NewThreadView } from "../features/threads/new-thread-view";
 import {
   buildThreadSidebarModel,
+  sessionThreadKey,
   visibleThreadShortcutOrder,
   type ThreadListEntry,
 } from "../features/threads/thread-groups";
 import { Sidebar } from "../features/threads/sidebar";
+import { ThreadSwitcher } from "../features/threads/thread-switcher";
+import {
+  loadThreadSwitcherOrder,
+  orderThreadSwitcherEntries,
+  saveThreadSwitcherOrder,
+  touchThreadSwitcherOrder,
+} from "../features/threads/thread-switcher-order";
+import { useThreadSwitcher } from "../features/threads/hooks/use-thread-switcher";
+import { dismissThreadShortcutHints } from "../features/threads/thread-shortcut-hints";
 import { SidebarToggleButton } from "../features/threads/sidebar-toggle-button";
 import { Topbar } from "./topbar";
 import { TerminalPanel } from "../features/workbench/terminal-panel";
@@ -125,6 +146,7 @@ export default function App() {
   } | null>(null);
   const [scheduledEditor, setScheduledEditor] = useState<ScheduledEditorState | null>(null);
   const [threadMenuOpen, setThreadMenuOpen] = useState(false);
+  const [paletteMode, setPaletteMode] = useState<PaletteMode | null>(null);
   const api = window.piApp;
   const sidebarToggleStateRef = useRef<{
     readonly api: typeof window.piApp;
@@ -398,12 +420,48 @@ export default function App() {
   );
   const threadSidebarModelRef = useRef(threadSidebarModel);
   threadSidebarModelRef.current = threadSidebarModel;
+  const threadOnScreenKey = snapshot?.activeView === "threads" ? selectedSessionKey : "";
+  const threadOnScreenKeyRef = useRef(threadOnScreenKey);
+  threadOnScreenKeyRef.current = threadOnScreenKey;
+  const selectThreadRef = useRef<(target: { workspaceId: string; sessionId: string }) => void>(
+    () => {},
+  );
+  useEffect(() => {
+    // Opening a thread is use; sending always happens in the thread on screen.
+    if (!threadOnScreenKey) return;
+    saveThreadSwitcherOrder(touchThreadSwitcherOrder(loadThreadSwitcherOrder(), threadOnScreenKey));
+  }, [threadOnScreenKey]);
+  const threadSwitcher = useThreadSwitcher({
+    readSource: () => {
+      const currentKey = threadOnScreenKeyRef.current;
+      const stored = loadThreadSwitcherOrder();
+      // Another window may have used a thread since this one did.
+      const order = currentKey ? touchThreadSwitcherOrder(stored, currentKey) : stored;
+      const recencyOrder = threadSidebarModelRef.current?.recencyOrder ?? [];
+      const entries = orderThreadSwitcherEntries(recencyOrder, order);
+      const first = entries[0];
+      return {
+        entries,
+        firstIsCurrent: first !== undefined && sessionThreadKey(first) === currentKey,
+      };
+    },
+    onSelect: (entry) =>
+      selectThreadRef.current({ workspaceId: entry.workspaceId, sessionId: entry.session.id }),
+  });
   const threadGroupingRef = useRef(snapshot?.threadGrouping ?? "time");
   threadGroupingRef.current = snapshot?.threadGrouping ?? "time";
   const threadShortcutOrderRef = useRef<readonly ThreadListEntry[] | null>(null);
   const threadSearchGate = useRef(createChordToggleGate());
   const changesToggleGate = useRef(createChordToggleGate(CHANGES_TOGGLE_DEDUPE_MS));
-  const handleCommandRef = useRef<(command: PiDesktopCommand) => boolean>(() => false);
+  // IPC and the renderer can both deliver one chord. Collapse only that pair so
+  // a quick second press still toggles.
+  const paletteGates = useRef({
+    commands: createChordPairGate(),
+    files: createChordPairGate(),
+  });
+  const handleCommandRef = useRef<(command: PiDesktopCommand, source?: ChordSource) => boolean>(
+    () => false,
+  );
   const handleRendererKeyDownRef = useRef<(event: globalThis.KeyboardEvent) => void>(() => {});
   const toggleThreadSearchRef = useRef<() => void>(() => {});
   const focusComposer = () => {
@@ -414,11 +472,15 @@ export default function App() {
       composerRef.current?.focus();
     });
   };
-  const toggleTerminal = useCallback(() => {
-    if (!sidePanelAvailable) return;
-    if (sidePanelVisible && selectedToolId === "terminal") workbench.setVisibility("hidden");
-    else workbench.openTool({ kind: "terminal" });
-  }, [sidePanelAvailable, sidePanelVisible, selectedToolId, workbench]);
+  const toggleWorkbenchTool = useCallback(
+    (kind: BuiltinToolKind) => {
+      if (!sidePanelAvailable) return;
+      if (sidePanelVisible && selectedToolId === kind) workbench.setVisibility("hidden");
+      else workbench.openTool({ kind });
+    },
+    [sidePanelAvailable, sidePanelVisible, selectedToolId, workbench],
+  );
+  const toggleTerminal = useCallback(() => toggleWorkbenchTool("terminal"), [toggleWorkbenchTool]);
   const closeFocusedSurface = useCallback(() => {
     if (!closableSurfaceFromTarget(document.activeElement)) return;
     const current = workbenchRef.current;
@@ -513,11 +575,10 @@ export default function App() {
     if (sidePanelAvailable) workbench.toggleVisibility();
   }, [sidePanelAvailable, workbench]);
 
-  const toggleChangesPanel = useCallback(() => {
-    if (!sidePanelAvailable) return;
-    if (sidePanelVisible && selectedToolId === "changes") workbench.setVisibility("hidden");
-    else workbench.openTool({ kind: "changes" });
-  }, [sidePanelAvailable, sidePanelVisible, selectedToolId, workbench]);
+  const toggleChangesPanel = useCallback(
+    () => toggleWorkbenchTool("changes"),
+    [toggleWorkbenchTool],
+  );
 
   const openSettings = (workspaceId?: string, section?: SettingsSection) => {
     if (!api) {
@@ -645,6 +706,7 @@ export default function App() {
     composerDraft,
     setComposerDraft,
     composerDraftRef,
+    flushComposerDraft,
     composerRef,
     requiresModelSelection: selectedSessionModelOnboarding.requiresModelSelection,
     openTreeModal,
@@ -720,7 +782,11 @@ export default function App() {
   }, []);
   const sidebarToggleShortcutLabel = api ? getDesktopShortcutLabel(api.platform, "B") : "";
 
-  const handleCommand = (command: PiDesktopCommand): boolean => {
+  const handleCommand = (command: PiDesktopCommand, source: ChordSource = "renderer"): boolean => {
+    // Any other shortcut acts on the app behind the palette, so close it first.
+    if (paletteMode && !isPaletteCommand(command)) {
+      setPaletteMode(null);
+    }
     if (command === desktopCommands.openSettings) {
       openSettings(selectedWorkspace?.rootWorkspaceId ?? selectedWorkspace?.id);
       return true;
@@ -750,6 +816,13 @@ export default function App() {
     }
     if (command === desktopCommands.toggleSidebar) {
       return handleTogglePrimarySidebar();
+    }
+    if (isPaletteCommand(command)) {
+      const mode = command === desktopCommands.openCommandPalette ? "commands" : "files";
+      if (threadSidebarModel && paletteGates.current[mode](source, performance.now())) {
+        setPaletteMode((current) => (current === mode ? null : mode));
+      }
+      return true;
     }
     const recentIndex = recentThreadShortcutIndex(command);
     if (recentIndex !== undefined) {
@@ -781,6 +854,7 @@ export default function App() {
   handleCommandRef.current = handleCommand;
   toggleThreadSearchRef.current = () => {
     if (!threadSearchGate.current(performance.now())) return;
+    setPaletteMode(null);
     if (threadSearch.isOpen) threadSearch.close();
     else threadSearch.open();
   };
@@ -833,6 +907,20 @@ export default function App() {
       key: event.key,
       code: event.code,
     });
+    if (isPaletteCommand(command)) {
+      if (
+        !platformShortcutModifier(api?.platform ?? "linux", {
+          meta: event.metaKey,
+          control: event.ctrlKey,
+        })
+      ) {
+        return;
+      }
+      if (event.repeat) {
+        event.preventDefault();
+        return;
+      }
+    }
     if (command && handleCommandRef.current(command)) {
       event.preventDefault();
     }
@@ -841,10 +929,11 @@ export default function App() {
   useEffect(() => {
     // Bind once. Re-subscribing when session or search identity changes drops
     // Cmd+D and 1-9 in the gap after a thread switch or relaunch.
-    const dispatch = (command: PiDesktopCommand) => {
-      handleCommandRef.current(command);
+    const dispatch = (command: PiDesktopCommand, source: ChordSource) => {
+      dismissThreadShortcutHints();
+      handleCommandRef.current(command, source);
     };
-    const removeCommandListener = window.piApp?.onCommand?.(dispatch);
+    const removeCommandListener = window.piApp?.onCommand?.((command) => dispatch(command, "main"));
     const handleKeyDown = (event: globalThis.KeyboardEvent) => {
       handleRendererKeyDownRef.current(event);
     };
@@ -860,7 +949,7 @@ export default function App() {
         key: chord.key,
         code: chord.code,
       });
-      if (command) dispatch(command);
+      if (command) dispatch(command, "renderer");
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => {
@@ -1025,6 +1114,7 @@ export default function App() {
       console.error("[renderer] selectSession failed", error);
     });
   };
+  selectThreadRef.current = handleSelectSession;
 
   const handleRespondToExtensionDialog = (
     response:
@@ -1107,25 +1197,128 @@ export default function App() {
     handleSelectSession(target);
   };
 
+  const selectedThreadTarget =
+    snapshot.activeView === "threads" && selectedWorkspace && selectedSession
+      ? { workspaceId: selectedWorkspace.id, sessionId: selectedSession.id }
+      : undefined;
+  const selectedRootWorkspaceId = selectedWorkspace?.rootWorkspaceId ?? selectedWorkspace?.id;
+  const paletteModelOptions =
+    paletteMode && selectedThreadTarget ? buildModelOptions(selectedModelRuntime) : [];
+  const commandPalette =
+    paletteMode && threadSidebarModel ? (
+      <CommandPaletteSurface
+        key={paletteMode}
+        api={api}
+        mode={paletteMode}
+        onModeChange={setPaletteMode}
+        onClose={() => setPaletteMode(null)}
+        threads={threadSidebarModel.recencyOrder}
+        workspaces={threadSidebarModel.folders}
+        currentThread={selectedThreadTarget}
+        actions={buildPaletteActions({
+          platform: api.platform,
+          hasWorkspace: rootWorkspaceOptions.length > 0,
+          thread:
+            selectedThreadTarget && selectedSession
+              ? {
+                  pinned: Boolean(selectedSession.pinnedAt),
+                  canSwitchModel: paletteModelOptions.length > 0,
+                }
+              : undefined,
+          canToggleSidebar: primarySidebarToggleVisible,
+          newThread: () => newThread.openSurface(selectedRootWorkspaceId),
+          openFolder: () => {
+            void updateSnapshot(setSnapshot, () => api.pickWorkspace()).catch((error: unknown) => {
+              console.error("[renderer] pickWorkspace failed", error);
+            });
+          },
+          openSettings: (section) => openSettings(selectedRootWorkspaceId, section),
+          openSkills: () => openSkills(selectedRootWorkspaceId),
+          openExtensions: () => openExtensions(selectedRootWorkspaceId),
+          openScheduledTasks: () => setActiveView("scheduled"),
+          toggleSidebar: handleTogglePrimarySidebar,
+          toggleTool: toggleWorkbenchTool,
+          toggleSidePanel,
+          extensionViews: extensionViews.views
+            .filter((view) => view.state === "ready")
+            .map((view) => {
+              const tool = {
+                kind: "extension",
+                extensionId: view.extensionId,
+                viewId: view.id,
+              } as const;
+              return {
+                id: toolRefId(tool),
+                title: view.title,
+                open: () => workbench.openTool(tool),
+              };
+            }),
+          findInThread: threadSearch.open,
+          setThreadPinned: (pinned) => {
+            if (selectedThreadTarget) handleSetSessionPinned(selectedThreadTarget, pinned);
+          },
+          archiveThread: () => {
+            if (selectedThreadTarget) handleArchiveSession(selectedThreadTarget);
+          },
+          openPaletteMode: setPaletteMode,
+        })}
+        fileScope={
+          selectedThreadTarget && selectedWorkspace
+            ? {
+                workspaceId: selectedWorkspace.id,
+                label: selectedWorktree?.name ?? selectedWorkspace.name,
+                openTabs:
+                  workbench.view.files.workspaceId === selectedWorkspace.id
+                    ? workbench.view.files.tabs.tabs
+                    : [],
+              }
+            : undefined
+        }
+        modelScope={
+          selectedThreadTarget
+            ? {
+                options: paletteModelOptions,
+                currentProvider: resolvedSessionProvider,
+                currentModelId: resolvedSessionModelId,
+              }
+            : undefined
+        }
+        onOpenThread={handleSelectSession}
+        onOpenWorkspace={wsMenu.selectWorkspace}
+        onOpenFile={(path) => {
+          if (!selectedWorkspace) return;
+          void workbench
+            .openFile({ workspaceId: selectedWorkspace.id, path })
+            .catch((error: unknown) => {
+              console.error("[renderer] open file from palette failed", error);
+            });
+        }}
+        onSelectModel={handleSetSessionModel}
+      />
+    ) : null;
+
   if (secondarySurfaceView) {
     return (
-      <SecondarySurfaces
-        api={api}
-        snapshot={snapshot}
-        setSnapshot={setSnapshot}
-        activeView={secondarySurfaceView}
-        rootWorkspaceOptions={rootWorkspaceOptions}
-        settingsSection={settingsSection}
-        onSelectSettingsSection={setSettingsSection}
-        settingsWorkspaceId={settingsWorkspaceId}
-        onSelectSettingsWorkspace={setSettingsWorkspaceId}
-        skillsWorkspaceId={skillsWorkspaceId}
-        onSelectSkillsWorkspace={setSkillsWorkspaceId}
-        extensionsWorkspaceId={extensionsWorkspaceId}
-        onSelectExtensionsWorkspace={setExtensionsWorkspaceId}
-        onBack={() => setActiveView("threads")}
-        onTrySkill={handleTrySkill}
-      />
+      <>
+        <SecondarySurfaces
+          api={api}
+          snapshot={snapshot}
+          setSnapshot={setSnapshot}
+          activeView={secondarySurfaceView}
+          rootWorkspaceOptions={rootWorkspaceOptions}
+          settingsSection={settingsSection}
+          onSelectSettingsSection={setSettingsSection}
+          settingsWorkspaceId={settingsWorkspaceId}
+          onSelectSettingsWorkspace={setSettingsWorkspaceId}
+          skillsWorkspaceId={skillsWorkspaceId}
+          onSelectSkillsWorkspace={setSkillsWorkspaceId}
+          extensionsWorkspaceId={extensionsWorkspaceId}
+          onSelectExtensionsWorkspace={setExtensionsWorkspaceId}
+          onBack={() => setActiveView("threads")}
+          onTrySkill={handleTrySkill}
+        />
+        {commandPalette}
+      </>
     );
   }
 
@@ -1614,6 +1807,10 @@ export default function App() {
           onOpenChat={handleOpenScheduledChat}
         />
       ) : null}
+      {threadSwitcher.state?.overlayVisible ? (
+        <ThreadSwitcher state={threadSwitcher.state} onChoose={threadSwitcher.choose} />
+      ) : null}
+      {commandPalette}
     </div>
   );
 }
