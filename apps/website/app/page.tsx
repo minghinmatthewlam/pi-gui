@@ -32,6 +32,8 @@ const showcase = [
     title: "Run agents side by side",
     body: "Every task gets its own thread. Start it in your checkout or in a fresh git worktree, then start the next one while it works. The sidebar shows what is running, what finished and what needs you.",
     shot: "threads",
+    width: 1640,
+    height: 1026,
     dark: false,
     alt: "pi-gui running an agent thread while two other threads sit in the sidebar",
   },
@@ -40,6 +42,8 @@ const showcase = [
     title: "Review every change before it lands",
     body: "The Changes tab shows exactly what the agent touched. Compare uncommitted work, a branch against its base, or a single turn, and stage it file by file.",
     shot: "review",
+    width: 1240,
+    height: 758,
     dark: true,
     alt: "The Changes tab showing the diff an agent made to src/price.js",
   },
@@ -48,14 +52,18 @@ const showcase = [
     title: "Terminal and files in the same window",
     body: "Open a real terminal, browse and edit files, or manage worktrees in tabs beside the conversation. Each task keeps its own layout.",
     shot: "terminal",
+    width: 1240,
+    height: 992,
     dark: true,
     alt: "The integrated terminal running the test suite next to the thread",
   },
   {
     eyebrow: "Keyboard",
     title: "Everything is a keystroke away",
-    body: "⌘K searches chats, workspaces and actions. ⌘P jumps to any file. Ctrl-Tab flips between recent threads, and ⌘1 to ⌘9 opens them directly. On Linux and Windows, use Ctrl.",
+    body: "⌘K searches chats, workspaces and actions. ⌘P jumps to any file. Ctrl-Tab flips between recent threads, and ⌘1 to ⌘9 jump to threads in the sidebar. On Linux and Windows, use Ctrl.",
     shot: "palette",
+    width: 1440,
+    height: 1280,
     dark: true,
     alt: "The command palette listing recent chats and actions",
   },
@@ -137,7 +145,7 @@ const faqs = [
   },
   {
     q: "Where does my code go?",
-    a: "Nowhere new. pi-gui runs on your machine and talks only to the model provider you configure, the same way the pi CLI does.",
+    a: "pi-gui runs on your machine. Your code goes only to the model provider you configure, the same way it does with the pi CLI. The app also checks GitHub for new releases.",
   },
   {
     q: "How do updates work?",
@@ -195,8 +203,8 @@ export default function Page() {
             </a>
             <h1>The desktop app for the pi coding agent</h1>
             <p className="hero__lede">
-              Run agents in parallel threads, each in its own worktree. Review every change, then
-              ship it without leaving the window.
+              Run agents in parallel threads, in your checkout or their own worktrees. Review every
+              change, then ship it without leaving the window.
             </p>
             <div className="hero__actions">
               <DownloadButton className="button button--primary" />
@@ -219,6 +227,7 @@ export default function Page() {
                 height={1200}
                 aria-label="An agent in pi-gui fixing a bug, running the tests, then the change open in the review tab"
               >
+                <source src="/media/hero.webm" type="video/webm" />
                 <source src="/media/hero.mp4" type="video/mp4" />
               </video>
             </div>
@@ -238,7 +247,13 @@ export default function Page() {
                   <p>{item.body}</p>
                 </div>
                 <div className="frame">
-                  <ThemedShot name={item.shot} alt={item.alt} dark={item.dark} />
+                  <ThemedShot
+                    name={item.shot}
+                    alt={item.alt}
+                    width={item.width}
+                    height={item.height}
+                    dark={item.dark}
+                  />
                 </div>
               </article>
             ))}

@@ -2,11 +2,15 @@
 export function ThemedShot({
   name,
   alt,
+  width,
+  height,
   dark = true,
   priority = false,
 }: {
   readonly name: string;
   readonly alt: string;
+  readonly width: number;
+  readonly height: number;
   readonly dark?: boolean;
   readonly priority?: boolean;
 }) {
@@ -18,8 +22,8 @@ export function ThemedShot({
       <img
         src={`/media/${name}${dark ? "-light" : ""}.webp`}
         alt={alt}
-        width={2880}
-        height={1800}
+        width={width}
+        height={height}
         loading={priority ? "eager" : "lazy"}
         decoding="async"
       />

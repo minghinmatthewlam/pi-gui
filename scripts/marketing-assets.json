@@ -15,6 +15,16 @@
       ]
     },
     {
+      "path": "apps/website/public/media/hero.webm",
+      "producer": "marketing:media",
+      "consumers": [
+        {
+          "path": "apps/website/app/page.tsx",
+          "reference": "/media/hero.webm"
+        }
+      ]
+    },
+    {
       "path": "apps/website/public/media/hero-poster.webp",
       "producer": "marketing:media",
       "consumers": [

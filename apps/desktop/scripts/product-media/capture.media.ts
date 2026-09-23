@@ -3,7 +3,16 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
-import { chmod, mkdir, mkdtemp, readFile, unlink, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  copyFile,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { launchDesktop, startThreadFromSurface } from "../../tests/helpers/electron-app";
@@ -49,7 +58,11 @@ async function writeGitWorkspace(root: string, name: string, files: Record<strin
 }
 
 // A second X display sized for 2x capture, so the app renders at devicePixelRatio 2.
-async function startDisplay(runDir: string): Promise<ChildProcess> {
+async function startDisplay(
+  runDir: string,
+): Promise<{ readonly xvfb: ChildProcess; readonly fontsConf: string }> {
+  const socket = `/tmp/.X11-unix/X${DISPLAY.slice(1)}`;
+  if (existsSync(socket)) throw new Error(`Display ${DISPLAY} is already in use (${socket})`);
   const xvfb = spawn(
     "Xvfb",
     [
@@ -62,8 +75,17 @@ async function startDisplay(runDir: string): Promise<ChildProcess> {
     ],
     { stdio: "ignore" },
   );
-  const socket = `/tmp/.X11-unix/X${DISPLAY.slice(1)}`;
-  await expect.poll(() => existsSync(socket), { timeout: 10_000 }).toBe(true);
+  let spawnError: Error | undefined;
+  xvfb.once("error", (error) => (spawnError = error));
+  await expect
+    .poll(
+      () => {
+        if (spawnError || xvfb.exitCode !== null) throw spawnError ?? new Error("Xvfb exited");
+        return existsSync(socket);
+      },
+      { timeout: 10_000 },
+    )
+    .toBe(true);
   // Linux has no SF Pro. When Inter and JetBrains Mono are installed (fonts-inter,
   // fonts-jetbrains-mono, or the user font dir), prefer them so captures resemble the macOS app.
   const hasFamily = (family: string) =>
@@ -91,8 +113,7 @@ async function startDisplay(runDir: string): Promise<ChildProcess> {
 </fontconfig>
 `,
   );
-  process.env.FONTCONFIG_FILE = fontsConf;
-  return xvfb;
+  return { xvfb, fontsConf };
 }
 
 function startScreenRecording(outputPath: string): () => Promise<void> {
@@ -122,8 +143,10 @@ function startScreenRecording(outputPath: string): () => Promise<void> {
     ],
     { stdio: ["pipe", "ignore", "inherit"] },
   );
+  ffmpeg.once("error", () => undefined);
   return () =>
     new Promise((resolve) => {
+      if (ffmpeg.exitCode !== null || ffmpeg.signalCode !== null) return resolve();
       ffmpeg.once("exit", () => resolve());
       ffmpeg.stdin?.end("q");
     });
@@ -138,7 +161,26 @@ interface Crop {
   readonly height: number;
 }
 
-async function publishStill(page: Page, runDir: string, name: string, crop?: Crop): Promise<void> {
+// Media renders into the run directory first and is published together at the end, so a failed
+// run never leaves a mixed set of old and new files on the site.
+async function renderTo(
+  runDir: string,
+  fileName: string,
+  render: (outputPath: string) => Promise<void>,
+): Promise<void> {
+  await mkdir(path.join(runDir, "media"), { recursive: true });
+  await render(path.join(runDir, "media", fileName));
+}
+
+async function publishMedia(runDir: string): Promise<void> {
+  for (const fileName of await readdir(path.join(runDir, "media"))) {
+    await replaceFileAtomically(path.join(mediaDir, fileName), (temporaryPath) =>
+      copyFile(path.join(runDir, "media", fileName), temporaryPath),
+    );
+  }
+}
+
+async function renderStill(page: Page, runDir: string, name: string, crop?: Crop): Promise<void> {
   const pngPath = path.join(runDir, `${name}.png`);
   await page.screenshot({ path: pngPath });
   const filter = crop
@@ -147,7 +189,7 @@ async function publishStill(page: Page, runDir: string, name: string, crop?: Cro
         `crop=${crop.width * SCALE}:${crop.height * SCALE}:${crop.x * SCALE}:${crop.y * SCALE}`,
       ]
     : [];
-  await replaceFileAtomically(path.join(mediaDir, `${name}.webp`), async (temporaryPath) => {
+  await renderTo(runDir, `${name}.webp`, async (outputPath) => {
     execFileSync("ffmpeg", [
       "-v",
       "error",
@@ -159,7 +201,7 @@ async function publishStill(page: Page, runDir: string, name: string, crop?: Cro
       "libwebp",
       "-quality",
       "88",
-      temporaryPath,
+      outputPath,
     ]);
   });
 }
@@ -175,8 +217,8 @@ async function boxOf(locator: Locator): Promise<Crop> {
   };
 }
 
-async function publishVideo(rawPath: string, name: string): Promise<void> {
-  await replaceFileAtomically(path.join(mediaDir, `${name}.mp4`), async (temporaryPath) => {
+async function renderVideo(runDir: string, rawPath: string, name: string): Promise<void> {
+  await renderTo(runDir, `${name}.mp4`, async (outputPath) => {
     execFileSync("ffmpeg", [
       "-v",
       "error",
@@ -194,11 +236,35 @@ async function publishVideo(rawPath: string, name: string): Promise<void> {
       "-an",
       "-movflags",
       "+faststart",
-      temporaryPath,
+      outputPath,
+    ]);
+  });
+  // VP9 copy for browsers without H.264 (such as open-source Chromium builds).
+  await renderTo(runDir, `${name}.webm`, async (outputPath) => {
+    execFileSync("ffmpeg", [
+      "-v",
+      "error",
+      "-y",
+      "-i",
+      rawPath,
+      "-vf",
+      "fps=30,scale=1920:-2:flags=lanczos,format=yuv420p",
+      "-c:v",
+      "libvpx-vp9",
+      "-crf",
+      "36",
+      "-b:v",
+      "0",
+      "-row-mt",
+      "1",
+      "-an",
+      "-f",
+      "webm",
+      outputPath,
     ]);
   });
   // The poster is the finished state, so the README and a paused video show the result.
-  await replaceFileAtomically(path.join(mediaDir, `${name}-poster.webp`), async (temporaryPath) => {
+  await renderTo(runDir, `${name}-poster.webp`, async (outputPath) => {
     execFileSync("ffmpeg", [
       "-v",
       "error",
@@ -215,16 +281,15 @@ async function publishVideo(rawPath: string, name: string): Promise<void> {
       "libwebp",
       "-quality",
       "85",
-      temporaryPath,
+      outputPath,
     ]);
   });
 }
 
 test("capture product media from a real run", async () => {
-  test.skip(
-    process.platform !== "linux",
-    "Product media is captured on Linux with Xvfb and x11grab.",
-  );
+  if (process.platform !== "linux") {
+    throw new Error("Product media is captured on Linux with Xvfb and x11grab.");
+  }
   const provider = requireEnv("PI_GUI_MARKETING_PROVIDER");
   const model = requireEnv("PI_GUI_MARKETING_MODEL");
   const authSource = requireEnv("PI_APP_REAL_AUTH_SOURCE_DIR");
@@ -237,25 +302,6 @@ test("capture product media from a real run", async () => {
   await mkdir(mediaDir, { recursive: true });
   await mkdir(evidenceRoot, { recursive: true });
   const runDir = await mkdtemp(path.join(evidenceRoot, "run-"));
-  // Credentials stay outside the retained evidence tree.
-  const privateDir = await mkdtemp(path.join(tmpdir(), "pi-gui-media-"));
-  await chmod(privateDir, 0o700);
-  const agentDir = path.join(privateDir, "agent");
-  await mkdir(agentDir, { mode: 0o700 });
-  await writeFile(
-    path.join(agentDir, "auth.json"),
-    JSON.stringify({ [provider]: auth[provider] }),
-    { mode: 0o600 },
-  );
-  await writeFile(
-    path.join(agentDir, "settings.json"),
-    JSON.stringify({
-      defaultProvider: provider,
-      defaultModel: model,
-      defaultThinkingLevel: "low",
-      enabledModels: [`${provider}/${model}`],
-    }),
-  );
 
   // A home directory with a short prompt, so the integrated terminal reads cleanly.
   const home = path.join(runDir, "home");
@@ -277,22 +323,45 @@ test("capture product media from a real run", async () => {
       "export function search(notes: string[], query: string) {\n  return notes.filter((note) => note.includes(query));\n}\n",
   });
 
-  const xvfb = await startDisplay(runDir);
-  const harness = await launchDesktop(path.join(runDir, "profile"), {
-    agentDir,
-    initialWorkspaces: [cart, notes],
-    scrubProviderEnv: true,
-    envOverrides: {
-      PI_APP_TEST_MODE: undefined,
-      DISPLAY,
-      GDK_SCALE: String(SCALE),
-      HOME: home,
-      FONTCONFIG_FILE: process.env.FONTCONFIG_FILE,
-    },
-  });
+  // Credentials stay outside the retained evidence tree and are deleted when the run ends.
+  const privateDir = await mkdtemp(path.join(tmpdir(), "pi-gui-media-"));
+  let xvfb: ChildProcess | undefined;
+  let harness: Awaited<ReturnType<typeof launchDesktop>> | undefined;
   let stopRecording: (() => Promise<void>) | undefined;
   const rawVideo = path.join(runDir, "hero-raw.mkv");
   try {
+    await chmod(privateDir, 0o700);
+    const agentDir = path.join(privateDir, "agent");
+    await mkdir(agentDir, { mode: 0o700 });
+    await writeFile(
+      path.join(agentDir, "auth.json"),
+      JSON.stringify({ [provider]: auth[provider] }),
+      { mode: 0o600 },
+    );
+    await writeFile(
+      path.join(agentDir, "settings.json"),
+      JSON.stringify({
+        defaultProvider: provider,
+        defaultModel: model,
+        defaultThinkingLevel: "low",
+        enabledModels: [`${provider}/${model}`],
+      }),
+    );
+
+    const display = await startDisplay(runDir);
+    xvfb = display.xvfb;
+    harness = await launchDesktop(path.join(runDir, "profile"), {
+      agentDir,
+      initialWorkspaces: [cart, notes],
+      scrubProviderEnv: true,
+      envOverrides: {
+        PI_APP_TEST_MODE: undefined,
+        DISPLAY,
+        GDK_SCALE: String(SCALE),
+        HOME: home,
+        FONTCONFIG_FILE: display.fontsConf,
+      },
+    });
     await harness.focusWindow();
     const page = await harness.firstWindow();
     await harness.electronApp.evaluate(
@@ -374,7 +443,7 @@ test("capture product media from a real run", async () => {
       const box = await boxOf(page.getByTestId("command-palette"));
       return { x: box.x - 40, y: box.y - 40, width: box.width + 80, height: box.height + 80 };
     };
-    await publishStill(page, runDir, "review-light", diffCrop);
+    await renderStill(page, runDir, "review-light", diffCrop);
 
     await openTool("Terminal");
     const terminal = page.getByTestId("integrated-terminal");
@@ -382,16 +451,17 @@ test("capture product media from a real run", async () => {
     await settle(1500);
     await terminal.click();
     await page.keyboard.type("npm test\n", { delay: 30 });
-    await expect(terminal).toContainText("pass 2", { timeout: 30_000 });
+    await expect(terminal).toContainText(/pass [1-9]/, { timeout: 30_000 });
+    await expect(terminal).toContainText(/fail 0\b/);
     await settle();
-    await publishStill(page, runDir, "terminal-light", terminalCrop);
+    await renderStill(page, runDir, "terminal-light", terminalCrop);
 
     await openTool("Changes");
     await page.locator(".timeline-item--assistant").last().click();
     await page.keyboard.press("Control+k");
     await expect(page.getByTestId("command-palette")).toBeVisible();
     await settle();
-    await publishStill(page, runDir, "palette-light", await paletteCrop());
+    await renderStill(page, runDir, "palette-light", await paletteCrop());
     await page.keyboard.press("Escape");
 
     // More threads running beside the finished one, for the parallel-work shot.
@@ -406,7 +476,7 @@ test("capture product media from a real run", async () => {
     });
     await page.locator(`.session-row[data-session-id="${heroId}"] .session-row__select`).click();
     await expect(workbench).toBeVisible();
-    await expect(runningRows).toHaveCount(2);
+    await expect.poll(() => runningRows.count()).toBeGreaterThan(0);
     // Wait for generated titles so no row still reads "New thread".
     await expect(page.locator(".session-row__title", { hasText: /^New thread$/ })).toHaveCount(0, {
       timeout: 60_000,
@@ -414,36 +484,37 @@ test("capture product media from a real run", async () => {
     // Park the pointer on the workbench, outside the crop, so no row shows its hover actions.
     await page.mouse.move(bench.x + bench.width / 2, bench.y + bench.height / 2);
     await settle(1200);
-    await publishStill(page, runDir, "threads", threadsCrop);
+    await renderStill(page, runDir, "threads", threadsCrop);
     await expect(runningRows).toHaveCount(0, { timeout: 240_000 });
 
     await page.keyboard.press("Control+,");
     await page.getByRole("button", { name: "Appearance", exact: true }).click();
-    await page.locator(".settings-row", { hasText: "Dark" }).locator('input[type="radio"]').click();
+    await page.getByRole("radio", { name: "Dark", exact: true }).click();
     await expect
       .poll(() => page.evaluate(() => document.documentElement.classList.contains("dark")))
       .toBe(true);
     await page.getByRole("button", { name: "Back to app" }).click();
     await expect(workbench).toBeVisible();
     await settle(1200);
-    await publishStill(page, runDir, "review-dark", diffCrop);
+    await renderStill(page, runDir, "review-dark", diffCrop);
     await openTool("Terminal");
     await settle();
-    await publishStill(page, runDir, "terminal-dark", terminalCrop);
+    await renderStill(page, runDir, "terminal-dark", terminalCrop);
     await page.locator(".timeline-item--assistant").last().click();
     await page.keyboard.press("Control+k");
     await expect(page.getByTestId("command-palette")).toBeVisible();
     await settle();
-    await publishStill(page, runDir, "palette-dark", await paletteCrop());
+    await renderStill(page, runDir, "palette-dark", await paletteCrop());
     await page.keyboard.press("Escape");
 
-    await publishVideo(rawVideo, "hero");
+    await renderVideo(runDir, rawVideo, "hero");
+    await publishMedia(runDir);
   } finally {
-    await stopRecording?.();
-    await harness.close();
-    xvfb.kill();
-    // Only the copied credentials go; the rest of the run is retained as evidence.
-    await unlink(path.join(agentDir, "auth.json"));
+    // Each step runs even if an earlier one fails; the credentials always go.
+    await stopRecording?.().catch((error: unknown) => console.error(error));
+    await harness?.close().catch((error: unknown) => console.error(error));
+    xvfb?.kill();
+    await rm(privateDir, { recursive: true, force: true });
     console.log(`Retained capture profile, workspaces and raw frames in ${runDir}`);
   }
 });

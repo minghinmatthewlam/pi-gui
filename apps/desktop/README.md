@@ -109,7 +109,9 @@ The root commands own published marketing outputs:
   a real agent run on Linux in its own 2x Xvfb display and records it with ffmpeg. The run
   needs `PI_GUI_MARKETING_PROVIDER`, `PI_GUI_MARKETING_MODEL` and `PI_APP_REAL_AUTH_SOURCE_DIR` (the
   pi agent directory holding `auth.json`); only the selected provider's saved credentials are
-  copied, into a private temporary directory, and that copy is deleted afterwards. Install Inter and
+  copied, into a private temporary directory, and that copy is deleted afterwards. If pi refreshes an OAuth
+  token during the run, the refreshed token is not written back, so a provider that rotates refresh
+  tokens may ask you to sign in again; an API key avoids that. Install Inter and
   JetBrains Mono first so Linux captures match the macOS fonts.
 - `pnpm marketing:capture` writes the three Remotion inputs in
   `video/public/captures/`. The parallel-session capture starts two threads with initial prompts and

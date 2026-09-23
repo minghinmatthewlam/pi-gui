@@ -86,7 +86,10 @@ test("marketing producers support staged proof and pass credentials only explici
   assert.match(source, /PI_APP_REAL_AUTH_SOURCE_DIR/);
   assert.match(source, /scrubProviderEnv: true/);
   assert.match(source, /\{ \[provider\]: auth\[provider\] \}/);
-  assert.doesNotMatch(source, /\brm\(/);
+  // The only removal is the private credential copy; media and evidence are never deleted.
+  assert.deepEqual(source.match(/\brm\([^)]*\)/g), [
+    "rm(privateDir, { recursive: true, force: true })",
+  ]);
 
   const showcaseSource = await readFile(
     path.join(root, "apps/desktop/scripts/capture-showcase.mts"),

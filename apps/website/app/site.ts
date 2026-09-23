@@ -6,7 +6,8 @@ export const OG_IMAGE_WIDTH = 1200;
 export const OG_IMAGE_HEIGHT = 630;
 
 export const GITHUB_URL = "https://github.com/minghinmatthewlam/pi-gui";
-export const RELEASES_URL = `${GITHUB_URL}/releases/latest`;
+// Every release is a prerelease during the beta, so /releases/latest has nothing to show.
+export const RELEASES_URL = `${GITHUB_URL}/releases`;
 export const PI_URL = "https://github.com/earendil-works/pi";
 export const BREW_INSTALL = "brew install --cask minghinmatthewlam/tap/pi-gui";
 
