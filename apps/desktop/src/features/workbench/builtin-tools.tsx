@@ -1,6 +1,6 @@
 import type { ComponentType, ReactNode } from "react";
 import { BUILTIN_TOOL_KINDS, type BuiltinToolKind } from "../../../contracts/workbench";
-import { DiffIcon, FileIcon, TerminalIcon, WorktreeIcon } from "../../ui/icons";
+import { DiffIcon, FileIcon, TerminalIcon } from "../../ui/icons";
 
 interface BuiltinToolDefinition {
   readonly label: string;
@@ -13,11 +13,6 @@ interface BuiltinToolDefinition {
 export const BUILTIN_TOOLS = {
   files: { label: "Files", description: "Browse files in this checkout", Icon: FileIcon },
   changes: { label: "Changes", description: "Review uncommitted changes", Icon: DiffIcon },
-  worktrees: {
-    label: "Worktrees",
-    description: "Open a task in another checkout",
-    Icon: WorktreeIcon,
-  },
   terminal: {
     label: "Terminal",
     description: "Run commands in this task's checkout",

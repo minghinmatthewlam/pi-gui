@@ -38,14 +38,17 @@ test("opening a tool adds or focuses its singleton without discarding other tool
 
 test("close selects a neighbor, preserves inactive selection, and leaves a chooser after the last tab", () => {
   let view = initialWorkbenchView("checkout");
-  for (const kind of ["files", "terminal", "worktrees"] as const) {
+  for (const kind of ["files", "terminal"] as const) {
     view = reduceWorkbench(view, { type: "open-tool", tool: { kind } });
   }
-  const closedInactive = reduceWorkbench(view, { type: "close-tool", toolId: "files" });
-  expect(closedInactive.selection).toEqual({ kind: "tool", toolId: "worktrees" });
-  const terminal = reduceWorkbench(closedInactive, { type: "close-tool", toolId: "worktrees" });
-  expect(terminal.selection).toEqual({ kind: "tool", toolId: "terminal" });
-  const changes = reduceWorkbench(terminal, { type: "close-tool", toolId: "terminal" });
+  const closedInactive = reduceWorkbench(view, { type: "close-tool", toolId: "changes" });
+  expect(closedInactive.selection).toEqual({ kind: "tool", toolId: "terminal" });
+  const files = reduceWorkbench(closedInactive, { type: "close-tool", toolId: "terminal" });
+  expect(files.selection).toEqual({ kind: "tool", toolId: "files" });
+  const changes = reduceWorkbench(
+    reduceWorkbench(files, { type: "open-tool", tool: { kind: "changes" } }),
+    { type: "close-tool", toolId: "files" },
+  );
   const empty = reduceWorkbench(changes, { type: "close-tool", toolId: "changes" });
   expect(empty).toMatchObject({ tools: [], visibility: "visible", selection: { kind: "chooser" } });
   expect(activeWorkbenchTool(empty)).toBeUndefined();
