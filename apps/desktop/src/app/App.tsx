@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { RuntimeSnapshot } from "@pi-gui/session-driver/runtime-types";
-import type { SessionRef } from "@pi-gui/session-driver/types";
 import {
   getSelectedSession,
   getSelectedWorkspace,
@@ -34,6 +33,7 @@ import {
   type ExtensionViewTheme,
 } from "../features/extensions/extension-view-panel";
 import { useExtensionViews } from "../features/extensions/use-extension-views";
+import { useExtensionHostActions } from "../features/extensions/use-extension-host-actions";
 import { Workbench } from "../features/workbench/workbench";
 import { useWorkbenchWidth } from "../features/workbench/use-workbench-width";
 import { WorktreesPanel } from "../features/workbench/worktrees-panel";
@@ -118,13 +118,6 @@ export default function App() {
     foreground: "#171717",
     accent: "#6554a4",
   });
-  const [extensionFileError, setExtensionFileError] = useState<{
-    readonly target: SessionRef;
-    readonly message: string;
-  } | null>(null);
-  const [preparingExtensionDrafts, setPreparingExtensionDrafts] = useState<
-    ReadonlyMap<string, SessionRef>
-  >(() => new Map());
   const [dockExpandedBySession, setDockExpandedBySession] = useState<Record<string, string>>({});
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const timelinePaneRef = useRef<HTMLDivElement | null>(null);
@@ -255,27 +248,12 @@ export default function App() {
   const workbench = useWorkbench({ api, target: workbenchTarget });
   const workbenchTargetRef = useRef(workbenchTarget);
   workbenchTargetRef.current = workbenchTarget;
-  const beforePrepareTaskDraft = useCallback(async () => {
-    const target = workbenchTarget;
-    if (!target || workbenchTargetRef.current !== target)
-      throw new Error("Return to the extension's task to create a task draft.");
-    await flushComposerDraftAsync(target);
-    if (workbenchTargetRef.current !== target)
-      throw new Error("The task changed before its draft could be saved.");
-  }, [flushComposerDraftAsync, workbenchTarget]);
-  const handlePrepareTaskDraftPendingChange = useCallback(
-    (pending: boolean, requestKey: string) => {
-      setPreparingExtensionDrafts((current) => {
-        if (pending && !workbenchTarget) return current;
-        if (!pending && !current.has(requestKey)) return current;
-        const next = new Map(current);
-        if (pending && workbenchTarget) next.set(requestKey, workbenchTarget);
-        else next.delete(requestKey);
-        return next;
-      });
-    },
-    [workbenchTarget],
-  );
+  const extensionHostActions = useExtensionHostActions({
+    api,
+    target: workbenchTarget,
+    workbench,
+    flushComposerDraftAsync,
+  });
   const activeTool = workbench.activeTool;
   const activeExtensionView =
     activeTool?.kind === "extension"
@@ -285,37 +263,6 @@ export default function App() {
       : undefined;
   const workbenchRef = useRef(workbench);
   workbenchRef.current = workbench;
-  const extensionFileRequestRef = useRef(0);
-  useEffect(() => {
-    setExtensionFileError(null);
-  }, [workbenchTarget, workbench.view.selection]);
-  useEffect(
-    () =>
-      api?.onExtensionViewOpenFile((event) => {
-        const target = workbenchTargetRef.current;
-        if (
-          target?.workspaceId !== event.target.workspaceId ||
-          target.sessionId !== event.target.sessionId
-        )
-          return;
-        const request = ++extensionFileRequestRef.current;
-        setExtensionFileError(null);
-        void workbenchRef.current
-          .openFile({ workspaceId: event.target.workspaceId, path: event.path, line: event.line })
-          .catch((error: unknown) => {
-            if (
-              workbenchTargetRef.current !== target ||
-              extensionFileRequestRef.current !== request
-            )
-              return;
-            setExtensionFileError({
-              target,
-              message: `Couldn't open ${event.path}. ${error instanceof Error ? error.message : "Try opening the file again."}`,
-            });
-          });
-      }),
-    [api],
-  );
   const selectedToolId =
     workbench.view.selection.kind === "tool" ? workbench.view.selection.toolId : null;
   const sidePanelAvailable = snapshot?.activeView === "threads" && Boolean(workbenchTarget);
@@ -1536,11 +1483,7 @@ export default function App() {
               ) : null}
               <ComposerPanel
                 key={selectedSessionKey}
-                preparingTaskDraft={[...preparingExtensionDrafts.values()].some(
-                  (target) =>
-                    target.workspaceId === workbenchTarget?.workspaceId &&
-                    target.sessionId === workbenchTarget.sessionId,
-                )}
+                preparingTaskDraft={extensionHostActions.preparingTaskDraft}
                 activeSlashCommand={slashMenu.activeSlashFlow?.command}
                 activeSlashCommandMeta={slashMenu.activeSlashFlow?.command?.description}
                 attachments={composerAttachments}
@@ -1672,12 +1615,7 @@ export default function App() {
             onActivateTool={workbench.activateTool}
             onCloseTool={workbench.closeTool}
             onShowChooser={workbench.showChooser}
-            error={
-              workbench.error ||
-              (extensionFileError?.target === workbenchTarget
-                ? extensionFileError.message
-                : undefined)
-            }
+            error={workbench.error || extensionHostActions.fileError}
             loading={!workbench.ready}
             onRetryRestore={workbench.retryRestore}
           >
@@ -1687,8 +1625,10 @@ export default function App() {
                 target={workbenchTarget}
                 view={activeExtensionView}
                 theme={extensionViewTheme}
-                onBeforePrepareTaskDraft={beforePrepareTaskDraft}
-                onPrepareTaskDraftPendingChange={handlePrepareTaskDraftPendingChange}
+                onBeforePrepareTaskDraft={extensionHostActions.beforePrepareTaskDraft}
+                onPrepareTaskDraftPendingChange={
+                  extensionHostActions.handlePrepareTaskDraftPendingChange
+                }
               />
             ) : selectedToolId === "changes" ? (
               <DiffPanel
