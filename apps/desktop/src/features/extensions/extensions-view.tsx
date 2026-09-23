@@ -33,70 +33,9 @@ export function ExtensionsTab({
   onToggleExtension,
   onOpenExtensionFolder,
 }: ExtensionsTabProps) {
-  if (selected) {
-    const manageable = isManageableExtension(selected);
-    const compatibilityRecords = commandCompatibility
-      .filter((record) => record.extensionPath === selected.path)
-      .sort((left, right) => left.commandName.localeCompare(right.commandName));
-    return (
-      <ResourceDetail
-        actions={
-          manageable ? (
-            <button
-              className="button button--secondary"
-              type="button"
-              onClick={() => onOpenExtensionFolder(selected.path)}
-            >
-              Open folder
-            </button>
-          ) : null
-        }
-        backLabel="All extensions"
-        enabled={selected.enabled}
-        icon={<ExtensionIcon />}
-        subtitle={selected.sourceInfo.source}
-        title={selected.displayName}
-        onBack={() => onSelect(undefined)}
-        onToggle={manageable ? (enabled) => onToggleExtension(selected.path, enabled) : undefined}
-      >
-        {selected.description ? (
-          <p className="resource-detail__description">{selected.description}</p>
-        ) : null}
-        <SettingsGroup>
-          <SettingsRow
-            title="Source"
-            description={
-              selected.sourceInfo.origin === "package"
-                ? "Installed as a package"
-                : "Loaded from a file"
-            }
-          >
-            <span className="settings-row__value">{extensionGroupLabel(selected)}</span>
-          </SettingsRow>
-          {extensionGroupLabel(selected) === "Built-in" ? null : (
-            <SettingsRow title="Location">
-              <code className="resource-detail__code" title={selected.path}>
-                {displayPath(selected.path, workspace.path)}
-              </code>
-            </SettingsRow>
-          )}
-        </SettingsGroup>
-        <ExtensionContributionSection title="Tools" items={selected.tools} />
-        {selected.commands.length > 0 ? (
-          <ExtensionCompatibilitySection
-            commands={selected.commands}
-            compatibilityRecords={compatibilityRecords}
-          />
-        ) : null}
-        <ExtensionContributionSection title="Flags" items={selected.flags} />
-        <ExtensionContributionSection title="Shortcuts" items={selected.shortcuts} />
-        <ExtensionDiagnostics diagnostics={selected.diagnostics} />
-      </ResourceDetail>
-    );
-  }
-
-  if (extensions.length === 0) {
-    return (
+  // The list stays mounted under an open detail so expanded groups, scroll and focus survive.
+  const list =
+    extensions.length === 0 ? (
       <ResourceEmptyState
         title={searching ? "No extensions match" : "No extensions yet"}
         body={
@@ -105,17 +44,101 @@ export function ExtensionsTab({
             : "Extensions are discovered in this workspace and your user extension folders. Refresh after adding one."
         }
       />
+    ) : (
+      <ResourceList
+        expanded={searching}
+        groups={groupExtensions(extensions, onToggleExtension)}
+        icon={<ExtensionIcon />}
+        testId="extensions-list"
+        onOpen={onSelect}
+      />
     );
-  }
 
   return (
-    <ResourceList
-      expanded={searching}
-      groups={groupExtensions(extensions, onToggleExtension)}
+    <>
+      {selected ? (
+        <ExtensionDetail
+          commandCompatibility={commandCompatibility}
+          selected={selected}
+          workspace={workspace}
+          onOpenExtensionFolder={onOpenExtensionFolder}
+          onSelect={onSelect}
+          onToggleExtension={onToggleExtension}
+        />
+      ) : null}
+      <div hidden={Boolean(selected)}>{list}</div>
+    </>
+  );
+}
+
+function ExtensionDetail({
+  selected,
+  workspace,
+  commandCompatibility,
+  onSelect,
+  onToggleExtension,
+  onOpenExtensionFolder,
+}: Omit<ExtensionsTabProps, "extensions" | "searching" | "selected"> & {
+  readonly selected: RuntimeExtensionRecord;
+}) {
+  const manageable = isManageableExtension(selected);
+  const compatibilityRecords = commandCompatibility
+    .filter((record) => record.extensionPath === selected.path)
+    .sort((left, right) => left.commandName.localeCompare(right.commandName));
+  return (
+    <ResourceDetail
+      actions={
+        manageable ? (
+          <button
+            className="button button--secondary"
+            type="button"
+            onClick={() => onOpenExtensionFolder(selected.path)}
+          >
+            Open folder
+          </button>
+        ) : null
+      }
+      backLabel="All extensions"
+      enabled={selected.enabled}
       icon={<ExtensionIcon />}
-      testId="extensions-list"
-      onOpen={onSelect}
-    />
+      subtitle={selected.sourceInfo.source}
+      title={selected.displayName}
+      onBack={() => onSelect(undefined)}
+      onToggle={manageable ? (enabled) => onToggleExtension(selected.path, enabled) : undefined}
+    >
+      {selected.description ? (
+        <p className="resource-detail__description">{selected.description}</p>
+      ) : null}
+      <SettingsGroup>
+        <SettingsRow
+          title="Source"
+          description={
+            selected.sourceInfo.origin === "package"
+              ? "Installed as a package"
+              : "Loaded from a file"
+          }
+        >
+          <span className="settings-row__value">{extensionGroupLabel(selected)}</span>
+        </SettingsRow>
+        {extensionGroupLabel(selected) === "Built-in" ? null : (
+          <SettingsRow title="Location">
+            <code className="resource-detail__code" title={selected.path}>
+              {displayPath(selected.path, workspace.path)}
+            </code>
+          </SettingsRow>
+        )}
+      </SettingsGroup>
+      <ExtensionContributionSection title="Tools" items={selected.tools} />
+      {selected.commands.length > 0 ? (
+        <ExtensionCompatibilitySection
+          commands={selected.commands}
+          compatibilityRecords={compatibilityRecords}
+        />
+      ) : null}
+      <ExtensionContributionSection title="Flags" items={selected.flags} />
+      <ExtensionContributionSection title="Shortcuts" items={selected.shortcuts} />
+      <ExtensionDiagnostics diagnostics={selected.diagnostics} />
+    </ResourceDetail>
   );
 }
 

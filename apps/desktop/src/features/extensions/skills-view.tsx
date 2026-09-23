@@ -31,67 +31,9 @@ export function SkillsTab({
   onOpenSkillFolder,
   onTrySkill,
 }: SkillsTabProps) {
-  if (selected) {
-    return (
-      <ResourceDetail
-        actions={
-          <>
-            <button
-              className="button button--secondary"
-              type="button"
-              onClick={() => onOpenSkillFolder(selected.filePath)}
-            >
-              Open folder
-            </button>
-            <button
-              className="button button--primary"
-              type="button"
-              onClick={() => onTrySkill(selected)}
-            >
-              Try
-            </button>
-          </>
-        }
-        backLabel="All skills"
-        enabled={selected.enabled}
-        icon={<SkillIcon />}
-        subtitle={selected.slashCommand}
-        title={titleCase(selected.name)}
-        onBack={() => onSelect(undefined)}
-        onToggle={(enabled) => onToggleSkill(selected.filePath, enabled)}
-      >
-        <p className="resource-detail__description">{selected.description}</p>
-        <SettingsGroup>
-          <SettingsRow
-            title="Slash command"
-            description="Type it in the composer to run the skill."
-          >
-            <code className="resource-detail__code">{selected.slashCommand}</code>
-          </SettingsRow>
-          <SettingsRow
-            title="Model invocation"
-            description={
-              selected.disableModelInvocation
-                ? "Only runs when you type its slash command."
-                : "pi can also choose this skill on its own when it fits the task."
-            }
-          >
-            <span className="settings-row__value">
-              {selected.disableModelInvocation ? "Slash command only" : "Automatic"}
-            </span>
-          </SettingsRow>
-          <SettingsRow title="Location" description={sourceScopeGroupLabel(selected.scope)}>
-            <code className="resource-detail__code" title={selected.filePath}>
-              {displayPath(selected.filePath, workspace.path)}
-            </code>
-          </SettingsRow>
-        </SettingsGroup>
-      </ResourceDetail>
-    );
-  }
-
-  if (skills.length === 0) {
-    return (
+  // The list stays mounted under an open detail so expanded groups, scroll and focus survive.
+  const list =
+    skills.length === 0 ? (
       <ResourceEmptyState
         title={searching ? "No skills match" : "No skills yet"}
         body={
@@ -100,17 +42,76 @@ export function SkillsTab({
             : "Skills are discovered in this workspace and your user skill folders. Create one, or refresh after adding one."
         }
       />
+    ) : (
+      <ResourceList
+        expanded={searching}
+        groups={groupSkills(skills, onToggleSkill)}
+        icon={<SkillIcon />}
+        testId="skills-list"
+        onOpen={onSelect}
+      />
     );
-  }
 
   return (
-    <ResourceList
-      expanded={searching}
-      groups={groupSkills(skills, onToggleSkill)}
-      icon={<SkillIcon />}
-      testId="skills-list"
-      onOpen={onSelect}
-    />
+    <>
+      {selected ? (
+        <ResourceDetail
+          actions={
+            <>
+              <button
+                className="button button--secondary"
+                type="button"
+                onClick={() => onOpenSkillFolder(selected.filePath)}
+              >
+                Open folder
+              </button>
+              <button
+                className="button button--primary"
+                type="button"
+                onClick={() => onTrySkill(selected)}
+              >
+                Try
+              </button>
+            </>
+          }
+          backLabel="All skills"
+          enabled={selected.enabled}
+          icon={<SkillIcon />}
+          subtitle={selected.slashCommand}
+          title={titleCase(selected.name)}
+          onBack={() => onSelect(undefined)}
+          onToggle={(enabled) => onToggleSkill(selected.filePath, enabled)}
+        >
+          <p className="resource-detail__description">{selected.description}</p>
+          <SettingsGroup>
+            <SettingsRow
+              title="Slash command"
+              description="Type it in the composer to run the skill."
+            >
+              <code className="resource-detail__code">{selected.slashCommand}</code>
+            </SettingsRow>
+            <SettingsRow
+              title="Model invocation"
+              description={
+                selected.disableModelInvocation
+                  ? "Only runs when you type its slash command."
+                  : "pi can also choose this skill on its own when it fits the task."
+              }
+            >
+              <span className="settings-row__value">
+                {selected.disableModelInvocation ? "Slash command only" : "Automatic"}
+              </span>
+            </SettingsRow>
+            <SettingsRow title="Location" description={sourceScopeGroupLabel(selected.scope)}>
+              <code className="resource-detail__code" title={selected.filePath}>
+                {displayPath(selected.filePath, workspace.path)}
+              </code>
+            </SettingsRow>
+          </SettingsGroup>
+        </ResourceDetail>
+      ) : null}
+      <div hidden={Boolean(selected)}>{list}</div>
+    </>
   );
 }
 
