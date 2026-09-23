@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "pnpm --filter @pi-gui/desktop dev",
     "build": "pnpm --filter @pi-gui/desktop run build && pnpm --filter @pi-gui/website run build",
-    "marketing:demo": "pnpm --filter @pi-gui/desktop run demo:readme",
+    "marketing:media": "pnpm --filter @pi-gui/desktop run demo:product-media",
     "marketing:capture": "pnpm --filter @pi-gui/desktop run demo:showcase-captures",
     "marketing:render": "pnpm --filter @pi-app/video run render",
     "typecheck": "pnpm check:workspaces && pnpm build:shared && pnpm -r --if-present typecheck && pnpm typecheck:extension-examples",

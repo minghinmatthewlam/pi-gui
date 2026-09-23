@@ -15,7 +15,7 @@ async function main() {
 
   assert.match(
     readme,
-    /Download the latest `\.dmg` \(macOS\) or `\.AppImage` \(Linux\) from the\s+\[Releases page\]/,
+    /Download the latest `\.dmg` \(macOS\), `\.AppImage` or `\.deb` \(Linux\), or `\.exe` \(Windows\) from the\s+\[Releases page\]/,
   );
   assert.match(readme, /brew install --cask pi-gui/);
   assert.match(readme, /brew upgrade --cask pi-gui/);
@@ -23,14 +23,14 @@ async function main() {
 
   assert.match(
     siteMetadata,
-    /Install (?:it )?from GitHub Releases(?: on either platform, or Homebrew on macOS)?/,
+    /Install it from GitHub Releases on macOS, Linux and Windows, or Homebrew on macOS/,
   );
+  assert.match(siteMetadata, /brew install --cask minghinmatthewlam\/tap\/pi-gui/);
   assert.doesNotMatch(siteMetadata, /source-install today/);
 
-  assert.match(websitePage, /Download Beta/);
-  assert.match(websitePage, /brew install --cask/);
-  assert.match(websitePage, /brew upgrade --cask/);
-  assert.match(websitePage, /Source install is for local development/);
+  assert.match(websitePage, /BREW_INSTALL/);
+  assert.match(websitePage, /brew upgrade --cask pi-gui/);
+  assert.match(websitePage, /Building from source is for contributors/);
   assert.doesNotMatch(websitePage, /Run the beta from source/);
 
   process.stdout.write("Install copy is aligned across README and website.\n");

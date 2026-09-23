@@ -1,180 +1,206 @@
 # pi-gui
 
-A Codex-style desktop app for the [`pi`](https://github.com/earendil-works/pi) coding agent.
+The desktop app for the [pi](https://github.com/earendil-works/pi) coding agent.
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Latest release](https://img.shields.io/github/v/release/minghinmatthewlam/pi-gui?include_prereleases&label=release)](https://github.com/minghinmatthewlam/pi-gui/releases)
-[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey.svg)](#install)
+[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey.svg)](#install)
 
-pi-gui gives `pi` a native home on the desktop: a threaded timeline of your agent
-sessions, git worktrees per thread, an integrated terminal and inline diff viewer,
-and multi-agent orchestration — all backed by `pi`'s own session files as the source
-of truth. It is a UI shell around [`@earendil-works/pi-coding-agent`](https://www.npmjs.com/package/@earendil-works/pi-coding-agent),
-not a separate agent runtime: session management, model/auth setup, and agent
-execution all run through upstream `pi`.
+Run agents in parallel threads, each in its own git worktree if you want one. Review every
+change, run the tests in a real terminal, and ship without leaving the window. pi-gui is a
+desktop shell around [`@earendil-works/pi-coding-agent`](https://www.npmjs.com/package/@earendil-works/pi-coding-agent),
+not a separate agent: sessions, models, auth and tools all run through pi itself, so anything
+you set up with the pi CLI carries over.
 
-![pi-gui in action](./docs/assets/demo.gif)
+[![An agent in pi-gui fixing a bug, running the tests, then the change open in the review tab](./apps/website/public/media/hero-poster.webp)](./apps/website/public/media/hero.mp4)
 
-<sub>Expanding a tool call, reviewing the diff panel, the integrated terminal, and a theme switch. ([higher-quality MP4](./docs/assets/demo.mp4))</sub>
-
-## Screenshots
-
-| Thread timeline (dark)                                    | Thread timeline (light)                                     |
-| --------------------------------------------------------- | ----------------------------------------------------------- |
-| ![Thread view, dark theme](./docs/assets/thread-dark.png) | ![Thread view, light theme](./docs/assets/thread-light.png) |
-
-| Inline diff viewer                         | Integrated terminal                                     |
-| ------------------------------------------ | ------------------------------------------------------- |
-| ![Diff panel](./docs/assets/diff-dark.png) | ![Integrated terminal](./docs/assets/terminal-dark.png) |
+<sub>A real run: the agent fixes a bug, adds a test and runs it, then the change opens for review. ([Watch the video](./apps/website/public/media/hero.mp4))</sub>
 
 ## Features
 
-- **Threaded timeline** — each session renders as a timeline of messages and
-  collapsible tool calls, Codex-style.
-- **Git worktrees per thread** — start a thread in the workspace directly (`Local`)
-  or in an isolated git worktree so parallel work never collides.
-- **Multi-agent orchestration** — an orchestrator thread can spin up and supervise
-  child worker threads.
-- **Integrated terminal** — a real PTY terminal (via `node-pty`) docked in the app.
-- **Inline diff viewer** — review changed files in a side panel (toggle with
-  <kbd>⌘/Ctrl</kbd>+<kbd>D</kbd>).
-- **Composer niceties** — `@`-mention files, and paste or drag-and-drop image
-  attachments straight into the prompt.
-- **Skills & extensions** — manage `pi` skills and extensions from a dedicated view.
-- **Appearance themes** — light and dark, with selectable theme presets.
-- **Native notifications** — get an OS notification when an agent run finishes.
-- **Session archive** — archive threads you're done with to keep the sidebar tidy.
-- **Multiple providers** — connect model providers via OAuth or API key under
-  **Settings → Providers**.
+### Run agents side by side
+
+Every task gets its own thread. Start it in your checkout or in a fresh git worktree, then
+start the next one while it works. The sidebar shows what is running, what finished and what
+needs you. Pin threads, group them by time or workspace, and archive the ones you are done with.
+
+<img src="./apps/website/public/media/threads.webp" alt="pi-gui running an agent thread while two other threads work in the sidebar" width="720">
+
+### Review every change before it lands
+
+The Changes tab shows exactly what the agent touched. Compare uncommitted work, a branch
+against its base, or a single turn, and stage or unstage it file by file.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./apps/website/public/media/review-dark.webp">
+  <img src="./apps/website/public/media/review-light.webp" alt="The Changes tab showing the diff an agent made to src/price.js" width="720">
+</picture>
+
+### Terminal and files in the same window
+
+The workbench beside the conversation holds a real terminal, a file explorer and editor,
+the review tab, your worktrees, and tabs from desktop extensions. Each task keeps its own layout.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./apps/website/public/media/terminal-dark.webp">
+  <img src="./apps/website/public/media/terminal-light.webp" alt="The integrated terminal running the test suite next to the thread" width="720">
+</picture>
+
+### Everything is a keystroke away
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./apps/website/public/media/palette-dark.webp">
+  <img src="./apps/website/public/media/palette-light.webp" alt="The command palette listing recent chats and actions" width="720">
+</picture>
+
+| Shortcut (macOS; use Ctrl on Linux and Windows)    | Does                                  |
+| -------------------------------------------------- | ------------------------------------- |
+| <kbd>⌘</kbd> <kbd>K</kbd>                          | Search chats, workspaces and actions  |
+| <kbd>⌘</kbd> <kbd>P</kbd>                          | Open any file in the current checkout |
+| <kbd>Ctrl</kbd> <kbd>Tab</kbd>                     | Switch between recent threads         |
+| <kbd>⌘</kbd> <kbd>1</kbd> to <kbd>9</kbd>          | Jump to a thread in the sidebar       |
+| <kbd>⌘</kbd> <kbd>J</kbd>                          | Toggle the terminal                   |
+| <kbd>⌘</kbd> <kbd>D</kbd>                          | Toggle the Changes tab                |
+| <kbd>⌘</kbd> <kbd>⌥</kbd> <kbd>B</kbd>             | Show or hide the workbench            |
+| <kbd>Enter</kbd> while a run is going              | Queue a follow-up                     |
+| <kbd>⌘</kbd> <kbd>Enter</kbd> while a run is going | Steer the current run                 |
+
+### And the rest
+
+- **Scheduled tasks.** Have pi rerun a prompt on a schedule, such as a weekly dependency
+  check, while the app is open.
+- **Skills and extensions.** Turn pi skills and extensions on and off, try them from the
+  composer, and give desktop extensions their own workbench tabs.
+- **Any provider.** Sign in with OAuth, paste an API key, or point at a custom endpoint.
+  Pick the model and thinking level per thread.
+- **Fork and rewind.** Fork a thread from any message into the same checkout or a new
+  worktree, and move around the session tree with `/tree`.
+- **Composer.** `@`-mention files, and paste or drop images into the prompt.
+- **Threads that run threads.** An agent can start, read and message other threads, which
+  show up in the sidebar like any other.
+- **Notifications.** Get told when a background thread finishes, fails or needs you.
+- **Themes.** Light and dark, plus presets like Catppuccin, Tokyo Night, Nord, Dracula,
+  Gruvbox and GitHub.
 
 ## Install
 
-pi-gui is in public beta for **macOS (Apple Silicon)** and **Linux (AppImage)**.
+pi-gui is in public beta for macOS (Apple Silicon), Linux (x64) and Windows (x64).
 
-### From GitHub Releases
-
-Download the latest `.dmg` (macOS) or `.AppImage` (Linux) from the
+Download the latest `.dmg` (macOS), `.AppImage` or `.deb` (Linux), or `.exe` (Windows) from the
 [Releases page](https://github.com/minghinmatthewlam/pi-gui/releases).
 
-On macOS, drag `pi-gui.app` into `/Applications` and launch it. Releases are signed
-and notarized. To update, download the newer release and replace the app.
+- **macOS:** drag `pi-gui.app` into Applications. Releases are signed and notarized.
+- **Linux:** make the AppImage executable and run it, or install the `.deb`.
+- **Windows:** run the setup `.exe`, or use the portable `.exe`. Builds are not code-signed
+  yet, so SmartScreen may ask you to confirm.
 
-### With Homebrew (macOS)
+On macOS you can also use Homebrew:
 
 ```bash
 brew tap minghinmatthewlam/tap
 brew install --cask pi-gui
 ```
 
-Update with `brew upgrade --cask pi-gui`. During beta, a Homebrew upgrade may prompt
-you to re-confirm macOS permissions or Dock placement.
+Update with `brew upgrade --cask pi-gui`. During the beta, a Homebrew upgrade may ask you to
+re-confirm macOS permissions or Dock placement. Other installs tell you when a new release is
+out and update from the Releases page.
 
-### From source
-
-See [Development](#development). Building from source is intended for contributors,
-not as the primary install path.
+Building from source is for contributors; see [Development](#development).
 
 ## Quickstart
 
-1. Install pi-gui and launch it.
+1. Install pi-gui and open it.
 2. Open **Settings → Providers** and connect a model provider (OAuth or API key).
-3. Add a workspace (a local project folder).
-4. Click **New thread**, pick `Local` or `Worktree`, and send your first prompt.
+3. Add a workspace: a local project folder.
+4. Click **New thread**, choose **Local** or **Worktree**, and send your first prompt.
 
-You need valid model/provider authentication that `pi` supports; pi-gui uses `pi`'s
-auth and session state, so anything you've already configured with the `pi` CLI
-carries over.
+pi-gui reads and writes pi's own session files and settings, so threads, credentials and
+skills are shared with the pi CLI.
 
 ## Architecture
 
-pi-gui is an Electron app organized around a tight main/preload/renderer boundary,
-sitting on top of the `pi` runtime:
+pi-gui is an Electron app with a tight main, preload and renderer boundary, on top of the pi
+runtime:
 
-- **Renderer** (`apps/desktop/src`) — the React UI: timeline, composer, diff panel,
-  terminal, settings. It talks to the main process only through a typed IPC surface.
-- **Preload** (`apps/desktop/electron/preload.ts`) — the narrow bridge that exposes
-  that IPC surface to the renderer; the renderer gets no broad Node access.
-- **Main** (`apps/desktop/electron`) — the Node side: windowing, session supervision,
-  worktrees, terminal PTYs, notifications, and persistence.
-- **`packages/pi-sdk-driver`** — a thin adapter from the desktop app to
-  `@earendil-works/pi-coding-agent`. It stays close to upstream `pi` and does not
-  fork or reimplement runtime behavior.
-- **JSONL session files as the source of truth** — `pi` persists each session as a
-  JSONL transcript on disk; pi-gui reads those files as the authoritative record for
-  closed sessions rather than keeping a divergent copy.
+- **Renderer** (`apps/desktop/src`): the React UI, including the timeline, composer,
+  workbench and settings. It talks to the main process only through a typed IPC surface.
+- **Preload** (`apps/desktop/electron/preload.ts`): the narrow bridge that exposes that IPC
+  surface. The renderer gets no broad Node access.
+- **Main** (`apps/desktop/electron`): windows, session supervision, worktrees, terminal PTYs,
+  scheduled tasks, notifications and persistence.
+- **`packages/pi-sdk-driver`**: a thin adapter over `@earendil-works/pi-coding-agent`. It stays
+  close to upstream pi and does not fork or reimplement runtime behavior.
+- **Session files are the source of truth.** pi stores each session as a JSONL transcript on
+  disk, and pi-gui reads those files rather than keeping its own copy.
 
-Supporting packages: `packages/session-driver` (shared session driver types) and
-`packages/catalogs` (lightweight workspace/session catalog state).
+See [docs/architecture.md](docs/architecture.md) for ownership and boundaries.
 
 ## Development
 
-Requires Node >=22.19.0 <26 and [pnpm](https://pnpm.io) (managed via `corepack`). pnpm is
-the supported package manager, and `pnpm-lock.yaml` is the authoritative lockfile.
+Requires Node 22.19 or newer (CI runs Node 22) and [pnpm](https://pnpm.io) through `corepack`.
+`pnpm-lock.yaml` is the authoritative lockfile.
 
 ```bash
 corepack enable
 pnpm install
 ```
 
-Common commands (run from the repo root):
+Common commands, from the repo root:
 
 ```bash
-pnpm dev         # run the desktop app in development (electron-vite, hot reload)
-pnpm check       # CI baseline: formatting, lint, renderer boundaries, workspace types, guard/driver/release-helper tests
-pnpm build       # build the desktop and website products
-pnpm marketing:render # explicitly render the Remotion showcase video
-pnpm typecheck   # type-check all workspaces
-pnpm format      # apply the shared formatter locally
-pnpm format:check # check formatting without changing files
-pnpm lint        # correctness rules plus typed promise and unsafe-any checks
-pnpm test        # run each workspace's tests (desktop runs the core E2E lane)
+pnpm dev            # run the desktop app with hot reload
+pnpm check          # CI baseline: format, lint, renderer boundaries, types, guard and driver tests
+pnpm build          # build the desktop app and the website
+pnpm typecheck      # type-check all workspaces
+pnpm lint           # correctness rules plus typed promise and unsafe-any checks
+pnpm format         # apply the shared formatter
+pnpm test           # each workspace's tests (desktop runs the core E2E lane)
+pnpm marketing:media  # re-record the README and website media from a real agent run
 ```
 
-`pnpm check` is the shared local/CI baseline. It does not launch Electron or
-replace the desktop, website-build, and package CI jobs. Formatting is enforced;
-typed lint rejects unsafe uses of `any` but does not ban every explicit `any` declaration.
-CI rejects Playwright `.only` tests so one focused test cannot hide the suite.
-See [the CI adoption plan](docs/ci-baseline.md) for current coverage and next steps.
+`pnpm check` is the shared local and CI baseline. It does not launch Electron or replace the
+desktop, website-build and package CI jobs; see [docs/ci-baseline.md](docs/ci-baseline.md).
 
-Desktop end-to-end tests use a Playwright + Electron harness and are organized into
-lanes. The default `pnpm test` runs the `core` lane; to run everything:
+Desktop end-to-end tests drive the real Electron app with Playwright, in lanes. `pnpm test`
+runs the `core` lane; to run everything:
 
 ```bash
 pnpm --filter @pi-gui/desktop run test:e2e:all   # core + live + native
 ```
 
-See [`apps/desktop/README.md`](./apps/desktop/README.md) for lane details and
-platform-specific packaging notes. Package a Linux AppImage locally with:
-
-```bash
-pnpm --filter @pi-gui/desktop run package:linux
-```
+See [`apps/desktop/README.md`](./apps/desktop/README.md) for the lanes, packaging on each
+platform, and how the product media is recorded.
 
 ## Repository layout
 
-- `apps/desktop` — the Electron app (renderer UI + main/preload).
-- `apps/website` — the marketing/landing site.
-- `packages/pi-sdk-driver` — adapter over `@earendil-works/pi-coding-agent`.
-- `packages/session-driver` — shared session driver types.
-- `packages/catalogs` — workspace/session catalog state.
+- `apps/desktop`: the Electron app (renderer, main and preload).
+- `apps/website`: [pi-gui.com](https://www.pi-gui.com).
+- `packages/pi-sdk-driver`: the adapter over `@earendil-works/pi-coding-agent`.
+- `packages/session-driver`: shared session driver types.
+- `packages/catalogs`: workspace and session catalog state.
+- `packages/extension-ui`: helpers for building desktop extension views.
+- `examples/desktop-extensions`: example extensions with their own workbench tabs.
+- `video`: the Remotion showcase video.
+- `docs`: architecture, CI and design notes.
+- `.agents/skills`: checked-in agent skills, including desktop verification.
 
 ## Contributing
 
-Contributions are welcome — see [CONTRIBUTING.md](./CONTRIBUTING.md) for setup,
-verification expectations, and the desktop test lanes. Desktop changes are expected
-to be verified on the real Electron surface, not only by unit tests.
+Contributions are welcome. See [CONTRIBUTING.md](./CONTRIBUTING.md) for setup, verification
+expectations and the desktop test lanes. Desktop changes should be verified on the real
+Electron app, not only by unit tests.
 
 ## Computer use
 
-Native computer use is not built into pi-gui. Desktop/browser control is available
-separately through the author's standalone
-[`computer-use-mcp`](https://github.com/minghinmatthewlam/computer-use-mcp) server,
-which any MCP-capable agent can use.
+Native computer use is not built into pi-gui. Desktop and browser control is available
+separately through the standalone
+[`computer-use-mcp`](https://github.com/minghinmatthewlam/computer-use-mcp) server, which any
+MCP-capable agent can use.
 
 ## Acknowledgements
 
-- Built on [`@earendil-works/pi-coding-agent`](https://www.npmjs.com/package/@earendil-works/pi-coding-agent).
-- Upstream runtime and ecosystem by [`earendil-works/pi`](https://github.com/earendil-works/pi).
+Built on [`@earendil-works/pi-coding-agent`](https://www.npmjs.com/package/@earendil-works/pi-coding-agent)
+and the [pi](https://github.com/earendil-works/pi) runtime and ecosystem.
 
 ## License
 

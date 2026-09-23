@@ -102,8 +102,15 @@ pnpm --filter @pi-gui/desktop run test:e2e:all
 
 The root commands own published marketing outputs:
 
-- `pnpm marketing:demo` records one fresh demo and writes the README files in
-  `docs/assets/` plus the website copy in `apps/website/public/demo.mp4`.
+- `pnpm marketing:media` records the README and pi-gui.com media in
+  `apps/website/public/media/`: the hero video and poster, and light and dark stills of the thread
+  list, review, terminal and command palette. It runs
+  [`scripts/product-media/capture.media.ts`](scripts/product-media/capture.media.ts), which drives
+  a real agent run on Linux in its own 2x Xvfb display and records it with ffmpeg. The run
+  needs `PI_GUI_MARKETING_PROVIDER`, `PI_GUI_MARKETING_MODEL` and `PI_APP_REAL_AUTH_SOURCE_DIR` (the
+  pi agent directory holding `auth.json`); only the selected provider's saved credentials are
+  copied, into a private temporary directory, and that copy is deleted afterwards. Install Inter and
+  JetBrains Mono first so Linux captures match the macOS fonts.
 - `pnpm marketing:capture` writes the three Remotion inputs in
   `video/public/captures/`. The parallel-session capture starts two threads with initial prompts and
   requires both sessions to report `running` before recording or publishing the clip. The command
@@ -115,8 +122,9 @@ The root commands own published marketing outputs:
 [`scripts/marketing-assets.json`](../../scripts/marketing-assets.json) is the producer-to-consumer
 manifest. Preserve existing media and capture evidence. For a proof run, set
 `PI_GUI_MARKETING_STAGE_DIR` to an empty directory so capture commands write the same output tree
-there without replacing tracked media. The README capture uses synthetic test state, scrubs ambient
-provider credentials, and retains its profile and frames under `.artifacts/marketing/readme-demo/`.
+there without replacing tracked media. The product media capture scrubs ambient provider
+credentials and retains its profile, workspaces and raw recording under
+`.artifacts/marketing/product-media/`.
 Showcase capture writes an empty auth file, does not copy ambient credentials, and retains its
 synthetic profiles and frames under `.artifacts/marketing/showcase-captures/`.
 
