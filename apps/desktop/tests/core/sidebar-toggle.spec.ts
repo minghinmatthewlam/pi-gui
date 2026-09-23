@@ -165,10 +165,7 @@ test("toggles and persists the primary sidebar from the button and keyboard shor
     await window.keyboard.press(desktopShortcut(","));
     await expectSecondaryTakeover(window, "settings-surface");
     await window.getByRole("button", { name: "Appearance", exact: true }).click();
-    await window
-      .locator(".settings-row", { hasText: "Light" })
-      .locator('input[type="radio"]')
-      .click();
+    await window.getByRole("radio", { name: "Light", exact: true }).click();
     await writeTakeoverProof(window, "settings-light.png");
     await window.keyboard.press(desktopShortcut("B"));
     await expect.poll(async () => (await getDesktopState(window)).sidebarCollapsed).toBe(false);
@@ -192,10 +189,7 @@ test("toggles and persists the primary sidebar from the button and keyboard shor
 
     await window.keyboard.press(desktopShortcut(","));
     await expectSecondaryTakeover(window, "settings-surface");
-    await window
-      .locator(".settings-row", { hasText: "Dark" })
-      .locator('input[type="radio"]')
-      .click();
+    await window.getByRole("radio", { name: "Dark", exact: true }).click();
     await writeTakeoverProof(window, "settings-dark.png");
     await window.getByRole("button", { name: "Back to app", exact: true }).click();
 

@@ -214,10 +214,7 @@ test("dark mode keeps the send button visible before and after typing", async ()
     await expect(settingsSurface).toBeVisible();
     await settingsSurface.getByRole("button", { name: "Appearance", exact: true }).click();
     await expect(window.locator(".view-header__title")).toHaveText("Appearance");
-    await settingsSurface
-      .locator(".settings-row", { hasText: "Dark" })
-      .locator('input[type="radio"]')
-      .click();
+    await settingsSurface.getByRole("radio", { name: "Dark", exact: true }).click();
     await expect
       .poll(() => window.evaluate(() => document.documentElement.classList.contains("dark")))
       .toBe(true);
