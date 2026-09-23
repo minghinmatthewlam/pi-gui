@@ -10,7 +10,9 @@ set -euo pipefail
 NODE_MIN=22.19.0
 PNPM_VERSION=10.25.0
 
-# Virtual display, the shared libraries Electron needs on Ubuntu 24.04, and
+# Virtual display with a minimal window manager (X11 maximize is a request only
+# a window manager answers), the shared libraries Electron needs on Ubuntu
+# 24.04, libnotify so Electron reports desktop notifications as supported, and
 # ffmpeg so agents can record the display as video proof of UI changes.
 export DEBIAN_FRONTEND=noninteractive
 # The image ships extra PPAs (deadsnakes, ondrej/php) that the Custom network
@@ -18,11 +20,11 @@ export DEBIAN_FRONTEND=noninteractive
 # download. Tolerate that; a missing package still fails the install below.
 apt-get update -q || true
 apt-get install -y -q --no-install-recommends \
-  xvfb xauth dbus-x11 fonts-liberation \
+  xvfb xauth dbus-x11 openbox fonts-liberation \
   libnss3 libatk1.0-0t64 libatk-bridge2.0-0t64 libcups2t64 libdrm2 libgbm1 \
   libgtk-3-0t64 libasound2t64 libxss1 libxkbcommon0 libxcomposite1 \
   libxdamage1 libxrandr2 libxtst6 libpango-1.0-0 libcairo2 libsecret-1-0 \
-  ffmpeg
+  libnotify4 ffmpeg
 
 # pi-gui requires Node >=22.19. The image has several Node installs and its
 # /usr/local/bin/node points at Node 20, so pin one satisfying install at

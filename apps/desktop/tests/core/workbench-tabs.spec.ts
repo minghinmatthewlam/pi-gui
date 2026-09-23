@@ -1,9 +1,10 @@
-import { writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
 import {
   commitAllInGitRepo,
   desktopShortcut,
+  getDesktopState,
   initGitRepo,
   launchDesktop,
   makeUserDataDir,
@@ -244,6 +245,65 @@ test("restores each task's tabs and draft through Settings, switching, and resta
     await selectSession(window, TASK_B);
     await expectActiveTool(window, "Worktrees");
     await expect(window.getByTestId("composer")).toHaveValue("Draft for task B");
+  } finally {
+    await harness.close();
+  }
+});
+
+test("an invalid or orphaned task layout does not block other saved UI state", async () => {
+  test.setTimeout(90_000);
+  const fixture = await prepareWorkspace();
+  const options = {
+    agentDir: fixture.agentDir,
+    initialWorkspaces: [fixture.workspacePath],
+    testMode: "background" as const,
+  };
+  const uiStatePath = join(fixture.userDataDir, "ui-state.json");
+  const savedLayouts = async () =>
+    (
+      JSON.parse(await readFile(uiStatePath, "utf8")) as {
+        taskWorkbenchTemplatesBySession?: Record<string, unknown>;
+      }
+    ).taskWorkbenchTemplatesBySession ?? {};
+  let harness = await launchDesktop(fixture.userDataDir, options);
+  let layoutA = "";
+  let layoutB = "";
+  try {
+    const window = await harness.firstWindow();
+    await selectSession(window, TASK_A);
+    await addTool(window, "Files");
+    await selectSession(window, TASK_B);
+    await addTool(window, "Worktrees");
+    await window.getByTestId("composer").fill("Draft for task B");
+    await expect.poll(async () => Object.keys(await savedLayouts()).length).toBe(2);
+    await expect.poll(() => readFile(uiStatePath, "utf8")).toContain("Draft for task B");
+    const state = await getDesktopState(window);
+    layoutB = `${state.selectedWorkspaceId}:${state.selectedSessionId}`;
+    layoutA = Object.keys(await savedLayouts()).find((key) => key !== layoutB) ?? "";
+  } finally {
+    await harness.close();
+  }
+
+  const saved = JSON.parse(await readFile(uiStatePath, "utf8")) as Record<string, unknown> & {
+    taskWorkbenchTemplatesBySession: Record<string, Record<string, unknown>>;
+  };
+  const layouts = saved.taskWorkbenchTemplatesBySession;
+  layouts["missing-workspace:deleted-task"] = layouts[layoutB]!;
+  layouts[layoutA] = { ...layouts[layoutA], visibility: "expanded" };
+  await writeFile(uiStatePath, JSON.stringify(saved));
+
+  harness = await launchDesktop(fixture.userDataDir, options);
+  try {
+    const window = await harness.firstWindow();
+    await selectSession(window, TASK_B);
+    await expectActiveTool(window, "Worktrees");
+    await expect(window.getByTestId("composer")).toHaveValue("Draft for task B");
+    await expect.poll(async () => Object.keys(await savedLayouts())).toEqual([layoutB]);
+    await selectSession(window, TASK_A);
+    await addTool(window, "Terminal");
+    await expect
+      .poll(async () => Object.keys(await savedLayouts()).sort())
+      .toEqual([layoutA, layoutB].sort());
   } finally {
     await harness.close();
   }

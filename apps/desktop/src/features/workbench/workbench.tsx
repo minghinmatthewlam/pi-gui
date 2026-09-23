@@ -189,7 +189,7 @@ export function Workbench({
                   }}
                   role="tab"
                   tabIndex={selected || (view.selection.kind === "chooser" && index === 0) ? 0 : -1}
-                  title={tool.kind === "extension" ? `${tool.extensionId}: ${label}` : label}
+                  title={label}
                   type="button"
                 >
                   <ToolIcon tool={tool} />
@@ -313,11 +313,9 @@ export function Workbench({
                 </span>
                 <span className="workbench__choice-copy">
                   <strong>{extension.title}</strong>
-                  <span>
-                    {extension.state === "error"
-                      ? (extension.error ?? "View unavailable")
-                      : extension.extensionId}
-                  </span>
+                  {extension.state === "error" ? (
+                    <span>{extension.error ?? "View unavailable"}</span>
+                  ) : null}
                 </span>
               </button>
             ))}
@@ -333,9 +331,6 @@ export function Workbench({
                 ? "Finding this extension view…"
                 : "This extension view is unavailable"}
             </h2>
-            <p>
-              {activeTool.extensionId} · {activeTool.viewId}
-            </p>
             <p>
               {activeExtension?.error ||
                 extensionViewsError ||

@@ -23,6 +23,7 @@ import type {
   ReviewScope,
   ReviewSection,
 } from "../../../contracts/review";
+import { isolatedGitEnvironment } from "./git-environment";
 
 const MAX_FILES = 2_000;
 const MAX_CONTENT_BYTES = 8 * 1024 * 1024;
@@ -64,7 +65,10 @@ interface FileSource {
 }
 
 export interface GitReviewFile extends Omit<ReviewFileEntry, "reviewed"> {
+  /** Everything the comparison read, including the index; any change makes actions stale. */
   readonly fingerprint: string;
+  /** The reviewed content only. Staging moves it into the index without changing it. */
+  readonly contentFingerprint: string;
   readonly source: FileSource;
 }
 
@@ -102,7 +106,7 @@ function git(cwd: string, args: readonly string[], maxBuffer = MAX_GIT_BYTES): P
         encoding: "buffer",
         maxBuffer,
         timeout: 15_000,
-        env: { ...process.env, GIT_OPTIONAL_LOCKS: "0", GIT_TERMINAL_PROMPT: "0" },
+        env: isolatedGitEnvironment(),
       },
       (error, stdout, stderr) => {
         if (error && error.code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER") {
@@ -314,13 +318,20 @@ function parseStatus(output: string): StatusFile[] {
   return [...files.values()];
 }
 
+function workingIdentity(working: WorkingFile | undefined) {
+  return working ? { mode: working.mode, digest: working.digest } : undefined;
+}
+
 function fingerprint(source: FileSource): string {
+  return digest(JSON.stringify({ ...source, working: workingIdentity(source.working) }));
+}
+
+function contentFingerprint(source: FileSource): string {
   return digest(
     JSON.stringify({
-      ...source,
-      working: source.working
-        ? { mode: source.working.mode, digest: source.working.digest }
-        : undefined,
+      base: source.base,
+      head: source.head,
+      working: workingIdentity(source.working),
     }),
   );
 }
@@ -395,7 +406,13 @@ export async function createGitReview(
           statusRecords: entry.records,
         };
         const { records: _records, ...fields } = entry;
-        files.push({ ...fields, id: digest(entry.path), fingerprint: fingerprint(source), source });
+        files.push({
+          ...fields,
+          id: digest(entry.path),
+          fingerprint: fingerprint(source),
+          contentFingerprint: contentFingerprint(source),
+          source,
+        });
       }
       if (
         headOid !== (await resolveRevision(checkoutPath, "HEAD")) ||
@@ -548,6 +565,7 @@ export async function createGitReview(
         conflicted: false,
         source,
         fingerprint: fingerprint(source),
+        contentFingerprint: contentFingerprint(source),
       });
     }
     const coverage = combineCoverage([

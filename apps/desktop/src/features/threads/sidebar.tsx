@@ -72,6 +72,7 @@ import {
   type ThreadListEntry,
   type WorkspaceThreadGroup,
 } from "./thread-groups";
+import { useThreadShortcutHintsVisible } from "./thread-shortcut-hints";
 import type { Dispatch, SetStateAction } from "react";
 import type { DesktopAppState } from "../../../contracts/desktop-state";
 
@@ -107,14 +108,6 @@ interface SidebarProps {
 
 const IS_MAC = typeof navigator !== "undefined" && /Mac/i.test(navigator.userAgent);
 const RENAME_THREAD_SHORTCUT_HINT = IS_MAC ? "⇧⌘R" : "Ctrl+Shift+R";
-
-function commandChordHeld(event: KeyboardEvent): boolean {
-  if (event.shiftKey) return false;
-  if (event.type === "keyup" && (event.key === "Meta" || event.key === "Control")) {
-    return event.key === "Meta" ? event.ctrlKey : event.metaKey;
-  }
-  return event.metaKey || event.ctrlKey || event.key === "Meta" || event.key === "Control";
-}
 
 interface ThreadShortcutBadge {
   readonly slot: number;
@@ -153,7 +146,7 @@ export function Sidebar(props: SidebarProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [archivedOpen, setArchivedOpen] = useState(false);
   const [expandedHistory, setExpandedHistory] = useState<ReadonlySet<string>>(() => new Set());
-  const [commandHeld, setCommandHeld] = useState(false);
+  const commandHeld = useThreadShortcutHintsVisible(api.platform);
   const threadMenu = useThreadMenu({ api, setSnapshot, updateSnapshot });
   const shortcutOrder = visibleThreadShortcutOrder({
     grouping: threadGrouping,
@@ -173,22 +166,6 @@ export function Sidebar(props: SidebarProps) {
         }),
       )
     : undefined;
-
-  useEffect(() => {
-    const sync = (event: KeyboardEvent) => {
-      const next = commandChordHeld(event);
-      setCommandHeld((current) => (current === next ? current : next));
-    };
-    const clear = () => setCommandHeld(false);
-    window.addEventListener("keydown", sync);
-    window.addEventListener("keyup", sync);
-    window.addEventListener("blur", clear);
-    return () => {
-      window.removeEventListener("keydown", sync);
-      window.removeEventListener("keyup", sync);
-      window.removeEventListener("blur", clear);
-    };
-  }, []);
 
   useEffect(() => {
     return () => {

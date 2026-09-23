@@ -69,6 +69,7 @@ import {
   touchThreadSwitcherOrder,
 } from "../features/threads/thread-switcher-order";
 import { useThreadSwitcher } from "../features/threads/hooks/use-thread-switcher";
+import { dismissThreadShortcutHints } from "../features/threads/thread-shortcut-hints";
 import { SidebarToggleButton } from "../features/threads/sidebar-toggle-button";
 import { Topbar } from "./topbar";
 import { TerminalPanel } from "../features/workbench/terminal-panel";
@@ -879,6 +880,7 @@ export default function App() {
     // Bind once. Re-subscribing when session or search identity changes drops
     // Cmd+D and 1-9 in the gap after a thread switch or relaunch.
     const dispatch = (command: PiDesktopCommand) => {
+      dismissThreadShortcutHints();
       handleCommandRef.current(command);
     };
     const removeCommandListener = window.piApp?.onCommand?.(dispatch);

@@ -47,6 +47,7 @@ test("adds a workspace from the empty state button using a stubbed folder select
 });
 
 test("exposes File > Open Folder… with Command+O and reuses the same open-folder action", async () => {
+  test.skip(process.platform !== "darwin", "The application menu is only installed on macOS.");
   test.setTimeout(60_000);
   const userDataDir = await makeUserDataDir();
   const workspacePath = await makeWorkspace("native-open-folder-menu-workspace");
