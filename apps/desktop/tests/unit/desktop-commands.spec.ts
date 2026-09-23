@@ -5,6 +5,7 @@ import {
   createEarlyModifierChordBuffer,
   desktopCommands,
   getDesktopCommandFromShortcut,
+  isSinglePressCommand,
   platformShortcutModifier,
   CHANGES_TOGGLE_DEDUPE_MS,
   createChordPairGate,
@@ -85,6 +86,24 @@ test("maps Changes and thread digits from key or code", () => {
   expect(
     getDesktopCommandFromShortcut({ modifier: true, shift: false, key: "2", code: "Digit2" }),
   ).toBe(desktopCommands.selectRecentThread2);
+});
+
+test("maps Shift chords to rename and archive thread, once per press", () => {
+  expect(
+    getDesktopCommandFromShortcut({ modifier: true, shift: true, key: "A", code: "KeyA" }),
+  ).toBe(desktopCommands.archiveThread);
+  expect(
+    getDesktopCommandFromShortcut({ modifier: true, shift: true, key: "R", code: "KeyR" }),
+  ).toBe(desktopCommands.renameThread);
+  expect(
+    getDesktopCommandFromShortcut({ modifier: true, shift: false, key: "a", code: "KeyA" }),
+  ).toBeUndefined();
+  expect(
+    getDesktopCommandFromShortcut({ modifier: false, shift: true, key: "A", code: "KeyA" }),
+  ).toBeUndefined();
+  expect(isSinglePressCommand(desktopCommands.archiveThread)).toBe(true);
+  expect(isSinglePressCommand(desktopCommands.renameThread)).toBe(true);
+  expect(isSinglePressCommand(desktopCommands.toggleTerminal)).toBe(false);
 });
 
 test("replays search and settings chords that arrive before the listener is armed", () => {

@@ -54,7 +54,7 @@ import {
   desktopCommands,
   desktopIpc,
   getDesktopCommandFromShortcut,
-  isPaletteCommand,
+  isSinglePressCommand,
   isCloseFocusedSurfaceShortcut,
   platformShortcutModifier,
   type CustomProviderProbeInput,
@@ -472,12 +472,12 @@ function createWindow(): BrowserWindow {
       }) &&
       (terminalFocused || sidePanelFocusedWebContentsIds.has(webContentsId));
     if (terminalFocused) {
-      // Control+K and Control+P belong to the shell, so only macOS Command
-      // chords open a palette from the terminal.
-      if (
-        command === desktopCommands.toggleSidePanel ||
-        (process.platform === "darwin" && isPaletteCommand(command) && !input.isAutoRepeat)
-      ) {
+      // Control chords belong to the shell, so only macOS Command chords open
+      // a palette or act on the thread from the terminal.
+      if (process.platform === "darwin" && isSinglePressCommand(command)) {
+        event.preventDefault();
+        if (!input.isAutoRepeat) window.webContents.send(desktopIpc.appCommand, command);
+      } else if (command === desktopCommands.toggleSidePanel) {
         event.preventDefault();
         window.webContents.send(desktopIpc.appCommand, command);
       } else if (closeFocusedSurface) {
@@ -515,7 +515,7 @@ function createWindow(): BrowserWindow {
     if (command) {
       event.preventDefault();
       // Holding a palette chord would open and close it at the repeat rate.
-      if (isPaletteCommand(command) && input.isAutoRepeat) {
+      if (isSinglePressCommand(command) && input.isAutoRepeat) {
         return;
       }
       window.webContents.send(desktopIpc.appCommand, command);
@@ -758,7 +758,24 @@ function installApplicationMenu(): void {
       ],
     },
     { role: "editMenu" },
-    { role: "viewMenu" },
+    {
+      label: "View",
+      submenu: [
+        { role: "reload" },
+        // Shift+Cmd+R renames the thread, so Force Reload has no shortcut.
+        {
+          label: "Force Reload",
+          click: () => BrowserWindow.getFocusedWindow()?.webContents.reloadIgnoringCache(),
+        },
+        { role: "toggleDevTools" },
+        { type: "separator" },
+        { role: "resetZoom" },
+        { role: "zoomIn" },
+        { role: "zoomOut" },
+        { type: "separator" },
+        { role: "togglefullscreen" },
+      ],
+    },
     { role: "windowMenu" },
   ];
 

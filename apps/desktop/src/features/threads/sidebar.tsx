@@ -60,7 +60,8 @@ import {
 import { formatRelativeTime } from "../../lib/string-utils";
 import { sessionLastInteractedAt } from "../../../contracts/thread-recency";
 import type { WorkspaceMenuState } from "./hooks/use-workspace-menu";
-import { useThreadMenu, type ThreadMenuState } from "./hooks/use-thread-menu";
+import type { ThreadMenuState } from "./hooks/use-thread-actions";
+import { archiveThreadShortcut, ThreadActionsMenu } from "./thread-actions";
 import {
   recencyHistoryExpansionKey,
   sessionThreadKey,
@@ -85,6 +86,7 @@ interface SidebarProps {
   readonly threadGrouping: ThreadGrouping;
   readonly linkedWorktreeByWorkspaceId: ReadonlyMap<string, WorktreeRecord>;
   readonly wsMenu: WorkspaceMenuState;
+  readonly threadMenu: ThreadMenuState;
   readonly api: PiDesktopApi;
   readonly setSnapshot: Dispatch<SetStateAction<DesktopAppState | null>>;
   readonly updateSnapshot: (
@@ -107,7 +109,6 @@ interface SidebarProps {
 }
 
 const IS_MAC = typeof navigator !== "undefined" && /Mac/i.test(navigator.userAgent);
-const RENAME_THREAD_SHORTCUT_HINT = IS_MAC ? "⇧⌘R" : "Ctrl+Shift+R";
 
 interface ThreadShortcutBadge {
   readonly slot: number;
@@ -128,6 +129,7 @@ export function Sidebar(props: SidebarProps) {
     threadGrouping,
     linkedWorktreeByWorkspaceId,
     wsMenu,
+    threadMenu,
     api,
     setSnapshot,
     updateSnapshot,
@@ -147,7 +149,6 @@ export function Sidebar(props: SidebarProps) {
   const [archivedOpen, setArchivedOpen] = useState(false);
   const [expandedHistory, setExpandedHistory] = useState<ReadonlySet<string>>(() => new Set());
   const commandHeld = useThreadShortcutHintsVisible(api.platform);
-  const threadMenu = useThreadMenu({ api, setSnapshot, updateSnapshot });
   const shortcutOrder = visibleThreadShortcutOrder({
     grouping: threadGrouping,
     model: threadSidebarModel,
@@ -173,25 +174,31 @@ export function Sidebar(props: SidebarProps) {
     };
   }, [threadShortcutOrderRef]);
 
-  // Cmd+Shift+R renames the currently selected thread (same flow as the
-  // "Rename thread" context-menu item).
+  // Rename can start from the header, Cmd-K or its shortcut, so reveal the
+  // row that holds the rename field when it sits in a collapsed group.
+  const renameSessionId = threadMenu.renameSessionId;
   useEffect(() => {
-    const handleRenameShortcut = (event: KeyboardEvent) => {
-      if (!(event.metaKey || event.ctrlKey) || !event.shiftKey) return;
-      if (event.key.toLowerCase() !== "r" && event.code !== "KeyR") return;
-      if (activeView !== "threads" || !selectedWorkspace || !selectedSession) return;
-      const entry = [
-        ...threadSidebarModel.pinnedThreads,
-        ...threadSidebarModel.recencyOrder,
-        ...threadSidebarModel.archivedThreads,
-      ].find((t) => t.workspaceId === selectedWorkspace.id && t.session.id === selectedSession.id);
-      if (!entry) return;
-      event.preventDefault();
-      threadMenu.startRename(entry);
-    };
-    window.addEventListener("keydown", handleRenameShortcut);
-    return () => window.removeEventListener("keydown", handleRenameShortcut);
-  }, [activeView, selectedWorkspace, selectedSession, threadSidebarModel, threadMenu]);
+    if (!renameSessionId) return;
+    const holds = (threads: readonly ThreadListEntry[]) =>
+      threads.some((thread) => thread.session.id === renameSessionId);
+    if (holds(threadSidebarModel.archivedThreads)) {
+      setArchivedOpen(true);
+      return;
+    }
+    const keys = [
+      ...threadSidebarModel.recencySections
+        .filter((section) => holds(section.threads))
+        .map((section) => recencyHistoryExpansionKey(section.bucket)),
+      ...threadSidebarModel.workspaceGroups
+        .filter((group) => holds(group.threads))
+        .map((group) => workspaceHistoryExpansionKey(group.workspace.id)),
+    ];
+    setExpandedHistory((current) =>
+      keys.every((key) => current.has(key)) ? current : new Set([...current, ...keys]),
+    );
+    // Reveal once per rename; later list changes should not reopen groups.
+  }, [renameSessionId]);
+
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
   const pinnedSortableId = (thread: ThreadListEntry) => `pinned:${sessionThreadKey(thread)}`;
   const pinnedSessionKeyFromSortableId = (id: string) =>
@@ -1448,6 +1455,10 @@ const ThreadSessionRow = forwardRef<HTMLDivElement, ThreadSessionRowProps>(
     const actionContext = showContext ? ` in ${thread.contextLabel}` : "";
     const shortcut = useContext(ThreadShortcutContext)?.get(sessionThreadKey(thread));
     const shortcutBadge = overlay ? undefined : shortcut;
+    const menuOpen =
+      !overlay &&
+      threadMenu?.openMenu?.surface === "sidebar" &&
+      threadMenu.openMenu.sessionId === thread.session.id;
     const classes = [
       "session-row",
       active ? "session-row--active" : "",
@@ -1478,7 +1489,7 @@ const ThreadSessionRow = forwardRef<HTMLDivElement, ThreadSessionRowProps>(
             if (!threadMenu || overlay) return;
             event.preventDefault();
             event.stopPropagation();
-            threadMenu.openMenu(thread.session.id);
+            threadMenu.openSidebarMenu(thread.session.id);
           }}
         >
           <button
@@ -1544,88 +1555,34 @@ const ThreadSessionRow = forwardRef<HTMLDivElement, ThreadSessionRowProps>(
                   <PinIcon filled={pinned} />
                 </button>
               ) : null}
-              <button
-                aria-label={`${archived ? "Restore" : "Archive"} ${thread.session.title}${actionContext}`}
-                className="icon-button session-row__action"
-                type="button"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onAction();
-                }}
-              >
-                {archived ? <RestoreIcon /> : <ArchiveIcon />}
-              </button>
-              {threadMenu && !overlay ? (
-                <span
-                  className="session-row__menu-wrap"
-                  ref={
-                    threadMenu.menuSessionId === thread.session.id
-                      ? threadMenu.menuWrapRef
-                      : undefined
-                  }
+              <span className="shortcut-tooltip-wrap session-row__tooltip-wrap">
+                <button
+                  aria-label={`${archived ? "Restore" : "Archive"} ${thread.session.title}${actionContext}`}
+                  className="icon-button session-row__action"
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onAction();
+                  }}
                 >
-                  <button
-                    aria-label={`Thread actions for ${thread.session.title}${actionContext}`}
-                    aria-haspopup="menu"
-                    aria-expanded={threadMenu.menuSessionId === thread.session.id}
-                    className="icon-button session-row__action session-row__menu-button"
-                    type="button"
-                    onClick={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      threadMenu.toggleMenu(thread.session.id);
-                    }}
-                  >
-                    …
-                  </button>
-                  {threadMenu.menuSessionId === thread.session.id ? (
-                    <div className="workspace-menu session-row__menu" role="menu">
-                      <button
-                        className="workspace-menu__item"
-                        type="button"
-                        onClick={(event) =>
-                          threadMenu.runMenuAction(event, () => threadMenu.startRename(thread))
-                        }
-                      >
-                        <span>Rename thread</span>
-                        <span className="workspace-menu__shortcut" aria-hidden="true">
-                          {RENAME_THREAD_SHORTCUT_HINT}
-                        </span>
-                      </button>
-                      <button
-                        className="workspace-menu__item"
-                        type="button"
-                        onClick={(event) =>
-                          threadMenu.runMenuAction(event, () => threadMenu.archiveOrRestore(thread))
-                        }
-                      >
-                        {archived ? "Restore" : "Archive"}
-                      </button>
-                      {thread.session.hasUnseenUpdate ? (
-                        <button
-                          className="workspace-menu__item"
-                          type="button"
-                          onClick={(event) =>
-                            threadMenu.runMenuAction(event, () => threadMenu.markRead(thread))
-                          }
-                        >
-                          Mark as read
-                        </button>
-                      ) : null}
-                      <button
-                        className="workspace-menu__item"
-                        type="button"
-                        onClick={(event) =>
-                          threadMenu.runMenuAction(event, () => threadMenu.copySessionId(thread))
-                        }
-                      >
-                        Copy session id
-                      </button>
-                    </div>
-                  ) : null}
-                </span>
-              ) : null}
+                  {archived ? <RestoreIcon /> : <ArchiveIcon />}
+                </button>
+                {threadMenu && !overlay && !menuOpen ? (
+                  <span className="shortcut-tooltip session-row__tooltip" role="tooltip">
+                    <span>{archived ? "Restore thread" : "Archive thread"}</span>
+                    {archived ? null : <kbd>{archiveThreadShortcut(threadMenu.platform)}</kbd>}
+                  </span>
+                ) : null}
+              </span>
             </span>
+            {threadMenu && menuOpen ? (
+              <div className="session-row__menu-wrap" ref={threadMenu.menuWrapRef}>
+                <ThreadActionsMenu
+                  actions={threadMenu.actionsFor(thread)}
+                  className="session-row__menu"
+                />
+              </div>
+            ) : null}
           </span>
         </div>
         {threadMenu?.renameSessionId === thread.session.id ? (
@@ -1640,7 +1597,10 @@ const ThreadSessionRow = forwardRef<HTMLDivElement, ThreadSessionRowProps>(
             <input
               aria-label={`Rename thread ${thread.session.title}`}
               className="workspace-rename__input"
-              ref={threadMenu.renameInputRef}
+              // Mounts when a rename starts, including after the sidebar or a
+              // collapsed group opens to reveal the row.
+              autoFocus
+              onFocus={(event) => event.currentTarget.select()}
               value={threadMenu.renameDraft}
               onChange={(event) => threadMenu.setRenameDraft(event.target.value)}
               onKeyDown={(event) => {

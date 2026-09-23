@@ -334,6 +334,20 @@ export function CustomizeSidebarIcon() {
   );
 }
 
+export function PencilIcon() {
+  return (
+    <Icon>
+      <path
+        d="M12.8 4.2a1.6 1.6 0 0 1 2.3 2.3L7.6 14l-3.1.8.8-3.1 7.5-7.5Z"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinejoin="round"
+        fill="none"
+      />
+    </Icon>
+  );
+}
+
 export function CopyIcon() {
   return (
     <Icon>

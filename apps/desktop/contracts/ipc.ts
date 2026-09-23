@@ -204,6 +204,8 @@ export const desktopCommands = {
   toggleSidebar: "toggle-sidebar",
   openCommandPalette: "open-command-palette",
   openFilePalette: "open-file-palette",
+  renameThread: "rename-thread",
+  archiveThread: "archive-thread",
   selectRecentThread1: "select-recent-thread-1",
   selectRecentThread2: "select-recent-thread-2",
   selectRecentThread3: "select-recent-thread-3",
@@ -235,6 +237,17 @@ export function isRecentThreadCommand(command: PiDesktopCommand | undefined): bo
 
 export function getDesktopShortcutLabel(platform: NodeJS.Platform, key: string): string {
   return `${platform === "darwin" ? "⌘" : "Ctrl+"}${key.toUpperCase()}`;
+}
+
+export function formatShortcut(
+  platform: NodeJS.Platform,
+  key: string,
+  modifiers: { readonly shift?: boolean; readonly alt?: boolean } = {},
+): string {
+  if (platform === "darwin") {
+    return `${modifiers.alt ? "⌥" : ""}${modifiers.shift ? "⇧" : ""}⌘${key.toUpperCase()}`;
+  }
+  return `Ctrl+${modifiers.alt ? "Alt+" : ""}${modifiers.shift ? "Shift+" : ""}${key.toUpperCase()}`;
 }
 
 export function getSidePanelToggleShortcutLabel(platform: NodeJS.Platform): string {
@@ -458,6 +471,8 @@ export function getDesktopCommandFromShortcut(
   const isP = lowerKey === "p" || input.code === "KeyP";
   const isN = lowerKey === "n" || input.code === "KeyN";
   const isShiftO = input.shift && (lowerKey === "o" || input.code === "KeyO");
+  const isShiftR = input.shift && (lowerKey === "r" || input.code === "KeyR");
+  const isShiftA = input.shift && (lowerKey === "a" || input.code === "KeyA");
 
   if (input.alt) {
     if (!input.shift && isB) {
@@ -494,6 +509,14 @@ export function getDesktopCommandFromShortcut(
     return desktopCommands.openNewThread;
   }
 
+  if (isShiftR) {
+    return desktopCommands.renameThread;
+  }
+
+  if (isShiftA) {
+    return desktopCommands.archiveThread;
+  }
+
   if (!input.shift) {
     const digitFromKey = /^[1-9]$/.test(input.key) ? input.key : undefined;
     const digitFromCode = input.code?.match(/^Digit([1-9])$/)?.[1];
@@ -513,6 +536,19 @@ export function getDesktopCommandFromShortcut(
 export function isPaletteCommand(command: PiDesktopCommand | undefined): boolean {
   return (
     command === desktopCommands.openCommandPalette || command === desktopCommands.openFilePalette
+  );
+}
+
+/**
+ * Commands that act once per press and only from the platform modifier. macOS
+ * Control chords stay with text fields, and off macOS the terminal keeps Control
+ * chords. Holding Archive would otherwise archive each next thread in turn.
+ */
+export function isSinglePressCommand(command: PiDesktopCommand | undefined): boolean {
+  return (
+    isPaletteCommand(command) ||
+    command === desktopCommands.renameThread ||
+    command === desktopCommands.archiveThread
   );
 }
 

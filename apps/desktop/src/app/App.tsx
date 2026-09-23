@@ -70,6 +70,8 @@ import { useSlashMenu } from "../features/conversation/hooks/use-slash-menu";
 import { useMentionMenu } from "../features/conversation/hooks/use-mention-menu";
 import { useThreadSearch } from "../features/conversation/hooks/use-thread-search";
 import { useWorkspaceMenu } from "../features/threads/hooks/use-workspace-menu";
+import { useThreadActions } from "../features/threads/hooks/use-thread-actions";
+import { ThreadActionsMenu } from "../features/threads/thread-actions";
 import { useNewThreadController } from "../features/threads/hooks/use-new-thread-controller";
 import {
   buildExtensionDockModel,
@@ -113,7 +115,6 @@ export default function App() {
     readonly request: DiffPanelFileRequest;
   } | null>(null);
   const [scheduledEditor, setScheduledEditor] = useState<ScheduledEditorState | null>(null);
-  const [threadMenuOpen, setThreadMenuOpen] = useState(false);
   const api = window.piApp;
 
   useEffect(() => {
@@ -529,6 +530,14 @@ export default function App() {
     setSnapshot,
     updateSnapshot,
   });
+  const threadMenu = useThreadActions({
+    api,
+    setSnapshot,
+    updateSnapshot,
+    scheduledTasks: snapshot?.scheduledTasks ?? [],
+    sidebarCollapsed: snapshot?.sidebarCollapsed ?? false,
+    openScheduledEditor: setScheduledEditor,
+  });
 
   const newThread = useNewThreadController({
     api,
@@ -656,28 +665,16 @@ export default function App() {
     setActiveView("extensions");
   };
 
-  const handleArchiveSession = (target: { workspaceId: string; sessionId: string }) => {
-    if (!api) return;
-    void updateSnapshot(setSnapshot, () => api.archiveSession(target)).catch((error: unknown) => {
-      console.error("[renderer] archiveSession failed", error);
-    });
-  };
-
-  const handleSetSessionPinned = (
-    target: { workspaceId: string; sessionId: string },
-    pinned: boolean,
-  ) => {
-    if (!api) return;
-    void updateSnapshot(setSnapshot, () => api.setSessionPinned(target, pinned)).catch(
-      (error: unknown) => {
-        console.error("[renderer] setSessionPinned failed", error);
-      },
-    );
-  };
-
   const selectedThreadTarget =
     snapshot?.activeView === "threads" && selectedWorkspace && selectedSession
       ? { workspaceId: selectedWorkspace.id, sessionId: selectedSession.id }
+      : undefined;
+  const selectedThreadActions =
+    selectedThreadTarget && selectedSession
+      ? threadMenu.actionsFor({
+          workspaceId: selectedThreadTarget.workspaceId,
+          session: selectedSession,
+        })
       : undefined;
   const selectedRootWorkspaceId = selectedWorkspace?.rootWorkspaceId ?? selectedWorkspace?.id;
   const commands = useDesktopCommands({
@@ -686,14 +683,9 @@ export default function App() {
     setSnapshot,
     hasWorkspace: rootWorkspaceOptions.length > 0,
     selectedRootWorkspaceId,
-    selectedThread:
-      selectedThreadTarget && selectedSession
-        ? {
-            target: selectedThreadTarget,
-            pinned: Boolean(selectedSession.pinnedAt),
-            canSwitchModel: selectedModelOptions.length > 0,
-          }
-        : undefined,
+    selectedThread: selectedThreadActions
+      ? { actions: selectedThreadActions, canSwitchModel: selectedModelOptions.length > 0 }
+      : undefined,
     threadSidebarModel,
     threadShortcutOrderRef,
     selectThread: (target) => selectThreadRef.current(target),
@@ -708,8 +700,6 @@ export default function App() {
     openSkills,
     openExtensions,
     setActiveView,
-    setThreadPinned: handleSetSessionPinned,
-    archiveThread: handleArchiveSession,
   });
 
   useEffect(() => {
@@ -843,12 +833,6 @@ export default function App() {
     });
   };
 
-  const handleUnarchiveSession = (target: { workspaceId: string; sessionId: string }) => {
-    void updateSnapshot(setSnapshot, () => api.unarchiveSession(target)).catch((error: unknown) => {
-      console.error("[renderer] unarchiveSession failed", error);
-    });
-  };
-
   const handleCreateScheduledTaskWithPi = () => {
     void updateSnapshot(setSnapshot, () => api.beginScheduledTaskInterview()).catch(
       (error: unknown) => {
@@ -973,6 +957,7 @@ export default function App() {
           threadGrouping={snapshot.threadGrouping}
           linkedWorktreeByWorkspaceId={linkedWorktreeByWorkspaceId}
           wsMenu={wsMenu}
+          threadMenu={threadMenu}
           api={api}
           setSnapshot={setSnapshot}
           updateSnapshot={updateSnapshot}
@@ -983,10 +968,10 @@ export default function App() {
           onOpenSkills={openSkills}
           onOpenExtensions={openExtensions}
           onOpenSettings={openSettings}
-          onArchiveSession={handleArchiveSession}
+          onArchiveSession={threadMenu.archive}
           onSelectSession={handleSelectSession}
-          onSetSessionPinned={handleSetSessionPinned}
-          onUnarchiveSession={handleUnarchiveSession}
+          onSetSessionPinned={threadMenu.setPinned}
+          onUnarchiveSession={threadMenu.restore}
         />
       ) : null}
 
@@ -1011,48 +996,26 @@ export default function App() {
                   ? runningLabel
                   : formatRelativeTime(selectedSession.updatedAt)}
               </div>
-              <div className="chat-header__menu-wrap">
+              <div
+                className="chat-header__menu-wrap"
+                ref={threadMenu.openMenu?.surface === "header" ? threadMenu.menuWrapRef : undefined}
+              >
                 <button
                   aria-haspopup="menu"
-                  aria-expanded={threadMenuOpen}
+                  aria-expanded={threadMenu.openMenu?.surface === "header"}
                   aria-label="Thread actions"
                   className="icon-button"
                   data-testid="thread-header-menu"
                   type="button"
-                  onClick={() => setThreadMenuOpen((open) => !open)}
+                  onClick={threadMenu.toggleHeaderMenu}
                 >
                   …
                 </button>
-                {threadMenuOpen ? (
-                  <div className="workspace-menu chat-header__menu" role="menu">
-                    <button
-                      className="workspace-menu__item"
-                      data-testid="thread-add-scheduled-task"
-                      type="button"
-                      onClick={() => {
-                        setThreadMenuOpen(false);
-                        if (scheduledBinding) {
-                          setScheduledEditor({
-                            mode: "edit",
-                            taskId: scheduledBinding.id,
-                          });
-                          return;
-                        }
-                        setScheduledEditor({
-                          mode: "create",
-                          prefill: {
-                            target: {
-                              kind: "existing-thread",
-                              workspaceId: selectedWorkspace.id,
-                              sessionId: selectedSession.id,
-                            },
-                          },
-                        });
-                      }}
-                    >
-                      {scheduledBinding ? "Edit scheduled task…" : "Add scheduled task…"}
-                    </button>
-                  </div>
+                {threadMenu.openMenu?.surface === "header" && selectedThreadActions ? (
+                  <ThreadActionsMenu
+                    actions={selectedThreadActions}
+                    className="chat-header__menu"
+                  />
                 ) : null}
               </div>
             </>
