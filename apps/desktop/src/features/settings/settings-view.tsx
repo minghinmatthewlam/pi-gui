@@ -111,12 +111,12 @@ export function SettingsView({
       <section className="canvas">
         <div className="conversation settings-view">
           {header}
-          <div className="settings-group settings-empty">
+          <div className="settings-group">
             <div className="settings-row">
               <div className="settings-row__label">
                 <div className="settings-row__title">Select a workspace</div>
                 <div className="settings-row__description">
-                  Providers and models are set per workspace. Open a folder to manage them.
+                  Providers and models are set per workspace. Choose one, or open a folder first.
                 </div>
               </div>
             </div>

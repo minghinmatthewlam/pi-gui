@@ -432,15 +432,16 @@ export function SecondarySurfaces({
         runtime={settingsSection === "models" ? settingsModelRuntime : settingsRuntime}
         platform={api.platform}
         headerAccessory={
-          settingsSection === "providers" ||
-          (settingsSection === "models" && snapshot.modelSettingsScopeMode === "per-repo") ? (
+          rootWorkspaceOptions.length > 0 &&
+          (settingsSection === "providers" ||
+            (settingsSection === "models" && snapshot.modelSettingsScopeMode === "per-repo")) ? (
             <SettingsSelect
               label="Workspace"
               options={rootWorkspaceOptions.map((workspace) => ({
                 value: workspace.id,
                 label: workspace.name,
               }))}
-              value={settingsWorkspace?.id ?? ""}
+              value={settingsWorkspace?.id}
               onChange={onSelectSettingsWorkspace}
             />
           ) : undefined

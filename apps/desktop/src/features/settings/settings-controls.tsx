@@ -67,19 +67,27 @@ export function SettingsSelect<T extends string>({
 }: {
   readonly label: string;
   readonly options: readonly SettingsSegmentedOption<T>[];
-  readonly value: T;
+  readonly value: T | undefined;
   readonly onChange: (value: T) => void;
 }) {
+  // Without a matching option Chromium shows the first one as chosen, and choosing it
+  // fires no change, so an unset value gets an explicit placeholder instead.
+  const hasValue = options.some((option) => option.value === value);
   return (
     <span className="settings-select-control">
       <select
         aria-label={label}
-        value={value}
+        value={hasValue ? value : ""}
         onChange={(event) => {
           const selected = options.find((option) => option.value === event.currentTarget.value);
           if (selected) onChange(selected.value);
         }}
       >
+        {hasValue ? null : (
+          <option disabled value="">
+            Choose…
+          </option>
+        )}
         {options.map((option) => (
           <option key={option.value} value={option.value}>
             {option.label}
