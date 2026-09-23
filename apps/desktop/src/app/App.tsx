@@ -34,7 +34,6 @@ import { useExtensionHostActions } from "../features/extensions/use-extension-ho
 import { Workbench } from "../features/workbench/workbench";
 import { renderBuiltinToolPanel } from "../features/workbench/builtin-tools";
 import { useWorkbenchWidth } from "../features/workbench/use-workbench-width";
-import { WorktreesPanel } from "../features/workbench/worktrees-panel";
 import type { WorkspaceFileLine } from "../features/conversation/workspace-file-line";
 import { buildModelOptions } from "../features/conversation/composer-commands";
 import { getDesktopShortcutLabel } from "../../contracts/ipc";
@@ -1355,25 +1354,6 @@ export default function App() {
                     workspace={selectedWorkspace}
                     sessionId={selectedSession.id}
                     onHide={() => workbench.closeTool("terminal")}
-                  />
-                ),
-                worktrees: () => (
-                  <WorktreesPanel
-                    rootWorkspace={rootWorkspace ?? selectedWorkspace}
-                    selectedWorkspace={selectedWorkspace}
-                    activeWorktrees={activeWorktrees}
-                    workspaces={snapshot.workspaces}
-                    onOpenWorkspace={(workspaceId) => {
-                      flushComposerDraft();
-                      viewport.savePosition();
-                      wsMenu.selectWorkspace(workspaceId);
-                    }}
-                    onNewWorktree={() => {
-                      if (!rootWorkspace) return;
-                      flushComposerDraft();
-                      viewport.savePosition();
-                      wsMenu.createWorktree(rootWorkspace.id);
-                    }}
                   />
                 ),
               })
