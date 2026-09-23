@@ -299,6 +299,7 @@
   max-width: 100%;
   min-width: 0;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 2px;
   padding: 0;
 }
@@ -338,6 +339,7 @@
 
 .timeline-tool__header {
   flex: 1;
+  min-width: 0;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -381,11 +383,16 @@
 }
 
 .timeline-tool__label {
+  /* One line beside the chevron; the full command is in the expanded body. Capping the
+     width keeps a long label from wrapping onto its own line and orphaning the chevron. */
+  max-width: calc(100% - 20px);
+  min-width: 0;
+  overflow: hidden;
   color: var(--muted-strong);
   font-size: 13px;
   line-height: 1.45;
-  min-width: 0;
-  overflow-wrap: anywhere;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .timeline-tool__detail {
