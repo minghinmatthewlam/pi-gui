@@ -38,6 +38,8 @@ export class ReviewRepository {
         timeout: 20_000,
         maxBuffer,
         encoding: "utf8",
+        // Reads must not take the index lock a concurrent git commit needs.
+        env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
       });
       return stdout;
     } catch (error) {
