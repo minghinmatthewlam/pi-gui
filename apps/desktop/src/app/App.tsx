@@ -1015,7 +1015,6 @@ export default function App() {
                   <ThreadActionsMenu
                     actions={selectedThreadActions}
                     className="chat-header__menu"
-                    onRun={threadMenu.runMenuAction}
                   />
                 ) : null}
               </div>

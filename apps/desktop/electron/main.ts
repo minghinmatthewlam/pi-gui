@@ -474,10 +474,10 @@ function createWindow(): BrowserWindow {
     if (terminalFocused) {
       // Control chords belong to the shell, so only macOS Command chords open
       // a palette or act on the thread from the terminal.
-      if (
-        command === desktopCommands.toggleSidePanel ||
-        (process.platform === "darwin" && isSinglePressCommand(command) && !input.isAutoRepeat)
-      ) {
+      if (process.platform === "darwin" && isSinglePressCommand(command)) {
+        event.preventDefault();
+        if (!input.isAutoRepeat) window.webContents.send(desktopIpc.appCommand, command);
+      } else if (command === desktopCommands.toggleSidePanel) {
         event.preventDefault();
         window.webContents.send(desktopIpc.appCommand, command);
       } else if (closeFocusedSurface) {

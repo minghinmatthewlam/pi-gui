@@ -127,10 +127,9 @@ export function buildThreadActions(
 interface ThreadActionsMenuProps {
   readonly actions: readonly ThreadAction[];
   readonly className: string;
-  readonly onRun: (action: ThreadAction) => void;
 }
 
-export function ThreadActionsMenu({ actions, className, onRun }: ThreadActionsMenuProps) {
+export function ThreadActionsMenu({ actions, className }: ThreadActionsMenuProps) {
   return (
     <div className={`workspace-menu ${className}`} role="menu">
       {actions.map((action) => (
@@ -142,7 +141,7 @@ export function ThreadActionsMenu({ actions, className, onRun }: ThreadActionsMe
           onClick={(event) => {
             event.preventDefault();
             event.stopPropagation();
-            onRun(action);
+            action.run();
           }}
         >
           <span>{action.title}</span>

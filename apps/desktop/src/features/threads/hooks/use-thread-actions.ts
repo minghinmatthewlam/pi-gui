@@ -44,15 +44,15 @@ export interface ThreadMenuState {
   readonly setRenameDraft: Dispatch<SetStateAction<string>>;
   readonly menuWrapRef: RefObject<HTMLDivElement | null>;
   readonly renamePanelRef: RefObject<HTMLFormElement | null>;
-  readonly renameInputRef: RefObject<HTMLInputElement | null>;
   readonly openSidebarMenu: (sessionId: string) => void;
   readonly toggleHeaderMenu: () => void;
   readonly submitRename: (subject: ThreadActionSubject) => void;
   readonly cancelRename: () => void;
-  /** The shared action list every thread menu and the command palette render. */
+  /**
+   * The shared action list every thread menu, shortcut and the command palette
+   * use. Running an action closes any open thread menu first.
+   */
   readonly actionsFor: (subject: ThreadActionSubject) => readonly ThreadAction[];
-  /** Runs an action picked from an open menu, closing the menu first. */
-  readonly runMenuAction: (action: ThreadAction) => void;
   readonly archive: (target: WorkspaceSessionTarget) => void;
   readonly restore: (target: WorkspaceSessionTarget) => void;
   readonly setPinned: (target: WorkspaceSessionTarget, pinned: boolean) => void;
@@ -71,14 +71,6 @@ export function useThreadActions({
   const [renameDraft, setRenameDraft] = useState("");
   const menuWrapRef = useRef<HTMLDivElement | null>(null);
   const renamePanelRef = useRef<HTMLFormElement | null>(null);
-  const renameInputRef = useRef<HTMLInputElement | null>(null);
-
-  useEffect(() => {
-    if (renameSessionId) {
-      renameInputRef.current?.focus();
-      renameInputRef.current?.select();
-    }
-  }, [renameSessionId]);
 
   useEffect(() => {
     const handlePointerDown = (event: MouseEvent) => {
@@ -128,7 +120,6 @@ export function useThreadActions({
     startRename: (subject) => {
       // The rename field lives in the sidebar row, so show the sidebar first.
       if (sidebarCollapsed) mutate((desktopApi) => desktopApi.setSidebarCollapsed(false));
-      setOpenMenu(null);
       setRenameSessionId(subject.session.id);
       setRenameDraft(subject.session.title);
     },
@@ -168,7 +159,6 @@ export function useThreadActions({
     setRenameDraft,
     menuWrapRef,
     renamePanelRef,
-    renameInputRef,
     openSidebarMenu: (sessionId) => {
       setRenameSessionId(null);
       setOpenMenu({ surface: "sidebar", sessionId });
@@ -188,11 +178,14 @@ export function useThreadActions({
       setRenameSessionId(null);
       setRenameDraft("");
     },
-    actionsFor: (subject) => buildThreadActions(subject, handlers),
-    runMenuAction: (action) => {
-      setOpenMenu(null);
-      action.run();
-    },
+    actionsFor: (subject) =>
+      buildThreadActions(subject, handlers).map((action) => ({
+        ...action,
+        run: () => {
+          setOpenMenu(null);
+          action.run();
+        },
+      })),
     archive,
     restore,
     setPinned,

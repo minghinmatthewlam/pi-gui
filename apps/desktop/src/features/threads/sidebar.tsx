@@ -174,6 +174,31 @@ export function Sidebar(props: SidebarProps) {
     };
   }, [threadShortcutOrderRef]);
 
+  // Rename can start from the header, Cmd-K or its shortcut, so reveal the
+  // row that holds the rename field when it sits in a collapsed group.
+  const renameSessionId = threadMenu.renameSessionId;
+  useEffect(() => {
+    if (!renameSessionId) return;
+    const holds = (threads: readonly ThreadListEntry[]) =>
+      threads.some((thread) => thread.session.id === renameSessionId);
+    if (holds(threadSidebarModel.archivedThreads)) {
+      setArchivedOpen(true);
+      return;
+    }
+    const keys = [
+      ...threadSidebarModel.recencySections
+        .filter((section) => holds(section.threads))
+        .map((section) => recencyHistoryExpansionKey(section.bucket)),
+      ...threadSidebarModel.workspaceGroups
+        .filter((group) => holds(group.threads))
+        .map((group) => workspaceHistoryExpansionKey(group.workspace.id)),
+    ];
+    setExpandedHistory((current) =>
+      keys.every((key) => current.has(key)) ? current : new Set([...current, ...keys]),
+    );
+    // Reveal once per rename; later list changes should not reopen groups.
+  }, [renameSessionId]);
+
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
   const pinnedSortableId = (thread: ThreadListEntry) => `pinned:${sessionThreadKey(thread)}`;
   const pinnedSessionKeyFromSortableId = (id: string) =>
@@ -1555,7 +1580,6 @@ const ThreadSessionRow = forwardRef<HTMLDivElement, ThreadSessionRowProps>(
                 <ThreadActionsMenu
                   actions={threadMenu.actionsFor(thread)}
                   className="session-row__menu"
-                  onRun={threadMenu.runMenuAction}
                 />
               </div>
             ) : null}
@@ -1573,7 +1597,10 @@ const ThreadSessionRow = forwardRef<HTMLDivElement, ThreadSessionRowProps>(
             <input
               aria-label={`Rename thread ${thread.session.title}`}
               className="workspace-rename__input"
-              ref={threadMenu.renameInputRef}
+              // Mounts when a rename starts, including after the sidebar or a
+              // collapsed group opens to reveal the row.
+              autoFocus
+              onFocus={(event) => event.currentTarget.select()}
               value={threadMenu.renameDraft}
               onChange={(event) => threadMenu.setRenameDraft(event.target.value)}
               onKeyDown={(event) => {

@@ -216,9 +216,12 @@ test("header and right-click menus match, show shortcuts, and Shift chords renam
     await expect(tooltip.locator("kbd")).toHaveText(isMac ? "⇧⌘A" : "Ctrl+Shift+A");
     await captureProof(window, "09-archive-tooltip.png");
 
+    // Rename from a collapsed sidebar opens it and focuses the field.
+    await window.keyboard.press(`${modifier}+B`);
+    await expect(window.locator(".session-row")).toHaveCount(0);
     await window.keyboard.press(`${modifier}+Shift+R`);
     const renameInput = window.getByLabel(`Rename thread ${targetTitle}`);
-    await expect(renameInput).toBeVisible();
+    await expect(renameInput).toBeFocused();
     await renameInput.fill(renamedTitle);
     await window.getByRole("button", { name: "Save" }).click();
     await expect(window.locator(".chat-header__title")).toHaveText(renamedTitle);
