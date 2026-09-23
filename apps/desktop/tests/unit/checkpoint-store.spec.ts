@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import {
   chmod,
+  link,
   mkdtemp,
   mkdir,
   readFile,
@@ -8,6 +9,7 @@ import {
   rename,
   symlink,
   unlink,
+  utimes,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -537,4 +539,146 @@ test("reports default and extended capture budgets on a 2,000-file checkout", as
       },
     })}`,
   );
+});
+
+async function snapshotRefs(store: TurnCheckpointStore): Promise<string[]> {
+  const output = await git(store.repositoryPath, [
+    "for-each-ref",
+    "--format=%(objectname)",
+    "refs/pi-gui/",
+  ]);
+  return output.toString().split("\n").filter(Boolean);
+}
+
+/** Files changed within the store's racy window are reread; let fixture writes age past it. */
+function ageFixtureFiles(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 2_100));
+}
+
+async function until(predicate: () => Promise<boolean>): Promise<void> {
+  const deadline = Date.now() + 10_000;
+  while (!(await predicate().catch(() => false))) {
+    if (Date.now() > deadline) throw new Error("Condition was not met in time.");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+}
+
+test("a boundary in one checkout does not wait for a slow capture in another checkout", async () => {
+  test.skip(process.platform === "win32", "Uses a FIFO to hold a capture open.");
+  const { directory, workspace, userData } = await fixture();
+  const store = new TurnCheckpointStore(userData, { timeoutMs: 30_000 });
+  await writeFile(join(workspace, "fast.txt"), "fast checkout");
+  const slow = join(directory, "slow");
+  await mkdir(slow);
+  await git(slow, ["init", "--template=", "--initial-branch=main"]);
+  await writeFile(join(slow, "slow.txt"), "slow checkout");
+  // Git blocks opening this HEAD until a writer arrives, holding the slow capture open.
+  const head = join(slow, ".git", "HEAD");
+  const writer = join(directory, "head-writer");
+  await rename(head, `${head}.real`);
+  await new Promise<void>((resolve, reject) =>
+    execFile("mkfifo", [head], (error) => (error ? reject(error) : resolve())),
+  );
+  await link(head, writer);
+  const slowTarget = { workspaceId: "slow", sessionId: "slow-task" };
+  const slowBoundary = store.recordBoundary(
+    boundary(slow, "slow", "opening", {
+      sessionRef: slowTarget,
+      workspace: { workspaceId: "slow", path: slow },
+    }),
+    new AbortController().signal,
+  );
+  const fast = store.recordBoundary(
+    boundary(workspace, "fast", "opening"),
+    new AbortController().signal,
+  );
+  const finished = await Promise.race([
+    fast.then(() => true),
+    new Promise<false>((resolve) => setTimeout(() => resolve(false), 5_000)),
+  ]);
+  // Release the blocked reader, then let later Git calls read the real HEAD.
+  await rename(`${head}.real`, head);
+  await writeFile(writer, "ref: refs/heads/main\n");
+  await slowBoundary;
+  expect(finished, "the other checkout's boundary must not queue behind the slow one").toBe(true);
+  expect((await store.list({ workspaceId: "repo", sessionId: "task" }))[0]).toMatchObject({
+    checkpointId: "fast",
+    before: { state: "available" },
+  });
+  expect((await store.list(slowTarget))[0]).toMatchObject({ before: { state: "available" } });
+});
+
+test("incremental captures reread only changed files and still see same-size rewrites", async () => {
+  const { workspace, store } = await fixture();
+  const old = new Date("2026-01-01T00:00:00.000Z");
+  for (const name of ["keep.txt", "edit.txt", "remove.txt"]) {
+    await writeFile(join(workspace, name), `${name} original`);
+    await utimes(join(workspace, name), old, old);
+  }
+  await mkdir(join(workspace, "nested"));
+  await writeFile(join(workspace, "nested", "deep.txt"), "deep");
+  await utimes(join(workspace, "nested", "deep.txt"), old, old);
+  await git(workspace, ["add", "."]);
+  await ageFixtureFiles();
+  const first = await store.capture(workspace);
+  available(first);
+  expect(await snapshotRefs(store)).toHaveLength(1);
+
+  // Nothing changed: the stored inventory yields the identical tree without a new snapshot.
+  const unchanged = await store.capture(workspace);
+  available(unchanged);
+  expect(unchanged.treeOid).toBe(first.treeOid);
+  expect(unchanged.fileCount).toBe(4);
+  expect(unchanged.byteCount).toBe(first.byteCount);
+  expect(await snapshotRefs(store)).toHaveLength(1);
+
+  // Same size and restored mtime: only the change time reveals the rewrite.
+  await writeFile(join(workspace, "edit.txt"), "edit.txt rewrites");
+  await utimes(join(workspace, "edit.txt"), old, old);
+  await unlink(join(workspace, "remove.txt"));
+  await writeFile(join(workspace, "nested", "added.txt"), "added");
+  const changed = await store.capture(workspace);
+  available(changed);
+  const tree = (await git(store.repositoryPath, ["ls-tree", "-r", "--name-only", changed.treeOid]))
+    .toString()
+    .trim()
+    .split("\n");
+  expect(tree).toEqual(["edit.txt", "keep.txt", "nested/added.txt", "nested/deep.txt"]);
+  expect(await git(store.repositoryPath, ["show", `${changed.treeOid}:edit.txt`])).toEqual(
+    Buffer.from("edit.txt rewrites"),
+  );
+  expect(await git(store.repositoryPath, ["show", `${changed.treeOid}:keep.txt`])).toEqual(
+    Buffer.from("keep.txt original"),
+  );
+
+  // A tracked directory replaced by a symlink is refused even though its file is unchanged.
+  await rename(join(workspace, "nested"), join(workspace, "..", "moved-nested"));
+  await symlink(join(workspace, "..", "moved-nested"), join(workspace, "nested"));
+  expect(await store.capture(workspace)).toMatchObject({
+    state: "unavailable",
+    code: "unsafe-symlink",
+  });
+});
+
+test("a checkout too slow for its first boundary builds its inventory in the background", async () => {
+  const { workspace, store } = await fixture();
+  await writeFile(join(workspace, "file.txt"), "contents");
+  await ageFixtureFiles();
+  const aborted = new AbortController();
+  aborted.abort();
+  await store.recordBoundary(boundary(workspace, "first", "opening"), aborted.signal);
+  expect((await store.list({ workspaceId: "repo", sessionId: "task" }))[0]).toMatchObject({
+    before: { state: "unavailable", code: "capture-aborted" },
+  });
+  await until(async () => (await snapshotRefs(store)).length === 1);
+  const [warmed] = await snapshotRefs(store);
+  await store.recordBoundary(
+    boundary(workspace, "second", "opening"),
+    new AbortController().signal,
+  );
+  const second = (await store.list({ workspaceId: "repo", sessionId: "task" })).find(
+    (record) => record.checkpointId === "second",
+  )!;
+  expect(second.before).toMatchObject({ state: "available", treeOid: warmed });
+  expect(await snapshotRefs(store)).toEqual([warmed]);
 });

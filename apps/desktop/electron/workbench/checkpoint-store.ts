@@ -33,6 +33,34 @@ const DEFAULT_LIMITS: CheckpointCaptureLimits = {
   maxFileBytes: 16 * 1024 * 1024,
 };
 
+/** Files modified this recently may still change within one timestamp tick; reread them. */
+const RACY_WINDOW_MS = 2_000;
+/** Checkouts whose last capture inventory is kept in memory for incremental captures. */
+const MAX_CACHED_CHECKOUTS = 16;
+/** Budget for building a checkout's first inventory in the background. */
+const WARM_TIMEOUT_MS = 60_000;
+const SNAPSHOT_REF_PREFIX = "refs/pi-gui/snapshots/";
+
+interface FileVersion {
+  readonly dev: number;
+  readonly ino: number;
+  readonly mode: number;
+  readonly size: number;
+  readonly mtimeMs: number;
+  readonly ctimeMs: number;
+}
+
+/** A file whose bytes are already stored as `oid`, valid while its version is unchanged. */
+interface CachedFile extends FileVersion {
+  readonly gitMode: string;
+  readonly oid: string;
+}
+
+interface CheckoutInventory {
+  readonly treeOid: string;
+  readonly files: ReadonlyMap<string, CachedFile>;
+}
+
 export type CheckpointCapture =
   | {
       readonly state: "available";
@@ -98,7 +126,15 @@ export class TurnCheckpointStore {
   private readonly records = new Map<string, StoredTurnCheckpoint>();
   private loaded: Promise<void> | undefined;
   private gitReady: Promise<void> | undefined;
-  private pending: Promise<void> = Promise.resolve();
+  /** Boundaries serialize per checkout; unrelated checkouts capture concurrently. */
+  private readonly checkoutQueues = new Map<string, Promise<void>>();
+  /** The latest boundary of each task, so its lookups never return an older turn. */
+  private readonly taskBoundaries = new Map<string, Promise<void>>();
+  private writing: Promise<void> = Promise.resolve();
+  private queuedWrite: Promise<void> | undefined;
+  /** Last successful inventory per checkout root. */
+  private readonly inventories = new Map<string, CheckoutInventory>();
+  private readonly warming = new Set<string>();
 
   constructor(userDataDir: string, limits: Partial<CheckpointCaptureLimits> = {}) {
     this.directory = join(userDataDir, "turn-checkpoints");
@@ -110,9 +146,13 @@ export class TurnCheckpointStore {
     }
   }
 
-  /** The adapter awaits this before a tool can run. A transition shares exactly one tree. */
+  /**
+   * The adapter awaits this before a tool can run. A transition shares exactly one tree.
+   * Only boundaries in the same checkout wait for each other, and the capture budget starts
+   * when this boundary's own capture starts.
+   */
   recordBoundary(boundary: TurnCaptureBoundary, signal: AbortSignal): Promise<void> {
-    return this.enqueue(async () => {
+    const operation = this.enqueue(resolve(boundary.workspace.path), async () => {
       await this.load();
       const { opening, closing } = boundary;
       if (!opening && !closing) return;
@@ -185,8 +225,9 @@ export class TurnCheckpointStore {
         }
         this.records.set(next.checkpointId, next);
       }
-      // An app exit during capture leaves a durable unfinished interval, never a completed one.
-      await this.persist();
+      // Metadata is written once, after the capture. An app exit before then leaves any
+      // interval this boundary closes durably open (restart marks it interrupted); an opening
+      // that never finished its baseline simply has no record.
       const capture = await this.capture(boundary.workspace.path, signal);
       const safeCapture = signal.aborted
         ? unavailableCapture(
@@ -194,6 +235,8 @@ export class TurnCheckpointStore {
             "The capture was interrupted or exceeded its time limit.",
           )
         : capture;
+      if (safeCapture.state === "unavailable" && safeCapture.code === "capture-aborted")
+        this.warmInventory(checkoutPath);
       if (closing) {
         const current = this.records.get(closing.checkpointId)!;
         this.records.set(closing.checkpointId, {
@@ -212,33 +255,31 @@ export class TurnCheckpointStore {
         const current = this.records.get(opening.checkpointId)!;
         this.records.set(opening.checkpointId, { ...current, before: safeCapture });
       }
+      // A capture whose deadline passed after its bytes were read still describes the
+      // checkout at this boundary; the adapter records the missed deadline itself.
       await this.persist();
-      // Resolution is serialized behind this operation, including any abort during the write.
-      if (signal.aborted) {
-        const aborted = unavailableCapture(
-          "capture-aborted",
-          "The capture was interrupted or exceeded its time limit.",
-        );
-        if (closing) {
-          const current = this.records.get(closing.checkpointId)!;
-          this.records.set(closing.checkpointId, { ...current, after: aborted });
-        }
-        if (opening) {
-          const current = this.records.get(opening.checkpointId)!;
-          this.records.set(opening.checkpointId, { ...current, before: aborted });
-        }
-        await this.persist();
-      }
     });
+    const task = targetKey(boundary.sessionRef);
+    const settled = operation.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.taskBoundaries.set(task, settled);
+    settled.then(
+      () => {
+        if (this.taskBoundaries.get(task) === settled) this.taskBoundaries.delete(task);
+      },
+      () => undefined,
+    );
+    return operation;
   }
 
   async list(target: SessionRef): Promise<readonly StoredTurnCheckpoint[]> {
-    return this.enqueue(async () => {
-      await this.load();
-      return structuredClone(
-        [...this.records.values()].filter((record) => sameTarget(record.target, target)),
-      );
-    });
+    await this.taskBoundaries.get(targetKey(target));
+    await this.load();
+    return structuredClone(
+      [...this.records.values()].filter((record) => sameTarget(record.target, target)),
+    );
   }
 
   async resolve(input: {
@@ -247,65 +288,65 @@ export class TurnCheckpointStore {
     checkpointId?: string;
   }): Promise<ResolvedTurnCheckpoint | ReviewIssue> {
     try {
-      return await this.enqueue(async () => {
-        await this.load();
-        const record = input.checkpointId
-          ? this.records.get(input.checkpointId)
-          : [...this.records.values()]
-              .filter(
-                (candidate) =>
-                  sameTarget(candidate.target, input.target) &&
-                  candidate.checkoutId === input.checkoutId &&
-                  candidate.outcome !== "open",
-              )
-              .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0];
-        if (
-          !record ||
-          !sameTarget(record.target, input.target) ||
-          record.checkoutId !== input.checkoutId
-        ) {
-          return unavailableReview(
-            "checkpoint-unavailable",
-            "No captured turn exists for this task and checkout.",
-          );
-        }
-        if (
-          record.outcome === "open" ||
-          record.before.state !== "available" ||
-          record.after?.state !== "available"
-        ) {
-          const failed = record.before.state === "unavailable" ? record.before : record.after;
-          return unavailableReview(
-            "checkpoint-incomplete",
-            failed?.state === "unavailable"
-              ? failed.message
-              : "This turn does not have complete before and after captures.",
-          );
-        }
-        const notes = [...record.before.coverage.notes, ...record.after.coverage.notes];
-        if (record.outcome !== "completed")
-          notes.push(`This interval ended ${record.outcome}; it is not a completed turn.`);
-        if (record.overlaps.length)
-          notes.push(
-            `Other runs overlapped this interval in the same checkout (${record.overlaps.length}). Changes cannot be attributed to this agent alone.`,
-          );
-        return {
-          state: "available",
-          checkpointId: record.checkpointId,
-          checkoutId: record.checkoutId,
-          repositoryPath: this.repositoryPath,
-          beforeTreeOid: record.before.treeOid,
-          afterTreeOid: record.after.treeOid,
-          capturedAt: record.after.capturedAt,
-          coverage: { state: notes.length ? "partial" : "complete", notes: [...new Set(notes)] },
-        };
-      });
+      // Resolution waits for the task's in-flight boundary, so it never returns an older turn.
+      await this.taskBoundaries.get(targetKey(input.target));
+      await this.load();
     } catch {
       return unavailableReview(
         "checkpoint-storage-unavailable",
         "Checkpoint metadata could not be read; existing data was retained.",
       );
     }
+    const record = input.checkpointId
+      ? this.records.get(input.checkpointId)
+      : [...this.records.values()]
+          .filter(
+            (candidate) =>
+              sameTarget(candidate.target, input.target) &&
+              candidate.checkoutId === input.checkoutId &&
+              candidate.outcome !== "open",
+          )
+          .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0];
+    if (
+      !record ||
+      !sameTarget(record.target, input.target) ||
+      record.checkoutId !== input.checkoutId
+    ) {
+      return unavailableReview(
+        "checkpoint-unavailable",
+        "No captured turn exists for this task and checkout.",
+      );
+    }
+    if (
+      record.outcome === "open" ||
+      record.before.state !== "available" ||
+      record.after?.state !== "available"
+    ) {
+      const failed = record.before.state === "unavailable" ? record.before : record.after;
+      return unavailableReview(
+        "checkpoint-incomplete",
+        failed?.state === "unavailable"
+          ? failed.message
+          : "This turn does not have complete before and after captures.",
+      );
+    }
+    const notes = [...record.before.coverage.notes, ...record.after.coverage.notes];
+    if (record.outcome !== "completed")
+      notes.push(`This interval ended ${record.outcome}; it is not a completed turn.`);
+    if (record.overlaps.length)
+      notes.push(
+        `Other runs overlapped this interval in the same checkout (${record.overlaps.length}). Changes cannot be attributed to this agent alone.`,
+      );
+    return {
+      state: "available",
+      checkpointId: record.checkpointId,
+      checkoutId: record.checkoutId,
+      repositoryPath: this.repositoryPath,
+      beforeTreeOid: record.before.treeOid,
+      afterTreeOid: record.after.treeOid,
+      capturedAt: record.after.capturedAt,
+      coverage: { state: notes.length ? "partial" : "complete", notes: [...new Set(notes)] },
+    };
   }
 
   async resolveTurn(input: {
@@ -342,9 +383,36 @@ export class TurnCheckpointStore {
       : result;
   }
 
-  async capture(workspacePath: string, parentSignal?: AbortSignal): Promise<CheckpointCapture> {
+  capture(
+    workspacePath: string,
+    parentSignal?: AbortSignal,
+    timeoutMs = this.limits.timeoutMs,
+  ): Promise<CheckpointCapture> {
+    return this.captureCheckout(workspacePath, parentSignal, timeoutMs);
+  }
+
+  /**
+   * A checkout too large to read within one boundary's budget never gets an inventory from
+   * boundaries alone. Build it off the capture path so later boundaries read only changes.
+   */
+  private warmInventory(checkoutPath: string): void {
+    if (this.inventories.has(checkoutPath) || this.warming.has(checkoutPath)) return;
+    this.warming.add(checkoutPath);
+    const timer = setTimeout(() => {
+      this.capture(checkoutPath, undefined, WARM_TIMEOUT_MS)
+        .finally(() => this.warming.delete(checkoutPath))
+        .catch(() => undefined);
+    }, 0);
+    timer.unref?.();
+  }
+
+  private async captureCheckout(
+    workspacePath: string,
+    parentSignal: AbortSignal | undefined,
+    timeoutMs: number,
+  ): Promise<CheckpointCapture> {
     const started = Date.now();
-    const timeout = AbortSignal.timeout(this.limits.timeoutMs);
+    const timeout = AbortSignal.timeout(timeoutMs);
     const failure = new AbortController();
     const signal = AbortSignal.any([
       failure.signal,
@@ -406,25 +474,42 @@ export class TurnCheckpointStore {
           `The checkout exceeds the ${this.limits.maxFiles}-file capture limit.`,
         );
       const entries = [...paths];
+      // Only files whose version changed since this checkout's last capture are read again.
+      const previous = this.inventories.get(root);
+      const directories = new Map<string, Promise<Stats | null>>();
       spoolPath = await mkdtemp(join(this.directory, "capture-"));
       const captureDirectory = spoolPath;
-      const spooled: { path: string; mode: string; name: string }[] = [];
+      const stored: { path: string; file: CachedFile }[] = [];
+      const spooled: { path: string; mode: string; name: string; version: FileVersion }[] = [];
       let cursor = 0;
       const workers = Array.from({ length: Math.min(8, entries.length) }, async () => {
         while (cursor < entries.length) {
           signal.throwIfAborted();
           const ordinal = cursor++;
           const path = entries[ordinal]!;
-          const file = await readSnapshotFile(root, rootStat, path, signal, (size) => {
-            if (size > this.limits.maxFileBytes || byteCount + size > this.limits.maxBytes) {
-              throw new CaptureError(
-                "byte-limit",
-                "The checkout exceeds the bounded turn-capture size limit.",
-              );
-            }
-            byteCount += size;
-          });
+          const file = await inspectSnapshotFile(
+            root,
+            rootStat,
+            path,
+            signal,
+            (size) => {
+              if (size > this.limits.maxFileBytes || byteCount + size > this.limits.maxBytes) {
+                throw new CaptureError(
+                  "byte-limit",
+                  "The checkout exceeds the bounded turn-capture size limit.",
+                );
+              }
+              byteCount += size;
+            },
+            previous?.files.get(path),
+            directories,
+          );
           if (!file) continue; // A tracked deletion is represented by absence from the new tree.
+          fileCount += 1;
+          if (file.kind === "stored") {
+            stored.push({ path, file: file.file });
+            continue;
+          }
           const name = `blob-${ordinal}`;
           await writeFile(join(captureDirectory, name), file.bytes, {
             flag: "wx",
@@ -432,8 +517,7 @@ export class TurnCheckpointStore {
             signal,
           });
           signal.throwIfAborted();
-          spooled.push({ path, mode: file.mode, name });
-          fileCount += 1;
+          spooled.push({ path, mode: file.mode, name, version: file.version });
         }
       });
       try {
@@ -444,16 +528,19 @@ export class TurnCheckpointStore {
         throw error;
       }
       signal.throwIfAborted();
-      // Git only opens freshly created private files with synthetic relative names. Original
-      // paths (including tabs/newlines) never enter this line-based input or get reopened by Git.
-      const objectOutput = await git(
-        captureDirectory,
-        ["--git-dir", this.repositoryPath, "hash-object", "--stdin-paths", "--no-filters", "-w"],
-        signal,
-        Buffer.from(spooled.map((entry) => `${entry.name}\n`).join("")),
-      );
-      signal.throwIfAborted();
-      const objectIds = objectOutput.length ? stripLine(objectOutput).split(/\r?\n/) : [];
+      let objectIds: string[] = [];
+      if (spooled.length) {
+        // Git only opens freshly created private files with synthetic relative names. Original
+        // paths (including tabs/newlines) never enter this line-based input or get reopened by Git.
+        const objectOutput = await git(
+          captureDirectory,
+          ["--git-dir", this.repositoryPath, "hash-object", "--stdin-paths", "--no-filters", "-w"],
+          signal,
+          Buffer.from(spooled.map((entry) => `${entry.name}\n`).join("")),
+        );
+        signal.throwIfAborted();
+        objectIds = objectOutput.length ? stripLine(objectOutput).split(/\r?\n/) : [];
+      }
       if (
         objectIds.length !== spooled.length ||
         objectIds.some((oid) => !/^[a-f0-9]{40}$/.test(oid))
@@ -463,33 +550,64 @@ export class TurnCheckpointStore {
           "Git returned an invalid snapshot object inventory.",
         );
       }
-      const indexEntries = spooled.map(
-        (entry, index) => `${entry.mode} ${objectIds[index]}\t${entry.path}\0`,
-      );
       await rm(captureDirectory, { recursive: true, force: true });
       spoolPath = undefined;
       signal.throwIfAborted();
-      const indexEnvironment = { GIT_INDEX_FILE: indexPath };
-      await git(this.repositoryPath, ["read-tree", "--empty"], signal, undefined, indexEnvironment);
-      await git(
-        this.repositoryPath,
-        ["update-index", "-z", "--index-info"],
-        signal,
-        Buffer.from(indexEntries.join("")),
-        indexEnvironment,
-      );
-      const treeOid = stripLine(
-        await git(this.repositoryPath, ["write-tree"], signal, undefined, indexEnvironment),
-      );
-      if (!/^[a-f0-9]{40}$/.test(treeOid))
-        throw new CaptureError("tree-invalid", "Git returned an invalid snapshot tree.");
+      const files = new Map<string, CachedFile>();
+      for (const entry of stored) files.set(entry.path, entry.file);
+      spooled.forEach((entry, index) => {
+        // A file written within one timestamp tick of this read could change again without a
+        // visible version change, so it is not trusted for reuse until it has aged.
+        if (Math.max(entry.version.mtimeMs, entry.version.ctimeMs) < started - RACY_WINDOW_MS)
+          files.set(entry.path, {
+            ...fileVersion(entry.version),
+            gitMode: entry.mode,
+            oid: objectIds[index]!,
+          });
+      });
+      let treeOid: string;
+      if (previous && spooled.length === 0 && stored.length === previous.files.size) {
+        // Every previously stored file is unchanged and nothing else exists: the same tree.
+        treeOid = previous.treeOid;
+      } else {
+        const indexEntries = [
+          ...stored.map((entry) => `${entry.file.gitMode} ${entry.file.oid}\t${entry.path}\0`),
+          ...spooled.map((entry, index) => `${entry.mode} ${objectIds[index]}\t${entry.path}\0`),
+        ];
+        const indexEnvironment = { GIT_INDEX_FILE: indexPath };
+        await git(
+          this.repositoryPath,
+          ["read-tree", "--empty"],
+          signal,
+          undefined,
+          indexEnvironment,
+        );
+        await git(
+          this.repositoryPath,
+          ["update-index", "-z", "--index-info"],
+          signal,
+          Buffer.from(indexEntries.join("")),
+          indexEnvironment,
+        );
+        treeOid = stripLine(
+          await git(this.repositoryPath, ["write-tree"], signal, undefined, indexEnvironment),
+        );
+        if (!/^[a-f0-9]{40}$/.test(treeOid))
+          throw new CaptureError("tree-invalid", "Git returned an invalid snapshot tree.");
+        signal.throwIfAborted();
+        await git(
+          this.repositoryPath,
+          ["update-ref", `${SNAPSHOT_REF_PREFIX}${snapshotId}`, treeOid],
+          signal,
+        );
+      }
       signal.throwIfAborted();
-      await git(
-        this.repositoryPath,
-        ["update-ref", `refs/pi-gui/snapshots/${snapshotId}`, treeOid],
-        signal,
-      );
-      signal.throwIfAborted();
+      this.inventories.delete(root);
+      this.inventories.set(root, { treeOid, files });
+      for (const key of this.inventories.keys()) {
+        if (this.inventories.size <= MAX_CACHED_CHECKOUTS) break;
+        this.inventories.delete(key);
+      }
       return {
         state: "available",
         treeOid,
@@ -600,20 +718,38 @@ export class TurnCheckpointStore {
     return this.loaded;
   }
 
+  /** Concurrent callers share one pending write; it serializes the records current at start. */
   private persist(): Promise<void> {
-    const metadata: CheckpointMetadata = { version: 1, records: [...this.records.values()] };
-    decodeMetadata(metadata);
-    return writeFileAtomicQueued(
-      this.metadataPath,
-      `${JSON.stringify(metadata, null, 2)}\n`,
-      decodeMetadata,
-    );
+    if (this.queuedWrite) return this.queuedWrite;
+    const write = this.writing
+      .catch(() => undefined)
+      .then(() => {
+        this.queuedWrite = undefined;
+        const metadata: CheckpointMetadata = { version: 1, records: [...this.records.values()] };
+        decodeMetadata(metadata);
+        return writeFileAtomicQueued(
+          this.metadataPath,
+          `${JSON.stringify(metadata)}\n`,
+          decodeMetadata,
+        );
+      });
+    this.queuedWrite = write;
+    this.writing = write;
+    return write;
   }
 
-  private enqueue<T>(action: () => Promise<T>): Promise<T> {
-    const result = this.pending.then(action, action);
-    this.pending = result.then(
+  private enqueue<T>(checkout: string, action: () => Promise<T>): Promise<T> {
+    const previous = this.checkoutQueues.get(checkout) ?? Promise.resolve();
+    const result = previous.then(action);
+    const settled = result.then(
       () => undefined,
+      () => undefined,
+    );
+    this.checkoutQueues.set(checkout, settled);
+    settled.then(
+      () => {
+        if (this.checkoutQueues.get(checkout) === settled) this.checkoutQueues.delete(checkout);
+      },
       () => undefined,
     );
     return result;
@@ -629,13 +765,24 @@ class CaptureError extends Error {
   }
 }
 
-async function readSnapshotFile(
+type SnapshotFile =
+  | { readonly kind: "stored"; readonly file: CachedFile }
+  | {
+      readonly kind: "read";
+      readonly mode: string;
+      readonly bytes: Buffer;
+      readonly version: FileVersion;
+    };
+
+async function inspectSnapshotFile(
   root: string,
   rootStat: Stats,
   path: string,
   signal: AbortSignal,
   reserve: (size: number) => void,
-): Promise<{ mode: string; bytes: Buffer } | null> {
+  stored: CachedFile | undefined,
+  directories: Map<string, Promise<Stats | null>>,
+): Promise<SnapshotFile | null> {
   const parts = path.split("/");
   if (
     isAbsolute(path) ||
@@ -651,18 +798,8 @@ async function readSnapshotFile(
   let parent = root;
   for (const component of parts.slice(0, -1)) {
     parent = join(parent, component);
-    let stat: Stats;
-    try {
-      stat = await lstat(parent);
-    } catch (error) {
-      if (isMissing(error)) return null;
-      throw error;
-    }
-    if (!stat.isDirectory() || stat.isSymbolicLink())
-      throw new CaptureError(
-        "unsafe-symlink",
-        "A tracked path now passes through a symlink or non-directory.",
-      );
+    const stat = await directoryStat(directories, parent);
+    if (!stat) return null;
     ancestors.push({ path: parent, stat });
   }
   let before: Stats;
@@ -673,6 +810,10 @@ async function readSnapshotFile(
     throw error;
   }
   signal.throwIfAborted();
+  if (stored && sameVersion(before, stored)) {
+    reserve(before.size);
+    return { kind: "stored", file: stored };
+  }
   const verifyAncestors = async () => {
     for (const ancestor of ancestors) {
       const current = await lstat(ancestor.path);
@@ -686,7 +827,7 @@ async function readSnapshotFile(
     await verifyAncestors();
     if (!sameVersion(before, await lstat(absolute)))
       throw new CaptureError("checkout-changing", "A symlink changed during capture.");
-    return { mode: "120000", bytes };
+    return { kind: "read", mode: "120000", bytes, version: before };
   }
   if (!before.isFile())
     throw new CaptureError(
@@ -721,17 +862,59 @@ async function readSnapshotFile(
     if (!sameVersion(before, await handle.stat()) || !sameVersion(before, await lstat(absolute)))
       throw new CaptureError("checkout-changing", "A file changed during capture.");
     await verifyAncestors();
-    return { mode: before.mode & 0o111 ? "100755" : "100644", bytes };
+    return {
+      kind: "read",
+      mode: before.mode & 0o111 ? "100755" : "100644",
+      bytes,
+      version: before,
+    };
   } finally {
     await handle.close();
   }
 }
 
-function sameIdentity(left: Stats, right: Stats): boolean {
+/** Each ancestor directory is checked once per capture; a missing one means a deletion. */
+function directoryStat(
+  directories: Map<string, Promise<Stats | null>>,
+  path: string,
+): Promise<Stats | null> {
+  let pending = directories.get(path);
+  if (!pending) {
+    pending = lstat(path).then(
+      (stat) => {
+        if (!stat.isDirectory() || stat.isSymbolicLink())
+          throw new CaptureError(
+            "unsafe-symlink",
+            "A tracked path now passes through a symlink or non-directory.",
+          );
+        return stat;
+      },
+      (error: unknown) => {
+        if (isMissing(error)) return null;
+        throw error;
+      },
+    );
+    directories.set(path, pending);
+  }
+  return pending;
+}
+
+function fileVersion(stat: FileVersion): FileVersion {
+  return {
+    dev: stat.dev,
+    ino: stat.ino,
+    mode: stat.mode,
+    size: stat.size,
+    mtimeMs: stat.mtimeMs,
+    ctimeMs: stat.ctimeMs,
+  };
+}
+
+function sameIdentity(left: FileVersion, right: FileVersion): boolean {
   return left.dev === right.dev && left.ino === right.ino;
 }
 
-function sameVersion(left: Stats, right: Stats): boolean {
+function sameVersion(left: FileVersion, right: FileVersion): boolean {
   return (
     sameIdentity(left, right) &&
     left.mode === right.mode &&
@@ -792,6 +975,10 @@ function nulRecords(buffer: Buffer): string[] {
 
 function isMissing(error: unknown): boolean {
   return typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT";
+}
+
+function targetKey(target: SessionRef): string {
+  return JSON.stringify([target.workspaceId, target.sessionId]);
 }
 
 function sameTarget(left: SessionRef, right: SessionRef): boolean {
