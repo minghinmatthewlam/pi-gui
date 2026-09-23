@@ -507,8 +507,10 @@ test("manages extensions and prefers runtime commands over colliding host action
     await expect(window.locator(".skill-detail")).toContainText("settings");
     await expect(window.locator(".skill-detail")).toContainText("prefill-demo");
 
-    await window.getByRole("button", { name: "Disable", exact: true }).click();
-    await expect(window.locator(".skill-detail__status")).toHaveText("Disabled");
+    const enabledSwitch = window.getByRole("switch", { name: "Enabled", exact: true });
+    await expect(enabledSwitch).toBeChecked();
+    await enabledSwitch.click();
+    await expect(enabledSwitch).not.toBeChecked();
     await window.getByRole("button", { name: "Back to app", exact: true }).click();
     await expect(window.locator(".chat-header__title")).toHaveText("Inspect extension surface");
     await expect(window.getByTestId("extension-dock")).toHaveCount(0);
@@ -519,8 +521,9 @@ test("manages extensions and prefers runtime commands over colliding host action
 
     await window.getByRole("button", { name: "Extensions", exact: true }).click();
     await extensionCard.click();
-    await window.getByRole("button", { name: "Enable", exact: true }).click();
-    await expect(window.locator(".skill-detail__status")).toHaveText("Enabled");
+    await expect(enabledSwitch).not.toBeChecked();
+    await enabledSwitch.click();
+    await expect(enabledSwitch).toBeChecked();
     await window.getByRole("button", { name: "Back to app", exact: true }).click();
     await expect(window.locator(".chat-header__title")).toHaveText("Extension Surface");
     await expect(window.getByTestId("extension-dock-summary")).toHaveText("Demo ready");
