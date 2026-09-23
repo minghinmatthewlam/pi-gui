@@ -1,16 +1,16 @@
 import type { ReactNode } from "react";
+import { formatShortcut } from "../../../contracts/ipc";
 import type { BuiltinToolKind } from "../../../contracts/workbench";
+import type { ThreadAction } from "../threads/thread-actions";
 import { BUILTIN_TOOL_ENTRIES } from "../workbench/builtin-tools";
 import type { SettingsSection } from "../settings/settings-view";
 import { sectionTitle } from "../settings/settings-utils";
 import {
-  ArchiveIcon,
   ClockIcon,
   ExtensionIcon,
   FileIcon,
   FolderIcon,
   ModelIcon,
-  PinIcon,
   PlusIcon,
   SearchIcon,
   SettingsIcon,
@@ -45,23 +45,15 @@ const SETTINGS_SECTIONS: readonly SettingsSection[] = [
   "notifications",
 ];
 
-export function formatShortcut(
-  platform: NodeJS.Platform,
-  key: string,
-  modifiers: { readonly shift?: boolean; readonly alt?: boolean } = {},
-): string {
-  if (platform === "darwin") {
-    return `${modifiers.alt ? "⌥" : ""}${modifiers.shift ? "⇧" : ""}⌘${key.toUpperCase()}`;
-  }
-  return `Ctrl+${modifiers.alt ? "Alt+" : ""}${modifiers.shift ? "Shift+" : ""}${key.toUpperCase()}`;
-}
-
 /** What the app can do right now; an action is listed only when it would work. */
 export interface PaletteActionContext {
   readonly platform: NodeJS.Platform;
   readonly hasWorkspace: boolean;
-  /** A thread is open in the main pane. */
-  readonly thread?: { readonly pinned: boolean; readonly canSwitchModel: boolean };
+  /** A thread is open in the main pane, with the actions its menus show. */
+  readonly thread?: {
+    readonly canSwitchModel: boolean;
+    readonly actions: readonly ThreadAction[];
+  };
   readonly canToggleSidebar: boolean;
   readonly newThread: () => void;
   readonly openFolder: () => void;
@@ -80,8 +72,6 @@ export interface PaletteActionContext {
     readonly open: () => void;
   }[];
   readonly findInThread: () => void;
-  readonly setThreadPinned: (pinned: boolean) => void;
-  readonly archiveThread: () => void;
   readonly openPaletteMode: (mode: PaletteMode) => void;
 }
 
@@ -155,20 +145,7 @@ export function buildPaletteActions(context: PaletteActionContext): readonly Pal
         run: view.open,
       });
     }
-    actions.push(
-      {
-        id: "pin-thread",
-        title: thread.pinned ? "Unpin thread" : "Pin thread",
-        icon: <PinIcon filled={thread.pinned} />,
-        run: () => context.setThreadPinned(!thread.pinned),
-      },
-      {
-        id: "archive-thread",
-        title: "Archive thread",
-        icon: <ArchiveIcon />,
-        run: context.archiveThread,
-      },
-    );
+    actions.push(...thread.actions);
   }
   if (context.canToggleSidebar) {
     actions.push({

@@ -23,6 +23,7 @@ import {
   isCloseFocusedSurfaceShortcut,
   isPaletteCommand,
   isRecentThreadCommand,
+  isSinglePressCommand,
   platformShortcutModifier,
   type ChordSource,
   type PiDesktopApi,
@@ -40,6 +41,7 @@ import {
   type ThreadListEntry,
   type ThreadSidebarModel,
 } from "../features/threads/thread-groups";
+import type { ThreadAction, ThreadActionId } from "../features/threads/thread-actions";
 import { dismissThreadShortcutHints } from "../features/threads/thread-shortcut-hints";
 import type { useWorkbench } from "../features/workbench/use-workbench";
 import {
@@ -58,14 +60,9 @@ interface DesktopCommandsInput {
   readonly setSnapshot: Dispatch<SetStateAction<DesktopAppState | null>>;
   readonly hasWorkspace: boolean;
   readonly selectedRootWorkspaceId: string | undefined;
-  /** The thread open in the main pane. */
+  /** The thread open in the main pane, with the actions its menus show. */
   readonly selectedThread:
-    | {
-        readonly target: WorkspaceSessionTarget;
-        readonly pinned: boolean;
-        readonly canSwitchModel: boolean;
-      }
-    | undefined;
+    { readonly actions: readonly ThreadAction[]; readonly canSwitchModel: boolean } | undefined;
   readonly threadSidebarModel: ThreadSidebarModel | undefined;
   readonly threadShortcutOrderRef: RefObject<readonly ThreadListEntry[] | null>;
   /** Opens a thread the way a sidebar click does, saving the current draft and scroll first. */
@@ -85,8 +82,6 @@ interface DesktopCommandsInput {
   readonly openSkills: (workspaceId?: string) => void;
   readonly openExtensions: (workspaceId?: string) => void;
   readonly setActiveView: (view: AppView) => void;
-  readonly setThreadPinned: (target: WorkspaceSessionTarget, pinned: boolean) => void;
-  readonly archiveThread: (target: WorkspaceSessionTarget) => void;
 }
 
 /**
@@ -187,6 +182,14 @@ export function useDesktopCommands(input: DesktopCommandsInput) {
       input.selectThread({ workspaceId: thread.workspaceId, sessionId: thread.session.id });
   };
 
+  /** Runs one of the open thread's menu actions; false when it has none by that id. */
+  const runThreadAction = (id: ThreadActionId) => {
+    const action = selectedThread?.actions.find((candidate) => candidate.id === id);
+    if (!action) return false;
+    action.run();
+    return true;
+  };
+
   const handlers: Record<PiDesktopCommand, CommandHandler> = {
     [desktopCommands.openSettings]: () => input.openSettings(selectedRootWorkspaceId),
     [desktopCommands.openNewThread]: openNewThread,
@@ -201,6 +204,8 @@ export function useDesktopCommands(input: DesktopCommandsInput) {
     [desktopCommands.toggleSidebar]: togglePrimarySidebar,
     [desktopCommands.openCommandPalette]: (source) => togglePalette("commands", source),
     [desktopCommands.openFilePalette]: (source) => togglePalette("files", source),
+    [desktopCommands.renameThread]: () => runThreadAction("rename-thread"),
+    [desktopCommands.archiveThread]: () => runThreadAction("archive-thread"),
     [desktopCommands.selectRecentThread1]: () => selectRecentThread(0),
     [desktopCommands.selectRecentThread2]: () => selectRecentThread(1),
     [desktopCommands.selectRecentThread3]: () => selectRecentThread(2),
@@ -273,7 +278,7 @@ export function useDesktopCommands(input: DesktopCommandsInput) {
       key: event.key,
       code: event.code,
     });
-    if (isPaletteCommand(command)) {
+    if (isSinglePressCommand(command)) {
       if (
         !platformShortcutModifier(api?.platform ?? "linux", {
           meta: event.metaKey,
@@ -391,12 +396,6 @@ export function useDesktopCommands(input: DesktopCommandsInput) {
               };
             }),
           findInThread: threadSearch.open,
-          setThreadPinned: (pinned) => {
-            if (selectedThread) input.setThreadPinned(selectedThread.target, pinned);
-          },
-          archiveThread: () => {
-            if (selectedThread) input.archiveThread(selectedThread.target);
-          },
           openPaletteMode: setPaletteMode,
         })
       : [];

@@ -693,7 +693,7 @@
 .session-row:hover .session-row__trailing,
 .session-row:focus-within .session-row__trailing,
 .session-row--pinned .session-row__trailing {
-  min-width: 74px;
+  min-width: 52px;
 }
 
 .session-row__trailing:has(.session-row__workspace-icon) {
@@ -765,31 +765,35 @@
 }
 
 .session-row__menu-wrap {
-  position: relative;
-  display: inline-flex;
-}
-
-.session-row .session-row__menu-button {
-  /* Fixed width: the … glyph is 16px in SF Pro but 18px in DejaVu Sans (Linux), which
-     would push the cluster past the 74px trailing slot reserved on hover. */
-  width: 24px;
-  justify-content: center;
-  padding-left: 6px;
-  font-size: 18px;
-  line-height: 1;
+  position: absolute;
+  top: 100%;
+  right: 0;
 }
 
 .session-row__menu {
-  top: calc(100% + 4px);
+  top: 4px;
   right: -6px;
   z-index: 20;
 }
 
-.session-row:has(.session-row__menu) .session-row__menu-button {
-  opacity: 1;
-  visibility: visible;
-  pointer-events: auto;
-  transform: scale(1);
+.session-row__tooltip-wrap {
+  display: inline-flex;
+}
+
+/* Lift the hovered row so its archive tooltip draws over the rows below. */
+.session-row:hover {
+  z-index: 3;
+}
+
+.session-row .session-row__tooltip {
+  left: auto;
+  right: -6px;
+  transform: translateY(-2px);
+}
+
+.session-row .session-row__tooltip-wrap:hover .session-row__tooltip,
+.session-row .session-row__tooltip-wrap:focus-within .session-row__tooltip {
+  transform: none;
 }
 
 .session-rename {

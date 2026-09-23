@@ -450,7 +450,7 @@ test("keeps one resizable width across tools, chooser, tasks, and restart", asyn
     expect(toggle.x).toBeGreaterThan(add.x);
     await expect(window.getByTestId("topbar").getByRole("heading", { name: TASK_A })).toBeVisible();
     await window.getByTestId("thread-header-menu").click();
-    await expect(window.getByTestId("thread-add-scheduled-task")).toBeVisible();
+    await expect(window.locator('[data-thread-action="scheduled-task"]')).toBeVisible();
     await window.getByTestId("thread-header-menu").click();
     await window.getByTestId("toggle-side-panel").click();
     await expect(window.getByTestId("workbench")).toHaveCount(0);
