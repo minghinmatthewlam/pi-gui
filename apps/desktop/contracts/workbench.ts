@@ -4,8 +4,16 @@ import { decodeReviewScope, type ReviewScope } from "./review";
 export const MAX_WORKBENCH_FILE_TABS = 100;
 export const MAX_WORKBENCH_TOOLS = 32;
 
+/** Every built-in tool; its presentation table must cover each kind. */
+export const BUILTIN_TOOL_KINDS = ["files", "changes", "worktrees", "terminal"] as const;
+export type BuiltinToolKind = (typeof BUILTIN_TOOL_KINDS)[number];
+
+export function isBuiltinToolKind(value: unknown): value is BuiltinToolKind {
+  return (BUILTIN_TOOL_KINDS as readonly unknown[]).includes(value);
+}
+
 export type ToolRef =
-  | { readonly kind: "files" | "changes" | "worktrees" | "terminal" }
+  | { readonly kind: BuiltinToolKind }
   | { readonly kind: "extension"; readonly extensionId: string; readonly viewId: string };
 
 export type ToolSelection =
@@ -60,13 +68,7 @@ export function decodeTaskWorkbenchTemplate(value: unknown): TaskWorkbenchTempla
         viewId: text(tool.viewId, 256),
       };
     }
-    if (
-      tool.kind !== "files" &&
-      tool.kind !== "changes" &&
-      tool.kind !== "worktrees" &&
-      tool.kind !== "terminal"
-    )
-      fail("tool kind");
+    if (!isBuiltinToolKind(tool.kind)) fail("tool kind");
     if (tool.extensionId !== undefined || tool.viewId !== undefined) fail("builtin tool fields");
     return { kind: tool.kind };
   });

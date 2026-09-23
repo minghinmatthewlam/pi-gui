@@ -1,16 +1,8 @@
 import { useEffect, useId, useRef, type KeyboardEvent, type ReactNode } from "react";
 import { toolRefId, type TaskWorkbenchTemplate, type ToolRef } from "../../../contracts/workbench";
 import type { DesktopExtensionViewInfo } from "../../../contracts/extension-views";
-import {
-  CloseIcon,
-  DiffIcon,
-  ExtensionIcon,
-  FileIcon,
-  PlusIcon,
-  SidePanelIcon,
-  TerminalIcon,
-  WorktreeIcon,
-} from "../../ui/icons";
+import { CloseIcon, ExtensionIcon, PlusIcon, SidePanelIcon } from "../../ui/icons";
+import { BUILTIN_TOOL_ENTRIES, BUILTIN_TOOLS } from "./builtin-tools";
 import { WorkbenchResizeHandle } from "./workbench-resize-handle";
 import { activeWorkbenchTool } from "./workbench-state";
 
@@ -32,41 +24,14 @@ interface WorkbenchProps {
   readonly onReloadExtensionViews?: () => void;
 }
 
-const BUILTIN_TOOLS = [
-  { kind: "files", description: "Browse files in this checkout" },
-  { kind: "changes", description: "Review uncommitted changes" },
-  { kind: "worktrees", description: "Open a task in another checkout" },
-  { kind: "terminal", description: "Run commands in this task's checkout" },
-] as const;
-
 export function workbenchToolLabel(tool: ToolRef): string {
-  switch (tool.kind) {
-    case "files":
-      return "Files";
-    case "changes":
-      return "Changes";
-    case "worktrees":
-      return "Worktrees";
-    case "terminal":
-      return "Terminal";
-    case "extension":
-      return tool.viewId;
-  }
+  return tool.kind === "extension" ? tool.viewId : BUILTIN_TOOLS[tool.kind].label;
 }
 
 function ToolIcon({ tool }: { readonly tool: ToolRef }) {
-  switch (tool.kind) {
-    case "files":
-      return <FileIcon />;
-    case "changes":
-      return <DiffIcon />;
-    case "worktrees":
-      return <WorktreeIcon />;
-    case "terminal":
-      return <TerminalIcon />;
-    case "extension":
-      return <ExtensionIcon />;
-  }
+  if (tool.kind === "extension") return <ExtensionIcon />;
+  const { Icon } = BUILTIN_TOOLS[tool.kind];
+  return <Icon />;
 }
 
 export function Workbench({
@@ -261,19 +226,19 @@ export function Workbench({
           <div className="workbench__chooser" data-testid="workbench-chooser">
             <h2>Open a tool</h2>
             <p>Keep the tools you need alongside your conversation.</p>
-            {BUILTIN_TOOLS.map(({ kind, description }) => (
+            {BUILTIN_TOOL_ENTRIES.map(({ kind, label, description, Icon }) => (
               <button
-                aria-label={workbenchToolLabel({ kind })}
+                aria-label={label}
                 className="workbench__choice"
                 key={kind}
                 onClick={() => onOpenTool({ kind })}
                 type="button"
               >
                 <span className="workbench__choice-icon">
-                  <ToolIcon tool={{ kind }} />
+                  <Icon />
                 </span>
                 <span className="workbench__choice-copy">
-                  <strong>{workbenchToolLabel({ kind })}</strong>
+                  <strong>{label}</strong>
                   <span>{description}</span>
                 </span>
               </button>
