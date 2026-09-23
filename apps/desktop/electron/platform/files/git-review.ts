@@ -31,7 +31,14 @@ const MAX_PATCH_BYTES = 1024 * 1024;
 const MAX_GIT_BYTES = 32 * 1024 * 1024;
 const MAX_PREPARATION_BYTES = 32 * 1024 * 1024;
 const PREPARATION_MS = 10_000;
+/** Pathspec bytes per Git call, well below Windows' 32K command-line limit. */
+const MAX_PATHSPEC_BYTES = 24_000;
 const COMPLETE: ReviewCoverage = { state: "complete", notes: [] };
+
+export interface GitReviewLimits {
+  /** Output cap for one Git listing; larger output makes the review unavailable. */
+  readonly maxGitBytes: number;
+}
 
 export type GitReviewScope =
   | Exclude<ReviewScope, { readonly kind: "turn" }>
@@ -123,8 +130,12 @@ function git(cwd: string, args: readonly string[], maxBuffer = MAX_GIT_BYTES): P
   });
 }
 
-async function gitText(cwd: string, args: readonly string[]): Promise<string> {
-  const result = await git(cwd, args);
+async function gitText(
+  cwd: string,
+  args: readonly string[],
+  maxBuffer = MAX_GIT_BYTES,
+): Promise<string> {
+  const result = await git(cwd, args, maxBuffer);
   if (result.code !== 0 || result.truncated)
     throw new Error("Git review data is unavailable or exceeds its size limit.");
   return result.stdout.toString("utf8");
@@ -262,10 +273,48 @@ function parseBlobs(output: string, index: boolean): Map<string, BlobRef[]> {
   return blobs;
 }
 
-async function tree(cwd: string, oid: string | null, paths: readonly string[] = []) {
+/** Splits pathspecs into command-line-sized batches. */
+function pathBatches(paths: Iterable<string>): string[][] {
+  const batches: string[][] = [];
+  let batch: string[] = [];
+  let bytes = 0;
+  for (const path of new Set(paths)) {
+    const size = Buffer.byteLength(path) + 1;
+    if (batch.length && bytes + size > MAX_PATHSPEC_BYTES) {
+      batches.push(batch);
+      batch = [];
+      bytes = 0;
+    }
+    batch.push(path);
+    bytes += size;
+  }
+  if (batch.length) batches.push(batch);
+  return batches;
+}
+
+/**
+ * Lists only the named paths, so the cost follows the change set rather than the size of
+ * the repository. Without paths nothing is listed (an empty pathspec would list everything).
+ */
+async function listBlobs(
+  cwd: string,
+  command: readonly string[],
+  paths: Iterable<string>,
+  index: boolean,
+  maxGitBytes: number,
+): Promise<Map<string, BlobRef[]>> {
+  const blobs = new Map<string, BlobRef[]>();
+  for (const batch of pathBatches(paths)) {
+    const output = await gitText(cwd, [...command, "--", ...batch], maxGitBytes);
+    for (const [path, refs] of parseBlobs(output, index)) blobs.set(path, refs);
+  }
+  return blobs;
+}
+
+function tree(cwd: string, oid: string | null, paths: Iterable<string>, maxGitBytes: number) {
   return oid
-    ? parseBlobs(await gitText(cwd, ["ls-tree", "-r", "-z", oid, "--", ...paths]), false)
-    : new Map<string, BlobRef[]>();
+    ? listBlobs(cwd, ["ls-tree", "-r", "-z", oid], paths, false, maxGitBytes)
+    : Promise.resolve(new Map<string, BlobRef[]>());
 }
 
 interface StatusFile {
@@ -362,7 +411,9 @@ async function defaultBase(cwd: string): Promise<string | null> {
 export async function createGitReview(
   checkoutPath: string,
   scope: GitReviewScope,
+  limits: Partial<GitReviewLimits> = {},
 ): Promise<GitReviewSnapshot | ReviewIssue> {
+  const maxGitBytes = limits.maxGitBytes ?? MAX_GIT_BYTES;
   try {
     if (scope.kind !== "turn") {
       const topLevel = (await gitText(checkoutPath, ["rev-parse", "--show-toplevel"])).trim();
@@ -376,19 +427,30 @@ export async function createGitReview(
     if (scope.kind === "uncommitted") {
       const deadline = Date.now() + PREPARATION_MS;
       const headOid = await resolveRevision(checkoutPath, "HEAD");
-      const status = await gitText(checkoutPath, [
-        "status",
-        "--porcelain=v1",
-        "-z",
-        "--untracked-files=all",
-      ]);
-      const indexOutput = await gitText(checkoutPath, ["ls-files", "--stage", "-z"]);
-      const indexBlobs = parseBlobs(indexOutput, true);
-      const baseBlobs = await tree(checkoutPath, headOid);
-      const entries = parseStatus(status);
+      const entries = parseStatus(
+        await gitText(
+          checkoutPath,
+          ["status", "--porcelain=v1", "-z", "--untracked-files=all"],
+          maxGitBytes,
+        ),
+      );
+      const included = entries.slice(0, MAX_FILES);
+      const indexBlobs = await listBlobs(
+        checkoutPath,
+        ["ls-files", "--stage", "-z"],
+        included.map((entry) => entry.path),
+        true,
+        maxGitBytes,
+      );
+      const baseBlobs = await tree(
+        checkoutPath,
+        headOid,
+        included.map((entry) => entry.previousPath ?? entry.path),
+        maxGitBytes,
+      );
       const files: GitReviewFile[] = [];
       let remainingBytes = MAX_PREPARATION_BYTES;
-      for (const entry of entries.slice(0, MAX_FILES)) {
+      for (const entry of included) {
         const working = await readWorkingFile(
           checkoutPath,
           entry.path,
@@ -414,17 +476,9 @@ export async function createGitReview(
           source,
         });
       }
-      if (
-        headOid !== (await resolveRevision(checkoutPath, "HEAD")) ||
-        status !==
-          (await gitText(checkoutPath, [
-            "status",
-            "--porcelain=v1",
-            "-z",
-            "--untracked-files=all",
-          ])) ||
-        indexOutput !== (await gitText(checkoutPath, ["ls-files", "--stage", "-z"]))
-      ) {
+      // Each file's index and working state is revalidated against its fingerprint before it is
+      // read, reviewed or staged, so the repository-wide listings are not repeated here.
+      if (headOid !== (await resolveRevision(checkoutPath, "HEAD"))) {
         return issue(
           "stale",
           "checkout-changed",
@@ -515,21 +569,23 @@ export async function createGitReview(
         );
     }
     const names = (
-      await gitText(checkoutPath, [
-        "diff",
-        "--no-ext-diff",
-        "--no-textconv",
-        "--name-status",
-        "-z",
-        "--find-renames",
-        baseOid,
-        headOid,
-        "--",
-      ])
+      await gitText(
+        checkoutPath,
+        [
+          "diff",
+          "--no-ext-diff",
+          "--no-textconv",
+          "--name-status",
+          "-z",
+          "--find-renames",
+          baseOid,
+          headOid,
+          "--",
+        ],
+        maxGitBytes,
+      )
     ).split("\0");
-    const baseBlobs = await tree(checkoutPath, baseOid);
-    const headBlobs = await tree(checkoutPath, headOid);
-    const files: GitReviewFile[] = [];
+    const changes: { code: string; first: string; path: string; renamed: boolean }[] = [];
     for (let index = 0; index < names.length; index += 1) {
       const code = names[index];
       if (!code) continue;
@@ -537,6 +593,23 @@ export async function createGitReview(
       const renamed = /^[RC]/.test(code);
       const path = renamed ? names[++index] : first;
       if (!path || !first) throw new Error("Invalid Git comparison listing.");
+      changes.push({ code, first, path, renamed });
+    }
+    const included = changes.slice(0, MAX_FILES);
+    const baseBlobs = await tree(
+      checkoutPath,
+      baseOid,
+      included.map((change) => change.first),
+      maxGitBytes,
+    );
+    const headBlobs = await tree(
+      checkoutPath,
+      headOid,
+      included.map((change) => change.path),
+      maxGitBytes,
+    );
+    const files: GitReviewFile[] = [];
+    for (const { code, first, path, renamed } of included) {
       const status: ReviewFileStatus =
         code[0] === "A"
           ? "added"
@@ -570,7 +643,7 @@ export async function createGitReview(
     }
     const coverage = combineCoverage([
       scope.kind === "turn" ? (scope.coverage ?? COMPLETE) : COMPLETE,
-      files.length > MAX_FILES
+      changes.length > MAX_FILES
         ? partial(`Only the first ${MAX_FILES} changed files are included.`)
         : COMPLETE,
     ]);
@@ -585,7 +658,7 @@ export async function createGitReview(
       headOid,
       baseOid,
       coverage,
-      files: files.slice(0, MAX_FILES),
+      files,
     };
   } catch (error) {
     return issue(
