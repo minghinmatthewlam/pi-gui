@@ -1,7 +1,7 @@
 {
   "name": "@pi-gui/website",
   "private": true,
-  "version": "0.1.0-beta.39",
+  "version": "0.1.0-beta.40",
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build",
