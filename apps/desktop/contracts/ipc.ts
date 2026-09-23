@@ -469,6 +469,7 @@ export function getDesktopCommandFromShortcut(
   const isD = lowerKey === "d" || input.code === "KeyD";
   const isK = lowerKey === "k" || input.code === "KeyK";
   const isP = lowerKey === "p" || input.code === "KeyP";
+  const isN = lowerKey === "n" || input.code === "KeyN";
   const isShiftO = input.shift && (lowerKey === "o" || input.code === "KeyO");
   const isShiftR = input.shift && (lowerKey === "r" || input.code === "KeyR");
   const isShiftA = input.shift && (lowerKey === "a" || input.code === "KeyA");
@@ -504,7 +505,7 @@ export function getDesktopCommandFromShortcut(
     return desktopCommands.openFilePalette;
   }
 
-  if (isShiftO) {
+  if ((!input.shift && isN) || isShiftO) {
     return desktopCommands.openNewThread;
   }
 
