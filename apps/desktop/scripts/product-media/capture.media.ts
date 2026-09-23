@@ -263,7 +263,22 @@ async function renderVideo(runDir: string, rawPath: string, name: string): Promi
       outputPath,
     ]);
   });
-  // The poster is the finished state, so the README and a paused video show the result.
+  // GitHub READMEs only play a GIF inline, so the README gets a smaller GIF copy.
+  await renderTo(runDir, `${name}.gif`, async (outputPath) => {
+    execFileSync("ffmpeg", [
+      "-v",
+      "error",
+      "-y",
+      "-i",
+      rawPath,
+      "-vf",
+      "fps=12,scale=1280:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=192:stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle",
+      "-loop",
+      "0",
+      outputPath,
+    ]);
+  });
+  // The poster is the finished state, so a paused video shows the result.
   await renderTo(runDir, `${name}-poster.webp`, async (outputPath) => {
     execFileSync("ffmpeg", [
       "-v",

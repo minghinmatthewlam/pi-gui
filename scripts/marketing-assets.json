@@ -25,16 +25,22 @@
       ]
     },
     {
+      "path": "apps/website/public/media/hero.gif",
+      "producer": "marketing:media",
+      "consumers": [
+        {
+          "path": "README.md",
+          "reference": "./apps/website/public/media/hero.gif"
+        }
+      ]
+    },
+    {
       "path": "apps/website/public/media/hero-poster.webp",
       "producer": "marketing:media",
       "consumers": [
         {
           "path": "apps/website/app/page.tsx",
           "reference": "/media/hero-poster.webp"
-        },
-        {
-          "path": "README.md",
-          "reference": "./apps/website/public/media/hero-poster.webp"
         }
       ]
     },

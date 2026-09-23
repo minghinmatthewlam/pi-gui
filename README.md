@@ -12,9 +12,9 @@ desktop shell around [`@earendil-works/pi-coding-agent`](https://www.npmjs.com/p
 not a separate agent: sessions, models, auth and tools all run through pi itself, so anything
 you set up with the pi CLI carries over.
 
-[![An agent in pi-gui fixing a bug, running the tests, then the change open in the review tab](./apps/website/public/media/hero-poster.webp)](./apps/website/public/media/hero.mp4)
+[![An agent in pi-gui fixing a bug, running the tests, then the change open in the review tab](./apps/website/public/media/hero.gif)](./apps/website/public/media/hero.mp4)
 
-<sub>A real run: the agent fixes a bug, adds a test and runs it, then the change opens for review. ([Watch the video](./apps/website/public/media/hero.mp4))</sub>
+<sub>A real run: the agent fixes a bug, adds a test and runs it, then the change opens for review. ([Watch in full quality](./apps/website/public/media/hero.mp4))</sub>
 
 ## Features
 
