@@ -750,7 +750,24 @@ function installApplicationMenu(): void {
       ],
     },
     { role: "editMenu" },
-    { role: "viewMenu" },
+    {
+      label: "View",
+      submenu: [
+        { role: "reload" },
+        // Shift+Cmd+R renames the thread, so Force Reload has no shortcut.
+        {
+          label: "Force Reload",
+          click: () => BrowserWindow.getFocusedWindow()?.webContents.reloadIgnoringCache(),
+        },
+        { role: "toggleDevTools" },
+        { type: "separator" },
+        { role: "resetZoom" },
+        { role: "zoomIn" },
+        { role: "zoomOut" },
+        { type: "separator" },
+        { role: "togglefullscreen" },
+      ],
+    },
     { role: "windowMenu" },
   ];
 
