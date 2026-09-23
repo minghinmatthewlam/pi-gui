@@ -9,6 +9,16 @@ const runtimePackages = new Set([
   "@earendil-works/pi-coding-agent",
   "@earendil-works/pi-agent-core",
 ]);
+// Host-side Chord transport and host-action parsing belong to Electron main and
+// the extension frame; the renderer may only import their types.
+const hostOnlyEntrypoints = new Set([
+  "@pi-gui/extension-ui/transport",
+  "@pi-gui/extension-ui/browser",
+]);
+const isHostOnlyEntrypointFile = (root, file) =>
+  /^packages\/extension-ui\/(?:src|dist)\/(?:transport|browser)\.[cm]?[jt]sx?$/.test(
+    path.relative(root, file).split(path.sep).join("/"),
+  );
 const sourceExtensions = [".ts", ".tsx", ".js", ".jsx", ".mts", ".cts", ".mjs", ".cjs"];
 const isInside = (directory, file) => {
   const relative = path.relative(directory, file);
@@ -89,6 +99,13 @@ export function checkRendererBoundary(root) {
         fail(expression, `Forbidden renderer runtime dependency '${specifier}'. ${repair}`);
         return;
       }
+      if (hostOnlyEntrypoints.has(specifier)) {
+        fail(
+          expression,
+          `Forbidden renderer runtime import '${specifier}'. Use an explicit type-only import.`,
+        );
+        return;
+      }
       // Vite asset imports contain no JavaScript runtime dependency.
       if (/\.(css|svg|png|jpe?g|gif|webp|woff2?|ttf)$/.test(specifier)) return;
       const resolved = ts.resolveModuleName(
@@ -113,7 +130,12 @@ export function checkRendererBoundary(root) {
         return;
       }
       const target = realpathSync(resolved.resolvedFileName);
-      if (isInside(main, target)) {
+      if (isHostOnlyEntrypointFile(root, target)) {
+        fail(
+          expression,
+          `Forbidden renderer runtime import of '${path.relative(root, target)}' through '${specifier}'. Use an explicit type-only import.`,
+        );
+      } else if (isInside(main, target)) {
         fail(
           expression,
           `Renderer reaches main/preload implementation '${path.relative(root, target)}'. ${repair}`,
