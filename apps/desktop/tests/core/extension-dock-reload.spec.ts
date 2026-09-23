@@ -75,13 +75,15 @@ test("resets dock expansion on /reload and extension enable or disable transitio
       .getByTestId("extensions-list")
       .getByRole("button", { name: /reload-dock-extension/i });
     await extensionCard.click();
-    await window.getByRole("button", { name: "Disable", exact: true }).click();
+    await window.getByRole("switch", { name: "Enabled", exact: true }).click();
+    await expect(window.getByRole("switch", { name: "Enabled", exact: true })).not.toBeChecked();
     await window.getByRole("button", { name: "Back to app", exact: true }).click();
     await expect(window.getByTestId("extension-dock")).toHaveCount(0);
 
     await window.getByRole("button", { name: "Extensions", exact: true }).click();
     await extensionCard.click();
-    await window.getByRole("button", { name: "Enable", exact: true }).click();
+    await window.getByRole("switch", { name: "Enabled", exact: true }).click();
+    await expect(window.getByRole("switch", { name: "Enabled", exact: true })).toBeChecked();
     await window.getByRole("button", { name: "Back to app", exact: true }).click();
     await expect(dockSummary).toHaveText("Session ready");
     await expect(dockBody).toHaveCount(0);

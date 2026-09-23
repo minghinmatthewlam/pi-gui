@@ -944,6 +944,7 @@ export default function App() {
           extensionsWorkspaceId={extensionsWorkspaceId}
           onSelectExtensionsWorkspace={setExtensionsWorkspaceId}
           onBack={() => setActiveView("threads")}
+          onSelectView={setActiveView}
           onTrySkill={handleTrySkill}
         />
         {commandPalette}

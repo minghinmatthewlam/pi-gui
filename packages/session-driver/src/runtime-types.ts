@@ -41,6 +41,7 @@ export interface RuntimeSkillRecord {
   readonly filePath: string;
   readonly baseDir: string;
   readonly source: string;
+  readonly scope: RuntimeSourceScope;
   readonly enabled: boolean;
   readonly disableModelInvocation: boolean;
   readonly slashCommand: string;

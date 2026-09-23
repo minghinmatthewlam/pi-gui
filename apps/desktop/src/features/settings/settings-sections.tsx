@@ -1,5 +1,13 @@
 import type { ReactNode } from "react";
-import { BellIcon, KeyboardIcon, ModelIcon, PlugIcon, SettingsIcon, SunIcon } from "../../ui/icons";
+import {
+  BellIcon,
+  KeyboardIcon,
+  ModelIcon,
+  PlugIcon,
+  SettingsIcon,
+  SkillIcon,
+  SunIcon,
+} from "../../ui/icons";
 
 export interface SettingsSectionDefinition {
   readonly id: string;
@@ -72,6 +80,20 @@ export const SETTINGS_SECTIONS = [
 ] as const satisfies readonly SettingsSectionDefinition[];
 
 export type SettingsSection = (typeof SETTINGS_SECTIONS)[number]["id"];
+
+/** Skills and extensions live in the settings nav but are their own app views. */
+export const CUSTOMIZE_SECTION_ID = "customize";
+
+export const SETTINGS_NAV_ITEMS = [
+  ...SETTINGS_SECTIONS,
+  {
+    id: CUSTOMIZE_SECTION_ID,
+    title: "Skills and extensions",
+    group: "Customize",
+    icon: <SkillIcon />,
+    keywords: ["skills", "extensions", "plugins", "slash commands", "tools"],
+  },
+] as const;
 
 export function settingsSectionDefinition(section: SettingsSection): SettingsSectionDefinition {
   return SETTINGS_SECTIONS.find((definition) => definition.id === section) ?? SETTINGS_SECTIONS[0];

@@ -149,7 +149,7 @@ test("maintenance: skills, pin, thread list, worktree, queued follow-ups", async
     });
     await test.step("Browse a workspace skill and insert it with Try", async () => {
       await page.getByRole("button", { name: "Skills", exact: true }).click();
-      await expect(page.locator(".skills-view")).toBeVisible();
+      await expect(page.getByTestId("skills-surface")).toBeVisible();
       await expect(page.getByTestId("skills-list")).toContainText("Demo Skill");
       await page.getByRole("button", { name: /Demo Skill/i }).click();
       await expect(page.locator(".skill-detail")).toContainText("/skill:demo-skill");
