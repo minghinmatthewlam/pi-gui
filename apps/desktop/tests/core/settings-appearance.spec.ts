@@ -123,10 +123,7 @@ test("selects and restores theme presets", async () => {
     await window.keyboard.press(desktopShortcut(","));
     await expect(window.getByTestId("settings-surface")).toBeVisible();
     await window.getByRole("button", { name: "Appearance", exact: true }).click();
-    await window
-      .locator(".settings-row", { hasText: "Light" })
-      .locator('input[type="radio"]')
-      .click();
+    await window.getByRole("radio", { name: "Light", exact: true }).click();
     await selectThemePreset(window, "Default");
     await expect(window.locator(".view-header__title")).toHaveText("Appearance");
     await window.getByRole("button", { name: "Back to app" }).click();
@@ -185,10 +182,7 @@ test("selects and restores theme presets", async () => {
     await window.keyboard.press(desktopShortcut(","));
     await expect(window.getByTestId("settings-surface")).toBeVisible();
     await window.getByRole("button", { name: "Appearance", exact: true }).click();
-    await window
-      .locator(".settings-row", { hasText: "Dark" })
-      .locator('input[type="radio"]')
-      .click();
+    await window.getByRole("radio", { name: "Dark", exact: true }).click();
     await expect
       .poll(() => window.evaluate(() => document.documentElement.classList.contains("dark")))
       .toBe(true);
@@ -260,10 +254,7 @@ test("light theme presets apply coordinated workbench palettes", async () => {
     await window.keyboard.press(desktopShortcut(","));
     await expect(window.getByTestId("settings-surface")).toBeVisible();
     await window.getByRole("button", { name: "Appearance", exact: true }).click();
-    await window
-      .locator(".settings-row", { hasText: "Light" })
-      .locator('input[type="radio"]')
-      .click();
+    await window.getByRole("radio", { name: "Light", exact: true }).click();
     await expect
       .poll(() => window.evaluate(() => document.documentElement.classList.contains("dark")))
       .toBe(false);
@@ -289,14 +280,7 @@ test("light theme presets apply coordinated workbench palettes", async () => {
         .poll(() => rootComputedCssVariables(window, pageLightTokenNames))
         .not.toEqual(baseline);
 
-      const activeCardBg = await elementCssProperty(
-        window,
-        ".theme-preset-card--active",
-        "background-color",
-      );
-      await expect
-        .poll(() => rootCssVariableAsColor(window, "--theme-selection-bg"))
-        .toBe(activeCardBg);
+      await expect(window.getByLabel("Color preset")).toHaveValue(preset.id);
     }
     expect(paletteSignatures.size).toBe(themePresets.length - 1);
 
@@ -430,7 +414,7 @@ async function expectThemedAppSurface(window: Page): Promise<void> {
 }
 
 async function selectThemePreset(window: Page, name: string): Promise<void> {
-  await window.locator(".theme-preset-card", { hasText: name }).click();
+  await window.getByLabel("Color preset").selectOption({ label: name });
 }
 
 async function saveProofScreenshot(

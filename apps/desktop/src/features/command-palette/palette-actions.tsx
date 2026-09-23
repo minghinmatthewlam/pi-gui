@@ -4,7 +4,7 @@ import type { BuiltinToolKind } from "../../../contracts/workbench";
 import type { ThreadAction } from "../threads/thread-actions";
 import { BUILTIN_TOOL_ENTRIES } from "../workbench/builtin-tools";
 import type { SettingsSection } from "../settings/settings-view";
-import { sectionTitle } from "../settings/settings-utils";
+import { sectionTitle } from "../settings/settings-sections";
 import {
   ClockIcon,
   ExtensionIcon,
@@ -40,9 +40,10 @@ export interface PaletteAction {
 /** "Settings" itself opens General. */
 const SETTINGS_SECTIONS: readonly SettingsSection[] = [
   "appearance",
+  "notifications",
+  "shortcuts",
   "providers",
   "models",
-  "notifications",
 ];
 
 /** What the app can do right now; an action is listed only when it would work. */

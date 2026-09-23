@@ -60,7 +60,7 @@ test("switches between app-global and per-repo model scope while worktrees inher
 
     await openSettings(window);
     await openSettingsSection(window, "Models");
-    await expect(window.locator(".surface-toolbar__field")).toHaveCount(0);
+    await expect(settingsWorkspacePicker(window)).toHaveCount(0);
     await expect(window.locator(".settings-select")).toHaveValue("openai:gpt-5");
 
     await openSettingsSection(window, "General");
@@ -70,20 +70,16 @@ test("switches between app-global and per-repo model scope while worktrees inher
       .toBe("per-repo");
 
     await openSettingsSection(window, "Models");
-    await expect(window.locator(".surface-toolbar__field")).toHaveCount(1);
-    await expect(window.locator(".surface-toolbar__field option")).toHaveCount(2);
-    await window
-      .locator(".surface-toolbar__field select")
-      .selectOption({ label: rootWorkspaceA.name });
-    await expect(window.locator(".surface-toolbar__field select")).toHaveValue(rootWorkspaceA.id);
+    await expect(settingsWorkspacePicker(window)).toHaveCount(1);
+    await expect(settingsWorkspacePicker(window).locator("option")).toHaveCount(2);
+    await settingsWorkspacePicker(window).selectOption({ label: rootWorkspaceA.name });
+    await expect(settingsWorkspacePicker(window)).toHaveValue(rootWorkspaceA.id);
     await expect(window.locator(".settings-select")).toHaveValue("openai:gpt-5");
     await setEnabledModels(window, ["openai/gpt-4o", "openai/gpt-4-turbo"], ["openai/gpt-5"]);
     await window.locator(".settings-select").selectOption("openai:gpt-4o");
     await expect(window.locator(".settings-select")).toHaveValue("openai:gpt-4o");
 
-    await window
-      .locator(".surface-toolbar__field select")
-      .selectOption({ label: rootWorkspaceB.name });
+    await settingsWorkspacePicker(window).selectOption({ label: rootWorkspaceB.name });
     await expect(window.locator(".settings-select")).toHaveValue("openai:gpt-5");
 
     await window.getByRole("button", { name: "Back to app", exact: true }).click();
@@ -123,9 +119,9 @@ test("switches between app-global and per-repo model scope while worktrees inher
 
     await openSettings(window);
     await openSettingsSection(window, "Models");
-    await expect(window.locator(".surface-toolbar__field option")).toHaveCount(2);
+    await expect(settingsWorkspacePicker(window).locator("option")).toHaveCount(2);
     expect(
-      (await window.locator(".surface-toolbar__field option").allTextContents()).every(
+      (await settingsWorkspacePicker(window).locator("option").allTextContents()).every(
         (text) => !/Worktree/i.test(text),
       ),
     ).toBeTruthy();
@@ -270,4 +266,8 @@ async function selectComposerModel(window: Page, label: string): Promise<void> {
   const dropdown = window.locator(".composer__bar .model-selector__dropdown").first();
   await expect(dropdown).toBeVisible();
   await dropdown.getByRole("button", { name: new RegExp(label, "i") }).click();
+}
+
+function settingsWorkspacePicker(window: Page) {
+  return window.getByTestId("settings-surface").getByLabel("Workspace", { exact: true });
 }

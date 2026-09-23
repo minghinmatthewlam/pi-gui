@@ -631,3 +631,72 @@ export function SearchIcon() {
     </Icon>
   );
 }
+
+export function SunIcon() {
+  return (
+    <Icon>
+      <circle cx="10" cy="10" r="3" stroke="currentColor" strokeWidth="1.35" />
+      <path
+        d="M10 3.2v1.4M10 15.4v1.4M3.2 10h1.4M15.4 10h1.4M5.2 5.2l1 1M13.8 13.8l1 1M5.2 14.8l1-1M13.8 6.2l1-1"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="1.35"
+      />
+    </Icon>
+  );
+}
+
+export function BellIcon() {
+  return (
+    <Icon>
+      <path
+        d="M5.6 13.6V9.2a4.4 4.4 0 0 1 8.8 0v4.4l1.1 1.4H4.5l1.1-1.4Z"
+        stroke="currentColor"
+        strokeLinejoin="round"
+        strokeWidth="1.35"
+      />
+      <path
+        d="M8.4 16.6a1.7 1.7 0 0 0 3.2 0"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="1.35"
+      />
+    </Icon>
+  );
+}
+
+export function KeyboardIcon() {
+  return (
+    <Icon>
+      <rect
+        x="3.2"
+        y="5.4"
+        width="13.6"
+        height="9.2"
+        rx="1.8"
+        stroke="currentColor"
+        strokeWidth="1.35"
+      />
+      <path
+        d="M6.2 8.4h.1M8.7 8.4h.1M11.2 8.4h.1M13.7 8.4h.1M7.4 11.6h5.2"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="1.5"
+      />
+    </Icon>
+  );
+}
+
+export function PlugIcon() {
+  return (
+    <Icon>
+      <path
+        d="M7.4 3.6v3M12.6 3.6v3M5.6 6.6h8.8v2.6a4.4 4.4 0 0 1-8.8 0V6.6ZM10 13.6v2.8"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.35"
+      />
+    </Icon>
+  );
+}
