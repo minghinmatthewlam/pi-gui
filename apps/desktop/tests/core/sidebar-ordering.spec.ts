@@ -219,6 +219,13 @@ async function pinThread(window: Page, title: string): Promise<void> {
   const row = window.locator(".session-row", { hasText: title });
   await row.hover();
   await window.getByRole("button", { name: new RegExp(`Pin ${title}`) }).click();
+  // Pinning round-trips through the main process before the row moves into the
+  // Pinned section. Wait for that move so the next hover isn't lost to the shift.
+  await expect(
+    window
+      .getByRole("region", { name: "Pinned threads" })
+      .getByRole("button", { name: new RegExp(`Unpin ${title}`) }),
+  ).toHaveAttribute("aria-pressed", "true");
 }
 
 async function dragPinnedThreadAfter(

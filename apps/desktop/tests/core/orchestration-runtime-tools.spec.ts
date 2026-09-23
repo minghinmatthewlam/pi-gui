@@ -16,13 +16,14 @@ import {
 
 async function startHangingOpenAiServer(): Promise<{
   readonly baseUrl: string;
-  readonly requestCount: () => number;
+  readonly pendingRequestCount: () => number;
   readonly close: () => Promise<void>;
 }> {
-  let requests = 0;
+  const pending = new Set<import("node:http").ServerResponse>();
   const sockets = new Set<import("node:net").Socket>();
-  const server = createServer((request) => {
-    requests += 1;
+  const server = createServer((request, response) => {
+    pending.add(response);
+    response.on("close", () => pending.delete(response));
     request.resume();
     // Intentionally leave the response pending: create_child_thread must return
     // after the running acknowledgement rather than await this model turn.
@@ -41,7 +42,7 @@ async function startHangingOpenAiServer(): Promise<{
   const address = server.address() as AddressInfo;
   return {
     baseUrl: `http://127.0.0.1:${address.port}/v1`,
-    requestCount: () => requests,
+    pendingRequestCount: () => pending.size,
     close: async () => {
       for (const socket of sockets) {
         socket.destroy();
@@ -119,29 +120,19 @@ test("create_child_thread returns after a slow worker starts, before its turn co
     await createNamedThread(window, "Parent orchestration thread");
     const parentRef = await selectedSessionRef(window);
     const prompt = "Keep this delegated worker running slowly.";
-    let deadline: ReturnType<typeof setTimeout> | undefined;
-    const timeout = new Promise<never>((_, reject) => {
-      deadline = setTimeout(
-        () => reject(new Error("create_child_thread waited for the slow turn to complete")),
-        2_000,
-      );
-    });
-    const result = await Promise.race([
+    // The server never answers, so the child's first turn cannot complete. A tool
+    // that awaited the turn would never return, and the test timeout names this step.
+    const result = await test.step("create_child_thread returns while the turn is in flight", () =>
       runOrchestrationRuntimeTool(harness, {
         toolName: "create_child_thread",
         toolCallId: "create-child-start-ack",
         sessionRef: parentRef,
         params: { prompt },
-      }),
-      timeout,
-    ]).finally(() => {
-      if (deadline) {
-        clearTimeout(deadline);
-      }
-    });
+      }));
 
     expect(result.details).toMatchObject({ deliveryStatus: "running", prompt });
-    expect(server.requestCount()).toBeGreaterThan(0);
+    // The worker's model request reached the server and is still unanswered.
+    await expect.poll(() => server.pendingRequestCount()).toBeGreaterThan(0);
     const child = (await getDesktopState(window)).orchestrationChildren.find(
       (entry) => entry.sourceToolCallId === "create-child-start-ack",
     );
