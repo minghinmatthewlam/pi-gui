@@ -113,7 +113,7 @@ test("the public Electron helper loads through Playwright and the marketing scri
   assert.equal(typeof helper.launchDesktop, "function");
 });
 
-test("Core shards cover each discovered test exactly once and preserve one worker", () => {
+test("Core shards cover each discovered test exactly once and default to one worker in CI", () => {
   const list = (shard) => {
     const result = spawnSync(
       process.execPath,
@@ -133,6 +133,7 @@ test("Core shards cover each discovered test exactly once and preserve one worke
           ...process.env,
           CI: "true",
           PI_APP_TEST_MODE: "background",
+          PI_APP_TEST_WORKERS: "",
           PLAYWRIGHT_JSON_OUTPUT_NAME: "",
           PLAYWRIGHT_JSON_OUTPUT_FILE: "",
         },

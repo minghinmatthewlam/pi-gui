@@ -384,6 +384,7 @@ function createWindow(): BrowserWindow {
     transparent: enableTransparency,
     vibrancy: process.platform === "darwin" && enableTransparency ? "under-window" : undefined,
     titleBarStyle: "hiddenInset",
+    autoHideMenuBar: process.platform !== "darwin",
     backgroundColor: enableTransparency ? "#00000000" : "#f3f4f8",
     trafficLightPosition: { x: 18, y: 18 },
     show: false,
@@ -1315,6 +1316,7 @@ async function promptForText(
     minimizable: false,
     maximizable: false,
     fullscreenable: false,
+    autoHideMenuBar: process.platform !== "darwin",
     title: "pi-gui",
     webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false },
   });
