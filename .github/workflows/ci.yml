@@ -145,17 +145,6 @@ jobs:
           sh -c 'openbox >/dev/null 2>&1 & exec "$@"' sh
           pnpm --filter @pi-gui/desktop run test:e2e:core --shard=${{ matrix.shard }}/4 --reporter=line,json
 
-      - name: TEMP diagnose reopen-state on Linux
-        if: ${{ always() && runner.os == 'Linux' && matrix.shard == 3 }}
-        env:
-          DEBUG: pw:browser
-          PI_APP_TEST_WORKERS: "1"
-        run: >-
-          cat /proc/sys/kernel/core_pattern; ulimit -c; ulimit -c 0;
-          xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24"
-          sh -c 'openbox >/dev/null 2>&1 & exec "$@"' sh
-          pnpm --dir apps/desktop exec cross-env PI_APP_TEST_LANE=core PI_APP_REAL_AUTH=0 PI_APP_TEST_MODE=background pnpm --dir ../.. exec playwright test -c apps/desktop/playwright.config.ts apps/desktop/tests/core/reopen-state.spec.ts --reporter=list 2>&1 | tail -300 || true
-
       - name: Summarize Core timing
         if: ${{ !cancelled() }}
         run: node .github/scripts/summarize-playwright-trend.mjs apps/desktop/test-results/core-report.json apps/desktop/test-results/core-summary.json
