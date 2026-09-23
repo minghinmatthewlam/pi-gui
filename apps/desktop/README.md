@@ -2,7 +2,7 @@
 
 Codex-style Electron shell for `pi`, with Playwright E2E coverage organized by test lane.
 
-macOS is the primary desktop UI verification target. Linux and Windows CI validate packaging; those checks do not establish platform-specific UI or native behavior.
+macOS is the primary desktop UI verification target. Pull-request CI runs the Core suite on Linux under Xvfb and pushes to `main` run it on macOS; Windows CI validates packaging only. The Linux run does not establish native macOS behavior.
 
 ## Setup
 
@@ -120,13 +120,13 @@ provider credentials, and retains its profile and frames under `.artifacts/marke
 Showcase capture writes an empty auth file, does not copy ambient credentials, and retains its
 synthetic profiles and frames under `.artifacts/marketing/showcase-captures/`.
 
-For mac-first CI, use:
+For the macOS Core run on `main`, use:
 
 ```bash
 pnpm --filter @pi-gui/desktop run test:e2e:ci:mac
 ```
 
-Linux CI currently validates packaging via:
+Linux CI also validates packaging via:
 
 ```bash
 pnpm --filter @pi-gui/desktop run package:linux
