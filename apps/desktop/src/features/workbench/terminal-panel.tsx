@@ -5,6 +5,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import "@xterm/xterm/css/xterm.css";
 import type { WorkspaceRecord } from "../../../contracts/desktop-state";
+import { desktopCommands, getDesktopCommandFromShortcut } from "../../../contracts/ipc";
 import { CloseIcon, PlusIcon, RefreshIcon } from "../../ui/icons";
 import type {
   TerminalPanelSnapshot,
@@ -241,6 +242,27 @@ export function TerminalPanel({ workspace, sessionId, onHide }: TerminalPanelPro
           setError(error instanceof Error ? error.message : String(error));
         });
         return false;
+      }
+      if (api.platform !== "darwin" && event.ctrlKey && !event.metaKey && !event.shiftKey) {
+        // Off macOS, Ctrl is the app's command key. Leave Ctrl+V to the browser's
+        // paste event and let app chords bubble to the window shortcut listener,
+        // instead of xterm turning them into control characters.
+        if (key === "v" && !event.altKey) {
+          return false;
+        }
+        const command = getDesktopCommandFromShortcut({
+          modifier: true,
+          alt: event.altKey,
+          shift: false,
+          key: event.key,
+          code: event.code,
+        });
+        if (
+          command === desktopCommands.toggleTerminal ||
+          command === desktopCommands.toggleSidePanel
+        ) {
+          return false;
+        }
       }
       if (api.platform === "darwin" && event.metaKey) {
         const sequence = macTerminalSequenceForEvent(event);

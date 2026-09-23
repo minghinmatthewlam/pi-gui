@@ -153,10 +153,11 @@ test("pastes clipboard text into the integrated terminal once", async () => {
     });
     await window.keyboard.press(desktopShortcut("V"));
 
+    // Join rows so a paste that soft-wraps after a long prompt still counts once.
     await expect
       .poll(async () =>
         countOccurrences(
-          (await terminal.locator(".xterm-rows").innerText()) ?? "",
+          ((await terminal.locator(".xterm-rows").innerText()) ?? "").replace(/\n/g, ""),
           "PI_TERMINAL_PASTE_ONCE",
         ),
       )
