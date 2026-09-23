@@ -324,3 +324,95 @@ test("queued edit and cancel keep their original session when navigation is alre
     await harness.close();
   }
 });
+
+test("an unsaved keystroke does not overwrite a queued edit or its cancel", async () => {
+  test.setTimeout(60_000);
+  const userDataDir = await makeUserDataDir();
+  const workspacePath = await makeWorkspace("queued-edit-draft-race");
+  const harness = await launchDesktop(userDataDir, {
+    initialWorkspaces: [workspacePath],
+    testMode: "background",
+  });
+
+  try {
+    const window = await harness.firstWindow();
+    await createNamedThread(window, "Queued edit race");
+    const queuedMessage: SessionQueuedMessage = {
+      id: "queued-race-message",
+      mode: "followUp",
+      text: "Queued text to edit",
+      attachments: [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    await emitRunningSnapshot(harness, window, [queuedMessage]);
+    await expect(window.getByTestId("queued-composer-message")).toContainText(queuedMessage.text);
+
+    // Main serializes a window's actions in arrival order. Keep that order across these
+    // channels and make the queued actions slow, so a debounced draft write that fires
+    // after Edit or Cancel is sent is handled after it, as on a busy main process.
+    await harness.electronApp.evaluate(
+      ({ ipcMain }, payload) => {
+        type InvokeHandler = (...args: unknown[]) => unknown;
+        const handlers = (
+          ipcMain as typeof ipcMain & { readonly _invokeHandlers?: Map<string, InvokeHandler> }
+        )._invokeHandlers;
+        const store = globalThis as typeof globalThis & { __queuedEditChain__?: Promise<unknown> };
+        store.__queuedEditChain__ = Promise.resolve();
+        for (const [channel, delayMs] of payload.channels) {
+          const original = handlers?.get(channel);
+          if (!original) throw new Error(`No IPC handler registered for ${channel}`);
+          ipcMain.removeHandler(channel);
+          ipcMain.handle(channel, (...args) => {
+            const result = (store.__queuedEditChain__ ?? Promise.resolve()).then(async () => {
+              await new Promise((resolve) => setTimeout(resolve, delayMs));
+              return original(...args);
+            });
+            store.__queuedEditChain__ = result.catch(() => undefined);
+            return result;
+          });
+        }
+      },
+      {
+        channels: [
+          [desktopIpc.editQueuedComposerMessage, 600],
+          [desktopIpc.cancelQueuedComposerEdit, 600],
+          [desktopIpc.updateComposerDraft, 0],
+        ] as const,
+      },
+    );
+    const settle = async () => {
+      await window.waitForTimeout(1_000);
+      await harness.electronApp.evaluate(async () => {
+        await (globalThis as typeof globalThis & { __queuedEditChain__?: Promise<unknown> })
+          .__queuedEditChain__;
+      });
+    };
+
+    const composer = window.getByTestId("composer");
+    await composer.click();
+    await window.keyboard.type("local scratch draft");
+    // Click in the page so Edit is sent inside the 350ms draft-save debounce.
+    await window
+      .getByTestId("queued-composer-message")
+      .getByRole("button", { name: "Edit", exact: true })
+      .evaluate((button: HTMLButtonElement) => button.click());
+    await settle();
+    await expect(window.getByTestId("queued-composer-editing")).toBeVisible();
+    await expect(composer).toHaveValue(queuedMessage.text);
+    expect((await getDesktopState(window)).composerDraft).toBe(queuedMessage.text);
+
+    await composer.click();
+    await window.keyboard.press("End");
+    await window.keyboard.type(" changed");
+    await window
+      .getByRole("button", { name: "Cancel" })
+      .evaluate((button: HTMLButtonElement) => button.click());
+    await settle();
+    await expect(window.getByTestId("queued-composer-editing")).toHaveCount(0);
+    await expect(composer).toHaveValue("local scratch draft");
+    expect((await getDesktopState(window)).composerDraft).toBe("local scratch draft");
+  } finally {
+    await harness.close();
+  }
+});
