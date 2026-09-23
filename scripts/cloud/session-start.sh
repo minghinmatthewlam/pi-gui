@@ -35,12 +35,21 @@ if ! pgrep -x Xvfb >/dev/null 2>&1; then
   if command -v Xvfb >/dev/null 2>&1; then
     nohup Xvfb "$display" -screen 0 1920x1080x24 -nolisten tcp >/tmp/xvfb.log 2>&1 &
     echo "display: started Xvfb on $display"
-    if command -v openbox >/dev/null 2>&1; then
-      sleep 1
-      DISPLAY="$display" nohup openbox >/tmp/openbox.log 2>&1 &
-    fi
   else
     echo "display: Xvfb missing; paste scripts/cloud/setup.sh into the environment setup script" >&2
+  fi
+fi
+if command -v openbox >/dev/null 2>&1 && ! pgrep -x openbox >/dev/null 2>&1; then
+  # X11 maximize is a request only a window manager answers.
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    [ -S "/tmp/.X11-unix/X${display#:}" ] && break
+    sleep 0.2
+  done
+  if [ -S "/tmp/.X11-unix/X${display#:}" ]; then
+    DISPLAY="$display" nohup openbox >/tmp/openbox.log 2>&1 &
+    echo "display: started openbox on $display"
+  else
+    echo "display: no X server on $display; openbox not started" >&2
   fi
 fi
 
