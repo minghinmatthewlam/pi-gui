@@ -133,11 +133,22 @@ function assertCoreShards(workflow) {
   assert.equal(matrix.if, undefined);
   assert.deepEqual(matrix.strategy.matrix, { shard: [1, 2, 3, 4] });
   assert.equal(matrix.strategy["fail-fast"], false);
-  const run = matrix.steps.find((step) => step.name === "Desktop Core");
-  assert.equal(run.if, undefined);
+  // PRs run Core on Linux and main pushes on macOS; each runner OS gets exactly one Core step.
   assert.equal(
-    run.run,
+    matrix["runs-on"],
+    "${{ github.event_name == 'pull_request' && 'ubuntu-latest' || 'macos-latest' }}",
+  );
+  const mac = matrix.steps.find((step) => step.name === "Desktop Core (macOS)");
+  assert.equal(mac.if, "${{ runner.os == 'macOS' }}");
+  assert.equal(
+    mac.run,
     "pnpm --filter @pi-gui/desktop run test:e2e:ci:mac --shard=${{ matrix.shard }}/4 --reporter=line,json",
+  );
+  const linux = matrix.steps.find((step) => step.name === "Desktop Core (Linux)");
+  assert.equal(linux.if, "${{ runner.os == 'Linux' }}");
+  assert.match(
+    linux.run,
+    /^xvfb-run .* pnpm --filter @pi-gui\/desktop run test:e2e:core --shard=\$\{\{ matrix\.shard \}\}\/4 --reporter=line,json$/,
   );
   const upload = matrix.steps.find((step) => isAction(step.uses, "actions/upload-artifact"));
   assert.equal(upload.with.name, "desktop-core-test-results-${{ matrix.shard }}");
@@ -159,8 +170,16 @@ test("all Core shards are required and retain independent reports", () => {
       w.jobs["desktop-core-shards"].strategy.matrix.shard = [1, 2, 3];
     },
     (w) => {
-      w.jobs["desktop-core-shards"].steps.find((s) => s.name === "Desktop Core").run =
+      w.jobs["desktop-core-shards"].steps.find((s) => s.name === "Desktop Core (macOS)").run =
         "echo skipped";
+    },
+    (w) => {
+      w.jobs["desktop-core-shards"].steps.find((s) => s.name === "Desktop Core (Linux)").run =
+        "echo skipped";
+    },
+    (w) => {
+      w.jobs["desktop-core-shards"].steps.find((s) => s.name === "Desktop Core (Linux)").if =
+        "${{ false }}";
     },
   ]) {
     const invalid = structuredClone(workflow);

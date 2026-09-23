@@ -95,8 +95,11 @@ test("opens task terminals with persistent output and independent shell tabs", a
 
     await expect(window.getByTestId("composer")).toBeVisible();
 
+    // Shells rename tabs through OSC titles (Ubuntu's bashrc sets user@host: dir), so
+    // target the panel's own close buttons rather than the "Terminal N" label.
     await window
-      .getByLabel(/Close Terminal/)
+      .getByRole("tablist", { name: "Terminal sessions" })
+      .locator(".terminal-panel__tab-close")
       .last()
       .click();
     await expect(window.getByTestId("terminal-tab")).toHaveCount(2);
