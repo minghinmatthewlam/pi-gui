@@ -1,9 +1,5 @@
 import { expect, test } from "@playwright/test";
-import {
-  desktopCommands,
-  getDesktopCommandFromShortcut,
-  recentThreadShortcutIndex,
-} from "../../contracts/ipc";
+import { desktopCommands, getDesktopCommandFromShortcut } from "../../contracts/ipc";
 import {
   compareByRecency,
   recencyBucketId,
@@ -71,7 +67,4 @@ test("maps unmodified digit shortcuts onto recency commands in order", () => {
     }),
   ).toBe(desktopCommands.selectRecentThread9);
   expect(getDesktopCommandFromShortcut({ modifier: true, shift: true, key: "1" })).toBeUndefined();
-  expect(recentThreadShortcutIndex(desktopCommands.selectRecentThread1)).toBe(0);
-  expect(recentThreadShortcutIndex(desktopCommands.selectRecentThread9)).toBe(8);
-  expect(recentThreadShortcutIndex(desktopCommands.toggleSidebar)).toBeUndefined();
 });

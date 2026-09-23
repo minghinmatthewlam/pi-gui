@@ -243,11 +243,6 @@ export type PiDesktopSelectedTranscriptListener = (
 ) => void;
 export type PiDesktopCommand = (typeof desktopCommands)[keyof typeof desktopCommands];
 
-export function recentThreadShortcutIndex(command: PiDesktopCommand): number | undefined {
-  const index = (RECENT_THREAD_COMMANDS as readonly string[]).indexOf(command);
-  return index >= 0 ? index : undefined;
-}
-
 export type ChangedFileStatus =
   "added" | "copied" | "deleted" | "modified" | "renamed" | "untracked";
 
