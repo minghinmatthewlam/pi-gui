@@ -358,7 +358,7 @@ export function useDesktopCommands(input: DesktopCommandsInput) {
   }, []);
 
   const paletteActions: readonly PaletteAction[] =
-    paletteMode && api
+    paletteMode && threadSidebarModel && api
       ? buildPaletteActions({
           platform: api.platform,
           hasWorkspace: input.hasWorkspace,
