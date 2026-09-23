@@ -12,6 +12,7 @@ import {
   makeWorkspace,
   selectSession,
 } from "../helpers/electron-app";
+import { expectExtensionViewReady } from "../helpers/desktop-extension-fixture";
 
 test("Stop remains available while an extension saves the running task's protected draft", async () => {
   const workspacePath = await makeWorkspace("extension-draft-stop");
@@ -60,6 +61,7 @@ export default function extension(pi) {
     await expect(
       frame.getByRole("button", { name: "Prepare task draft", exact: true }),
     ).toBeVisible();
+    await expectExtensionViewReady(window);
     await expect(window.getByRole("tab", { name: "Draft actions", exact: true })).toHaveAttribute(
       "title",
       "Draft actions",

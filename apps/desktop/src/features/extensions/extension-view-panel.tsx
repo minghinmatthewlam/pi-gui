@@ -272,6 +272,7 @@ export function ExtensionViewPanel({
       className="extension-view-panel"
       aria-label={view.title}
       data-testid="extension-view-panel"
+      data-state={state.kind}
     >
       <header className="extension-view-panel__header">
         <span>{view.title}</span>
@@ -290,27 +291,31 @@ export function ExtensionViewPanel({
           <p>{state.message}</p>
           <p>The extension’s commands remain available. Reload view reconnects its interface.</p>
         </div>
-      ) : state.kind !== "ready" ? (
-        <div className="extension-view-panel__status" role="status">
-          Loading extension view…
-        </div>
       ) : null}
-      {connection ? (
-        <iframe
-          className="extension-view-panel__frame"
-          data-testid="extension-view-frame"
-          key={connection.connectionId}
-          title={view.title}
-          ref={iframeRef}
-          src={connection.frameUrl}
-          sandbox="allow-scripts"
-          referrerPolicy="no-referrer"
-          onLoad={() => {
-            const frame = iframeRef.current;
-            if (frame) attachFrameRef.current?.(frame);
-          }}
-        />
-      ) : null}
+      <div className="extension-view-panel__body">
+        {state.kind === "opening" || state.kind === "mounting" ? (
+          // Covers the frame while it mounts, so the frame keeps its place when the view becomes ready.
+          <div className="extension-view-panel__status extension-view-panel__loading" role="status">
+            Loading extension view…
+          </div>
+        ) : null}
+        {connection ? (
+          <iframe
+            className="extension-view-panel__frame"
+            data-testid="extension-view-frame"
+            key={connection.connectionId}
+            title={view.title}
+            ref={iframeRef}
+            src={connection.frameUrl}
+            sandbox="allow-scripts"
+            referrerPolicy="no-referrer"
+            onLoad={() => {
+              const frame = iframeRef.current;
+              if (frame) attachFrameRef.current?.(frame);
+            }}
+          />
+        ) : null}
+      </div>
     </section>
   );
 }

@@ -39,6 +39,21 @@
   font-size: 14px;
 }
 
+.extension-view-panel__body {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.extension-view-panel__loading {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  background: var(--main);
+}
+
 .extension-view-panel__frame {
   flex: 1 1 auto;
   width: 100%;

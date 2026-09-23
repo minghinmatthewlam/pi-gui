@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 import {
   installDesktopExtensionFixture,
+  expectExtensionViewReady,
   openDesktopExtensionFixture,
 } from "../helpers/desktop-extension-fixture";
 import {
@@ -51,6 +52,7 @@ test("packaged extension frame loads its bundled bridge and exchanges live Chord
     await expect(frameElement).toHaveAttribute("sandbox", "allow-scripts");
     await expect(frame.getByRole("heading", { name: "Security fixture" })).toBeVisible();
     await expect(frame.locator("#counter")).toHaveText("Count 0 · activations 1");
+    await expectExtensionViewReady(window);
     await frame.getByRole("button", { name: "Increment", exact: true }).click();
     await expect(frame.locator("#counter")).toHaveText("Count 1 · activations 1");
 

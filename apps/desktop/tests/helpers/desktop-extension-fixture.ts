@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { Page } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
 
 export async function installDesktopExtensionFixture(
   workspace: string,
@@ -50,7 +50,12 @@ export async function mount(root, host) {
   let parentAccess = 'allowed';
   try { void parent.document.body; } catch { parentAccess = 'blocked'; }
   root.querySelector('#boundary').textContent = JSON.stringify({ preload: typeof window.piApp, process: typeof process, require: typeof require, parentAccess, origin: self.origin });
-  root.querySelector('#increment').onclick = () => service.increment(context);
+  // Record delivery and failure so a missing increment says whether the click or the call was lost.
+  root.querySelector('#increment').onclick = event => {
+    const button = event.currentTarget;
+    button.dataset.clicks = String(Number(button.dataset.clicks ?? 0) + 1);
+    service.increment(context).catch(error => { button.dataset.error = String(error?.message ?? error); });
+  };
   root.querySelector('#network').onclick = async () => {
     try { await fetch(${JSON.stringify(attackUrl)}); root.querySelector('#network-result').textContent = 'Network allowed'; }
     catch { root.querySelector('#network-result').textContent = 'Network blocked'; }
@@ -76,4 +81,12 @@ export async function openDesktopExtensionFixture(window: Page): Promise<void> {
   const chooser = window.getByTestId("workbench-chooser");
   if (!(await chooser.isVisible())) await window.getByTestId("workbench-add-tab").click();
   await chooser.getByRole("button", { name: "Security fixture", exact: true }).click();
+}
+
+/**
+ * Waits until the host has received the frame's ready signal. The frame paints its content
+ * before mount() returns, so visible frame text alone does not mean the view is ready.
+ */
+export async function expectExtensionViewReady(window: Page): Promise<void> {
+  await expect(window.getByTestId("extension-view-panel")).toHaveAttribute("data-state", "ready");
 }

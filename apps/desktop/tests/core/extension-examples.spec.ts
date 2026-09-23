@@ -11,6 +11,7 @@ import {
   writeProjectExtension,
 } from "../helpers/electron-app";
 
+import { expectExtensionViewReady } from "../helpers/desktop-extension-fixture";
 import {
   createExamplePrFixture,
   desktopExtensionExamplesDirectory as examples,
@@ -28,6 +29,7 @@ async function openExample(window: Page, title: string): Promise<FrameLocator> {
   }
   const frame = window.frameLocator('[data-testid="extension-view-frame"]');
   await expect(frame.getByRole("heading", { name: title, exact: true })).toBeVisible();
+  await expectExtensionViewReady(window);
   return frame;
 }
 
@@ -254,6 +256,7 @@ test("the actual PR Review example records a Pi review, opens files, prepares a 
     await expect(
       frame.getByRole("heading", { name: "Review · completed", exact: true }),
     ).toBeVisible();
+    await expectExtensionViewReady(window);
     await fixture.advanceHead("export const search = (query) => query ? [query] : [];\n");
     await frame.getByRole("button", { name: "Refresh PR", exact: true }).click();
     await expect(

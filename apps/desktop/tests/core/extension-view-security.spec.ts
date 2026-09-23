@@ -3,6 +3,7 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 import {
+  expectExtensionViewReady,
   installDesktopExtensionFixture as installFixture,
   openDesktopExtensionFixture as openFixture,
 } from "../helpers/desktop-extension-fixture";
@@ -49,7 +50,10 @@ test("custom frontend exchanges Chord state while its opaque frame cannot access
         origin: "null",
       }),
     );
-    await frame.getByRole("button", { name: "Increment", exact: true }).click();
+    await expectExtensionViewReady(window);
+    const increment = frame.getByRole("button", { name: "Increment", exact: true });
+    await increment.click();
+    await expect(increment).toHaveAttribute("data-clicks", "1");
     await expect(frame.locator("#counter")).toHaveText("Count 1 · activations 1");
     await frame.getByRole("button", { name: "Try network", exact: true }).click();
     await expect(frame.locator("#network-result")).toHaveText("Network blocked");
@@ -88,6 +92,7 @@ test("custom frontend exchanges Chord state while its opaque frame cannot access
 
     // No debounce wait: navigation from the iframe must persist the latest visible draft first.
     await window.getByTestId("composer").fill("Unsent original task draft");
+    await expectExtensionViewReady(window);
     await frame.getByRole("button", { name: "Prepare task draft", exact: true }).click();
     await expect(window.locator(".chat-header__title")).toHaveText("Extension prepared task");
     await expect(window.getByTestId("composer")).toHaveValue(
@@ -124,6 +129,7 @@ test("a failed author mount keeps conversation editable and Reload view recovers
     const frame = window.frameLocator('[data-testid="extension-view-frame"]');
     await expect(frame.locator("#counter")).toHaveText("Count 0 · activations 1");
     await expect(window.getByTestId("composer")).toHaveValue("Draft while custom view is broken");
+    await expectExtensionViewReady(window);
     await frame.getByRole("button", { name: "Increment", exact: true }).click();
     await expect(frame.locator("#counter")).toHaveText("Count 1 · activations 1");
   } finally {
@@ -179,6 +185,8 @@ test("two real windows share one task backend while their frame connections rema
       }
     }, new URL(firstUrl).hostname);
     expect(wrongSender).toBe("rejected");
+    await expectExtensionViewReady(first);
+    await expectExtensionViewReady(second);
     await firstFrame.getByRole("button", { name: "Increment", exact: true }).click();
     await expect(firstFrame.locator("#counter")).toHaveText("Count 1 · activations 1");
     await expect(secondFrame.locator("#counter")).toHaveText("Count 1 · activations 1");
