@@ -1893,32 +1893,6 @@
   align-content: stretch;
 }
 
-.settings-disclosure {
-  border-top: 1px solid var(--line);
-  padding-top: 12px;
-}
-
-.settings-group > .settings-disclosure {
-  border-top: none;
-  padding: 14px 18px;
-}
-
-.settings-disclosure__summary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  cursor: pointer;
-  color: var(--text-strong);
-  font-size: 13px;
-  font-weight: 600;
-  list-style: none;
-}
-
-.settings-disclosure__summary::-webkit-details-marker {
-  display: none;
-}
-
 .settings-disclosure__body {
   display: grid;
   gap: 12px;
@@ -2323,22 +2297,9 @@
   color: var(--text-strong);
 }
 
-.settings-hint {
-  color: var(--muted-soft);
-  font-size: 13px;
-  font-style: italic;
-}
-
 .settings-warning {
   color: var(--warning, #d97706);
   font-size: 13px;
-}
-
-.settings-toggle--inline {
-  display: inline-flex;
-  align-items: center;
-  margin-left: auto;
-  cursor: pointer;
 }
 
 .settings-field {
@@ -2356,7 +2317,6 @@
   gap: 12px;
 }
 
-.settings-select,
 .settings-search,
 .settings-text-input {
   width: min(420px, 100%);
@@ -2387,111 +2347,9 @@
   min-width: 0;
 }
 
-.settings-option-list {
-  display: grid;
-  gap: 8px;
-}
-
 .settings-list {
   display: grid;
   gap: 10px;
-}
-
-.settings-list__row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 11px 12px;
-  border-radius: var(--radius-xl);
-  border: 1px solid var(--line);
-  background: var(--surface-muted);
-}
-
-.settings-list__body {
-  min-width: 0;
-  display: grid;
-  gap: 4px;
-}
-
-.settings-list__title {
-  color: var(--text-strong);
-  font-size: 14px;
-  font-weight: 590;
-}
-
-.settings-list__meta {
-  color: var(--muted-soft);
-  font-size: 12px;
-}
-
-.settings-option {
-  padding: 11px 12px;
-  border-radius: var(--radius-xl);
-  border: 1px solid var(--line);
-  background: var(--surface-muted);
-  text-align: left;
-  display: grid;
-  gap: 4px;
-}
-
-.settings-option--active,
-.settings-option:hover {
-  border-color: var(--line-strong);
-  background: var(--overlay-hover);
-}
-
-.settings-option__title {
-  color: var(--text-strong);
-  font-size: 14px;
-  font-weight: 590;
-}
-
-.settings-option__meta {
-  color: var(--muted-soft);
-  font-size: 12px;
-}
-
-.settings-pill-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.settings-pill {
-  padding: 8px 12px;
-  border-radius: var(--radius-pill);
-  border: 1px solid var(--theme-control-border, var(--line));
-  background: var(--theme-control-bg, var(--surface-muted));
-  color: var(--muted-strong);
-  font-size: 13px;
-  font-weight: 560;
-}
-
-.settings-pill--active {
-  border-color: var(--theme-selection-border, var(--accent-tint-border));
-  background: var(--theme-selection-bg, var(--accent-tint-bg));
-  color: var(--theme-selection-ink, var(--text-strong));
-}
-
-.settings-toggle-list {
-  display: grid;
-  gap: 10px;
-}
-
-.settings-toggle {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  color: var(--text-strong);
-  font-size: 14px;
-}
-
-.settings-toggle--row {
-  padding: 11px 12px;
-  border-radius: var(--radius-xl);
-  border: 1px solid var(--line);
-  background: var(--surface-muted);
 }
 
 .skills-search {
@@ -3342,7 +3200,6 @@
 
   .settings-row,
   .settings-field__header,
-  .settings-list__row,
   .resource-detail__header,
   .resource-toolbar {
     flex-direction: column;
@@ -3408,4 +3265,50 @@ mark.thread-find-active {
   color: var(--find-active-ink);
   border-radius: var(--radius-2xs);
   padding: 0 1px;
+}
+
+/* ── Models and providers ────────────────────────────── */
+
+.settings-section__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settings-section__header .resource-search {
+  width: 240px;
+}
+
+.model-row .settings-row__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.model-row .settings-row__description {
+  display: flex;
+  min-height: 18px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.model-row__badge,
+.model-row__tag {
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: var(--font-medium);
+  line-height: 16px;
+}
+
+.model-row__badge {
+  background: var(--accent-tint-bg);
+  color: var(--text-strong);
+}
+
+.model-row__tag {
+  border: 1px solid var(--border-default);
+  color: var(--muted-soft);
 }

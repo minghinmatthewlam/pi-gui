@@ -12,10 +12,6 @@ export const THINKING_LEVELS: NonNullable<RuntimeSettingsSnapshot["defaultThinki
   "max",
 ];
 
-export function settingsPill(active: boolean): string {
-  return `settings-pill${active ? " settings-pill--active" : ""}`;
-}
-
 export function labelForThinking(
   level: NonNullable<RuntimeSettingsSnapshot["defaultThinkingLevel"]>,
 ): string {

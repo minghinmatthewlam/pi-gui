@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import type { RuntimeSnapshot } from "@pi-gui/session-driver/runtime-types";
+import type { RuntimeProviderRecord, RuntimeSnapshot } from "@pi-gui/session-driver/runtime-types";
+import { SearchIcon } from "../../ui/icons";
 import type { CustomProviderConfig } from "../../../contracts/ipc";
 import { SettingsCustomEndpointsSection } from "./settings-custom-endpoints-section";
 import { filterProviders, ProviderRow, SettingsGroup } from "./settings-utils";
@@ -14,6 +15,15 @@ interface SettingsProvidersSectionProps {
   readonly onDeleteCustomProvider: (providerId: string) => Promise<string | undefined>;
 }
 
+const COLLAPSED_AVAILABLE_COUNT = 8;
+
+/** Sign-in providers first, then API key providers, then the rest, each alphabetical. */
+function compareAvailableProviders(left: RuntimeProviderRecord, right: RuntimeProviderRecord) {
+  const rank = (provider: RuntimeProviderRecord) =>
+    provider.oauthSupported ? 0 : provider.apiKeySetupSupported ? 1 : 2;
+  return rank(left) - rank(right) || left.name.localeCompare(right.name);
+}
+
 export function SettingsProvidersSection({
   runtime,
   onLoginProvider,
@@ -24,15 +34,32 @@ export function SettingsProvidersSection({
   onDeleteCustomProvider,
 }: SettingsProvidersSectionProps) {
   const [providerQuery, setProviderQuery] = useState("");
+  const [showAllAvailable, setShowAllAvailable] = useState(false);
   const [apiKeyProviderId, setApiKeyProviderId] = useState<string | undefined>();
   const [apiKeyDraft, setApiKeyDraft] = useState("");
   const [apiKeyError, setApiKeyError] = useState<string | undefined>();
   const [apiKeyPending, setApiKeyPending] = useState(false);
 
   const providers = runtime?.providers ?? [];
-  const connectedProviders = providers.filter((p) => p.hasAuth);
-  const oauthProviders = providers.filter((p) => p.oauthSupported);
-  const filteredProviders = filterProviders(providers, providerQuery);
+  const connectedProviders = providers.filter((provider) => provider.hasAuth);
+  const defaultProviderId = runtime?.settings.defaultProvider;
+  const attentionProviders = providers.filter(
+    (provider) => provider.id === defaultProviderId && !provider.hasAuth,
+  );
+  const availableProviders = providers
+    .filter((provider) => !provider.hasAuth && provider.id !== defaultProviderId)
+    .sort(compareAvailableProviders);
+  const filteredAvailable = filterProviders(availableProviders, providerQuery);
+  const expandAvailable = showAllAvailable || providerQuery.trim().length > 0;
+  const shownAvailable = expandAvailable
+    ? filteredAvailable
+    : filteredAvailable.slice(0, COLLAPSED_AVAILABLE_COUNT);
+  const hiddenAvailableCount = filteredAvailable.length - shownAvailable.length;
+  const rowHandlers = {
+    onLoginProvider,
+    onLogoutProvider,
+    onConfigureApiKey: (entry: RuntimeProviderRecord) => setApiKeyProviderId(entry.id),
+  };
   const apiKeyProvider = apiKeyProviderId
     ? providers.find((provider) => provider.id === apiKeyProviderId)
     : undefined;
@@ -83,41 +110,38 @@ export function SettingsProvidersSection({
 
   return (
     <>
-      <SettingsGroup
-        title="Connected"
-        description="Connected providers are used first for picking models."
-      >
-        {connectedProviders.length > 0 ? (
-          connectedProviders.map((provider) => (
-            <ProviderRow
-              key={provider.id}
-              provider={provider}
-              onLoginProvider={onLoginProvider}
-              onLogoutProvider={onLogoutProvider}
-              onConfigureApiKey={(entry) => setApiKeyProviderId(entry.id)}
-            />
-          ))
-        ) : (
-          <div className="settings-row">
-            <span className="settings-row__description">No providers connected yet.</span>
-          </div>
-        )}
-      </SettingsGroup>
+      {attentionProviders.length > 0 ? (
+        <SettingsGroup
+          title="Needs attention"
+          description="Your default model uses this provider, but it is not connected."
+        >
+          {attentionProviders.map((provider) => (
+            <ProviderRow key={provider.id} provider={provider} {...rowHandlers} />
+          ))}
+        </SettingsGroup>
+      ) : null}
 
-      <SettingsGroup
-        title="Sign in"
-        description="OAuth-capable providers can sign in directly from the desktop app."
-      >
-        {oauthProviders.map((provider) => (
-          <ProviderRow
-            key={provider.id}
-            provider={provider}
-            onLoginProvider={onLoginProvider}
-            onLogoutProvider={onLogoutProvider}
-            onConfigureApiKey={(entry) => setApiKeyProviderId(entry.id)}
-          />
-        ))}
-      </SettingsGroup>
+      <section className="settings-section">
+        <h3 className="settings-section__title">
+          Connected <span className="resource-list__count">{connectedProviders.length}</span>
+        </h3>
+        <p className="settings-section__description">
+          pi picks models from connected providers first.
+        </p>
+        <div className="settings-group">
+          {connectedProviders.length > 0 ? (
+            connectedProviders.map((provider) => (
+              <ProviderRow key={provider.id} provider={provider} {...rowHandlers} />
+            ))
+          ) : (
+            <div className="settings-row">
+              <span className="settings-row__description">
+                No providers connected yet. Sign in or add an API key below.
+              </span>
+            </div>
+          )}
+        </div>
+      </section>
 
       <SettingsCustomEndpointsSection
         existingProviderIds={existingProviderIds}
@@ -125,34 +149,51 @@ export function SettingsProvidersSection({
         onDeleteCustomProvider={onDeleteCustomProvider}
       />
 
-      <SettingsGroup title="All providers" description="Browse the full provider inventory.">
-        <details className="settings-disclosure">
-          <summary className="settings-disclosure__summary">
-            <span>Browse all providers</span>
-            <span>{filteredProviders.length}</span>
-          </summary>
-          <div className="settings-disclosure__body">
+      <section className="settings-section">
+        <div className="settings-section__header">
+          <h3 className="settings-section__title">
+            Available <span className="resource-list__count">{availableProviders.length}</span>
+          </h3>
+          <label className="resource-search">
+            <SearchIcon />
             <input
               aria-label="Search providers"
-              className="settings-search"
               placeholder="Search providers"
+              spellCheck={false}
+              type="search"
               value={providerQuery}
-              onChange={(event) => setProviderQuery(event.target.value)}
+              onChange={(event) => setProviderQuery(event.currentTarget.value)}
             />
-            <div className="settings-list">
-              {filteredProviders.map((provider) => (
-                <ProviderRow
-                  key={provider.id}
-                  provider={provider}
-                  onLoginProvider={onLoginProvider}
-                  onLogoutProvider={onLogoutProvider}
-                  onConfigureApiKey={(entry) => setApiKeyProviderId(entry.id)}
-                />
-              ))}
+          </label>
+        </div>
+        <p className="settings-section__description">
+          Sign in with OAuth or save an API key to connect a provider.
+        </p>
+        <div className="settings-group" data-testid="settings-available-providers">
+          {shownAvailable.length > 0 ? (
+            shownAvailable.map((provider) => (
+              <ProviderRow key={provider.id} provider={provider} {...rowHandlers} />
+            ))
+          ) : (
+            <div className="settings-row">
+              <span className="settings-row__description">
+                {providerQuery.trim()
+                  ? `No providers match “${providerQuery.trim()}”.`
+                  : "Every provider is connected."}
+              </span>
             </div>
-          </div>
-        </details>
-      </SettingsGroup>
+          )}
+        </div>
+        {hiddenAvailableCount > 0 ? (
+          <button
+            className="resource-list__more"
+            type="button"
+            onClick={() => setShowAllAvailable(true)}
+          >
+            Show {hiddenAvailableCount} more
+          </button>
+        ) : null}
+      </section>
 
       {apiKeyProvider ? (
         <ProviderApiKeyDialog

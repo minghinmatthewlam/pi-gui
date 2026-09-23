@@ -30,6 +30,7 @@ interface SettingsViewProps {
   readonly platform: NodeJS.Platform;
   /** Shown beside the page title, such as the workspace a page edits. */
   readonly headerAccessory?: ReactNode;
+  readonly onSelectSection: (section: SettingsSection) => void;
   readonly notificationPreferences: NotificationPreferences;
   readonly notificationPermissionStatus: DesktopNotificationPermissionStatus;
   readonly notificationPermissionPending: boolean;
@@ -66,6 +67,7 @@ export function SettingsView({
   section,
   platform,
   headerAccessory,
+  onSelectSection,
   notificationPreferences,
   notificationPermissionStatus,
   notificationPermissionPending,
@@ -171,6 +173,7 @@ export function SettingsView({
           {section === "models" ? (
             <SettingsModelsSection
               runtime={runtime}
+              onOpenProviders={() => onSelectSection("providers")}
               onSetDefaultModel={onSetDefaultModel}
               onSetScopedModelPatterns={onSetScopedModelPatterns}
               onSetThinkingLevel={onSetThinkingLevel}

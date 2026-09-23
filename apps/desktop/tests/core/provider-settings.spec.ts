@@ -38,11 +38,9 @@ test("settings lets the user save an API key for a built-in provider", async () 
     await window.getByRole("button", { name: "Providers", exact: true }).click();
     await expect(window.locator(".view-header__title")).toHaveText("Providers");
 
-    const allProviders = window.locator(".settings-section", {
-      has: window.locator(".settings-section__title", { hasText: "All providers" }),
-    });
-    await allProviders.locator(".settings-disclosure__summary").click();
-    const openAiRow = allProviders.locator(".settings-row", {
+    const availableProviders = window.getByTestId("settings-available-providers");
+    await window.getByLabel("Search providers").fill("openai");
+    const openAiRow = availableProviders.locator(".settings-row", {
       has: window.locator(".settings-row__title", { hasText: OPENAI_CATALOG_TITLE }),
     });
     await expect(openAiRow).toContainText("API key");
@@ -65,8 +63,12 @@ test("settings lets the user save an API key for a built-in provider", async () 
     const enabledModels = window.locator(".settings-section", {
       has: window.locator(".settings-section__title", { hasText: "Enabled models" }),
     });
-    await expect(enabledModels).toContainText("openai/gpt-5");
-    await expect(enabledModels).toContainText("openai/gpt-4o");
+    await expect(
+      enabledModels.getByRole("switch", { name: "Enable openai/gpt-5", exact: true }),
+    ).toBeChecked();
+    await expect(
+      enabledModels.getByRole("switch", { name: "Enable openai/gpt-4o", exact: true }),
+    ).toBeChecked();
   } finally {
     await harness.close();
   }
@@ -226,8 +228,65 @@ test("opening the first workspace from the empty state hydrates provider and mod
     const enabledModels = window.locator(".settings-section", {
       has: window.locator(".settings-section__title", { hasText: "Enabled models" }),
     });
-    await expect(enabledModels).toContainText("openai/gpt-5");
-    await expect(enabledModels).toContainText("openai/gpt-4o");
+    await expect(
+      enabledModels.getByRole("switch", { name: "Enable openai/gpt-5", exact: true }),
+    ).toBeChecked();
+    await expect(
+      enabledModels.getByRole("switch", { name: "Enable openai/gpt-4o", exact: true }),
+    ).toBeChecked();
+  } finally {
+    await harness.close();
+  }
+});
+
+test("providers flags the default model's provider when it is not connected", async () => {
+  test.setTimeout(60_000);
+  const userDataDir = await makeUserDataDir();
+  const agentDir = join(userDataDir, "agent");
+  const workspacePath = await makeWorkspace("provider-settings-attention-workspace");
+  await seedAgentDir(agentDir, { withOpenAiAuth: false });
+
+  const harness = await launchDesktop(userDataDir, {
+    agentDir,
+    initialWorkspaces: [workspacePath],
+    scrubProviderEnv: true,
+    testMode: "background",
+  });
+
+  try {
+    const window = await harness.firstWindow();
+    await window.keyboard.press(desktopShortcut(","));
+    await expect(window.getByTestId("settings-surface")).toBeVisible();
+    await window.getByRole("button", { name: "Models", exact: true }).click();
+    await expect(window.locator(".view-header__title")).toHaveText("Models");
+    const unconnected = window.getByTestId("settings-unconnected-model-list");
+    await expect(unconnected).toHaveCount(0);
+    await window.getByLabel("Search models").fill("gpt-4o");
+    await expect(
+      unconnected.locator(".model-row", { hasText: "openai/gpt-4o" }).first(),
+    ).toBeVisible();
+    await expect(unconnected.getByRole("switch")).toHaveCount(0);
+
+    await window.getByRole("button", { name: "Connect a provider" }).click();
+    await expect(window.locator(".view-header__title")).toHaveText("Providers");
+    const available = window.getByTestId("settings-available-providers");
+    await expect(available.locator(".settings-row")).toHaveCount(8);
+    await expect(available.locator(".settings-row").first()).toContainText("OAuth");
+    await window.getByRole("button", { name: /^Show \d+ more$/ }).click();
+    await expect.poll(() => available.locator(".settings-row").count()).toBeGreaterThan(8);
+
+    const attention = window.locator(".settings-section", {
+      has: window.locator(".settings-section__title", { hasText: "Needs attention" }),
+    });
+    await expect(
+      attention.locator(".settings-row__title", { hasText: OPENAI_CATALOG_TITLE }),
+    ).toHaveCount(1);
+    await window.getByLabel("Search providers").fill("openai");
+    await expect(
+      window
+        .getByTestId("settings-available-providers")
+        .locator(".settings-row__title", { hasText: new RegExp(`^${OPENAI_CATALOG_TITLE}$`) }),
+    ).toHaveCount(0);
   } finally {
     await harness.close();
   }
