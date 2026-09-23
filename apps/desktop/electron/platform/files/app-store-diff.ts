@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import type { ChangedFileEntry, ChangedFilesResult } from "../../../contracts/ipc";
+import { isolatedGitEnvironment } from "./git-environment";
 import { resolveWorkspacePath } from "./workspace-paths";
 
 export interface GitCommandOptions {
@@ -145,7 +146,8 @@ function executeGitCommand(
   options: GitCommandOptions,
 ): Promise<GitCommandResult> {
   return new Promise((resolve) => {
-    execFile("git", [...args], options, (error, stdout) => {
+    // Status must not take the index lock the user's own git commands need.
+    execFile("git", [...args], { ...options, env: isolatedGitEnvironment() }, (error, stdout) => {
       resolve({
         error,
         stdout,

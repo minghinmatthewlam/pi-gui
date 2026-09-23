@@ -13,6 +13,7 @@ import {
   seedNamedTextSessionFixture,
   selectSession,
   selectSidePanel,
+  waitForTimelineLayout,
   type DesktopHarness,
 } from "../helpers/electron-app";
 
@@ -320,10 +321,12 @@ test("assistant file links keep the opened document with their originating task"
     const window = await harness.firstWindow();
     await selectSession(window, TASK_A);
     await window.getByTestId("toggle-side-panel").click();
+    await waitForTimelineLayout(window);
     await window.getByTestId("workspace-file-link").filter({ hasText: "alpha.txt:2" }).click();
     await expectActiveTool(window, "Files");
     await expect(window.getByTestId("file-line-mark")).toContainText("Alpha target line");
     await selectSession(window, TASK_B);
+    await waitForTimelineLayout(window);
     await window.getByTestId("workspace-file-link").filter({ hasText: "beta.txt:2" }).click();
     await expectActiveTool(window, "Files");
     await expect(window.getByTestId("file-line-mark")).toContainText("Beta target line");

@@ -1607,6 +1607,22 @@ export async function selectSession(window: Page, sessionTitle: string): Promise
   await expect(window.locator(".chat-header__title")).toHaveText(sessionTitle);
 }
 
+/**
+ * Waits until transcript rows stop moving. Rows are placed from estimates and move once
+ * measured; a click whose press and release straddle that move is lost without an error.
+ * A resize (such as opening the side panel) reaches the timeline only after the next
+ * layout, so let one full frame run before reading the state.
+ */
+export async function waitForTimelineLayout(window: Page): Promise<void> {
+  await window.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      ),
+  );
+  await expect(window.getByTestId("timeline-pane")).toHaveAttribute("data-layout", "settled");
+}
+
 export async function selectSidePanel(
   window: Page,
   choice: "Files" | "Changes" | "Worktrees" | "Terminal",

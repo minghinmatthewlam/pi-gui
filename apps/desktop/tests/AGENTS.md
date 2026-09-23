@@ -26,5 +26,6 @@ Apply these rules under `apps/desktop/tests/`.
 
 - A flake is a bug in the test or the product. Never retry, skip, quarantine or raise a timeout to get green: find the race, fix it, and say what it was.
 - Wait on the app's real state, not on what happens to be visible. Content that paints before an async step settles (an extension frame before it reports ready, a row before a pin round-trip moves it) is not readiness. When no observable state exists, expose one on the surface (for example `data-state` on `extension-view-panel`) and wait on it with a shared helper.
+- Before clicking inside the transcript right after a thread switch, side-panel toggle or resize, call `waitForTimelineLayout`. Timeline rows move once measured, and a click whose press and release straddle that move is silently lost, so Playwright's own stability check is not enough.
 - Do not race product calls against wall-clock deadlines. Assert the behavior (a call returned while its work is still pending) against a fixture that makes the alternative impossible.
 - If a flaky test checks nothing a user would notice, propose rewriting or removing it rather than keeping it green.
