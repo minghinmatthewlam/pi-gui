@@ -198,3 +198,21 @@ test("workbench boundary accepts unavailable extension references but rejects co
   ).toThrow(/oversized reference/);
   expect(await requests.get(firstTask)).toBeNull();
 });
+
+test("a saved layout with the removed Worktrees tool keeps its other tabs", () => {
+  const legacy = { ...template("files"), tools: [{ kind: "files" }, { kind: "worktrees" }] };
+  expect(decodeTaskWorkbenchTemplate(legacy)).toEqual(template("files"));
+  expect(
+    decodeTaskWorkbenchTemplate({ ...legacy, selection: { kind: "tool", toolId: "worktrees" } }),
+  ).toEqual(template("files"));
+  expect(
+    decodeTaskWorkbenchTemplate({
+      ...legacy,
+      tools: [{ kind: "worktrees" }],
+      selection: { kind: "tool", toolId: "worktrees" },
+    }),
+  ).toEqual({ ...template("files"), tools: [], selection: { kind: "chooser" } });
+  expect(() =>
+    decodeTaskWorkbenchTemplate({ ...legacy, tools: [{ kind: "worktrees", viewId: "x" }] }),
+  ).toThrow(/builtin tool fields/);
+});

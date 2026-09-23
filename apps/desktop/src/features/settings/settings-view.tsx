@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type {
   RuntimeSettingsSnapshot,
   RuntimeSnapshot,
@@ -17,14 +18,18 @@ import { SettingsGeneralSection } from "./settings-general-section";
 import { SettingsModelsSection } from "./settings-models-section";
 import { SettingsNotificationsSection } from "./settings-notifications-section";
 import { SettingsProvidersSection } from "./settings-providers-section";
-import { type SettingsSection, sectionTitle, sectionDescription } from "./settings-utils";
+import { type SettingsSection, settingsSectionDefinition } from "./settings-sections";
+import { SettingsShortcutsSection } from "./settings-shortcuts-section";
 
-export type { SettingsSection } from "./settings-utils";
+export type { SettingsSection } from "./settings-sections";
 
 interface SettingsViewProps {
   readonly workspace?: WorkspaceRecord;
   readonly runtime?: RuntimeSnapshot;
   readonly section: SettingsSection;
+  readonly platform: NodeJS.Platform;
+  /** Shown beside the page title, such as the workspace a page edits. */
+  readonly headerAccessory?: ReactNode;
   readonly notificationPreferences: NotificationPreferences;
   readonly notificationPermissionStatus: DesktopNotificationPermissionStatus;
   readonly notificationPermissionPending: boolean;
@@ -59,6 +64,8 @@ export function SettingsView({
   workspace,
   runtime,
   section,
+  platform,
+  headerAccessory,
   notificationPreferences,
   notificationPermissionStatus,
   notificationPermissionPending,
@@ -86,18 +93,34 @@ export function SettingsView({
   onSetThemePresetId,
   onSetEnableTransparency,
 }: SettingsViewProps) {
-  if (
-    !workspace &&
-    section !== "general" &&
-    section !== "notifications" &&
-    section !== "appearance"
-  ) {
+  const definition = settingsSectionDefinition(section);
+  const header = (
+    <header className="view-header">
+      <div>
+        <h1 className="view-header__title">{definition.title}</h1>
+        <p className="view-header__body">
+          {definition.description(workspace?.name ?? "this workspace")}
+        </p>
+      </div>
+      {headerAccessory ? <div className="view-header__actions">{headerAccessory}</div> : null}
+    </header>
+  );
+
+  if (!workspace && definition.needsWorkspace) {
     return (
-      <section className="canvas canvas--empty">
-        <div className="empty-panel">
-          <div className="session-header__eyebrow">Settings</div>
-          <h1>Select a workspace</h1>
-          <p>Provider and skill settings need a selected workspace.</p>
+      <section className="canvas">
+        <div className="conversation settings-view">
+          {header}
+          <div className="settings-group">
+            <div className="settings-row">
+              <div className="settings-row__label">
+                <div className="settings-row__title">Select a workspace</div>
+                <div className="settings-row__description">
+                  Providers and models are set per workspace. Choose one, or open a folder first.
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
     );
@@ -106,14 +129,7 @@ export function SettingsView({
   return (
     <section className="canvas">
       <div className="conversation settings-view">
-        <header className="view-header">
-          <div>
-            <h1 className="view-header__title">{sectionTitle(section)}</h1>
-            <p className="view-header__body">
-              {sectionDescription(section, workspace?.name ?? "this workspace")}
-            </p>
-          </div>
-        </header>
+        {header}
 
         <div className="settings-grid">
           {section === "appearance" ? (
@@ -137,6 +153,8 @@ export function SettingsView({
               onToggleSkillCommands={onToggleSkillCommands}
             />
           ) : null}
+
+          {section === "shortcuts" ? <SettingsShortcutsSection platform={platform} /> : null}
 
           {section === "providers" ? (
             <SettingsProvidersSection
