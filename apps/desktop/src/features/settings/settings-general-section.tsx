@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import type { RuntimeSnapshot } from "@pi-gui/session-driver/runtime-types";
 import type { ModelSettingsScopeMode } from "../../../contracts/desktop-state";
-import { SettingsGroup, SettingsInfoRow, SettingsRow } from "./settings-utils";
+import { SettingsSegmented, SettingsSwitch } from "./settings-controls";
+import { SettingsGroup, SettingsRow } from "./settings-utils";
 
 interface SettingsGeneralSectionProps {
   readonly runtime?: RuntimeSnapshot;
@@ -20,7 +21,6 @@ export function SettingsGeneralSection({
   onSetIntegratedTerminalShell,
   onToggleSkillCommands,
 }: SettingsGeneralSectionProps) {
-  const connectedCount = runtime?.providers.filter((p) => p.hasAuth).length ?? 0;
   const [terminalShellDraft, setTerminalShellDraft] = useState(integratedTerminalShell);
 
   useEffect(() => {
@@ -35,49 +35,37 @@ export function SettingsGeneralSection({
 
   return (
     <>
-      <SettingsGroup title="General">
-        <SettingsInfoRow
-          label="Connected providers"
-          value={connectedCount > 0 ? String(connectedCount) : "None"}
-        />
-        <SettingsInfoRow label="Discovered skills" value={String(runtime?.skills.length ?? 0)} />
+      <SettingsGroup title="Agent">
         <SettingsRow
           title="Model settings scope"
-          description="Choose whether model defaults apply everywhere or per repo."
+          description="Apply the default model and enabled models everywhere, or set them per repo."
         >
-          <div className="settings-pill-row">
-            <button
-              className={`settings-pill${modelSettingsScopeMode === "app-global" ? " settings-pill--active" : ""}`}
-              type="button"
-              aria-pressed={modelSettingsScopeMode === "app-global"}
-              onClick={() => onSetModelSettingsScopeMode("app-global")}
-            >
-              App global
-            </button>
-            <button
-              className={`settings-pill${modelSettingsScopeMode === "per-repo" ? " settings-pill--active" : ""}`}
-              type="button"
-              aria-pressed={modelSettingsScopeMode === "per-repo"}
-              onClick={() => onSetModelSettingsScopeMode("per-repo")}
-            >
-              Per repo
-            </button>
-          </div>
-        </SettingsRow>
-        <SettingsRow
-          title="Enable skill slash commands"
-          description="Keep skill slash commands available in the composer."
-        >
-          <input
-            aria-label="Enable skill slash commands"
-            checked={runtime?.settings.enableSkillCommands ?? true}
-            type="checkbox"
-            onChange={(event) => onToggleSkillCommands(event.target.checked)}
+          <SettingsSegmented
+            label="Model settings scope"
+            options={[
+              { value: "app-global", label: "App global" },
+              { value: "per-repo", label: "Per repo" },
+            ]}
+            value={modelSettingsScopeMode}
+            onChange={onSetModelSettingsScopeMode}
           />
         </SettingsRow>
         <SettingsRow
-          title="Shell of integrated terminal"
-          description="Leave blank to use your default login shell."
+          title="Skill slash commands"
+          description="Offer each skill as a slash command in the composer."
+        >
+          <SettingsSwitch
+            checked={runtime?.settings.enableSkillCommands ?? true}
+            label="Enable skill slash commands"
+            onChange={onToggleSkillCommands}
+          />
+        </SettingsRow>
+      </SettingsGroup>
+
+      <SettingsGroup title="Terminal">
+        <SettingsRow
+          title="Shell"
+          description="The shell the integrated terminal starts. Leave blank to use your login shell."
         >
           <input
             aria-label="Shell of integrated terminal"
@@ -95,16 +83,6 @@ export function SettingsGeneralSection({
             }}
           />
         </SettingsRow>
-      </SettingsGroup>
-
-      <SettingsGroup title="Shortcuts">
-        <SettingsInfoRow label="New thread" value="Cmd+Shift+O" />
-        <SettingsInfoRow label="Recent threads" value="Cmd+1…9" />
-        <SettingsInfoRow label="Open settings" value="Cmd+," />
-        <SettingsInfoRow label="Toggle terminal" value="Cmd+J" />
-        <SettingsInfoRow label="New terminal tab" value="Cmd+T" />
-        <SettingsInfoRow label="Send message" value="Enter" />
-        <SettingsInfoRow label="New line" value="Shift+Enter" />
       </SettingsGroup>
     </>
   );

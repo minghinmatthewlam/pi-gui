@@ -4,8 +4,6 @@ import type {
   RuntimeSnapshot,
 } from "@pi-gui/session-driver/runtime-types";
 
-export type SettingsSection = "appearance" | "general" | "providers" | "models" | "notifications";
-
 export const THINKING_LEVELS: NonNullable<RuntimeSettingsSnapshot["defaultThinkingLevel"]>[] = [
   "low",
   "medium",
@@ -25,36 +23,6 @@ export function labelForThinking(
     return "Extra High";
   }
   return level.charAt(0).toUpperCase() + level.slice(1);
-}
-
-export function sectionTitle(section: SettingsSection): string {
-  switch (section) {
-    case "appearance":
-      return "Appearance";
-    case "providers":
-      return "Providers";
-    case "models":
-      return "Models";
-    case "notifications":
-      return "Notifications";
-    default:
-      return "General";
-  }
-}
-
-export function sectionDescription(section: SettingsSection, workspaceName: string): string {
-  switch (section) {
-    case "appearance":
-      return "Choose a preset palette and light, dark, or automatic system mode.";
-    case "providers":
-      return `Connect providers and manage auth for ${workspaceName}.`;
-    case "models":
-      return "Choose the default model and which models appear in pickers.";
-    case "notifications":
-      return "Manage both macOS notification access and which background events should alert you.";
-    default:
-      return "Keep the high-value app and runtime controls close to hand.";
-  }
 }
 
 export function filterProviders(
@@ -92,17 +60,20 @@ export function filterModels(
 export function SettingsGroup({
   title,
   description,
+  plain = false,
   children,
 }: {
   readonly title?: string;
   readonly description?: string;
+  /** Lay children out without the rounded card, for tiles and other custom content. */
+  readonly plain?: boolean;
   readonly children: ReactNode;
 }) {
   return (
     <div className="settings-section">
       {title ? <h3 className="settings-section__title">{title}</h3> : null}
       {description ? <p className="settings-section__description">{description}</p> : null}
-      <div className="settings-group">{children}</div>
+      {plain ? children : <div className="settings-group">{children}</div>}
     </div>
   );
 }
@@ -123,25 +94,6 @@ export function SettingsRow({
         {description ? <div className="settings-row__description">{description}</div> : null}
       </div>
       {children ? <div className="settings-row__control">{children}</div> : null}
-    </div>
-  );
-}
-
-export function SettingsInfoRow({
-  label,
-  value,
-}: {
-  readonly label: string;
-  readonly value: string;
-}) {
-  return (
-    <div className="settings-row">
-      <div className="settings-row__label">
-        <div className="settings-row__title">{label}</div>
-      </div>
-      <div className="settings-row__control">
-        <span className="settings-row__value">{value}</span>
-      </div>
     </div>
   );
 }

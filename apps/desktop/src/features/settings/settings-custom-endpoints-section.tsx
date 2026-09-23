@@ -471,7 +471,7 @@ function ModelChecklist({
             .sort((a, b) => a.localeCompare(b))
             .map((id) => (
               <li key={id} className="settings-row">
-                <label className="settings-row__label">
+                <label className="custom-endpoint-model-list__item">
                   <input
                     aria-label={`Enable ${id}`}
                     type="checkbox"
