@@ -335,26 +335,6 @@ export class TurnCheckpointStore {
   }
 
   /**
-   * Drops finalized intervals of tasks that are no longer in the catalog. Records written
-   * after `listedAt` are kept, so a task created while the catalog was being read survives.
-   */
-  async retainTasks(tasks: readonly SessionRef[], listedAt: string): Promise<void> {
-    await this.load();
-    const live = new Set(tasks.map(targetKey));
-    let dropped = 0;
-    for (const [id, record] of this.records) {
-      if (record.outcome === "open" || live.has(targetKey(record.target))) continue;
-      if (record.updatedAt >= listedAt) continue;
-      this.records.delete(id);
-      dropped += 1;
-    }
-    if (!dropped) return;
-    await this.persist();
-    this.droppedSinceMaintenance += dropped;
-    this.scheduleMaintenance();
-  }
-
-  /**
    * Deletes refs that no retained interval needs and lets Git prune their objects. Refs and
    * objects younger than the grace period survive, so a concurrent capture keeps its tree.
    */
