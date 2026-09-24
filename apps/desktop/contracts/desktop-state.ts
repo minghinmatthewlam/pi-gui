@@ -1,8 +1,4 @@
-import type {
-  HostUiRequest,
-  SessionConfig,
-  SessionUsageSnapshot,
-} from "@pi-gui/session-driver";
+import type { HostUiRequest, SessionConfig, SessionUsageSnapshot } from "@pi-gui/session-driver";
 import type {
   ModelSettingsSnapshot,
   RuntimeCommandRecord,

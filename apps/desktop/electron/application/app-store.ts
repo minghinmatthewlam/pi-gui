@@ -4219,7 +4219,10 @@ export class DesktopAppStore {
     }
   }
 
-  private updateSessionUsage(sessionRef: SessionRef, usage: SessionUsageSnapshot | undefined): void {
+  private updateSessionUsage(
+    sessionRef: SessionRef,
+    usage: SessionUsageSnapshot | undefined,
+  ): void {
     const key = sessionKey(sessionRef);
     if (usage) {
       this.sessionState.sessionUsageBySession.set(key, usage);
