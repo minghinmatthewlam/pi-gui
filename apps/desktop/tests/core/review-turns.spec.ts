@@ -73,7 +73,7 @@ async function expectCompleted(window: Page, text: string): Promise<void> {
 }
 
 async function openCapturedFile(window: Page): Promise<Locator> {
-  const panel = window.getByRole("region", { name: "Changes review", exact: true });
+  const panel = window.getByRole("region", { name: "Review", exact: true });
   await expect(panel.locator(".diff-panel__file")).toHaveCount(1);
   const row = panel.locator('.diff-panel__file[data-file-path="result.txt"]');
   await expect(row).toBeVisible();
@@ -126,7 +126,7 @@ test("Last turn captures actual tool edits and a response pins its own saved com
     await window.getByRole("button", { name: "Start thread", exact: true }).click();
     await expectCompleted(window, "First capture complete");
     expect(await readFile(join(workspacePath, "result.txt"), "utf8")).toBe("FIRST_TURN_OUTPUT\n");
-    await selectSidePanel(window, "Changes");
+    await selectSidePanel(window, "Review");
     await window.getByLabel("Review scope", { exact: true }).selectOption("turn");
     let patch = await openCapturedFile(window);
     await expect(patch).toContainText("INITIAL_CONTENT");
@@ -147,7 +147,7 @@ test("Last turn captures actual tool edits and a response pins its own saved com
     // Later editor activity must not rewrite either captured interval.
     await writeFile(join(workspacePath, "result.txt"), "LATER_MANUAL_EDIT\n");
     await window
-      .getByRole("region", { name: "Changes review", exact: true })
+      .getByRole("region", { name: "Review", exact: true })
       .getByRole("button", { name: "Refresh", exact: true })
       .click();
     patch = await openCapturedFile(window);

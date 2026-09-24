@@ -89,14 +89,14 @@ test("Cmd/Ctrl+K finds chats and actions, Cmd/Ctrl+P opens files", async () => {
     // Side panel tools open from the palette; the same action hides the panel again.
     const tools = window.getByRole("tablist", { name: "Workspace tools" });
     await openPalette(window, "K");
-    await window.keyboard.type("toggle changes");
+    await window.keyboard.type("toggle review");
     await window.keyboard.press("Enter");
-    await expect(tools.getByRole("tab", { name: "Changes" })).toHaveAttribute(
+    await expect(tools.getByRole("tab", { name: "Review" })).toHaveAttribute(
       "aria-selected",
       "true",
     );
     await openPalette(window, "K");
-    await window.keyboard.type("toggle changes");
+    await window.keyboard.type("toggle review");
     await window.keyboard.press("Enter");
     await expect(tools).toHaveCount(0);
 

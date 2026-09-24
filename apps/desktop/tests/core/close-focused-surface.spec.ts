@@ -40,7 +40,7 @@ async function expectFocusWithin(window: Page, selector: string): Promise<void> 
     .toBe(true);
 }
 
-test("Ctrl or Cmd+W closes the focused Files, Changes, or Terminal surface", async () => {
+test("Ctrl or Cmd+W closes the focused Files, Review, or Terminal surface", async () => {
   test.setTimeout(60_000);
   const userDataDir = await makeUserDataDir();
   const workspacePath = await makeWorkspace("close-focused-surface");
@@ -64,7 +64,7 @@ test("Ctrl or Cmd+W closes the focused Files, Changes, or Terminal surface", asy
     await expect(files).toHaveCount(0);
     await expect.poll(() => openWindowCount(harness)).toBe(1);
 
-    await selectSidePanel(window, "Changes");
+    await selectSidePanel(window, "Review");
     await expect(changes).toBeVisible();
     const refresh = changes.getByRole("button", { name: "Refresh" });
     await expect(refresh).toBeEnabled();
@@ -74,7 +74,7 @@ test("Ctrl or Cmd+W closes the focused Files, Changes, or Terminal surface", asy
     await expect(changes).toHaveCount(0);
     await expect.poll(() => openWindowCount(harness)).toBe(1);
 
-    await selectSidePanel(window, "Changes");
+    await selectSidePanel(window, "Review");
     await selectSidePanel(window, "Terminal");
     await expect(changes).toHaveCount(0);
     await expect(terminal).toBeVisible();

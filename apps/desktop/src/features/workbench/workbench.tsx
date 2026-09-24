@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, type KeyboardEvent, type ReactNode } from "react";
+import { formatShortcut } from "../../../contracts/ipc";
 import { toolRefId, type TaskWorkbenchTemplate, type ToolRef } from "../../../contracts/workbench";
 import type { DesktopExtensionViewInfo } from "../../../contracts/extension-views";
 import { CloseIcon, ExtensionIcon, PlusIcon, SidePanelIcon } from "../../ui/icons";
@@ -8,6 +9,7 @@ import { activeWorkbenchTool } from "./workbench-state";
 
 interface WorkbenchProps {
   readonly view: TaskWorkbenchTemplate;
+  readonly platform: NodeJS.Platform;
   readonly onResize: (width: number) => void;
   readonly onTogglePanel: () => void;
   readonly onOpenTool: (tool: ToolRef) => void;
@@ -36,6 +38,7 @@ function ToolIcon({ tool }: { readonly tool: ToolRef }) {
 
 export function Workbench({
   view,
+  platform,
   onResize,
   onTogglePanel,
   onOpenTool,
@@ -226,8 +229,13 @@ export function Workbench({
           <div className="workbench__chooser" data-testid="workbench-chooser">
             <h2>Open a tool</h2>
             <p>Keep the tools you need alongside your conversation.</p>
-            {BUILTIN_TOOL_ENTRIES.map(({ kind, label, description, Icon }) => (
+            {BUILTIN_TOOL_ENTRIES.map(({ kind, label, description, Icon, shortcutKey }) => (
               <button
+                aria-keyshortcuts={
+                  shortcutKey
+                    ? `${platform === "darwin" ? "Meta" : "Control"}+${shortcutKey}`
+                    : undefined
+                }
                 aria-label={label}
                 className="workbench__choice"
                 key={kind}
@@ -241,6 +249,11 @@ export function Workbench({
                   <strong>{label}</strong>
                   <span>{description}</span>
                 </span>
+                {shortcutKey ? (
+                  <kbd className="workbench__choice-shortcut">
+                    {formatShortcut(platform, shortcutKey)}
+                  </kbd>
+                ) : null}
               </button>
             ))}
             <h3 className="workbench__extension-heading">Extension views</h3>

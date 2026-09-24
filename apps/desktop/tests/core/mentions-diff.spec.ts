@@ -91,7 +91,7 @@ test("toggles the diff panel from the keyboard shortcut and renders changed file
       "false",
     );
     await expect(topbarActions.getByLabel("Toggle terminal")).toHaveCount(0);
-    await expect(topbarActions.getByLabel("Toggle changes")).toHaveCount(0);
+    await expect(topbarActions.getByLabel("Toggle review")).toHaveCount(0);
     await expect(topbarActions.getByLabel("Toggle files")).toHaveCount(0);
     await expect(topbarActions.getByLabel(/prompt navigation/i)).toHaveCount(0);
     await expect(topbarActions.getByLabel(/Evidence|Workbench|Open folder/i)).toHaveCount(0);
@@ -104,9 +104,9 @@ test("toggles the diff panel from the keyboard shortcut and renders changed file
     await window.getByTestId("toggle-side-panel").click();
     await expect(diffPanel).toHaveCount(0);
 
-    await window.keyboard.press(desktopShortcut("D"));
+    await window.keyboard.press(desktopShortcut("R"));
     await expect(diffPanel).toBeVisible();
-    await expect(diffPanel.locator(".diff-panel__title")).toContainText("Changes");
+    await expect(diffPanel.locator(".diff-panel__title")).toContainText("Review");
     await expect(diffPanel.locator(".diff-panel__file-path")).toHaveText("README.md");
 
     const mainBox = await window.locator(".main").boundingBox();

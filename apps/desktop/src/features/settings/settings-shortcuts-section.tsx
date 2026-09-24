@@ -48,7 +48,7 @@ const SHORTCUT_GROUPS: readonly {
     shortcuts: [
       { title: "Toggle terminal", modifiers: ["Mod"], key: "J" },
       { title: "New terminal tab", modifiers: ["Mod"], key: "T" },
-      { title: "Toggle changes", modifiers: ["Mod"], key: "D" },
+      { title: "Toggle review", modifiers: ["Mod"], key: "R" },
       { title: "Close workbench tab", modifiers: ["Mod"], key: "W" },
     ],
   },

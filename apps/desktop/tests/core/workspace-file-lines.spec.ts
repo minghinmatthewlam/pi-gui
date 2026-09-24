@@ -137,7 +137,7 @@ test("assistant file lines open in the Files panel and web links stay external",
     expect(window.url()).toBe(appUrl);
     await expect(window.getByTestId("file-workbench")).toHaveCount(0);
 
-    await selectSidePanel(window, "Changes");
+    await selectSidePanel(window, "Review");
     await expect(window.locator(".diff-panel")).toBeVisible();
     await fileButton(assistant, "missing.ts:2").click();
     await expect(window.locator(".diff-panel")).toBeVisible();
