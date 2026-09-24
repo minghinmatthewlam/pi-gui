@@ -16,8 +16,8 @@ import type { ClipboardImageRead } from "./composer-attachments";
 import type { SessionRef } from "@pi-gui/session-driver/types";
 import type { SaveTaskWorkbenchTemplateInput, TaskWorkbenchTemplate } from "./workbench";
 import type {
-  ResolveTurnReviewInput,
-  ResolveTurnReviewResult,
+  TurnChangesInput,
+  TurnChangesResult,
   GetReviewInput,
   ReviewResult,
   ReviewFileInput,
@@ -179,7 +179,7 @@ export const desktopIpc = {
   getChangedFiles: "pi-gui:get-changed-files",
   getFileDiff: "pi-gui:get-file-diff",
   stageFile: "pi-gui:stage-file",
-  resolveTurnReview: "pi-gui:resolve-turn-review",
+  getTurnChanges: "pi-gui:get-turn-changes",
   getReview: "pi-gui:get-review",
   getReviewFile: "pi-gui:get-review-file",
   setReviewFileReviewed: "pi-gui:set-review-file-reviewed",
@@ -750,7 +750,7 @@ export interface PiDesktopApi {
   closeExtensionView(connectionId: string): Promise<void>;
   onExtensionViewMessage(listener: (event: ExtensionViewMessage) => void): () => void;
   onExtensionViewCatalogChanged(listener: (event: ExtensionViewCatalogChange) => void): () => void;
-  resolveTurnReview(input: ResolveTurnReviewInput): Promise<ResolveTurnReviewResult>;
+  getTurnChanges(input: TurnChangesInput): Promise<TurnChangesResult>;
   getReview(input: GetReviewInput): Promise<ReviewResult>;
   getReviewFile(input: ReviewFileInput): Promise<ReviewFileResult>;
   setReviewFileReviewed(input: SetReviewFileReviewedInput): Promise<SetReviewFileReviewedResult>;

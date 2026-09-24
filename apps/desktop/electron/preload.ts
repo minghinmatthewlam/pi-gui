@@ -28,8 +28,8 @@ import {
 import type { ClipboardImageRead } from "../contracts/composer-attachments";
 import type { SaveTaskWorkbenchTemplateInput, TaskWorkbenchTemplate } from "../contracts/workbench";
 import type {
-  ResolveTurnReviewInput,
-  ResolveTurnReviewResult,
+  TurnChangesInput,
+  TurnChangesResult,
   GetReviewInput,
   ReviewResult,
   ReviewFileInput,
@@ -126,8 +126,8 @@ contextBridge.exposeInMainWorld("piApp", {
     subscribeIpc(desktopIpc.extensionViewCatalogChanged, listener),
   onExtensionViewOpenFile: (listener: (event: ExtensionViewOpenFile) => void) =>
     subscribeIpc(desktopIpc.extensionViewOpenFile, listener),
-  resolveTurnReview: (input: ResolveTurnReviewInput) =>
-    ipcRenderer.invoke(desktopIpc.resolveTurnReview, input) as Promise<ResolveTurnReviewResult>,
+  getTurnChanges: (input: TurnChangesInput) =>
+    ipcRenderer.invoke(desktopIpc.getTurnChanges, input) as Promise<TurnChangesResult>,
   getReview: (input: GetReviewInput) =>
     ipcRenderer.invoke(desktopIpc.getReview, input) as Promise<ReviewResult>,
   getReviewFile: (input: ReviewFileInput) =>

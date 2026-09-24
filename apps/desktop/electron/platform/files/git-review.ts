@@ -22,6 +22,7 @@ import type {
   ReviewIssue,
   ReviewScope,
   ReviewSection,
+  TurnChangedFile,
 } from "../../../contracts/review";
 import { isolatedGitEnvironment } from "./git-environment";
 
@@ -671,6 +672,48 @@ export async function createGitReview(
       error instanceof Error ? error.message : "Git review is unavailable.",
     );
   }
+}
+
+/** Per-file line counts between two captured trees, in Git's path order. */
+export async function summarizeGitTreeChanges(
+  repositoryPath: string,
+  beforeTreeOid: string,
+  afterTreeOid: string,
+): Promise<TurnChangedFile[]> {
+  const records = (
+    await gitText(repositoryPath, [
+      "diff",
+      "--no-ext-diff",
+      "--no-textconv",
+      "--numstat",
+      "-z",
+      "--find-renames",
+      beforeTreeOid,
+      afterTreeOid,
+      "--",
+    ])
+  ).split("\0");
+  const files: TurnChangedFile[] = [];
+  for (let index = 0; index < records.length && files.length < MAX_FILES; index += 1) {
+    const record = records[index];
+    if (!record) continue;
+    const [added, removed, inlinePath] = record.split("\t");
+    if (added === undefined || removed === undefined || inlinePath === undefined)
+      throw new Error("Invalid Git change summary.");
+    // A rename leaves the inline path empty and lists the old and new paths next.
+    const previousPath = inlinePath ? undefined : records[++index];
+    const path = inlinePath || records[++index];
+    if (!path || previousPath === "") throw new Error("Invalid Git change summary.");
+    files.push({
+      path,
+      ...(previousPath === undefined ? {} : { previousPath }),
+      lines:
+        added === "-" || removed === "-"
+          ? null
+          : { added: Number(added), removed: Number(removed) },
+    });
+  }
+  return files;
 }
 
 export async function checkGitReviewFileCurrent(

@@ -13,6 +13,7 @@ import type { ScheduledTaskOrigin } from "../../../contracts/scheduled-tasks";
 import type { TimelineViewport } from "./hooks/use-timeline-viewport";
 import { ThreadSearchBar } from "./thread-search";
 import { TimelineItem } from "./timeline-item";
+import type { OpenTurnChange } from "./turn-changes-card";
 import type { WorkspaceFileLine } from "./workspace-file-line";
 import { SparkIcon } from "../../ui/icons";
 
@@ -34,7 +35,7 @@ interface ConversationTimelineProps {
   readonly viewport: TimelineViewport;
   readonly threadSearch: ThreadSearchModel;
   readonly onViewFileInDiff?: (path: string) => void;
-  readonly onReviewTurn?: (messageId: string) => Promise<void>;
+  readonly onOpenTurnChange?: OpenTurnChange;
   readonly onForkFromMessage?: (messageIndex: number, preview?: string) => void;
   readonly onOpenWorkspaceFileLine?: (target: WorkspaceFileLine) => void;
   readonly scheduledOrigins?: ReadonlyMap<string, ScheduledTaskOrigin>;
@@ -48,7 +49,7 @@ export function ConversationTimeline({
   viewport,
   threadSearch,
   onViewFileInDiff,
-  onReviewTurn,
+  onOpenTurnChange,
   onForkFromMessage,
   onOpenWorkspaceFileLine,
   scheduledOrigins,
@@ -133,7 +134,7 @@ export function ConversationTimeline({
                   expandedToolCallIds={expandedToolCallIds}
                   onToggleToolCall={toggleToolCall}
                   onViewFileInDiff={onViewFileInDiff}
-                  onReviewTurn={onReviewTurn}
+                  onOpenTurnChange={onOpenTurnChange}
                   sourceMessageIndex={renderedMessageIndexById.get(item.id)}
                   onForkFromMessage={onForkFromMessage}
                   onOpenWorkspaceFileLine={onOpenWorkspaceFileLine}
@@ -231,7 +232,7 @@ interface MeasuredTimelineItemProps {
   readonly expandedToolCallIds: ReadonlySet<string>;
   readonly onToggleToolCall: (callId: string) => void;
   readonly onViewFileInDiff?: (path: string) => void;
-  readonly onReviewTurn?: (messageId: string) => Promise<void>;
+  readonly onOpenTurnChange?: OpenTurnChange;
   readonly sourceMessageIndex?: number;
   readonly onForkFromMessage?: (messageIndex: number, preview?: string) => void;
   readonly onOpenWorkspaceFileLine?: (target: WorkspaceFileLine) => void;
@@ -248,7 +249,7 @@ function MeasuredTimelineItemBase({
   expandedToolCallIds,
   onToggleToolCall,
   onViewFileInDiff,
-  onReviewTurn,
+  onOpenTurnChange,
   sourceMessageIndex,
   onForkFromMessage,
   onOpenWorkspaceFileLine,
@@ -290,7 +291,7 @@ function MeasuredTimelineItemBase({
         expandedToolCallIds={expandedToolCallIds}
         onToggleToolCall={onToggleToolCall}
         onViewFileInDiff={onViewFileInDiff}
-        onReviewTurn={onReviewTurn}
+        onOpenTurnChange={onOpenTurnChange}
         sourceMessageIndex={sourceMessageIndex}
         onForkFromMessage={onForkFromMessage}
         onOpenWorkspaceFileLine={onOpenWorkspaceFileLine}
@@ -345,6 +346,10 @@ function isSameDisplayItem(a: DisplayTimelineItem, b: DisplayTimelineItem): bool
   if (a.kind === "turn-marker" && b.kind === "turn-marker") {
     return a.durationMs === b.durationMs;
   }
+  if (a.kind === "turn-changes" && b.kind === "turn-changes") {
+    // A card's id is its checkpoint, and a captured turn's files never change.
+    return true;
+  }
   return false;
 }
 
@@ -361,7 +366,7 @@ function areMeasuredTimelineItemPropsEqual(
     prev.expandedToolCallIds === next.expandedToolCallIds &&
     prev.onToggleToolCall === next.onToggleToolCall &&
     prev.onViewFileInDiff === next.onViewFileInDiff &&
-    prev.onReviewTurn === next.onReviewTurn &&
+    prev.onOpenTurnChange === next.onOpenTurnChange &&
     prev.sourceMessageIndex === next.sourceMessageIndex &&
     prev.onForkFromMessage === next.onForkFromMessage &&
     prev.onOpenWorkspaceFileLine === next.onOpenWorkspaceFileLine &&

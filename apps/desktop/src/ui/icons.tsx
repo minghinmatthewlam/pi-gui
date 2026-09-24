@@ -610,6 +610,20 @@ export function DiffIcon() {
   );
 }
 
+export function FileDiffIcon() {
+  return (
+    <Icon>
+      <rect x="4" y="3.5" width="12" height="13" rx="2.5" stroke="currentColor" strokeWidth="1.3" />
+      <path
+        d="M10 6.5v4M8 8.5h4M8 13.5h4"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="1.3"
+      />
+    </Icon>
+  );
+}
+
 export function ChatIcon() {
   return (
     <Icon>

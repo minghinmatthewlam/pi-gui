@@ -154,17 +154,16 @@ test("Last turn captures actual tool edits and a response pins its own saved com
     await expect(patch).toContainText("SECOND_TURN_OUTPUT");
     await expect(patch).not.toContainText("LATER_MANUAL_EDIT");
 
-    const firstResponse = window
-      .locator(".timeline-item--assistant")
-      .filter({ hasText: "First capture complete" });
-    await firstResponse
-      .getByRole("button", { name: "Review changes from this response", exact: true })
-      .click();
+    // Each turn's card pins its own saved comparison, not the latest one.
+    const cards = window.getByTestId("turn-changes");
+    await expect(cards).toHaveCount(2);
+    await cards.first().getByRole("button", { name: "Review", exact: true }).click();
     await expect(window.getByLabel("Review scope", { exact: true })).toHaveValue("selected-turn");
-    await expect(window.locator('.diff-panel__file[data-file-path="result.txt"]')).toBeVisible();
+    await expect(
+      window.locator('.diff-panel__file--selected[data-file-path="result.txt"]'),
+    ).toBeVisible();
 
-    // Restart before selecting a file: the response action must persist the
-    // exact checkpoint even while its file selection is still empty.
+    // The card's exact checkpoint survives a restart.
     await harness.close();
     harness = await launchDesktop(userDataDir, options);
     window = await harness.firstWindow();

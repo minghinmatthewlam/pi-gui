@@ -76,13 +76,27 @@ export interface GetReviewInput {
   readonly scope: ReviewScope;
 }
 
-export interface ResolveTurnReviewInput {
+export interface TurnChangesInput {
   readonly target: SessionRef;
-  readonly messageId: string;
 }
 
-export type ResolveTurnReviewResult =
-  { readonly state: "available"; readonly checkpointId: string } | ReviewIssue;
+export interface TurnChangedFile {
+  readonly path: string;
+  readonly previousPath?: string;
+  /** Line counts; binary files have none. */
+  readonly lines: { readonly added: number; readonly removed: number } | null;
+}
+
+/** What one captured agent turn changed, anchored to that turn's transcript entries. */
+export interface TurnChangeSummary {
+  readonly checkpointId: string;
+  readonly checkoutId: string;
+  readonly entryIds: readonly string[];
+  readonly files: readonly TurnChangedFile[];
+}
+
+export type TurnChangesResult =
+  { readonly state: "available"; readonly turns: readonly TurnChangeSummary[] } | ReviewIssue;
 
 export interface ReviewFileInput {
   readonly reviewId: string;
@@ -138,9 +152,8 @@ export function decodeGetReviewInput(value: unknown): GetReviewInput {
   };
 }
 
-export function decodeResolveTurnReviewInput(value: unknown): ResolveTurnReviewInput {
-  const input = record(value, ["target", "messageId"]);
-  return { target: sessionTarget(input.target), messageId: text(input.messageId, "messageId") };
+export function decodeTurnChangesInput(value: unknown): TurnChangesInput {
+  return { target: sessionTarget(record(value, ["target"]).target) };
 }
 
 export function decodeReviewFileInput(value: unknown): ReviewFileInput {

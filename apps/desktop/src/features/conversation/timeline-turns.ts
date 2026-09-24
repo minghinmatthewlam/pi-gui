@@ -1,3 +1,4 @@
+import type { TurnChangeSummary } from "../../../contracts/review";
 import type { DisplayTimelineItem, TranscriptMessage } from "../../../contracts/timeline-types";
 
 const MIN_WORKED_DURATION_MS = 1_000;
@@ -11,11 +12,17 @@ const MIN_WORKED_DURATION_MS = 1_000;
  * Durations are never fabricated: a marker is emitted only when the turn has
  * downstream work and both endpoints carry parseable timestamps spanning at
  * least one second.
+ *
+ * Each captured turn that changed files gets a changes card at the end of that turn: after
+ * the last transcript item of the turn and any tool rows that follow it, before the next
+ * user message.
  */
 export function buildDisplayTimelineItems(
   transcript: readonly TranscriptMessage[],
+  turnChanges: readonly TurnChangeSummary[] = [],
 ): readonly DisplayTimelineItem[] {
   const result: DisplayTimelineItem[] = [];
+  const cardsAfter = turnChangeCardPositions(transcript, turnChanges);
 
   for (let index = 0; index < transcript.length; index += 1) {
     const item = transcript[index];
@@ -23,6 +30,9 @@ export function buildDisplayTimelineItems(
       continue;
     }
     result.push(item);
+    for (const turn of cardsAfter.get(index) ?? []) {
+      result.push({ kind: "turn-changes", id: `turn-changes:${turn.checkpointId}`, turn });
+    }
 
     if (item.kind !== "message" || item.role !== "user") {
       continue;
@@ -61,4 +71,33 @@ export function buildDisplayTimelineItems(
   }
 
   return result;
+}
+
+function turnChangeCardPositions(
+  transcript: readonly TranscriptMessage[],
+  turnChanges: readonly TurnChangeSummary[],
+): ReadonlyMap<number, TurnChangeSummary[]> {
+  const positions = new Map<number, TurnChangeSummary[]>();
+  if (turnChanges.length === 0) return positions;
+  const turnByEntry = new Map<string, TurnChangeSummary>();
+  for (const turn of turnChanges)
+    for (const entryId of turn.entryIds) turnByEntry.set(entryId, turn);
+  const lastIndex = new Map<TurnChangeSummary, number>();
+  transcript.forEach((item, index) => {
+    if (item.kind !== "message") return;
+    const turn = turnByEntry.get(item.sourceMessageId ?? item.id);
+    if (turn) lastIndex.set(turn, index);
+  });
+  // Cards keep the capture order when several turns end at the same row.
+  for (const turn of turnChanges) {
+    let index = lastIndex.get(turn);
+    if (index === undefined) continue;
+    while (index + 1 < transcript.length && !isUserMessage(transcript[index + 1])) index += 1;
+    positions.set(index, [...(positions.get(index) ?? []), turn]);
+  }
+  return positions;
+}
+
+function isUserMessage(item: TranscriptMessage | undefined): boolean {
+  return item?.kind === "message" && item.role === "user";
 }

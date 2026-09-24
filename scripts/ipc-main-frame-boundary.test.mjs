@@ -21,7 +21,7 @@ const rawIpcAllowlist = new Map([
 
 // Channels whose handlers must reject anything other than the owned window's main frame.
 const mainFrameChannels = [
-  "resolveTurnReview",
+  "getTurnChanges",
   "getReview",
   "getReviewFile",
   "setReviewFileReviewed",

@@ -9,7 +9,7 @@ import {
   decodeGetReviewInput,
   decodeReviewFileInput,
   decodeReviewScope,
-  decodeResolveTurnReviewInput,
+  decodeTurnChangesInput,
   decodeSetReviewFileReviewedInput,
   type AvailableReview,
   type ReviewResult,
@@ -56,11 +56,8 @@ test("review requests reject foreign fields, malformed identities and mixed scop
     baseRef: "refs/heads/trunk",
   });
   expect(decodeReviewScope({ kind: "turn" })).toEqual({ kind: "turn" });
-  expect(decodeResolveTurnReviewInput({ target: firstTask, messageId: "entry" })).toEqual({
-    target: firstTask,
-    messageId: "entry",
-  });
-  expect(() => decodeResolveTurnReviewInput({ target: firstTask, messageId: "" })).toThrow();
+  expect(decodeTurnChangesInput({ target: firstTask })).toEqual({ target: firstTask });
+  expect(() => decodeTurnChangesInput({ target: firstTask, messageId: "entry" })).toThrow();
   expect(() => decodeGetReviewInput({ ...valid, cwd: "/arbitrary" })).toThrow();
   expect(() =>
     decodeGetReviewInput({ ...valid, target: { ...firstTask, sessionId: "" } }),
@@ -192,23 +189,40 @@ test("missing captured history is unavailable and a supplied checkpoint stays ex
     state: "unavailable",
     code: "checkpoint-unavailable",
   });
-  await expect(
-    owner.resolveTurnReview({ target: firstTask, messageId: "old-message" }),
-  ).resolves.toMatchObject({ state: "unavailable", code: "checkpoint-unavailable" });
+  await expect(owner.getTurnChanges({ target: firstTask })).resolves.toEqual({
+    state: "available",
+    turns: [],
+  });
   const beforeTreeOid = await git(checkoutPath, ["rev-parse", "HEAD^{tree}"]);
   await git(checkoutPath, ["add", "example.txt"]);
   await git(checkoutPath, ["commit", "-m", "after"]);
   const afterTreeOid = await git(checkoutPath, ["rev-parse", "HEAD^{tree}"]);
   const requests: unknown[] = [];
   const checkpoints: ReviewCheckpointSource = {
-    async resolveTurn(request) {
-      return request.messageId === "captured-message"
-        ? { state: "available", checkpointId: "captured-turn" }
-        : {
-            state: "unavailable",
-            code: "checkpoint-unavailable",
-            message: "No capture exists for this exact message.",
-          };
+    async listTurns() {
+      const turn = {
+        state: "available" as const,
+        checkoutId: "checkout",
+        repositoryPath: checkoutPath,
+        capturedAt: "2026-09-22T12:00:00.000Z",
+        coverage: { state: "complete" as const, notes: [] },
+      };
+      return [
+        {
+          ...turn,
+          checkpointId: "captured-turn",
+          beforeTreeOid,
+          afterTreeOid,
+          entryIds: ["captured-message"],
+        },
+        {
+          ...turn,
+          checkpointId: "unchanged-turn",
+          beforeTreeOid: afterTreeOid,
+          afterTreeOid,
+          entryIds: ["quiet-message"],
+        },
+      ];
     },
     async resolve(request) {
       requests.push(request);
@@ -230,12 +244,18 @@ test("missing captured history is unavailable and a supplied checkpoint stays ex
     resolveCheckoutPath: () => undefined,
     checkpoints,
   });
-  await expect(
-    capturedOwner.resolveTurnReview({ target: firstTask, messageId: "captured-message" }),
-  ).resolves.toEqual({ state: "available", checkpointId: "captured-turn" });
-  await expect(
-    capturedOwner.resolveTurnReview({ target: firstTask, messageId: "old-message" }),
-  ).resolves.toMatchObject({ state: "unavailable", code: "checkpoint-unavailable" });
+  // A turn that changed nothing gets no summary.
+  await expect(capturedOwner.getTurnChanges({ target: firstTask })).resolves.toEqual({
+    state: "available",
+    turns: [
+      {
+        checkpointId: "captured-turn",
+        checkoutId: "checkout",
+        entryIds: ["captured-message"],
+        files: [{ path: "example.txt", lines: { added: 1, removed: 1 } }],
+      },
+    ],
+  });
   const result = available(await capturedOwner.getReview(input));
   expect(result.scope).toEqual({ kind: "turn", checkpointId: "captured-turn" });
   expect(result.capturedAt).toBe("2026-09-22T12:00:00.000Z");

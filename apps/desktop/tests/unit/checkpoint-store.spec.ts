@@ -168,13 +168,15 @@ test("a queued-input transition shares one capture and pins exact transcript ent
     signal,
   );
   const target = { workspaceId: "repo", sessionId: "task" };
-  expect(await store.resolveTurn({ target, messageId: "assistant-first" })).toEqual({
-    state: "available",
-    checkpointId: "first",
-  });
-  expect(await store.resolveTurn({ target, messageId: "unrelated" })).toMatchObject({
-    state: "unavailable",
-  });
+  expect(
+    (await store.listTurns(target)).map(({ checkpointId, entryIds }) => ({
+      checkpointId,
+      entryIds,
+    })),
+  ).toEqual([
+    { checkpointId: "first", entryIds: ["user-first", "assistant-first"] },
+    { checkpointId: "second", entryIds: ["user-second", "assistant-second"] },
+  ]);
   expect(await store.resolve({ target, checkoutId: "repo" })).toMatchObject({
     state: "available",
     checkpointId: "second",
