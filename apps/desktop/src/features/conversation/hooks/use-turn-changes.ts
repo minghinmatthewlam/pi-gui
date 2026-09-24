@@ -8,7 +8,8 @@ const NO_TURNS: readonly TurnChangeSummary[] = [];
 
 /**
  * The files each captured turn of the selected thread changed. Captures finish when a run
- * settles, so the list is read when the thread opens and again whenever a run stops.
+ * settles, so the list is read when the thread opens (running or not) and again when a run
+ * starts or stops; the open turn of a running thread is never listed.
  */
 export function useTurnChanges({
   api,
@@ -29,7 +30,7 @@ export function useTurnChanges({
   workbenchRef.current = workbench;
 
   useEffect(() => {
-    if (!api || !target || running) return;
+    if (!api || !target) return;
     let current = true;
     void api.getTurnChanges({ target }).then(
       (result) => {
@@ -52,7 +53,11 @@ export function useTurnChanges({
   }, []);
 
   return {
-    turns: loaded && loaded.target === target ? loaded.turns : NO_TURNS,
+    turns: loaded && target && sameTarget(loaded.target, target) ? loaded.turns : NO_TURNS,
     openTurnChange,
   };
+}
+
+function sameTarget(left: SessionRef, right: SessionRef): boolean {
+  return left.workspaceId === right.workspaceId && left.sessionId === right.sessionId;
 }
