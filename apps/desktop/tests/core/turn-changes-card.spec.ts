@@ -131,7 +131,7 @@ test("a turn that edits files gets a changes card whose rows open that file's di
     ).toHaveCount(0);
 
     await card.locator('.turn-changes__file[data-file-path="src/nested/f.txt"]').click();
-    const panel = window.getByRole("region", { name: "Changes review", exact: true });
+    const panel = window.getByRole("region", { name: "Review", exact: true });
     await expect(window.getByLabel("Review scope", { exact: true })).toHaveValue("selected-turn");
     await expect(panel.locator(".diff-panel__file")).toHaveCount(7);
     await expect(
@@ -154,7 +154,9 @@ test("a turn that edits files gets a changes card whose rows open that file's di
     await window.getByTestId("composer").press("Enter");
     await expectCompleted(window, "Nothing to change");
     await expect(card).toHaveCount(1);
-    await expect(window.getByRole("button", { name: "Review", exact: true })).toHaveCount(1);
+    await expect(
+      window.getByTestId("transcript").getByRole("button", { name: "Review", exact: true }),
+    ).toHaveCount(1);
   } finally {
     await harness.close();
   }
