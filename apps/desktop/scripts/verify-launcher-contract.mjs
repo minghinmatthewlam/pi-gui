@@ -172,7 +172,8 @@ function captureStdout(command, args, options) {
     child.stdout?.on("data", (chunk) => (stdout += chunk.toString()));
     child.stderr?.on("data", (chunk) => (stderr += chunk.toString()));
     child.once("error", reject);
-    child.once("exit", (code) => {
+    // "close" waits for stdout to drain; "exit" can fire before the last chunk arrives.
+    child.once("close", (code) => {
       if (code === 0) {
         resolve(stdout);
         return;
