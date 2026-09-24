@@ -262,15 +262,20 @@ export default function App() {
   const transcriptFailed = transcriptHydration?.kind === "failed" ? transcriptHydration : null;
   const isTranscriptLoading =
     Boolean(selectedSession) && !selectedTranscriptForSession && !transcriptFailed;
+  const selectedSessionRunning = selectedSession?.status === "running";
   const turnChanges = useTurnChanges({
     api,
     target: workbenchTarget,
-    running: selectedSession?.status === "running",
+    running: selectedSessionRunning,
     workbench,
   });
   const timelineRows = useMemo(
-    () => buildDisplayTimelineItems(activeTranscript, turnChanges.turns),
-    [activeTranscript, turnChanges.turns],
+    () =>
+      buildDisplayTimelineItems(activeTranscript, {
+        lastTurnRunning: selectedSessionRunning,
+        turnChanges: turnChanges.turns,
+      }),
+    [activeTranscript, selectedSessionRunning, turnChanges.turns],
   );
   const viewport = useTimelineViewport({
     sessionKey: selectedSessionKey,

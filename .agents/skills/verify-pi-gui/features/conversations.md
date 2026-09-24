@@ -12,7 +12,7 @@ The primary product flow is to send a prompt, watch an assistant response grow, 
 
 ## How to get to it (user POV)
 
-- Sidebar New thread → enter a prompt → Start thread.
+- Sidebar New thread (or Cmd+N / Control+N) → enter a prompt → Start thread.
 - Existing thread → composer → Send message (the primary proof uses the button).
 - During a run, an empty composer shows Stop run.
 - Click a tool header to expand/collapse its output.

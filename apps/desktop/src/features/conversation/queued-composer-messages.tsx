@@ -1,5 +1,6 @@
 import type { ComposerAttachment, QueuedComposerMessage } from "../../../contracts/desktop-state";
 import { FileIcon } from "../../ui/icons";
+import { ImageAttachmentThumb } from "./image-attachment-thumb";
 
 interface QueuedComposerMessagesProps {
   readonly messages: readonly QueuedComposerMessage[];
@@ -80,17 +81,19 @@ function QueuedAttachmentPreview({ attachment }: { readonly attachment: Composer
   return (
     <div className={`queued-composer-attachment queued-composer-attachment--${attachment.kind}`}>
       {attachment.kind === "image" ? (
-        <img
-          alt={attachment.name}
+        <ImageAttachmentThumb
           className="queued-composer-attachment__preview"
+          name={attachment.name}
           src={`data:${attachment.mimeType};base64,${attachment.data}`}
         />
       ) : (
-        <span className="queued-composer-attachment__icon" aria-hidden="true">
-          <FileIcon />
-        </span>
+        <>
+          <span className="queued-composer-attachment__icon" aria-hidden="true">
+            <FileIcon />
+          </span>
+          <span className="queued-composer-attachment__name">{attachment.name}</span>
+        </>
       )}
-      <span className="queued-composer-attachment__name">{attachment.name}</span>
     </div>
   );
 }

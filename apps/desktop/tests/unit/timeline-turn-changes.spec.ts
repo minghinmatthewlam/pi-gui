@@ -46,12 +46,14 @@ test("each turn's card follows that turn's last rows and precedes the next promp
     message("u3", "user"),
     message("a3", "assistant"),
   ];
-  const rows = buildDisplayTimelineItems(transcript, [
-    turn("first", ["u1", "a1", "a1-final"]),
-    // A turn whose only visible anchor is its prompt still ends after its tool rows.
-    turn("second", ["u2", "tool-only-assistant"]),
-    turn("unplaced", ["not-in-transcript"]),
-  ]).map((row) => row.id);
+  const rows = buildDisplayTimelineItems(transcript, {
+    turnChanges: [
+      turn("first", ["u1", "a1", "a1-final"]),
+      // A turn whose only visible anchor is its prompt still ends after its tool rows.
+      turn("second", ["u2", "tool-only-assistant"]),
+      turn("unplaced", ["not-in-transcript"]),
+    ],
+  }).map((row) => row.id);
   expect(rows).toEqual([
     "u1",
     "a1",

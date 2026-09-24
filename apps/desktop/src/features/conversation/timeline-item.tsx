@@ -7,6 +7,7 @@ import type {
   TimelineTurnMarker,
 } from "../../../contracts/timeline-types";
 import type { ScheduledTaskOrigin } from "../../../contracts/scheduled-tasks";
+import { ImageAttachmentThumb } from "./image-attachment-thumb";
 import { MessageMarkdown } from "./message-markdown";
 import { TurnChangesCard, type OpenTurnChange } from "./turn-changes-card";
 import type { WorkspaceFileLine } from "./workspace-file-line";
@@ -108,10 +109,10 @@ function TimelineMessage({
               <div className="timeline-item__attachments">
                 {item.attachments.map((attachment, index) =>
                   attachment.kind === "image" ? (
-                    <img
-                      alt={attachment.name ?? `Attachment ${index + 1}`}
+                    <ImageAttachmentThumb
                       className="timeline-item__attachment timeline-item__attachment--image"
                       key={`${item.id}:${index}`}
+                      name={attachment.name ?? `Attachment ${index + 1}`}
                       src={`data:${attachment.mimeType};base64,${attachment.data}`}
                     />
                   ) : (

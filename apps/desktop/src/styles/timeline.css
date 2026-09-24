@@ -216,8 +216,8 @@
 .timeline-item__attachment--image {
   width: 88px;
   height: 88px;
-  object-fit: cover;
   border-radius: var(--radius-xl);
+  overflow: hidden;
 }
 
 .timeline-item__attachment--file {
