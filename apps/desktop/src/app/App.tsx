@@ -261,9 +261,10 @@ export default function App() {
   const transcriptFailed = transcriptHydration?.kind === "failed" ? transcriptHydration : null;
   const isTranscriptLoading =
     Boolean(selectedSession) && !selectedTranscriptForSession && !transcriptFailed;
+  const selectedSessionRunning = selectedSession?.status === "running";
   const timelineRows = useMemo(
-    () => buildDisplayTimelineItems(activeTranscript),
-    [activeTranscript],
+    () => buildDisplayTimelineItems(activeTranscript, { lastTurnRunning: selectedSessionRunning }),
+    [activeTranscript, selectedSessionRunning],
   );
   const viewport = useTimelineViewport({
     sessionKey: selectedSessionKey,
