@@ -64,7 +64,7 @@ export default function extension(pi) {
     await expectExtensionViewReady(window);
     await expect(window.getByRole("tab", { name: "Draft actions", exact: true })).toHaveAttribute(
       "title",
-      "Draft actions",
+      /^Draft actions \(/,
     );
     const state = await getDesktopState(window);
     const target = { workspaceId: state.selectedWorkspaceId!, sessionId: state.selectedSessionId! };
