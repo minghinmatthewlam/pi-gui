@@ -13,6 +13,11 @@ interface PersistablePiSessionManager {
 
 export function forcePersistPiSession(sessionManager: object): void {
   const compatibleManager = sessionManager as PersistablePiSessionManager;
+  // Once the file exists, Pi appends each entry itself. Rewriting it from
+  // memory would drop turns another Pi process appended to the same file.
+  if (compatibleManager.flushed) {
+    return;
+  }
   const rewriteFile = compatibleManager._rewriteFile;
   if (!rewriteFile) {
     return;

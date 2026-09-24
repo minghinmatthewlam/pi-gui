@@ -1270,6 +1270,7 @@ export default function App() {
         {sidePanelVisible && selectedWorkspace && selectedSession ? (
           <Workbench
             view={workbench.view}
+            platform={api?.platform ?? "linux"}
             onResize={workbenchWidth.setWidth}
             onTogglePanel={commands.toggleSidePanel}
             extensionViews={extensionViews.views}

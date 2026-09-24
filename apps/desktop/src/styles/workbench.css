@@ -178,6 +178,14 @@
   line-height: 1.4;
 }
 
+.workbench__choice-shortcut {
+  flex: none;
+  margin-left: auto;
+  color: var(--muted-soft);
+  font-family: inherit;
+  font-size: var(--text-xs);
+}
+
 .workbench__unavailable > .button {
   align-self: flex-start;
 }

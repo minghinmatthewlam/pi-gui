@@ -7,7 +7,7 @@ import {
   getDesktopCommandFromShortcut,
   isSinglePressCommand,
   platformShortcutModifier,
-  CHANGES_TOGGLE_DEDUPE_MS,
+  REVIEW_TOGGLE_DEDUPE_MS,
   createChordPairGate,
   SEARCH_CHORD_TOGGLE_MS,
 } from "../../contracts/ipc";
@@ -63,18 +63,21 @@ test("keeps a shortcut that arrives before the renderer subscribes", () => {
   expect(next).toEqual([desktopCommands.openSettings]);
 });
 
-test("maps Changes and thread digits from key or code", () => {
+test("maps Review and thread digits from key or code", () => {
   expect(
     getDesktopCommandFromShortcut({
       modifier: true,
       shift: false,
       key: "Unidentified",
-      code: "KeyD",
+      code: "KeyR",
     }),
-  ).toBe(desktopCommands.toggleChanges);
+  ).toBe(desktopCommands.toggleReview);
+  expect(
+    getDesktopCommandFromShortcut({ modifier: true, shift: false, key: "r", code: "KeyR" }),
+  ).toBe(desktopCommands.toggleReview);
   expect(
     getDesktopCommandFromShortcut({ modifier: true, shift: false, key: "d", code: "KeyD" }),
-  ).toBe(desktopCommands.toggleChanges);
+  ).toBeUndefined();
   expect(
     getDesktopCommandFromShortcut({
       modifier: true,
@@ -103,6 +106,7 @@ test("maps Shift chords to rename and archive thread, once per press", () => {
   ).toBeUndefined();
   expect(isSinglePressCommand(desktopCommands.archiveThread)).toBe(true);
   expect(isSinglePressCommand(desktopCommands.renameThread)).toBe(true);
+  expect(isSinglePressCommand(desktopCommands.toggleReview)).toBe(true);
   expect(isSinglePressCommand(desktopCommands.toggleTerminal)).toBe(false);
 });
 
@@ -113,12 +117,12 @@ test("replays search and settings chords that arrive before the listener is arme
   buffer.note({ modifier: true, shift: true, key: "f", code: "KeyF" });
   buffer.note({ modifier: false, shift: false, key: "f", code: "KeyF" });
   buffer.note({ modifier: true, shift: false, key: "1", code: "Digit1" });
-  buffer.note({ modifier: true, shift: false, key: "Unidentified", code: "KeyD" });
+  buffer.note({ modifier: true, shift: false, key: "Unidentified", code: "KeyR" });
   expect(buffer.arm()).toEqual([
     { key: "f", code: "KeyF" },
     { key: "Unidentified", code: "Comma" },
     { key: "1", code: "Digit1" },
-    { key: "Unidentified", code: "KeyD" },
+    { key: "Unidentified", code: "KeyR" },
   ]);
   buffer.note({ modifier: true, shift: false, key: ",", code: "Comma" });
   expect(buffer.arm()).toEqual([]);
@@ -132,15 +136,15 @@ test("collapses a second search keydown from the same chord", () => {
   expect(allow(1_200)).toBe(true);
 });
 
-test("search chord gate swallows a second press at 50ms, unlike Changes", () => {
+test("search chord gate swallows a second press at 50ms, unlike Review", () => {
   const search = createChordToggleGate(SEARCH_CHORD_TOGGLE_MS);
   expect(search(1_000)).toBe(true);
   expect(search(1_050)).toBe(false);
 
-  const changes = createChordToggleGate(CHANGES_TOGGLE_DEDUPE_MS);
+  const changes = createChordToggleGate(REVIEW_TOGGLE_DEDUPE_MS);
   expect(changes(1_000)).toBe(true);
-  expect(changes(1_000 + CHANGES_TOGGLE_DEDUPE_MS - 1)).toBe(false);
-  expect(changes(1_000 + CHANGES_TOGGLE_DEDUPE_MS)).toBe(true);
+  expect(changes(1_000 + REVIEW_TOGGLE_DEDUPE_MS - 1)).toBe(false);
+  expect(changes(1_000 + REVIEW_TOGGLE_DEDUPE_MS)).toBe(true);
 });
 
 test("chord pair gate collapses one chord seen by main and renderer, not two quick presses", () => {
@@ -150,5 +154,5 @@ test("chord pair gate collapses one chord seen by main and renderer, not two qui
   // A second physical press, however quick, arrives from the same source.
   expect(allow("main", 1_004)).toBe(true);
   expect(allow("main", 1_005)).toBe(true);
-  expect(allow("renderer", 1_000 + 5 + CHANGES_TOGGLE_DEDUPE_MS)).toBe(true);
+  expect(allow("renderer", 1_000 + 5 + REVIEW_TOGGLE_DEDUPE_MS)).toBe(true);
 });

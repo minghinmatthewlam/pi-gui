@@ -40,12 +40,12 @@ const showcase = [
   {
     eyebrow: "Review",
     title: "Review every change before it lands",
-    body: "The Changes tab shows exactly what the agent touched. Compare uncommitted work, a branch against its base, or a single turn, and stage it file by file.",
+    body: "The Review tab shows exactly what the agent touched. Compare uncommitted work, a branch against its base, or a single turn, and stage it file by file.",
     shot: "review",
     width: 1240,
     height: 758,
     dark: true,
-    alt: "The Changes tab showing the diff an agent made to src/price.js",
+    alt: "The Review tab showing the diff an agent made to src/price.js",
   },
   {
     eyebrow: "Workbench",
