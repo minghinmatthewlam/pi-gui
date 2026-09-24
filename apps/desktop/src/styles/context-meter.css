@@ -1,0 +1,122 @@
+/* =============================================================================
+ * Context meter — ring beside the model picker and its hover card.
+ * Modelled on Codex's context-window hover and Claude's usage-limit hover.
+ * ========================================================================== */
+
+.context-meter {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.context-meter__ring {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  cursor: default;
+  transition: background var(--motion-base) var(--ease-out);
+}
+
+.context-meter__ring:hover,
+.context-meter__ring:focus-visible {
+  background: var(--overlay-hover);
+}
+
+.context-meter__ring:focus-visible {
+  outline: none;
+  border-color: var(--focus-ring-border);
+}
+
+.context-meter__track,
+.context-meter__fill {
+  fill: none;
+  stroke-width: 2.2;
+}
+
+.context-meter__track {
+  stroke: var(--border-heavy);
+}
+
+.context-meter__fill {
+  stroke: var(--muted-strong);
+  stroke-linecap: round;
+  transition: stroke-dasharray var(--motion-base) var(--ease-out);
+}
+
+.context-meter__ring[data-tone="warning"] .context-meter__fill {
+  stroke: var(--warning);
+}
+
+.context-meter__ring[data-tone="danger"] .context-meter__fill {
+  stroke: var(--error);
+}
+
+.context-meter__card {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-bottom: 8px;
+  width: 300px;
+  padding: 12px 14px;
+  background: var(--surface);
+  border-radius: var(--radius-2xl);
+  box-shadow: var(--elevation-popover);
+  z-index: 20;
+  color: var(--text-strong);
+  font-size: 12px;
+  line-height: 1.45;
+  cursor: default;
+}
+
+.context-meter__section {
+  padding: 8px 0;
+  border-top: 1px solid var(--border-light);
+}
+
+.context-meter__section:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.context-meter__section:last-child {
+  padding-bottom: 0;
+}
+
+.context-meter__heading {
+  margin: 0 0 2px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: var(--font-normal);
+}
+
+.context-meter__headline {
+  margin: 0;
+  font-size: 13px;
+  font-weight: var(--font-medium);
+  font-variant-numeric: tabular-nums;
+}
+
+.context-meter__note {
+  margin: 0;
+  color: var(--muted);
+}
+
+.context-meter__row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--muted-strong);
+}
+
+.context-meter__value {
+  color: var(--text-strong);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}

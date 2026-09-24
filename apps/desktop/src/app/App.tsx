@@ -1175,6 +1175,11 @@ export default function App() {
                 composerDraft={composerDraft}
                 composerRef={composerRef}
                 runtime={selectedModelRuntime}
+                usage={
+                  selectedSessionKey
+                    ? snapshot?.sessionUsageBySession[selectedSessionKey]
+                    : undefined
+                }
                 provider={resolvedSessionProvider}
                 modelId={resolvedSessionModelId}
                 thinkingLevel={resolvedSessionThinkingLevel}

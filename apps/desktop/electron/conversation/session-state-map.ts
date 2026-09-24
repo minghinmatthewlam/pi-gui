@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { SessionConfig } from "@pi-gui/session-driver";
+import type { SessionConfig, SessionUsageSnapshot } from "@pi-gui/session-driver";
 import {
   createEmptyExtensionUiState as createBaseExtensionUiState,
   type ExtensionUiState,
@@ -55,6 +55,7 @@ export class SessionStateMap {
   readonly runMetricsBySession = new Map<string, RunMetrics>();
   readonly activeWorkingActivityBySession = new Map<string, string>();
   readonly sessionCommandsBySession = new Map<string, RuntimeCommandRecord[]>();
+  readonly sessionUsageBySession = new Map<string, SessionUsageSnapshot>();
   readonly extensionUiBySession = new Map<string, MutableSessionExtensionUiState>();
   readonly pendingAutoTitleBySession = new Map<string, PendingAutoTitle>();
   readonly loadedTranscriptKeys = new Set<string>();
@@ -99,6 +100,7 @@ export class SessionStateMap {
       this.runMetricsBySession,
       this.activeWorkingActivityBySession,
       this.sessionCommandsBySession,
+      this.sessionUsageBySession,
       this.extensionUiBySession,
       this.pendingAutoTitleBySession,
     ];
@@ -160,6 +162,7 @@ export class SessionStateMap {
     this.pinnedSessionOrder = this.pinnedSessionOrder.filter((entry) => entry !== key);
     this.sessionErrorsBySession.delete(key);
     this.sessionCommandsBySession.delete(key);
+    this.sessionUsageBySession.delete(key);
     this.extensionUiBySession.delete(key);
     this.pendingAutoTitleBySession.delete(key);
     pendingAutoTitle?.cancel();

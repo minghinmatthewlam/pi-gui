@@ -1,4 +1,8 @@
-import type { HostUiRequest, SessionConfig } from "@pi-gui/session-driver";
+import type {
+  HostUiRequest,
+  SessionConfig,
+  SessionUsageSnapshot,
+} from "@pi-gui/session-driver";
 import type {
   ModelSettingsSnapshot,
   RuntimeCommandRecord,
@@ -331,6 +335,8 @@ export interface DesktopAppState {
   readonly editingQueuedMessageId?: string;
   readonly runtimeByWorkspace: Readonly<Record<string, RuntimeSnapshot>>;
   readonly sessionCommandsBySession: Readonly<Record<string, readonly RuntimeCommandRecord[]>>;
+  /** Context, cache and usage for open sessions; absent until pi reports it. */
+  readonly sessionUsageBySession: Readonly<Record<string, SessionUsageSnapshot>>;
   readonly sessionExtensionUiBySession: Readonly<Record<string, SessionExtensionUiStateRecord>>;
   readonly extensionCommandCompatibilityByWorkspace: Readonly<
     Record<string, readonly ExtensionCommandCompatibilityRecord[]>
@@ -380,6 +386,7 @@ export function createEmptyDesktopAppState(): DesktopAppState {
     queuedComposerMessages: [],
     runtimeByWorkspace: {},
     sessionCommandsBySession: {},
+    sessionUsageBySession: {},
     sessionExtensionUiBySession: {},
     extensionCommandCompatibilityByWorkspace: {},
     orchestrationChildren: [],

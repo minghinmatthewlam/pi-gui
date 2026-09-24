@@ -23,6 +23,7 @@ import type {
   CreateSessionOptions,
   HostUiResponse,
   SessionConfig,
+  SessionUsageSnapshot,
   SessionDriverEvent,
   SessionQueuedMessage,
   SessionRef,
@@ -411,6 +412,7 @@ export class DesktopAppStore {
         this.sessionState.transcriptCache.set(key, []);
         this.sessionState.loadedTranscriptKeys.add(key);
         this.updateSessionConfig(snapshot.ref, snapshot.config);
+        this.updateSessionUsage(snapshot.ref, snapshot.usage);
       },
       unpinSession: (sessionRef) => {
         const key = sessionKey(sessionRef);
@@ -469,6 +471,7 @@ export class DesktopAppStore {
         this.sessionState.transcriptCache.set(key, []);
         this.sessionState.loadedTranscriptKeys.add(key);
         this.updateSessionConfig(snapshot.ref, snapshot.config);
+        this.updateSessionUsage(snapshot.ref, snapshot.usage);
       },
       transcriptFor: (sessionRef) =>
         this.sessionState.transcriptCache.get(sessionKey(sessionRef)) ?? [],
@@ -2234,6 +2237,7 @@ export class DesktopAppStore {
         activeView,
         runtimeByWorkspace,
         sessionCommandsBySession: mapToRecord(this.sessionState.sessionCommandsBySession),
+        sessionUsageBySession: mapToRecord(this.sessionState.sessionUsageBySession),
         sessionExtensionUiBySession: this.serializeSessionExtensionUiState(),
         extensionCommandCompatibilityByWorkspace: serializeCompatibilityByWorkspace(
           this.extensionCommandCompatibilityByWorkspace,
@@ -3105,11 +3109,13 @@ export class DesktopAppStore {
         case "sessionOpened":
         case "runCompleted":
           this.updateSessionConfig(event.sessionRef, event.snapshot.config);
+          this.updateSessionUsage(event.sessionRef, event.snapshot.usage);
           this.updateQueuedComposerMessages(event.sessionRef, event.snapshot.queuedMessages);
           await this.refreshSessionCommands(event.sessionRef);
           break;
         case "sessionUpdated":
           this.updateSessionConfig(event.sessionRef, event.snapshot.config);
+          this.updateSessionUsage(event.sessionRef, event.snapshot.usage);
           this.updateQueuedComposerMessages(event.sessionRef, event.snapshot.queuedMessages);
           if (event.snapshot.status !== "running") {
             this.refreshSessionCommandsCoalesced(event.sessionRef);
@@ -3129,6 +3135,7 @@ export class DesktopAppStore {
           this.clearExtensionDialogTimeoutsForSession(event.sessionRef);
           this.sessionState.extensionUiBySession.delete(key);
           this.sessionState.sessionCommandsBySession.delete(key);
+          this.sessionState.sessionUsageBySession.delete(key);
           this.sessionState.queuedComposerMessagesBySession.delete(key);
           this.sessionState.queuedComposerEditsBySession.delete(key);
           this.clearPendingAutoTitle(event.sessionRef);
@@ -3391,6 +3398,11 @@ export class DesktopAppStore {
         state.sessionCommandsBySession,
         key,
         this.sessionState.sessionCommandsBySession.get(key),
+      ),
+      sessionUsageBySession: updateRecordValue(
+        state.sessionUsageBySession,
+        key,
+        this.sessionState.sessionUsageBySession.get(key),
       ),
       sessionExtensionUiBySession: updateRecordValue(
         state.sessionExtensionUiBySession,
@@ -4204,6 +4216,15 @@ export class DesktopAppStore {
       this.sessionState.sessionConfigBySession.set(key, config);
     } else {
       this.sessionState.sessionConfigBySession.delete(key);
+    }
+  }
+
+  private updateSessionUsage(sessionRef: SessionRef, usage: SessionUsageSnapshot | undefined): void {
+    const key = sessionKey(sessionRef);
+    if (usage) {
+      this.sessionState.sessionUsageBySession.set(key, usage);
+    } else {
+      this.sessionState.sessionUsageBySession.delete(key);
     }
   }
 
