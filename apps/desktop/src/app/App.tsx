@@ -1190,6 +1190,7 @@ export default function App() {
                 onSubmit={submitComposerDraft}
                 onStop={stopCurrentRun}
                 runningLabel={runningLabel}
+                steerShortcutLabel={api.platform === "darwin" ? "Cmd+Enter" : "Ctrl+Enter"}
                 selectedSession={selectedSession}
                 lastError={snapshot.lastError}
                 selectedSlashCommand={
