@@ -140,15 +140,13 @@
   gap: 8px;
 }
 
+/* In flow, so a revealed action never covers the row below it. The negative inset lines the
+   first icon up with the message text. */
 .timeline-item__actions {
-  position: absolute;
-  left: 0;
-  top: 100%;
-  z-index: 2;
   display: flex;
   align-items: center;
-  gap: 4px;
-  margin-top: 2px;
+  gap: 8px;
+  margin: 6px 0 0 -8px;
   opacity: 0;
   transform: translateY(-2px);
   transition:
@@ -188,15 +186,12 @@
   font-weight: 500;
 }
 
-.timeline-item__review-error {
-  margin: var(--space-1) 0 0;
-  color: var(--error-ink);
-  font-size: var(--text-sm);
-  line-height: var(--leading-normal);
-  overflow-wrap: anywhere;
+.timeline-item__action:disabled {
+  cursor: default;
+  opacity: 0.45;
 }
 
-.timeline-item__action:hover {
+.timeline-item__action:hover:not(:disabled) {
   background: var(--surface-muted);
   border-color: var(--line);
   color: var(--ink);
@@ -882,4 +877,131 @@
   flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
+}
+
+/* ---- Turn changes card -------------------------------------------------- */
+
+.turn-changes {
+  max-width: 100%;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-3xl);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.turn-changes__header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.turn-changes__glyph {
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-lg);
+  background: var(--surface-muted);
+  color: var(--muted-strong);
+}
+
+.turn-changes__glyph svg {
+  width: 20px;
+  height: 20px;
+}
+
+.turn-changes__summary {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.turn-changes__title {
+  color: var(--ink);
+  font-size: var(--text-base);
+  font-weight: var(--font-medium);
+}
+
+.turn-changes__review {
+  flex-shrink: 0;
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--ink);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.turn-changes__review:hover {
+  background: var(--surface-muted);
+}
+
+.turn-changes__files {
+  margin: 0;
+  padding: 4px 0;
+  list-style: none;
+}
+
+.turn-changes__file {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  padding: 7px 14px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.turn-changes__file:hover:not(:disabled) {
+  background: var(--overlay-hover);
+}
+
+.turn-changes__file:focus-visible,
+.turn-changes__review:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.turn-changes__path {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.turn-changes__dir {
+  color: var(--muted-path);
+}
+
+.turn-changes__stats {
+  display: inline-flex;
+  gap: 6px;
+  flex-shrink: 0;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.turn-changes__added {
+  color: var(--success);
+}
+
+.turn-changes__removed {
+  color: var(--error);
+}
+
+.turn-changes__binary,
+.turn-changes__more {
+  color: var(--muted);
 }

@@ -135,10 +135,10 @@ type ReviewScope =
 
 getReview(input: { target: SessionRef; checkoutId: string; scope: ReviewScope }): Promise<ReviewResult>;
 getReviewFile(input: { reviewId: string; fileId: string }): Promise<ReviewFileResult>;
-resolveTurnReview(input: { target: SessionRef; messageId: string }): Promise<ResolveTurnReviewResult>;
+getTurnChanges(input: { target: SessionRef }): Promise<TurnChangesResult>;
 ```
 
-The [review contract](../apps/desktop/contracts/review.ts) returns `available | stale | unavailable | failed`. Available results include an immutable comparison identity, resolved checkout/revisions, file identities and `complete | partial` coverage with notes. The [review owner](../apps/desktop/electron/workbench/review-owner.ts) retains up to 16 comparisons in memory. File reads, reviewed marks and staging use the returned comparison/file IDs; evicted or changed comparisons require Refresh. The requested scope is persisted, but asynchronous resolution never writes layout: Branch without `baseRef` resolves the repository default again on refresh; Last turn without `checkpointId` means latest. A transcript action stores an exact checkpoint ID.
+The [review contract](../apps/desktop/contracts/review.ts) returns `available | stale | unavailable | failed`. Available results include an immutable comparison identity, resolved checkout/revisions, file identities and `complete | partial` coverage with notes. The [review owner](../apps/desktop/electron/workbench/review-owner.ts) retains up to 16 comparisons in memory. File reads, reviewed marks and staging use the returned comparison/file IDs; evicted or changed comparisons require Refresh. The requested scope is persisted, but asynchronous resolution never writes layout: Branch without `baseRef` resolves the repository default again on refresh; Last turn without `checkpointId` means latest. `getTurnChanges` lists each captured turn's changed files with line counts; the timeline shows them as a card after that turn, and opening a file from it stores that turn's exact checkpoint ID.
 
 Reviewed marks live in host-owned `reviewed-files.json`, keyed by task, checkout, scope and file-content identity. Changes invalidate the relevant mark, and restarting can retain marks for unchanged content. Renderer-local path-only marks are no longer read or written; old bytes are left intact. Temporary Git errors do not erase marks.
 

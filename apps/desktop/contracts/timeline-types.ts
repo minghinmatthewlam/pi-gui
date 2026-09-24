@@ -1,4 +1,5 @@
 import type { SessionTranscriptMessage, SessionTranscriptRole } from "@pi-gui/session-driver";
+import type { TurnChangeSummary } from "./review";
 
 export type SessionRole = SessionTranscriptRole;
 export type TimelineTone = "neutral" | "success" | "warning" | "error";
@@ -53,4 +54,11 @@ export interface TimelineTurnMarker {
   readonly durationMs: number;
 }
 
-export type DisplayTimelineItem = TranscriptMessage | TimelineTurnMarker;
+/** A derived, view-only card listing the files one captured turn changed, placed after that turn. */
+export interface TimelineTurnChanges {
+  readonly kind: "turn-changes";
+  readonly id: string;
+  readonly turn: TurnChangeSummary;
+}
+
+export type DisplayTimelineItem = TranscriptMessage | TimelineTurnMarker | TimelineTurnChanges;

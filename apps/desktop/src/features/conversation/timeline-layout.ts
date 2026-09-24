@@ -16,6 +16,7 @@ export const TIMELINE_OVERSCAN = 720;
 
 export function estimateRowHeight(item: DisplayTimelineItem, width: number): number {
   if (item.kind === "turn-marker") return 32;
+  if (item.kind === "turn-changes") return 74 + Math.min(item.turn.files.length, 6) * 36;
   if (item.kind === "message") {
     const charactersPerLine = Math.max(20, Math.floor((width || 700) / 8));
     const lines = item.text

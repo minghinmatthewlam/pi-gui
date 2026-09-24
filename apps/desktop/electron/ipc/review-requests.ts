@@ -1,6 +1,6 @@
 import { desktopIpc } from "../../contracts/ipc";
 import {
-  decodeResolveTurnReviewInput,
+  decodeTurnChangesInput,
   decodeGetReviewInput,
   decodeReviewFileInput,
   decodeSetReviewFileReviewedInput,
@@ -11,7 +11,7 @@ import type { MainFrameHandler } from "./main-frame-ipc";
 
 export type ReviewRequestsOwner = Pick<
   ReviewOwner,
-  | "resolveTurnReview"
+  | "getTurnChanges"
   | "getReview"
   | "getReviewFile"
   | "setReviewFileReviewed"
@@ -19,9 +19,7 @@ export type ReviewRequestsOwner = Pick<
 >;
 
 export function registerReviewRequests(handle: MainFrameHandler, owner: ReviewRequestsOwner): void {
-  handle(desktopIpc.resolveTurnReview, decodeResolveTurnReviewInput, (input) =>
-    owner.resolveTurnReview(input),
-  );
+  handle(desktopIpc.getTurnChanges, decodeTurnChangesInput, (input) => owner.getTurnChanges(input));
   handle(desktopIpc.getReview, decodeGetReviewInput, (input) => owner.getReview(input));
   handle(desktopIpc.getReviewFile, decodeReviewFileInput, (input) => owner.getReviewFile(input));
   handle(desktopIpc.setReviewFileReviewed, decodeSetReviewFileReviewedInput, (input) =>

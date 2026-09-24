@@ -18,6 +18,7 @@ import { useDesktopCommands } from "./use-desktop-commands";
 import { useRunningLabel } from "../features/conversation/hooks/use-running-label";
 import { useTimelineViewport } from "../features/conversation/hooks/use-timeline-viewport";
 import { buildDisplayTimelineItems } from "../features/conversation/timeline-turns";
+import { useTurnChanges } from "../features/conversation/hooks/use-turn-changes";
 import { formatRelativeTime } from "../lib/string-utils";
 import { restoreTopmostDialogFocus } from "../ui/dialog-focus";
 import { ComposerPanel } from "../features/conversation/composer-panel";
@@ -262,9 +263,19 @@ export default function App() {
   const isTranscriptLoading =
     Boolean(selectedSession) && !selectedTranscriptForSession && !transcriptFailed;
   const selectedSessionRunning = selectedSession?.status === "running";
+  const turnChanges = useTurnChanges({
+    api,
+    target: workbenchTarget,
+    running: selectedSessionRunning,
+    workbench,
+  });
   const timelineRows = useMemo(
-    () => buildDisplayTimelineItems(activeTranscript, { lastTurnRunning: selectedSessionRunning }),
-    [activeTranscript, selectedSessionRunning],
+    () =>
+      buildDisplayTimelineItems(activeTranscript, {
+        lastTurnRunning: selectedSessionRunning,
+        turnChanges: turnChanges.turns,
+      }),
+    [activeTranscript, selectedSessionRunning, turnChanges.turns],
   );
   const viewport = useTimelineViewport({
     sessionKey: selectedSessionKey,
@@ -378,31 +389,6 @@ export default function App() {
       request: { workspaceId: workspace.id, path, nonce: Date.now() },
     });
   }, []);
-  const reviewTurnRequestRef = useRef(0);
-  const handleReviewTurn = useCallback(
-    async (messageId: string) => {
-      const target = workbenchTargetRef.current;
-      if (!api || !target) return;
-      const request = ++reviewTurnRequestRef.current;
-      const stillSelected = () =>
-        workbenchTargetRef.current === target && reviewTurnRequestRef.current === request;
-      try {
-        const result = await api.resolveTurnReview({ target, messageId });
-        if (!stillSelected()) return;
-        if (result.state !== "available") throw new Error(result.message);
-        workbenchRef.current.setChanges({
-          workspaceId: target.workspaceId,
-          selectedPath: null,
-          scope: { kind: "turn", checkpointId: result.checkpointId },
-        });
-        workbenchRef.current.openTool({ kind: "changes" });
-        setDiffFileRequest(null);
-      } catch (error) {
-        if (stillSelected()) throw error;
-      }
-    },
-    [api],
-  );
   const selectedSessionKeyRef = useRef(selectedSessionKey);
   selectedSessionKeyRef.current = selectedSessionKey;
   const selectedWorkspaceRef = useRef(selectedWorkspace);
@@ -1149,7 +1135,7 @@ export default function App() {
                     viewport={viewport}
                     threadSearch={threadSearch}
                     onViewFileInDiff={handleViewFileInDiff}
-                    onReviewTurn={handleReviewTurn}
+                    onOpenTurnChange={turnChanges.openTurnChange}
                     onOpenWorkspaceFileLine={handleOpenWorkspaceFileLine}
                     workspacePath={selectedWorkspace.path}
                     onForkFromMessage={
