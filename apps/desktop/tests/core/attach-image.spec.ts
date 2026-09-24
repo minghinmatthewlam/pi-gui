@@ -39,6 +39,8 @@ test("attaches an image from a stubbed picker result and shows the attachment ch
     await thumb.click();
     await expect(viewer).toBeVisible();
     await expect(viewer.getByRole("img", { name: "screenshot.png" })).toBeVisible();
+    await window.keyboard.press("Shift+Tab");
+    await expect(viewer.getByRole("button", { name: "Close image" })).toBeFocused();
     await window.keyboard.press("Escape");
     await expect(viewer).toHaveCount(0);
     await expect(thumb).toBeFocused();

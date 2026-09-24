@@ -51,7 +51,7 @@ function ImageViewer({
   const dialogRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    dialogRef.current?.focus();
+    dialogRef.current?.querySelector<HTMLButtonElement>(".image-viewer__close")?.focus();
   }, []);
 
   const handleKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
