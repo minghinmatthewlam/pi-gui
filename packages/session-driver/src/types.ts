@@ -1,3 +1,5 @@
+import type { SessionUsageSnapshot } from "./usage.js";
+
 export type WorkspaceId = string;
 export type SessionId = string;
 export type RunId = string;
@@ -38,6 +40,7 @@ export interface SessionSnapshot {
   readonly config?: SessionConfig;
   readonly runningRunId?: RunId;
   readonly queuedMessages?: readonly SessionQueuedMessage[];
+  readonly usage?: SessionUsageSnapshot;
 }
 
 export interface SessionImageAttachment {

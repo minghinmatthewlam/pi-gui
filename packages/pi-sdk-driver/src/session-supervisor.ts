@@ -36,7 +36,9 @@ import type {
   SessionEventListener,
   SessionModelSelection,
   SessionRef,
+  SessionPlanLimits,
   SessionSnapshot,
+  SessionUsageSnapshot,
   SessionSchemaInfo,
   SessionStatus,
   SessionTranscriptItem,
@@ -99,6 +101,7 @@ import {
 import { forcePersistPiSession } from "./compat/pi-session-persistence.js";
 import { createTurnCaptureExtension } from "./turn-capture.js";
 import { createTranscriptIdentityExtension } from "./transcript-identity.js";
+import { createPlanLimitsExtension, readSessionUsage } from "./session-usage.js";
 import {
   createDesktopExtensionBridge,
   type PiDesktopExtensionObserver,
@@ -194,6 +197,8 @@ interface ManagedSessionRecord {
   extensionUiState: ExtensionUiState;
   bindingExtensions: boolean;
   sessionCommands: RuntimeCommandRecord[];
+  /** Context, cache and usage read from pi at the last turn boundary. */
+  usage: SessionUsageSnapshot | undefined;
   /** Path of the advisory lease file this record currently holds, if any. */
   leasePath: string | undefined;
   /** mtime (epoch ms) of the JSONL last reconciled into the served transcript. */
@@ -236,6 +241,8 @@ export class SessionSupervisor {
   private readonly onTurnCaptureBoundary: PiSdkDriverOptions["onTurnCaptureBoundary"];
   private readonly turnCaptureTimeoutMs: number | undefined;
   private readonly records = new Map<string, ManagedSessionRecord>();
+  /** Latest plan limits a provider reported, shared by every session on that provider. */
+  private readonly planLimitsByProvider = new Map<string, SessionPlanLimits>();
   private readonly ensureRecordInFlight = new Map<string, Promise<ManagedSessionRecord>>();
   /** Preserve invocation order so stale touches cannot undo a later rename or removal. */
   private readonly workspaceMutationQueues = new Map<WorkspaceId, Promise<void>>();
@@ -276,6 +283,13 @@ export class SessionSupervisor {
       resourceLoaderOptions: {
         extensionFactories: [
           ...this.extensionFactories,
+          {
+            name: "pi-gui-plan-limits",
+            hidden: true,
+            factory: createPlanLimitsExtension({
+              onPlanLimits: (limits) => this.planLimitsByProvider.set(limits.provider, limits),
+            }),
+          },
           {
             name: "pi-gui-transcript-identity",
             hidden: true,
@@ -1045,6 +1059,7 @@ export class SessionSupervisor {
     await this.emitModelSelection(session, model, previousModel);
     forcePersistPiSession(session.sessionManager);
     record.config = deriveSessionConfig(session.sessionManager);
+    this.refreshUsage(record);
     await this.persistSnapshot(record);
     await this.emit(record, sessionUpdatedEvent(record));
   }
@@ -1085,6 +1100,7 @@ export class SessionSupervisor {
     record.status = "idle";
     record.config = deriveSessionConfig(record.session.sessionManager);
     record.preview = extractPreview(record.session.messages) ?? record.preview;
+    this.refreshUsage(record);
     await this.persistSnapshot(record);
     await this.emit(record, sessionUpdatedEvent(record));
   }
@@ -1290,6 +1306,7 @@ export class SessionSupervisor {
       extensionUiState: createEmptyExtensionUiState(),
       bindingExtensions: false,
       sessionCommands: [],
+      usage: undefined,
       leasePath: undefined,
       transcriptDiskMtimeMs: undefined,
     };
@@ -1479,6 +1496,7 @@ export class SessionSupervisor {
       record.bindingExtensions = false;
     }
     record.sessionCommands = this.collectSessionCommands(session);
+    this.refreshUsage(record);
   }
 
   private async bindSessionRuntime(record: ManagedSessionRecord): Promise<void> {
@@ -2149,6 +2167,16 @@ export class SessionSupervisor {
           record,
         );
       case "turn_end":
+        // The reply is persisted by turn_end, so pi's context count includes it.
+        this.refreshUsage(record);
+        return [sessionUpdatedEvent(record)];
+      case "compaction_end":
+        this.refreshUsage(record);
+        return [sessionUpdatedEvent(record)];
+      case "entry_appended":
+        // Cache-warming refreshes land as usage entries between runs.
+        if (event.entry.type !== "usage") return [];
+        this.refreshUsage(record);
         return [sessionUpdatedEvent(record)];
       case "agent_end": {
         // Pi can retry or continue from agent_before_settle after agent_end.
@@ -2175,6 +2203,8 @@ export class SessionSupervisor {
         if (record.session) {
           record.sessionCommands = this.collectSessionCommands(record.session);
         }
+        // Cache warming is armed or stopped once the run settles.
+        this.refreshUsage(record);
 
         // User cancellation is neither successful completion nor a runtime
         // failure. Publish idle without triggering completion/failure consumers.
@@ -2200,6 +2230,23 @@ export class SessionSupervisor {
       }
       default:
         return [];
+    }
+  }
+
+  private refreshUsage(record: ManagedSessionRecord): void {
+    const session = record.session;
+    if (!session) {
+      record.usage = undefined;
+      return;
+    }
+    try {
+      const provider = session.model?.provider;
+      record.usage = readSessionUsage(
+        session,
+        provider ? this.planLimitsByProvider.get(provider) : undefined,
+      );
+    } catch (error) {
+      console.warn("[pi-sdk-driver] reading session usage failed", error);
     }
   }
 
