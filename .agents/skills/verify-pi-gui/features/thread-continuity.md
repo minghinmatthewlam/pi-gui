@@ -13,7 +13,7 @@ Users keep independent conversations and drafts, switch while an agent works, an
 ## How to get to it (user POV)
 
 - Click a thread row in the workspace sidebar.
-- Hover a thread and use Archive; expand Archived and use Restore.
+- Hover a thread and use Archive; expand Archived and use Restore. Archive is also in the thread-actions menu and on Shift+Cmd+A; see [archive](archive.md). The default recipe drives only the hover route.
 - Quit and reopen the app, then select either thread.
 
 ## Driving it with Playwright

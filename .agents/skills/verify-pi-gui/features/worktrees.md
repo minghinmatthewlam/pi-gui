@@ -10,7 +10,10 @@ Users create a separate Git workspace or choose a worktree environment for a new
 
 ## How to get to it (user POV)
 
-- Open Workspace actions for the repository and choose Create permanent worktree.
+- Open Workspace actions for the repository and choose Create permanent worktree. Under Time grouping the folder row is hidden once it has threads; switch Customize Sidebar → Grouping → Workspace first. The new worktree gets no sidebar row of its own; its threads show under the root folder with a worktree icon.
+- On a linked worktree, the same menu offers Remove worktree, with a confirmation.
+- The Fork modal offers the same Local or Worktree choice.
+- The old Worktrees side panel has been removed; it is not an entry point.
 - Click New thread in the sidebar and choose Local or Worktree.
 
 ## Driving it with Playwright
