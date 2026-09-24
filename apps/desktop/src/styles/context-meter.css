@@ -75,6 +75,16 @@
   cursor: default;
 }
 
+/* Keeps the pointer inside the hover area while it crosses the gap to the card. */
+.context-meter__card::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  height: 8px;
+}
+
 .context-meter__section {
   padding: 8px 0;
   border-top: 1px solid var(--border-light);

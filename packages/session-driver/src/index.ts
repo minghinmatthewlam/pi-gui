@@ -87,7 +87,7 @@ export type {
   SessionContextUsage,
   SessionPlanLimit,
   SessionPlanLimits,
-  SessionPromptCacheState,
+  SessionPromptCache,
   SessionTokenCounts,
   SessionUsageSnapshot,
 } from "./usage.js";

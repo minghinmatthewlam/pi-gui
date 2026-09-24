@@ -2019,6 +2019,8 @@ export class SessionSupervisor {
     const displayMessages = displayMessagesFromSession(session.sessionManager);
     record.preview = extractPreview(displayMessages.at(-1));
     record.sessionCommands = this.collectSessionCommands(session);
+    // Tree navigation and reloads change which branch pi counts.
+    this.refreshUsage(record);
     await this.persistSnapshot(record);
     if (options.emitUpdate) {
       await this.emit(record, sessionUpdatedEvent(record));
@@ -2174,10 +2176,15 @@ export class SessionSupervisor {
         this.refreshUsage(record);
         return [sessionUpdatedEvent(record)];
       case "entry_appended":
-        // Cache-warming refreshes land as usage entries between runs.
+        // Cache-warming refreshes land as usage entries. pi announces them
+        // before rescheduling the next refresh, so read once it has.
         if (event.entry.type !== "usage") return [];
-        this.refreshUsage(record);
-        return [sessionUpdatedEvent(record)];
+        queueMicrotask(() => {
+          if (record.closed) return;
+          this.refreshUsage(record);
+          this.queueDriverEvents(record, [sessionUpdatedEvent(record)], { persistSnapshot: false });
+        });
+        return [];
       case "agent_end": {
         // Pi can retry or continue from agent_before_settle after agent_end.
         // Keep one desktop run alive until Pi publishes its settled boundary.

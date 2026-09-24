@@ -45,10 +45,13 @@ async function runOneTurn(t: TestContext, promptCache: Record<string, number> | 
   await mkdir(agentDir);
   await mkdir(cwd);
   const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
+  const previousRetention = process.env.PI_CACHE_RETENTION;
   process.env.PI_CODING_AGENT_DIR = agentDir;
+  delete process.env.PI_CACHE_RETENTION;
   t.after(() => {
     if (previousAgentDir === undefined) delete process.env.PI_CODING_AGENT_DIR;
     else process.env.PI_CODING_AGENT_DIR = previousAgentDir;
+    if (previousRetention !== undefined) process.env.PI_CACHE_RETENTION = previousRetention;
   });
   t.mock.method(globalThis, "fetch", async () => {
     throw new Error("session usage tests must never use the network");
@@ -71,6 +74,13 @@ async function runOneTurn(t: TestContext, promptCache: Record<string, number> | 
               id: "scripted",
               input: ["text"],
               contextWindow: 128000,
+              maxTokens: 4096,
+              ...(promptCache ? { promptCache } : {}),
+            },
+            {
+              id: "other",
+              input: ["text"],
+              contextWindow: 64000,
               maxTokens: 4096,
               ...(promptCache ? { promptCache } : {}),
             },
@@ -107,17 +117,17 @@ async function runOneTurn(t: TestContext, promptCache: Record<string, number> | 
     },
   );
   await driver.sendUserMessage(snapshot.ref, { text: "hello" });
-  return { opened: snapshot, completed: await completed, events };
+  return { driver, opened: snapshot, completed: await completed, events };
 }
 
-test("a fresh session reports its context window before any turn", async (t) => {
+await test("a fresh session reports its context window before any turn", async (t) => {
   const { opened } = await runOneTurn(t, undefined);
   assert.equal(opened.usage?.context?.contextWindow, 128000);
   assert.equal(opened.usage?.lastTurn, undefined);
-  assert.deepEqual(opened.usage?.cache, { kind: "unknown" });
+  assert.deepEqual(opened.usage?.cache, {});
 });
 
-test("a completed turn reports pi's context, cache and totals", async (t) => {
+await test("a completed turn reports pi's context, cache and totals", async (t) => {
   const { completed } = await runOneTurn(t, { short: 300 });
   const usage = completed.snapshot.usage;
   assert.ok(usage);
@@ -137,17 +147,26 @@ test("a completed turn reports pi's context, cache and totals", async (t) => {
   assert.equal(usage.subscription, false);
   // The cache entry lapses one lifetime after the request that last touched it.
   assert.deepEqual(usage.cache, {
-    kind: "expires",
     expiresAt: new Date(REQUEST_STARTED_AT + 300_000).toISOString(),
   });
 });
 
-test("a model without a declared cache lifetime reports unknown expiry", async (t) => {
-  const { completed } = await runOneTurn(t, undefined);
-  assert.deepEqual(completed.snapshot.usage?.cache, { kind: "unknown" });
+await test("switching models drops the old model's cache expiry", async (t) => {
+  const { driver, completed, events } = await runOneTurn(t, { short: 300 });
+  await driver.setSessionModel(completed.sessionRef, { provider: "usage-test", modelId: "other" });
+  const latest = events.filter((event) => event.type === "sessionUpdated").at(-1);
+  assert.ok(latest?.type === "sessionUpdated");
+  assert.equal(latest.snapshot.usage?.context?.contextWindow, 64000);
+  // The last reply was the other model's, so nothing is cached for this one.
+  assert.deepEqual(latest.snapshot.usage?.cache, {});
 });
 
-test("Codex plan-limit headers parse into windows", () => {
+await test("a model without a declared cache lifetime reports unknown expiry", async (t) => {
+  const { completed } = await runOneTurn(t, undefined);
+  assert.deepEqual(completed.snapshot.usage?.cache, {});
+});
+
+await test("Codex plan-limit headers parse into windows", () => {
   // Shape captured from a live ChatGPT-subscription Codex response.
   const limits = parsePlanLimitHeaders({
     "x-codex-plan-type": "pro",
@@ -168,7 +187,7 @@ test("Codex plan-limit headers parse into windows", () => {
   ]);
 });
 
-test("Claude unified limit headers parse as percentages", () => {
+await test("Claude unified limit headers parse as percentages", () => {
   const limits = parsePlanLimitHeaders({
     "Anthropic-Ratelimit-Unified-5h-Utilization": "0.41",
     "anthropic-ratelimit-unified-5h-reset": "1790416878",
@@ -178,6 +197,6 @@ test("Claude unified limit headers parse as percentages", () => {
   assert.ok(Math.abs((limits[0]?.usedPercent ?? 0) - 41) < 1e-9);
 });
 
-test("responses without plan headers report nothing", () => {
+await test("responses without plan headers report nothing", () => {
   assert.deepEqual(parsePlanLimitHeaders({ "content-type": "text/event-stream" }), []);
 });

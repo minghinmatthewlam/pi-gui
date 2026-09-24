@@ -17,15 +17,17 @@ export interface SessionContextUsage {
 }
 
 /**
- * What is known about the provider's prompt cache for this session's last request.
- * - `warming`: pi is keeping it alive and sends a refresh at `nextRefreshAt`.
- * - `expires`: the model declares a cache lifetime; the entry lapses at `expiresAt`.
- * - `unknown`: the model does not declare a lifetime, so expiry cannot be shown.
+ * What is known about the provider's prompt cache for the current model. Both
+ * times are absolute so readers can count down without new snapshots; pi can
+ * stop warming without an event, so a past `nextRefreshAt` means no refresh is
+ * coming and `expiresAt` applies.
  */
-export type SessionPromptCacheState =
-  | { readonly kind: "warming"; readonly nextRefreshAt: Timestamp }
-  | { readonly kind: "expires"; readonly expiresAt: Timestamp }
-  | { readonly kind: "unknown" };
+export interface SessionPromptCache {
+  /** When the entry lapses unless touched; absent when the model declares no cache lifetime. */
+  readonly expiresAt?: Timestamp;
+  /** When pi's cache warmer plans its next refresh; absent when warming is not scheduled. */
+  readonly nextRefreshAt?: Timestamp;
+}
 
 /** One provider-reported plan limit window, such as a 5-hour or weekly limit. */
 export interface SessionPlanLimit {
@@ -45,7 +47,7 @@ export interface SessionUsageSnapshot {
   readonly context?: SessionContextUsage;
   /** Prompt tokens of the latest reply, for the cache hit rate. */
   readonly lastTurn?: SessionTokenCounts;
-  readonly cache: SessionPromptCacheState;
+  readonly cache: SessionPromptCache;
   /** Totals for the whole session, including compaction and cache-warming requests. */
   readonly totals: SessionTokenCounts & { readonly cost: number };
   /** True when the provider bills through a subscription, so `totals.cost` is not money spent. */

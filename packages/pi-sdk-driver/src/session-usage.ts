@@ -2,7 +2,7 @@ import type { AgentSession, ExtensionFactory } from "@earendil-works/pi-coding-a
 import type {
   SessionPlanLimit,
   SessionPlanLimits,
-  SessionPromptCacheState,
+  SessionPromptCache,
   SessionTokenCounts,
   SessionUsageSnapshot,
 } from "@pi-gui/session-driver";
@@ -18,9 +18,9 @@ export function readSessionUsage(
   const model = session.model;
   if (!model) return undefined;
 
-  const contextUsage = session.getContextUsage();
-  const compaction = session.settingsManager.getCompactionSettings(model);
   const stats = session.getSessionStats();
+  const contextUsage = stats.contextUsage;
+  const compaction = session.settingsManager.getCompactionSettings(model);
   const branch = session.sessionManager.getBranch();
 
   return {
@@ -36,7 +36,7 @@ export function readSessionUsage(
         }
       : {}),
     ...withLastTurn(latestAssistantUsage(branch)),
-    cache: promptCacheState(session, branch),
+    cache: promptCache(session, model, branch),
     totals: {
       input: stats.tokens.input,
       output: stats.tokens.output,
@@ -52,9 +52,12 @@ export function readSessionUsage(
 }
 
 type BranchEntry = ReturnType<AgentSession["sessionManager"]["getBranch"]>[number];
+type SessionModel = NonNullable<AgentSession["model"]>;
 
 interface AssistantUsage {
   readonly counts: SessionTokenCounts;
+  readonly provider: string;
+  readonly model: string;
   /** When the request started, which is when the provider last touched its cache entry. */
   readonly requestedAtMs: number;
 }
@@ -71,46 +74,62 @@ function latestAssistantUsage(branch: readonly BranchEntry[]): AssistantUsage | 
     if (message.stopReason === "aborted" || message.stopReason === "error") continue;
     const { input, output, cacheRead, cacheWrite } = message.usage;
     if (input + output + cacheRead + cacheWrite === 0) continue;
-    return { counts: { input, output, cacheRead, cacheWrite }, requestedAtMs: message.timestamp };
+    return {
+      counts: { input, output, cacheRead, cacheWrite },
+      provider: message.provider,
+      model: message.model,
+      requestedAtMs: message.timestamp,
+    };
   }
   return undefined;
 }
 
-function promptCacheState(
+function promptCache(
   session: AgentSession,
+  model: SessionModel,
   branch: readonly BranchEntry[],
-): SessionPromptCacheState {
+): SessionPromptCache {
   const warming = session.cacheWarmingStatus;
-  if (warming?.state === "refreshing") {
-    return { kind: "warming", nextRefreshAt: new Date().toISOString() };
-  }
-  if (warming?.state === "scheduled" && warming.nextWarmAt !== undefined) {
-    return { kind: "warming", nextRefreshAt: new Date(warming.nextWarmAt).toISOString() };
-  }
-
-  const ttlMs = promptCacheTtlMs(session);
-  const lastRequestAtMs = latestCacheTouchMs(branch);
-  if (ttlMs === undefined || lastRequestAtMs === undefined) return { kind: "unknown" };
-  return { kind: "expires", expiresAt: new Date(lastRequestAtMs + ttlMs).toISOString() };
+  const nextRefreshAt =
+    warming?.state === "scheduled" && warming.nextWarmAt !== undefined
+      ? new Date(warming.nextWarmAt).toISOString()
+      : undefined;
+  const ttlMs = promptCacheTtlMs(model);
+  const touchedAtMs = latestCacheTouchMs(model, branch);
+  return {
+    ...(ttlMs !== undefined && touchedAtMs !== undefined
+      ? { expiresAt: new Date(touchedAtMs + ttlMs).toISOString() }
+      : {}),
+    ...(nextRefreshAt ? { nextRefreshAt } : {}),
+  };
 }
 
 /**
  * Mirrors pi's `getPromptCacheTtlMs`, which pi does not export. AgentSession
  * never sets `cacheRetention`, so the tier comes from `PI_CACHE_RETENTION`.
  */
-function promptCacheTtlMs(session: AgentSession): number | undefined {
+function promptCacheTtlMs(model: SessionModel): number | undefined {
   const retention = process.env.PI_CACHE_RETENTION === "long" ? "long" : "short";
-  const seconds = session.model?.promptCache?.[retention];
+  const seconds = model.promptCache?.[retention];
   return seconds === undefined ? undefined : seconds * 1000;
 }
 
-/** Latest provider request on this branch: a real reply or a cache-warming refresh. */
-function latestCacheTouchMs(branch: readonly BranchEntry[]): number | undefined {
-  let latest = latestAssistantUsage(branch)?.requestedAtMs;
+/**
+ * Latest request that touched the current model's cache entry: its last reply,
+ * or a cache-warming refresh after it. Another model's requests do not count.
+ */
+function latestCacheTouchMs(
+  model: SessionModel,
+  branch: readonly BranchEntry[],
+): number | undefined {
+  const reply = latestAssistantUsage(branch);
+  if (!reply || reply.provider !== model.provider || reply.model !== model.id) return undefined;
+  let latest = reply.requestedAtMs;
   for (const entry of branch) {
     if (entry.type !== "usage" || entry.kind !== "cache_warm") continue;
+    if (entry.provider !== model.provider) continue;
     const at = Date.parse(entry.timestamp);
-    if (Number.isFinite(at) && (latest === undefined || at > latest)) latest = at;
+    if (Number.isFinite(at) && at > latest) latest = at;
   }
   return latest;
 }

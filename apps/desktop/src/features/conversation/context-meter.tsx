@@ -1,7 +1,7 @@
 import { useEffect, useId, useState } from "react";
 import type {
   SessionPlanLimit,
-  SessionPromptCacheState,
+  SessionPromptCache,
   SessionUsageSnapshot,
 } from "@pi-gui/session-driver";
 
@@ -132,44 +132,35 @@ function Row({ label, value }: { readonly label: string; readonly value: string 
   );
 }
 
-function CacheRow({
-  cache,
-  now,
-}: {
-  readonly cache: SessionPromptCacheState;
-  readonly now: number;
-}) {
-  switch (cache.kind) {
-    case "warming":
-      return (
-        <Row
-          label="Kept warm"
-          value={`next refresh in ${formatCountdown(Date.parse(cache.nextRefreshAt) - now)}`}
-        />
-      );
-    case "expires": {
-      const remaining = Date.parse(cache.expiresAt) - now;
-      return remaining > 0 ? (
-        <Row label="Expires in" value={formatCountdown(remaining)} />
-      ) : (
-        <Row label="Expiry" value="expired, next turn rewrites it" />
-      );
-    }
-    case "unknown":
-      return <Row label="Expiry" value="not reported by this model" />;
+function CacheRow({ cache, now }: { readonly cache: SessionPromptCache; readonly now: number }) {
+  const nextRefreshIn = cache.nextRefreshAt ? Date.parse(cache.nextRefreshAt) - now : 0;
+  if (nextRefreshIn > 0) {
+    return <Row label="Kept warm" value={`next refresh in ${formatCountdown(nextRefreshIn)}`} />;
   }
+  if (!cache.expiresAt) return <Row label="Expiry" value="not reported by this model" />;
+  const expiresIn = Date.parse(cache.expiresAt) - now;
+  return expiresIn > 0 ? (
+    <Row label="Expires in" value={formatCountdown(expiresIn)} />
+  ) : (
+    <Row label="Expiry" value="expired, next turn rewrites it" />
+  );
 }
 
 function hasCountdown(usage: SessionUsageSnapshot | undefined): boolean {
-  return Boolean(usage && (usage.cache.kind !== "unknown" || usage.planLimits));
+  return Boolean(usage && (usage.cache.expiresAt || usage.cache.nextRefreshAt || usage.planLimits));
 }
 
-/** Current time, ticking every second only while something on screen counts down. */
+/** Current time; re-renders every second only while something on screen counts down. */
 function useNow(ticking: boolean): number {
   const [now, setNow] = useState(() => Date.now());
+  const [wasTicking, setWasTicking] = useState(ticking);
+  if (ticking !== wasTicking) {
+    // Read the clock during the render that opens the card, so it never shows a stale countdown.
+    setWasTicking(ticking);
+    setNow(Date.now());
+  }
   useEffect(() => {
     if (!ticking) return undefined;
-    setNow(Date.now());
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
   }, [ticking]);
