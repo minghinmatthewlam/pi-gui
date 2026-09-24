@@ -199,7 +199,7 @@ export const desktopCommands = {
   openNewThread: "open-new-thread",
   toggleTerminal: "toggle-terminal",
   toggleSidePanel: "toggle-side-panel",
-  toggleChanges: "toggle-changes",
+  toggleReview: "toggle-review",
   closeFocusedSurface: "close-focused-surface",
   toggleSidebar: "toggle-sidebar",
   openCommandPalette: "open-command-palette",
@@ -388,7 +388,7 @@ export function createDesktopCommandSubscription() {
 
 /** Collapses a repeated keydown from one physical chord so a toggle stays open. */
 export const SEARCH_CHORD_TOGGLE_MS = 200;
-export const CHANGES_TOGGLE_DEDUPE_MS = 8;
+export const REVIEW_TOGGLE_DEDUPE_MS = 8;
 
 export type ChordSource = "main" | "renderer";
 
@@ -396,7 +396,7 @@ export type ChordSource = "main" | "renderer";
  * Collapses one chord that reaches the renderer twice, once forwarded by the main
  * process and once as a keydown. Repeats from the same source are separate presses.
  */
-export function createChordPairGate(windowMs = CHANGES_TOGGLE_DEDUPE_MS) {
+export function createChordPairGate(windowMs = REVIEW_TOGGLE_DEDUPE_MS) {
   let last: { readonly source: ChordSource; readonly at: number } | undefined;
   return (source: ChordSource, now: number): boolean => {
     if (last && last.source !== source && now - last.at < windowMs) {
@@ -426,13 +426,13 @@ function isBufferedModifierChord(key: string, code?: string): boolean {
   const lower = key.toLowerCase();
   if (lower === "f" || code === "KeyF") return true;
   if (lower === "," || code === "Comma") return true;
-  if (lower === "d" || code === "KeyD") return true;
+  if (lower === "r" || code === "KeyR") return true;
   return /^[1-9]$/.test(key) || /^Digit[1-9]$/.test(code ?? "");
 }
 
 /**
  * Keeps Command/Ctrl chords that arrive before the React shortcut listener
- * exists. Search, settings, Changes, and thread digits are replayed.
+ * exists. Search, settings, Review, and thread digits are replayed.
  */
 export function createEarlyModifierChordBuffer() {
   const pending: EarlyModifierChord[] = [];
@@ -466,12 +466,12 @@ export function getDesktopCommandFromShortcut(
   const isComma = input.key === "," || input.code === "Comma";
   const isB = lowerKey === "b" || input.code === "KeyB";
   const isJ = lowerKey === "j" || input.code === "KeyJ";
-  const isD = lowerKey === "d" || input.code === "KeyD";
+  const isR = lowerKey === "r" || input.code === "KeyR";
   const isK = lowerKey === "k" || input.code === "KeyK";
   const isP = lowerKey === "p" || input.code === "KeyP";
   const isN = lowerKey === "n" || input.code === "KeyN";
   const isShiftO = input.shift && (lowerKey === "o" || input.code === "KeyO");
-  const isShiftR = input.shift && (lowerKey === "r" || input.code === "KeyR");
+  const isShiftR = input.shift && isR;
   const isShiftA = input.shift && (lowerKey === "a" || input.code === "KeyA");
 
   if (input.alt) {
@@ -489,8 +489,8 @@ export function getDesktopCommandFromShortcut(
     return desktopCommands.toggleTerminal;
   }
 
-  if (!input.shift && isD) {
-    return desktopCommands.toggleChanges;
+  if (!input.shift && isR) {
+    return desktopCommands.toggleReview;
   }
 
   if (!input.shift && isB) {
@@ -542,11 +542,13 @@ export function isPaletteCommand(command: PiDesktopCommand | undefined): boolean
 /**
  * Commands that act once per press and only from the platform modifier. macOS
  * Control chords stay with text fields, and off macOS the terminal keeps Control
- * chords. Holding Archive would otherwise archive each next thread in turn.
+ * chords. Holding Archive would otherwise archive each next thread in turn, and
+ * holding Review would flicker the panel.
  */
 export function isSinglePressCommand(command: PiDesktopCommand | undefined): boolean {
   return (
     isPaletteCommand(command) ||
+    command === desktopCommands.toggleReview ||
     command === desktopCommands.renameThread ||
     command === desktopCommands.archiveThread
   );

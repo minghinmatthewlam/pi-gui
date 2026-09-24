@@ -26,6 +26,14 @@ test("one icon and keyboard shortcuts toggle the selected workspace tool", async
     await expect(toggle).toHaveCount(1);
     await expect(toggle).toBeVisible();
     await expect(toggle).toHaveText("");
+    await toggle.click();
+    const chooser = window.getByTestId("workbench-chooser");
+    if (!(await chooser.isVisible())) await window.getByTestId("workbench-add-tab").click();
+    const modifierLabel = process.platform === "darwin" ? "⌘" : "Ctrl+";
+    const tile = (name: string) => chooser.getByRole("button", { name, exact: true });
+    await expect(tile("Review").locator("kbd")).toHaveText(`${modifierLabel}R`);
+    await expect(tile("Terminal").locator("kbd")).toHaveText(`${modifierLabel}J`);
+    await expect(tile("Files").locator("kbd")).toHaveCount(0);
     await selectSidePanel(window, "Files");
     await expect(toggle).toHaveAttribute("aria-pressed", "true");
 
@@ -36,10 +44,10 @@ test("one icon and keyboard shortcuts toggle the selected workspace tool", async
     await window.keyboard.press(desktopShortcut("Alt+B"));
     await expect(window.getByTestId("file-workbench")).toBeVisible();
 
-    await selectSidePanel(window, "Changes");
+    await selectSidePanel(window, "Review");
     await expect(window.locator(".diff-panel")).toBeVisible();
     await expect(window.getByTestId("file-workbench")).toHaveCount(0);
-    await window.keyboard.press(desktopShortcut("D"));
+    await window.keyboard.press(desktopShortcut("R"));
     await expect(window.getByTestId("workbench")).toHaveCount(0);
     await window.keyboard.press(desktopShortcut("Alt+B"));
     await expect(window.locator(".diff-panel")).toBeVisible();
@@ -71,6 +79,22 @@ test("one icon and keyboard shortcuts toggle the selected workspace tool", async
     await expect(
       window.getByRole("tablist", { name: "Workspace tools" }).getByRole("tab"),
     ).toHaveCount(3);
+
+    // Cmd+R reaches Review from the terminal on macOS; Ctrl+R stays with the shell elsewhere.
+    await terminal.locator(".xterm").click();
+    await harness.electronApp.evaluate(({ BrowserWindow }, keyModifier) => {
+      BrowserWindow.getAllWindows()[0]?.webContents.sendInputEvent({
+        type: "keyDown",
+        keyCode: "r",
+        modifiers: [keyModifier],
+      });
+    }, modifier);
+    if (process.platform === "darwin") {
+      await expect(window.locator(".diff-panel")).toBeVisible();
+    } else {
+      await expect(terminal.locator(".xterm-rows")).toContainText(/i-search/);
+      await expect(window.locator(".diff-panel")).toHaveCount(0);
+    }
   } finally {
     await harness.close();
   }

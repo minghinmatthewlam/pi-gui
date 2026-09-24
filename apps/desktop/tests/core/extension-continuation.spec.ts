@@ -127,9 +127,7 @@ test("keeps no-tool continuation replies separate and completes only after settl
     );
     await expect(window.getByTestId("send")).toHaveAttribute("aria-label", "Stop run");
     expect(
-      (await getSelectedTranscript(window))?.transcript.filter(
-        (item) => item.kind === "summary" && item.presentation === "divider",
-      ),
+      (await getSelectedTranscript(window))?.transcript.filter((item) => item.kind === "summary"),
     ).toHaveLength(0);
 
     await confirmation.getByTestId("extension-dialog-confirm").click();
@@ -139,9 +137,7 @@ test("keeps no-tool continuation replies separate and completes only after settl
     await expect(assistantRows).toHaveText(["First response", "Continued response"]);
     await expect(window.getByTestId("send")).toHaveAttribute("aria-label", "Stop run");
     expect(
-      (await getSelectedTranscript(window))?.transcript.filter(
-        (item) => item.kind === "summary" && item.presentation === "divider",
-      ),
+      (await getSelectedTranscript(window))?.transcript.filter((item) => item.kind === "summary"),
     ).toHaveLength(0);
 
     await settlement.getByTestId("extension-dialog-confirm").click();
@@ -153,14 +149,11 @@ test("keeps no-tool continuation replies separate and completes only after settl
     );
     await expect(window.getByTestId("send")).not.toHaveAttribute("aria-label", "Stop run");
     await expect(window.getByTestId("composer-error-banner")).toHaveCount(0);
-    await expect
-      .poll(
-        async () =>
-          (await getSelectedTranscript(window))?.transcript.filter(
-            (item) => item.kind === "summary" && item.presentation === "divider",
-          ).length,
-      )
-      .toBe(1);
+    // A no-tool run that completes cleanly adds no summary row: no failure or
+    // "Completed" divider, and "Worked for" is derived by the renderer.
+    expect(
+      (await getSelectedTranscript(window))?.transcript.filter((item) => item.kind === "summary"),
+    ).toHaveLength(0);
   } finally {
     await harness.close();
   }

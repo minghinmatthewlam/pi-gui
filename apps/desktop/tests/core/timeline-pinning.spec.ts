@@ -344,7 +344,7 @@ test("keeps the latest assistant content visible when the composer grows at the 
       .toBeLessThanOrEqual(16);
 
     const diffPanel = window.locator(".diff-panel");
-    await window.keyboard.press(desktopShortcut("D"));
+    await window.keyboard.press(desktopShortcut("R"));
     await expect(diffPanel).toBeVisible();
     await expect(diffPanel.locator(".diff-panel__file-name")).toContainText("README.md");
     await expect(window.getByTestId("timeline-pane")).toBeVisible();
@@ -717,11 +717,8 @@ test("keeps a reopened virtualized long transcript stable", async () => {
       hasText: pinnedStream.fullText,
     });
     await expect(streamedRow).toBeVisible();
-    const streamedCompletionRow = window
-      .locator(".timeline-summary", { hasText: "Worked for" })
-      .last();
-    const streamedBaseline = await waitForStableVirtualizedBottom(window, streamedCompletionRow);
-    await expectStableTimelineWindow(window, streamedCompletionRow, streamedBaseline);
+    const streamedBaseline = await waitForStableVirtualizedBottom(window, streamedRow);
+    await expectStableTimelineWindow(window, streamedRow, streamedBaseline);
   } finally {
     await harness.close();
   }
@@ -802,7 +799,7 @@ test("keeps the mid-thread viewport stable when the composer grows away from the
     const beforeDiffMetrics = await getTimelineScrollMetrics(window);
     const pane = window.getByTestId("timeline-pane");
     const beforeDiffWidth = await pane.evaluate((element) => element.clientWidth);
-    await window.keyboard.press(desktopShortcut("D"));
+    await window.keyboard.press(desktopShortcut("R"));
     await expect(diffPanel).toBeVisible();
     await expect(diffPanel.locator(".diff-panel__file-name")).toContainText("README.md");
     await expect

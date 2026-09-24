@@ -47,8 +47,8 @@ test("maps Alt+B to the side panel and leaves plain B on the sidebar", () => {
     getDesktopCommandFromShortcut({ modifier: true, shift: false, key: "b", code: "KeyB" }),
   ).toBe(desktopCommands.toggleSidebar);
   expect(
-    getDesktopCommandFromShortcut({ modifier: true, shift: false, key: "d", code: "KeyD" }),
-  ).toBe(desktopCommands.toggleChanges);
+    getDesktopCommandFromShortcut({ modifier: true, shift: false, key: "r", code: "KeyR" }),
+  ).toBe(desktopCommands.toggleReview);
   expect(getSidePanelToggleShortcutLabel("darwin")).toBe("⌘⌥B");
   expect(getSidePanelToggleShortcutLabel("linux")).toBe("Ctrl+Alt+B");
   expect(getSidePanelToggleShortcutLabel("win32")).toBe("Ctrl+Alt+B");

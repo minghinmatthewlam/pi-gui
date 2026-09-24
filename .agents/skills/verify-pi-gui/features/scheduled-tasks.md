@@ -13,17 +13,18 @@ Users create local on-device schedules from the Scheduled sidebar, a thread menu
 
 - Click Scheduled in the sidebar.
 - Choose Create ▾ → Set up manually, or Create with pi.
-- From a thread, open the header ⋯ and choose Add scheduled task… / Edit scheduled task….
+- From a thread, open the thread-actions menu (header Thread actions button, right-click the row, or Cmd-K) and choose Add scheduled task… / Edit scheduled task….
+- Cmd-K also lists a Scheduled tasks entry.
 
 ## Driving it with Playwright
 
 Preconditions: isolated profile and fixture folder. Core coverage is credential-free; do not fake `auth.json` / `~/.pi`.
 
-- **Run:** `pnpm --filter @pi-gui/desktop run test:e2e:runner -- apps/desktop/tests/core/scheduled-tasks.spec.ts apps/desktop/tests/core/scheduled-task-runtime-tools.spec.ts`.
+- **Run:** `PI_APP_TEST_LANE=core PI_APP_REAL_AUTH=0 pnpm --filter @pi-gui/desktop run test:e2e:runner -- apps/desktop/tests/core/scheduled-tasks.spec.ts apps/desktop/tests/core/scheduled-task-runtime-tools.spec.ts`. No `prove.sh` lane drives scheduled tasks.
 - **List/create:** click Scheduled, Set up manually, fill title and instruction, Create. Active should show the row and next-run copy. Pause, then restart the same profile.
 - **Interview:** Create with pi. Composer must contain the interview prompt and the transcript must have no assistant row.
 - **Fire:** bind a due once/interval task to the selected thread, call the test-mode fire hook, require `sent-by-scheduled-task`.
-- **Tool:** `runScheduledTaskRuntimeTool` with `create_scheduled_task`. The snapshot must contain the new task id.
+- **Tool:** `runScheduledTaskRuntimeTool` with `create_scheduled_task`, then `list_scheduled_tasks`. The snapshot must contain the new task id. No spec calls `update_scheduled_task`; do not claim it is covered.
 
 This is fixture-backed Electron proof, not real-provider interview execution. A live tool-call interview belongs only behind `PI_APP_REAL_AUTH=1`.
 

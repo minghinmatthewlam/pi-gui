@@ -75,7 +75,7 @@ test("syntax-highlights known languages and leaves unknown extensions plain", as
   test.setTimeout(45_000);
   const { harness, window } = await launchSeeded("Review UX highlight");
   try {
-    await selectSidePanel(window, "Changes");
+    await selectSidePanel(window, "Review");
     const diffPanel = window.locator(".diff-panel");
     await expect(diffPanel).toBeVisible();
 
@@ -133,7 +133,7 @@ test("reviewed marks survive relaunch and apply only to the reviewed file revisi
       value: legacyValue,
     });
 
-    await selectSidePanel(firstWindow, "Changes");
+    await selectSidePanel(firstWindow, "Review");
     const diffPanel = firstWindow.locator(".diff-panel");
     await expect(diffPanel).toBeVisible();
     await expect(diffPanel.locator(".diff-panel__file")).toHaveCount(3);
@@ -164,7 +164,7 @@ test("reviewed marks survive relaunch and apply only to the reviewed file revisi
   const window = await reopened.firstWindow();
   try {
     await expect(window.locator(".chat-header__title")).toBeVisible();
-    await selectSidePanel(window, "Changes");
+    await selectSidePanel(window, "Review");
     const reopenedPanel = window.locator(".diff-panel");
     await expect(reopenedPanel).toBeVisible();
     await expect(reopenedPanel.getByTestId("diff-panel-counter")).toHaveText("Reviewed 2 of 3");
@@ -198,10 +198,10 @@ test("Files mode shows a file browser and reader instead of the changes reviewer
   test.setTimeout(45_000);
   const { harness, window } = await launchSeeded("Review UX files mode");
   try {
-    await selectSidePanel(window, "Changes");
+    await selectSidePanel(window, "Review");
     const diffPanel = window.locator(".diff-panel");
     await expect(diffPanel).toBeVisible();
-    await expect(diffPanel.locator(".diff-panel__title")).toHaveText("Changes");
+    await expect(diffPanel.locator(".diff-panel__title")).toHaveText("Review");
     await expect(diffPanel.getByTestId("diff-panel-counter")).toHaveText("Reviewed 0 of 3");
 
     await diffPanel
@@ -299,7 +299,7 @@ test("highlighting tokens swap palettes when the dark class flips", async () => 
   test.setTimeout(45_000);
   const { harness, window } = await launchSeeded("Review UX theme");
   try {
-    await selectSidePanel(window, "Changes");
+    await selectSidePanel(window, "Review");
 
     const diffPanel = window.locator(".diff-panel");
     await diffPanel

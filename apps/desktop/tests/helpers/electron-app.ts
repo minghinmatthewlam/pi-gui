@@ -1625,7 +1625,7 @@ export async function waitForTimelineLayout(window: Page): Promise<void> {
 
 export async function selectSidePanel(
   window: Page,
-  choice: "Files" | "Changes" | "Terminal",
+  choice: "Files" | "Review" | "Terminal",
 ): Promise<void> {
   const workbench = window.getByTestId("workbench");
   if (!(await workbench.isVisible())) {

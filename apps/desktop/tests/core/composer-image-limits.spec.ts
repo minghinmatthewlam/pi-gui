@@ -177,7 +177,10 @@ test("relaunch skips oversized saved images without halting startup", async () =
       composerImageSavedSkipMessage(1),
     );
     await expect(window.locator(".composer-attachment")).toHaveCount(1);
-    await expect(window.locator(".composer-attachment__name")).toContainText("tiny.png");
+    await expect(window.locator(".composer-attachment__preview")).toHaveAttribute(
+      "title",
+      "tiny.png",
+    );
     await captureComposerProof(window, "composer_restore_skip_diagnostic.png");
     expect(await readFile(attachmentPath, "utf8")).toBe(original);
   } finally {
@@ -250,8 +253,11 @@ test("relaunch skips oversize-pixel saved images without rewriting the attachmen
       composerImageSavedSkipMessage(1),
     );
     await expect(window.locator(".composer-attachment")).toHaveCount(1);
-    await expect(window.locator(".composer-attachment__name")).toContainText("tiny.png");
-    await expect(window.locator(".composer-attachment__name")).not.toContainText("wide.png");
+    await expect(window.locator(".composer-attachment__preview")).toHaveAttribute(
+      "title",
+      "tiny.png",
+    );
+    await expect(window.getByRole("button", { name: "View wide.png" })).toHaveCount(0);
     await captureComposerProof(window, "composer_restore_pixel_skip.png");
     expect(await readFile(attachmentPath, "utf8")).toBe(original);
   } finally {
@@ -322,8 +328,11 @@ test("legacy migration skips oversize-pixel images before the composer map", asy
       composerImageSavedSkipMessage(1),
     );
     await expect(window.locator(".composer-attachment")).toHaveCount(1);
-    await expect(window.locator(".composer-attachment__name")).toContainText("tiny.png");
-    await expect(window.locator(".composer-attachment__name")).not.toContainText("wide.png");
+    await expect(window.locator(".composer-attachment__preview")).toHaveAttribute(
+      "title",
+      "tiny.png",
+    );
+    await expect(window.getByRole("button", { name: "View wide.png" })).toHaveCount(0);
     const migrated = JSON.parse(await readFile(attachmentPath, "utf8")) as Array<{
       readonly id: string;
     }>;

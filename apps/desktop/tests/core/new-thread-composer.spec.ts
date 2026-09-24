@@ -61,8 +61,11 @@ test("new thread reuses composer behaviors for slash commands, image previews, a
     await pasteTinyPng(window, "new-thread-image.png", "new-thread-composer");
     const chip = window.locator(".composer-attachment");
     await expect(chip).toBeVisible();
-    await expect(chip.locator(".composer-attachment__preview")).toBeVisible();
-    await expect(chip.locator(".composer-attachment__name")).toContainText("new-thread-image.png");
+    await expect(chip.locator(".composer-attachment__preview")).toHaveAttribute(
+      "title",
+      "new-thread-image.png",
+    );
+    await expect(chip.locator(".composer-attachment__name")).toHaveCount(0);
 
     await window.getByRole("button", { name: "Start thread" }).click();
 
@@ -80,8 +83,13 @@ test("new thread reuses composer behaviors for slash commands, image previews, a
         { timeout: 15_000 },
       )
       .toBe("image");
-    await expect(window.locator(".timeline-item__attachment")).toBeVisible({ timeout: 15_000 });
+    const sentImage = window.getByRole("button", { name: "View new-thread-image.png" });
+    await expect(sentImage).toBeVisible({ timeout: 15_000 });
     await expect(window.locator(".composer-attachment")).toHaveCount(0);
+    await sentImage.click();
+    await expect(window.getByTestId("image-viewer")).toBeVisible();
+    await window.keyboard.press("Escape");
+    await expect(window.getByTestId("image-viewer")).toHaveCount(0);
   } finally {
     await harness.close();
   }

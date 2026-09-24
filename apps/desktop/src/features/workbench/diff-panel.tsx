@@ -313,11 +313,11 @@ export function DiffPanel({
   return (
     <section
       className="side-panel diff-panel file-workbench file-workbench--changes review-panel"
-      aria-label="Changes review"
+      aria-label="Review"
     >
       <div className="diff-panel__header file-workbench__header">
         <div className="file-workbench__heading">
-          <h2 className="diff-panel__title">Changes</h2>
+          <h2 className="diff-panel__title">Review</h2>
         </div>
         {review && review.files.length > 0 ? (
           <span className="diff-panel__counter" data-testid="diff-panel-counter">

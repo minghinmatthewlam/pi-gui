@@ -388,7 +388,7 @@ test("capture product media from a real run", async () => {
     const workbench = page.getByTestId("workbench");
     const idle = () =>
       expect(send).not.toHaveAttribute("aria-label", "Stop run", { timeout: 240_000 });
-    const openTool = async (name: "Changes" | "Files" | "Terminal") => {
+    const openTool = async (name: "Review" | "Files" | "Terminal") => {
       if (!(await workbench.isVisible())) await page.getByTestId("toggle-side-panel").click();
       const tab = workbench.getByRole("tab", { name, exact: true });
       if (!(await tab.count())) {
@@ -433,7 +433,7 @@ test("capture product media from a real run", async () => {
     // A failed tool call makes a poor product shot; rerun the capture if the agent stumbled.
     await expect(page.locator(".timeline-tool--failed")).toHaveCount(0);
     await settle(1500);
-    await openTool("Changes");
+    await openTool("Review");
     const priceRow = workbench.locator('[data-file-path="src/price.js"]').first();
     await priceRow.click();
     // Widen the workbench so diffs read without wrapping.
@@ -471,7 +471,7 @@ test("capture product media from a real run", async () => {
     await settle();
     await renderStill(page, runDir, "terminal-light", terminalCrop);
 
-    await openTool("Changes");
+    await openTool("Review");
     await page.locator(".timeline-item--assistant").last().click();
     await page.keyboard.press("Control+k");
     await expect(page.getByTestId("command-palette")).toBeVisible();

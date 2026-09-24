@@ -28,12 +28,12 @@ needs you. Pin threads, group them by time or workspace, and archive the ones yo
 
 ### Review every change before it lands
 
-The Changes tab shows exactly what the agent touched. Compare uncommitted work, a branch
+The Review tab shows exactly what the agent touched. Compare uncommitted work, a branch
 against its base, or a single turn, and stage or unstage it file by file.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="./apps/website/public/media/review-dark.webp">
-  <img src="./apps/website/public/media/review-light.webp" alt="The Changes tab showing the diff an agent made to src/price.js" width="720">
+  <img src="./apps/website/public/media/review-light.webp" alt="The Review tab showing the diff an agent made to src/price.js" width="720">
 </picture>
 
 ### Terminal and files in the same window
@@ -60,7 +60,7 @@ the review tab, your worktrees, and tabs from desktop extensions. Each task keep
 | <kbd>Ctrl</kbd> <kbd>Tab</kbd>                     | Switch between recent threads         |
 | <kbd>⌘</kbd> <kbd>1</kbd> to <kbd>9</kbd>          | Jump to a thread in the sidebar       |
 | <kbd>⌘</kbd> <kbd>J</kbd>                          | Toggle the terminal                   |
-| <kbd>⌘</kbd> <kbd>D</kbd>                          | Toggle the Changes tab                |
+| <kbd>⌘</kbd> <kbd>R</kbd>                          | Toggle the Review tab                 |
 | <kbd>⌘</kbd> <kbd>⌥</kbd> <kbd>B</kbd>             | Show or hide the workbench            |
 | <kbd>Enter</kbd> while a run is going              | Queue a follow-up                     |
 | <kbd>⌘</kbd> <kbd>Enter</kbd> while a run is going | Steer the current run                 |

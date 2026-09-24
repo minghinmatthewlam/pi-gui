@@ -30,7 +30,11 @@ Record exact feature/entry point, command, result and evidence directory. `compl
 
 Packaged-app launch, native dialogs/clipboard, model/account onboarding, attachments, file/diff/terminal interaction, and broader extension behavior require separate mapped journeys as those features are changed. Do not claim full-app coverage from this initial map.
 
-## Latest observed proof (2026-09-22)
+## Latest observed proof (2026-09-24)
+
+Maintenance pass on main `b417b30` in a Linux cloud session (Xvfb), `openai-codex/gpt-5.6-luna`. Conversation `run-mQubER` passed all ten checkpoints, maintenance `run-yrUVKY` passed all seven, and `run-XTCNXP` passed again after the steer-before-follow-up order check was hardened, and smoke `run-0gAibp` passed. No assertion failures; all owned Electron PIDs closed. Eight core specs passed 21/21 via `test:e2e:runner`: `scheduled-tasks`, `scheduled-task-runtime-tools`, `thread-menu`, `composer-controls`, `archive`, `skills-settings`, `worktrees` and `navigation`. The other core specs the map cites (thread switcher, command palette, sidebar toggle, recency, ordering, stop-running-prompt, and the per-page settings specs) were not run in this pass. Known product gap: the running composer hint always reads "Cmd+Enter to steer", also on Linux and Windows where the key is Control+Enter.
+
+## Earlier observed proof (2026-09-22)
 
 The completed review/extension implementation passed all ten real-provider conversation
 checkpoints in `run-bif5h7` and all seven maintenance checkpoints in `run-XBuK0l`,

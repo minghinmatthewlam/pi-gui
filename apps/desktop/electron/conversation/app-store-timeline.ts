@@ -260,11 +260,8 @@ export function applyTimelineEvent(
         if (label) {
           transcript.push(makeSummaryItem(label, { presentation: "inline" }));
         }
-        transcript.push(
-          makeSummaryItem(workedForLabel(metrics.startedAt, event.timestamp), {
-            presentation: "divider",
-          }),
-        );
+        // No "Worked for" row here: the renderer derives one per turn from
+        // timestamps and places it above the turn's final reply.
       } else {
         transcript.push(
           makeSummaryItem("Completed", {
