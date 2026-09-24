@@ -186,7 +186,12 @@
   font-weight: 500;
 }
 
-.timeline-item__action:hover {
+.timeline-item__action:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.timeline-item__action:hover:not(:disabled) {
   background: var(--surface-muted);
   border-color: var(--line);
   color: var(--ink);
