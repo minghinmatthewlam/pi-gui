@@ -761,8 +761,12 @@ function installApplicationMenu(): void {
     {
       label: "View",
       submenu: [
-        { role: "reload" },
-        // Shift+Cmd+R renames the thread, so Force Reload has no shortcut.
+        // Cmd+R toggles Review and Shift+Cmd+R renames the thread, so neither
+        // reload has a shortcut.
+        {
+          label: "Reload",
+          click: () => BrowserWindow.getFocusedWindow()?.webContents.reload(),
+        },
         {
           label: "Force Reload",
           click: () => BrowserWindow.getFocusedWindow()?.webContents.reloadIgnoringCache(),

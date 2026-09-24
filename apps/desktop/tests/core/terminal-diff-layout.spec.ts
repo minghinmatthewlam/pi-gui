@@ -7,7 +7,7 @@ import {
   makeWorkspace,
 } from "../helpers/electron-app";
 
-test("Changes and Terminal share one side workspace while the composer stays available", async () => {
+test("Review and Terminal share one side workspace while the composer stays available", async () => {
   const userDataDir = await makeUserDataDir();
   const workspacePath = await makeWorkspace("terminal-diff-layout");
   const harness = await launchDesktop(userDataDir, {
@@ -17,8 +17,8 @@ test("Changes and Terminal share one side workspace while the composer stays ava
 
   try {
     const window = await harness.firstWindow();
-    await createNamedThread(window, "Terminal and Changes layout");
-    await selectSidePanel(window, "Changes");
+    await createNamedThread(window, "Terminal and Review layout");
+    await selectSidePanel(window, "Review");
     const changes = window.locator(".diff-panel");
     await expect(changes).toBeVisible();
     const changesBox = await changes.boundingBox();
@@ -37,7 +37,7 @@ test("Changes and Terminal share one side workspace while the composer stays ava
     expect(terminalBox.width).toBeGreaterThanOrEqual(300);
     expect(composerBox.x + composerBox.width).toBeLessThanOrEqual(terminalBox.x + 1);
 
-    await window.getByRole("tab", { name: "Changes", exact: true }).click();
+    await window.getByRole("tab", { name: "Review", exact: true }).click();
     await expect(changes).toBeVisible();
     await expect(terminal).toHaveCount(0);
     await expect(window.getByRole("tab", { name: "Terminal", exact: true })).toHaveCount(1);

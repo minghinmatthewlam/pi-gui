@@ -21,12 +21,6 @@ import {
 
 export type PaletteMode = "commands" | "files" | "models";
 
-/** Palette shortcut hints for the tools that have one. */
-const TOOL_SHORTCUT_KEYS: Partial<Record<BuiltinToolKind, string>> = {
-  changes: "D",
-  terminal: "J",
-};
-
 export interface PaletteAction {
   readonly id: string;
   readonly title: string;
@@ -121,13 +115,12 @@ export function buildPaletteActions(context: PaletteActionContext): readonly Pal
         run: () => context.openPaletteMode("models"),
       });
     }
-    for (const { kind, label, Icon } of BUILTIN_TOOL_ENTRIES) {
-      const key = TOOL_SHORTCUT_KEYS[kind];
+    for (const { kind, label, Icon, shortcutKey } of BUILTIN_TOOL_ENTRIES) {
       actions.push({
         id: `toggle-${kind}`,
         title: `Toggle ${label.toLowerCase()}`,
         icon: <Icon />,
-        hint: key ? formatShortcut(platform, key) : undefined,
+        hint: shortcutKey ? formatShortcut(platform, shortcutKey) : undefined,
         run: () => context.toggleTool(kind),
       });
     }

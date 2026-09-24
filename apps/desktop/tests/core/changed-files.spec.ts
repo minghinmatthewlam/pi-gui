@@ -35,7 +35,7 @@ test("preserves an exact changed-file path through diff and stage actions", asyn
   try {
     const window = await harness.firstWindow();
     await createNamedThread(window, "Changed path test");
-    await selectSidePanel(window, "Changes");
+    await selectSidePanel(window, "Review");
 
     const diffPanel = window.locator(".diff-panel");
     const changedRows = diffPanel.locator(".diff-panel__file");
@@ -95,7 +95,7 @@ test("shows Git status as unavailable without losing reviewed files", async () =
   try {
     const window = await harness.firstWindow();
     await createNamedThread(window, "Reviewed unavailable status test");
-    await selectSidePanel(window, "Changes");
+    await selectSidePanel(window, "Review");
     const diffPanel = window.locator(".diff-panel");
     await diffPanel.getByTestId(`diff-panel-reviewed-${filePath}`).click();
     await expect(diffPanel.getByTestId(`diff-panel-reviewed-${filePath}`)).toBeChecked();

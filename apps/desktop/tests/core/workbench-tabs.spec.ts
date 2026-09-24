@@ -19,7 +19,7 @@ import {
 
 const TASK_A = "Workbench task A";
 const TASK_B = "Workbench task B";
-type ToolName = "Files" | "Changes" | "Terminal";
+type ToolName = "Files" | "Review" | "Terminal";
 
 // Real Pi history is fixture setup. All workspace, task, tab, and draft changes
 // below use the visible app, with no provider requests or injected runtime events.
@@ -127,7 +127,7 @@ test("adds singleton tool tabs, closes to a neighbor, and keeps an empty chooser
     await selectSession(window, TASK_A);
     await expect(window.getByTestId("workbench")).toHaveCount(0);
     await openWorkbench(window);
-    await expectActiveTool(window, "Changes");
+    await expectActiveTool(window, "Review");
     await addTool(window, "Files");
     await expect(window.getByTestId("file-workbench")).toBeVisible();
     await window.locator('.file-workbench__tree-row--file[data-file-path="alpha.txt"]').click();
@@ -141,7 +141,7 @@ test("adds singleton tool tabs, closes to a neighbor, and keeps an empty chooser
     await window.keyboard.press("Enter");
     await expect(terminal.locator(".xterm-rows")).toContainText("WORKBENCH_READY");
     await captureToolWidths(harness, window, testInfo, "Terminal");
-    await addTool(window, "Changes");
+    await addTool(window, "Review");
     await expect(window.locator(".diff-panel")).toBeVisible();
     await window
       .locator('.diff-panel__file[data-file-path="alpha.txt"] .diff-panel__file-name')
@@ -149,10 +149,10 @@ test("adds singleton tool tabs, closes to a neighbor, and keeps an empty chooser
     await expect(
       window.getByRole("region", { name: "Combined changes", exact: true }).locator(".diff-inline"),
     ).toContainText("Uncommitted workspace edit");
-    await captureToolWidths(harness, window, testInfo, "Changes");
+    await captureToolWidths(harness, window, testInfo, "Review");
     await expect(
       window.getByRole("tablist", { name: "Workspace tools" }).getByRole("tab"),
-    ).toHaveText(["Changes", "Files", "Terminal"]);
+    ).toHaveText(["Review", "Files", "Terminal"]);
     await addTool(window, "Terminal");
     await expect(
       window.getByRole("tablist", { name: "Workspace tools" }).getByRole("tab"),
@@ -161,8 +161,8 @@ test("adds singleton tool tabs, closes to a neighbor, and keeps an empty chooser
     await window.getByRole("button", { name: "Close Terminal tab", exact: true }).click();
     await expectActiveTool(window, "Files");
     await window.getByRole("button", { name: "Close Files tab", exact: true }).click();
-    await expectActiveTool(window, "Changes");
-    await window.getByRole("button", { name: "Close Changes tab", exact: true }).click();
+    await expectActiveTool(window, "Review");
+    await window.getByRole("button", { name: "Close Review tab", exact: true }).click();
     await expect(window.getByTestId("workbench-chooser")).toBeVisible();
     await expect(
       window.getByRole("tablist", { name: "Workspace tools" }).getByRole("tab"),
@@ -204,7 +204,7 @@ test("restores each task's tabs and draft through Settings, switching, and resta
     await selectSession(window, TASK_B);
     await expect(window.getByTestId("workbench")).toHaveCount(0);
     await openWorkbench(window);
-    await expectActiveTool(window, "Changes");
+    await expectActiveTool(window, "Review");
     await expect(window.getByRole("tab", { name: "Files", exact: true })).toHaveCount(0);
     await addTool(window, "Terminal");
     await window.getByTestId("composer").fill("Draft for task B");
@@ -299,7 +299,7 @@ test("an invalid or orphaned task layout does not block other saved UI state", a
     await expectActiveTool(window, "Terminal");
     await expect(
       window.getByRole("tablist", { name: "Workspace tools" }).getByRole("tab"),
-    ).toHaveText(["Changes", "Terminal"]);
+    ).toHaveText(["Review", "Terminal"]);
     await expect(window.getByTestId("composer")).toHaveValue("Draft for task B");
     await expect.poll(async () => Object.keys(await savedLayouts())).toEqual([layoutB]);
     await selectSession(window, TASK_A);
@@ -365,7 +365,7 @@ test("closing the Terminal view preserves its live shell", async () => {
     await expect(terminal.locator(".xterm-rows")).toContainText("SHELL_READY");
     await window.getByRole("button", { name: "Close Terminal tab", exact: true }).click();
     await expect(terminal).toHaveCount(0);
-    await expectActiveTool(window, "Changes");
+    await expectActiveTool(window, "Review");
     await addTool(window, "Terminal");
     await terminal.locator(".xterm").click();
     await window.keyboard.type("printf 'SHELL_%s\\n' \"$PI_GUI_WORKBENCH_CANARY\"");
@@ -395,7 +395,7 @@ test("two windows keep independent live tool selections for the same task", asyn
     await addTool(second, "Terminal");
     await expectActiveTool(first, "Files");
     await expect(first.getByRole("tab", { name: "Terminal", exact: true })).toHaveCount(0);
-    await selectSidePanel(first, "Changes");
+    await selectSidePanel(first, "Review");
     await expectActiveTool(second, "Terminal");
     await first.getByTestId("toggle-side-panel").click();
     await expect(first.getByTestId("workbench")).toHaveCount(0);
@@ -434,7 +434,7 @@ test("keeps one resizable width across tools, chooser, tasks, and restart", asyn
     await window.mouse.move(start.x - 97, start.y + 160, { steps: 10 });
     await window.mouse.up();
     await expect.poll(panelWidth).toBe(540);
-    for (const tool of ["Files", "Changes", "Terminal"] as const) {
+    for (const tool of ["Files", "Review", "Terminal"] as const) {
       await window.getByTestId("workbench-add-tab").click();
       await expect.poll(panelWidth).toBe(540);
       await window

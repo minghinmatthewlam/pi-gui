@@ -33,8 +33,8 @@ async function openReview(workspacePath: string, additionalWorkspaces: readonly 
   const window = await harness.firstWindow();
   const workspace = await waitForWorkspaceByPath(window, workspacePath);
   await createNamedThread(window, "Review scope task", { workspaceName: workspace.name });
-  await selectSidePanel(window, "Changes");
-  const panel = window.getByRole("region", { name: "Changes review", exact: true });
+  await selectSidePanel(window, "Review");
+  const panel = window.getByRole("region", { name: "Review", exact: true });
   await expect(panel).toBeVisible();
   return { harness, window, panel, workspace };
 }
