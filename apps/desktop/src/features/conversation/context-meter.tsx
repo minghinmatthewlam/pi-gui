@@ -137,7 +137,13 @@ function CacheRow({ cache, now }: { readonly cache: SessionPromptCache; readonly
   if (nextRefreshIn > 0) {
     return <Row label="Kept warm" value={`next refresh in ${formatCountdown(nextRefreshIn)}`} />;
   }
-  if (!cache.expiresAt) return <Row label="Expiry" value="not reported by this model" />;
+  if (!cache.expiresAt) {
+    return cache.lifetimeSeconds === undefined ? (
+      <Row label="Expiry" value="not reported by this model" />
+    ) : (
+      <Row label="Expiry" value="nothing cached for this model yet" />
+    );
+  }
   const expiresIn = Date.parse(cache.expiresAt) - now;
   return expiresIn > 0 ? (
     <Row label="Expires in" value={formatCountdown(expiresIn)} />

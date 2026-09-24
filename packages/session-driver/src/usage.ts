@@ -23,6 +23,8 @@ export interface SessionContextUsage {
  * coming and `expiresAt` applies.
  */
 export interface SessionPromptCache {
+  /** Cache lifetime the model declares; absent when it declares none, so expiry is unknowable. */
+  readonly lifetimeSeconds?: number;
   /** When the entry lapses unless touched; absent when the model declares no cache lifetime. */
   readonly expiresAt?: Timestamp;
   /** When pi's cache warmer plans its next refresh; absent when warming is not scheduled. */

@@ -97,6 +97,7 @@ function promptCache(
   const ttlMs = promptCacheTtlMs(model);
   const touchedAtMs = latestCacheTouchMs(model, branch);
   return {
+    ...(ttlMs !== undefined ? { lifetimeSeconds: ttlMs / 1000 } : {}),
     ...(ttlMs !== undefined && touchedAtMs !== undefined
       ? { expiresAt: new Date(touchedAtMs + ttlMs).toISOString() }
       : {}),

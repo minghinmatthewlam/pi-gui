@@ -147,6 +147,7 @@ await test("a completed turn reports pi's context, cache and totals", async (t) 
   assert.equal(usage.subscription, false);
   // The cache entry lapses one lifetime after the request that last touched it.
   assert.deepEqual(usage.cache, {
+    lifetimeSeconds: 300,
     expiresAt: new Date(REQUEST_STARTED_AT + 300_000).toISOString(),
   });
 });
@@ -158,7 +159,7 @@ await test("switching models drops the old model's cache expiry", async (t) => {
   assert.ok(latest?.type === "sessionUpdated");
   assert.equal(latest.snapshot.usage?.context?.contextWindow, 64000);
   // The last reply was the other model's, so nothing is cached for this one.
-  assert.deepEqual(latest.snapshot.usage?.cache, {});
+  assert.deepEqual(latest.snapshot.usage?.cache, { lifetimeSeconds: 300 });
 });
 
 await test("a model without a declared cache lifetime reports unknown expiry", async (t) => {
