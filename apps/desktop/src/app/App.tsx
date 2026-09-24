@@ -32,6 +32,7 @@ import {
 } from "../features/extensions/extension-view-panel";
 import { useExtensionViews } from "../features/extensions/use-extension-views";
 import { useExtensionHostActions } from "../features/extensions/use-extension-host-actions";
+import { useSidePanelTabHintsVisible } from "../features/workbench/side-panel-tab-hints";
 import { Workbench } from "../features/workbench/workbench";
 import { renderBuiltinToolPanel } from "../features/workbench/builtin-tools";
 import { useWorkbenchWidth } from "../features/workbench/use-workbench-width";
@@ -214,6 +215,8 @@ export default function App() {
   } = useComposerDraftSync({ api, snapshot, selectedSession: workbenchTarget });
   const extensionViews = useExtensionViews({ api, target: workbenchTarget });
   const workbench = useWorkbench({ api, target: workbenchTarget });
+  // Tracked while the panel is closed too, so a chord that opens it shows the hints.
+  const sidePanelTabHintsVisible = useSidePanelTabHintsVisible(api?.platform ?? "linux");
   const workbenchTargetRef = useRef(workbenchTarget);
   workbenchTargetRef.current = workbenchTarget;
   const extensionHostActions = useExtensionHostActions({
@@ -1282,6 +1285,7 @@ export default function App() {
           <Workbench
             view={workbench.view}
             platform={api?.platform ?? "linux"}
+            tabHintsVisible={sidePanelTabHintsVisible}
             onResize={workbenchWidth.setWidth}
             onTogglePanel={commands.toggleSidePanel}
             extensionViews={extensionViews.views}

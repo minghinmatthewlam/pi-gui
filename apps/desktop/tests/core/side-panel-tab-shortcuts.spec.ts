@@ -62,8 +62,13 @@ test("Control or Alt with 1-9 selects side panel tabs while Cmd or Ctrl keeps sw
     await composer.click();
     await window.keyboard.press(desktopShortcut("Alt+B"));
     await expect(window.getByTestId("workbench")).toHaveCount(0);
-    await window.keyboard.press(`${tabModifier}+1`);
+    // Holding the modifier, the panel opens with its tab numbers showing.
+    await window.keyboard.down(tabModifier);
+    await window.keyboard.press("1");
     await expect(tab("Review")).toHaveAttribute("aria-selected", "true");
+    await expect(tabs.locator("[data-tab-shortcut]")).toHaveCount(3);
+    await window.keyboard.up(tabModifier);
+    await expect(tabs.locator("[data-tab-shortcut]")).toHaveCount(0);
 
     // Main-process path, from inside the terminal, which is itself a side panel tab.
     await tab("Terminal").click();

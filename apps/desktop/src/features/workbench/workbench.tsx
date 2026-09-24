@@ -8,13 +8,14 @@ import { toolRefId, type TaskWorkbenchTemplate, type ToolRef } from "../../../co
 import type { DesktopExtensionViewInfo } from "../../../contracts/extension-views";
 import { CloseIcon, ExtensionIcon, PlusIcon, SidePanelIcon } from "../../ui/icons";
 import { BUILTIN_TOOL_ENTRIES, BUILTIN_TOOLS } from "./builtin-tools";
-import { useSidePanelTabHintsVisible } from "./side-panel-tab-hints";
 import { WorkbenchResizeHandle } from "./workbench-resize-handle";
 import { activeWorkbenchTool } from "./workbench-state";
 
 interface WorkbenchProps {
   readonly view: TaskWorkbenchTemplate;
   readonly platform: NodeJS.Platform;
+  /** Whether the side panel tab modifier is held, so tabs show their numbers. */
+  readonly tabHintsVisible: boolean;
   readonly onResize: (width: number) => void;
   readonly onTogglePanel: () => void;
   readonly onOpenTool: (tool: ToolRef) => void;
@@ -44,6 +45,7 @@ function ToolIcon({ tool }: { readonly tool: ToolRef }) {
 export function Workbench({
   view,
   platform,
+  tabHintsVisible,
   onResize,
   onTogglePanel,
   onOpenTool,
@@ -63,7 +65,6 @@ export function Workbench({
   const addRef = useRef<HTMLButtonElement | null>(null);
   const tabRefs = useRef(new Map<string, HTMLButtonElement>());
   const activeTool = activeWorkbenchTool(view);
-  const tabHintsVisible = useSidePanelTabHintsVisible(platform);
   const activeExtension =
     activeTool?.kind === "extension"
       ? extensionViews.find(
