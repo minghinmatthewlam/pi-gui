@@ -2,7 +2,7 @@
 
 Users change app preferences in Settings and expect them to survive returning to the app and restarting it.
 
-Settings is one shell: a sidebar with Back to app, a Search box, and grouped pages. App: General (model settings scope, Enable skill slash commands, shell path), Appearance, Notifications, Keyboard shortcuts. Agent: Providers, Models (both get a workspace picker; Models only in Per repo scope). Customize: Skills and extensions, which keeps the Settings sidebar but renders `skills-surface` / `extensions-surface` instead of `settings-surface`. Escape leaves Settings unless a dialog is open or Search has text (the first Escape clears Search). The selected page is not persisted; Settings reopens on General.
+Settings is one shell: a sidebar with Back to app, a Search box, and grouped pages. App: General (model settings scope, Enable skill slash commands, shell path), Appearance, Notifications, Keyboard shortcuts. Agent: Providers, Models (both get a workspace picker; Models only in Per repo scope). Customize: Skills and extensions, which keeps the Settings sidebar but renders `skills-surface` / `extensions-surface` instead of `settings-surface`. Escape leaves Settings unless a dialog is open or Search has text (the first Escape clears Search). Settings reopens on the last page visited in this session; after a restart or in a new window it starts on General.
 
 ## Sub-features
 

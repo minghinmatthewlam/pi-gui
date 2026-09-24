@@ -32,7 +32,7 @@ Packaged-app launch, native dialogs/clipboard, model/account onboarding, attachm
 
 ## Latest observed proof (2026-09-24)
 
-Maintenance pass on main `b417b30` in a Linux cloud session (Xvfb), `openai-codex/gpt-5.6-luna`. Conversation `run-mQubER` passed all ten checkpoints, maintenance `run-yrUVKY` passed all seven (now including the steer-before-follow-up order check), and smoke `run-0gAibp` passed. No assertion failures; all owned Electron PIDs closed. The core specs cited for scheduled tasks, the thread-actions menu and Shift chords, Cmd+N, archive, skills, worktrees and navigation passed 21/21 via `test:e2e:runner`. Known product gap: the running composer hint always reads "Cmd+Enter to steer", also on Linux and Windows where the key is Control+Enter.
+Maintenance pass on main `b417b30` in a Linux cloud session (Xvfb), `openai-codex/gpt-5.6-luna`. Conversation `run-mQubER` passed all ten checkpoints, maintenance `run-yrUVKY` passed all seven, and `run-XTCNXP` passed again after the steer-before-follow-up order check was hardened, and smoke `run-0gAibp` passed. No assertion failures; all owned Electron PIDs closed. Eight core specs passed 21/21 via `test:e2e:runner`: `scheduled-tasks`, `scheduled-task-runtime-tools`, `thread-menu`, `composer-controls`, `archive`, `skills-settings`, `worktrees` and `navigation`. The other core specs the map cites (thread switcher, command palette, sidebar toggle, recency, ordering, stop-running-prompt, and the per-page settings specs) were not run in this pass. Known product gap: the running composer hint always reads "Cmd+Enter to steer", also on Linux and Windows where the key is Control+Enter.
 
 ## Earlier observed proof (2026-09-22)
 

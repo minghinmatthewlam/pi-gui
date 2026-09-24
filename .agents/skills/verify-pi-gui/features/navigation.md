@@ -17,9 +17,9 @@ Users switch folders and conversations in the sidebar and recover the selected t
 - Send in a thread and confirm it moves to the top of Today. Opening the same thread must leave its bucket unchanged. ⌘1 stays the first pinned thread, or the first visible row when nothing is pinned. Empty date buckets stay hidden.
 - Hover a thread and click Pin; click its Unpin icon in the Pinned section.
 - Click New thread in the sidebar or press Cmd+N (Control+N elsewhere; File > New Thread). Shift+Cmd+O still works as an alias. Shift+Cmd+N opens a new window instead.
-- Open the one thread-actions menu from the header Thread actions button, by right-clicking a row, or from Cmd-K: Rename (Shift+Cmd+R, inline), Pin/Unpin, Archive (Shift+Cmd+A), Mark as read, Add/Edit scheduled task, Copy session ID.
+- Open the one thread-actions menu from the header Thread actions button or by right-clicking a row; Cmd-K lists the same actions. It offers Rename (Shift+Cmd+R, inline), Pin/Unpin, Archive (Shift+Cmd+A), Mark as read (only when the thread has unseen updates), Add/Edit scheduled task, Copy session ID.
 - Cmd-K opens the command palette (Recents, Chats, Workspaces, Actions); Cmd-P opens the file palette; Ctrl-Tab opens the Recent threads switcher; Cmd+B toggles the sidebar.
-- Open a folder through the sidebar Open folder button or Cmd+O (OS folder picker); this is a separate native entry.
+- Open a folder through the sidebar Open folder button or Cmd+O on macOS (OS folder picker; no Control+O elsewhere); this is a separate native entry.
 
 ## Driving it with Playwright
 

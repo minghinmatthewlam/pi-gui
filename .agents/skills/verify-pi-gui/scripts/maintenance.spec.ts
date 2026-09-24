@@ -266,10 +266,11 @@ test("maintenance: skills, pin, thread list, worktree, queued follow-ups", async
         timeout: 180_000,
       });
       const replies = await assistant().allTextContents();
-      expect(
-        replies.findIndex((text) => text.includes("STEER_DONE")),
-        "the steered reply precedes the queued follow-up",
-      ).toBeLessThan(replies.findIndex((text) => text.includes("FOLLOW_UP_DONE")));
+      const steerIndex = replies.findIndex((text) => text.includes("STEER_DONE"));
+      expect(steerIndex, "the steered reply is still mounted").toBeGreaterThanOrEqual(0);
+      expect(steerIndex, "the steered reply precedes the queued follow-up").toBeLessThan(
+        replies.findIndex((text) => text.includes("FOLLOW_UP_DONE")),
+      );
       await expect(assistant().filter({ hasText: "BASELINE_DONE" })).toHaveCount(0);
       await expect(page.getByTestId("queued-composer-messages")).toHaveCount(0);
       await expect(page.locator(".session-row--active")).not.toHaveAttribute(
