@@ -450,11 +450,13 @@ function createWindow(): BrowserWindow {
       return;
     }
 
-    // Side panel tab chords act from the terminal too: it is itself a side panel
-    // tab, and these chords are the way out of it.
+    // Side panel tab chords act from the terminal and extension views too. The
+    // key is not consumed: that would also swallow the modifier's keyup, leaving
+    // the tab hints up, and on Windows and Linux it would let the Alt release
+    // open the hidden menu bar. The page takes no default action for these keys,
+    // and the renderer's own handling of the same keydown is idempotent.
     const sidePanelTabCommand = getSidePanelTabCommand(process.platform, input);
     if (sidePanelTabCommand) {
-      event.preventDefault();
       if (!input.isAutoRepeat) window.webContents.send(desktopIpc.appCommand, sidePanelTabCommand);
       return;
     }

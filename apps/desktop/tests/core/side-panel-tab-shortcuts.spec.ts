@@ -101,6 +101,28 @@ test("Control or Alt with 1-9 selects side panel tabs while Cmd or Ctrl keeps sw
     await sendDigit("1", [mainModifier]);
     await expect(tab("Review")).toHaveAttribute("aria-selected", "true");
 
+    // Main forwards the chord without consuming it, so the modifier's release
+    // still reaches the page and ends the tab hints.
+    const sendKey = (type: "keyDown" | "keyUp", keyCode: string, modifiers: string[]) =>
+      harness.electronApp.evaluate(
+        ({ BrowserWindow }, input) => {
+          BrowserWindow.getAllWindows()[0]?.webContents.sendInputEvent({
+            type: input.type,
+            keyCode: input.keyCode,
+            modifiers: input.modifiers as Electron.InputEvent["modifiers"],
+          });
+        },
+        { type, keyCode, modifiers },
+      );
+    const modifierKeyCode = isMac ? "Control" : "Alt";
+    await sendKey("keyDown", modifierKeyCode, [mainModifier]);
+    await expect(tabs.locator("[data-tab-shortcut]")).toHaveCount(3);
+    await sendKey("keyDown", "3", [mainModifier]);
+    await sendKey("keyUp", "3", [mainModifier]);
+    await expect(tab("Terminal")).toHaveAttribute("aria-selected", "true");
+    await sendKey("keyUp", modifierKeyCode, []);
+    await expect(tabs.locator("[data-tab-shortcut]")).toHaveCount(0);
+
     // Cmd+1-9 on macOS and Ctrl+1-9 elsewhere still switch threads.
     await composer.click();
     await window.keyboard.press(desktopShortcut("2"));

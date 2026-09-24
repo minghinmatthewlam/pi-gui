@@ -260,8 +260,8 @@ export function useDesktopCommands(input: DesktopCommandsInput) {
       closeFocusedSurface();
       return;
     }
-    // Main consumes these chords in the app, the terminal included; this path
-    // serves keydowns it never saw, such as Playwright key presses.
+    // Main forwards these chords without consuming them, so this repeats its
+    // selection harmlessly; it serves keydowns main never saw, such as Playwright's.
     const sidePanelTabCommand = getSidePanelTabCommand(api?.platform ?? "linux", {
       meta: event.metaKey,
       control: event.ctrlKey,
@@ -271,7 +271,6 @@ export function useDesktopCommands(input: DesktopCommandsInput) {
       code: event.code,
     });
     if (sidePanelTabCommand) {
-      event.preventDefault();
       if (!event.repeat) handleCommandRef.current(sidePanelTabCommand);
       return;
     }

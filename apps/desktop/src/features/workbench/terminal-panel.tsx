@@ -6,6 +6,7 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import "@xterm/xterm/css/xterm.css";
 import type { WorkspaceRecord } from "../../../contracts/desktop-state";
 import { CloseIcon, PlusIcon, RefreshIcon } from "../../ui/icons";
+import { getSidePanelTabCommand } from "../../../contracts/ipc";
 import type {
   TerminalPanelSnapshot,
   TerminalSessionSnapshot,
@@ -233,6 +234,19 @@ export function TerminalPanel({ workspace, sessionId, onHide }: TerminalPanelPro
     terminal.attachCustomKeyEventHandler((event) => {
       if (event.type !== "keydown") {
         return true;
+      }
+      if (
+        getSidePanelTabCommand(api.platform, {
+          meta: event.metaKey,
+          control: event.ctrlKey,
+          alt: event.altKey,
+          shift: event.shiftKey,
+          key: event.key,
+          code: event.code,
+        })
+      ) {
+        // Side panel tab chords switch tabs; the shell never sees them.
+        return false;
       }
       const commandModifier = api.platform === "darwin" ? event.metaKey : event.ctrlKey;
       const key = event.key.toLowerCase();
