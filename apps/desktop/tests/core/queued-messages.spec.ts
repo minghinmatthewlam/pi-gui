@@ -142,7 +142,10 @@ test("shows queued messages while running and preserves attachments through inli
     await composer.click();
     await window.keyboard.type("local scratch draft");
     await pasteTinyPng(window, "local-draft.png");
-    await expect(window.locator(".composer-attachment__name")).toContainText("local-draft.png");
+    await expect(window.locator(".composer-attachment__preview")).toHaveAttribute(
+      "title",
+      "local-draft.png",
+    );
 
     const queuedCard = window.getByTestId("queued-composer-message").first();
     await expect(queuedCard.locator(".queued-composer-message__mode")).toHaveCount(0);
@@ -154,11 +157,17 @@ test("shows queued messages while running and preserves attachments through inli
       "Editing queued message",
     );
     await expect(composer).toHaveValue("Inspect the queued screenshot");
-    await expect(window.locator(".composer-attachment__name")).toContainText("queued-image.png");
+    await expect(window.locator(".composer-attachment__preview")).toHaveAttribute(
+      "title",
+      "queued-image.png",
+    );
 
     await window.getByRole("button", { name: "Cancel" }).click();
     await expect(composer).toHaveValue("local scratch draft");
-    await expect(window.locator(".composer-attachment__name")).toContainText("local-draft.png");
+    await expect(window.locator(".composer-attachment__preview")).toHaveAttribute(
+      "title",
+      "local-draft.png",
+    );
   } finally {
     await harness.close();
   }

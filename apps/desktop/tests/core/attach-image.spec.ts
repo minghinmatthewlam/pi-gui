@@ -31,7 +31,23 @@ test("attaches an image from a stubbed picker result and shows the attachment ch
     await stubNextOpenDialog(harness, [imagePath]);
     await window.getByRole("button", { name: "Attach files" }).click();
 
-    await expect(window.locator(".composer-attachment")).toContainText("screenshot.png");
+    const thumb = window.getByRole("button", { name: "View screenshot.png" });
+    await expect(thumb).toBeVisible();
+    await expect(window.locator(".composer-attachment__name")).toHaveCount(0);
+
+    const viewer = window.getByTestId("image-viewer");
+    await thumb.click();
+    await expect(viewer).toBeVisible();
+    await expect(viewer.getByRole("img", { name: "screenshot.png" })).toBeVisible();
+    await window.keyboard.press("Escape");
+    await expect(viewer).toHaveCount(0);
+    await expect(thumb).toBeFocused();
+
+    await thumb.click();
+    await expect(viewer).toBeVisible();
+    await viewer.click({ position: { x: 8, y: 8 } });
+    await expect(viewer).toHaveCount(0);
+
     await window.getByRole("button", { name: "Remove screenshot.png" }).click();
     await expect(window.locator(".composer-attachment")).toHaveCount(0);
   } finally {

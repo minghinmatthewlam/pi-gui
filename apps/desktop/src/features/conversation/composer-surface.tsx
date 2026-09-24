@@ -27,6 +27,7 @@ import {
   SparkIcon,
   StatusIcon,
 } from "../../ui/icons";
+import { ImageAttachmentThumb } from "./image-attachment-thumb";
 import { QueuedComposerMessages } from "./queued-composer-messages";
 
 type ExtensionMentionOption = Extract<MentionOption, { kind: "extension" }>;
@@ -214,17 +215,19 @@ export function ComposerSurface({
               key={attachment.id}
             >
               {attachment.kind === "image" ? (
-                <img
-                  alt={attachment.name}
+                <ImageAttachmentThumb
                   className="composer-attachment__preview"
+                  name={attachment.name}
                   src={`data:${attachment.mimeType};base64,${attachment.data}`}
                 />
               ) : (
-                <span className="composer-attachment__icon" aria-hidden="true">
-                  <FileIcon />
-                </span>
+                <>
+                  <span className="composer-attachment__icon" aria-hidden="true">
+                    <FileIcon />
+                  </span>
+                  <span className="composer-attachment__name">{attachment.name}</span>
+                </>
               )}
-              <span className="composer-attachment__name">{attachment.name}</span>
               <button
                 aria-label={`Remove ${attachment.name}`}
                 className="composer-attachment__remove"
