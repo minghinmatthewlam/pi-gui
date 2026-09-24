@@ -388,7 +388,7 @@ export function createDesktopCommandSubscription() {
 
 /** Collapses a repeated keydown from one physical chord so a toggle stays open. */
 export const SEARCH_CHORD_TOGGLE_MS = 200;
-export const CHANGES_TOGGLE_DEDUPE_MS = 8;
+export const REVIEW_TOGGLE_DEDUPE_MS = 8;
 
 export type ChordSource = "main" | "renderer";
 
@@ -396,7 +396,7 @@ export type ChordSource = "main" | "renderer";
  * Collapses one chord that reaches the renderer twice, once forwarded by the main
  * process and once as a keydown. Repeats from the same source are separate presses.
  */
-export function createChordPairGate(windowMs = CHANGES_TOGGLE_DEDUPE_MS) {
+export function createChordPairGate(windowMs = REVIEW_TOGGLE_DEDUPE_MS) {
   let last: { readonly source: ChordSource; readonly at: number } | undefined;
   return (source: ChordSource, now: number): boolean => {
     if (last && last.source !== source && now - last.at < windowMs) {

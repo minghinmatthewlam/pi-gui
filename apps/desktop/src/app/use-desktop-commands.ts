@@ -16,7 +16,7 @@ import type { DesktopExtensionViewInfo } from "../../contracts/extension-views";
 import {
   createChordPairGate,
   createChordToggleGate,
-  CHANGES_TOGGLE_DEDUPE_MS,
+  REVIEW_TOGGLE_DEDUPE_MS,
   desktopCommands,
   earlyModifierChords,
   getDesktopCommandFromShortcut,
@@ -115,7 +115,7 @@ export function useDesktopCommands(input: DesktopCommandsInput) {
     sidebarCollapsed: snapshot?.sidebarCollapsed ?? false,
   };
   const threadSearchGate = useRef(createChordToggleGate());
-  const changesToggleGate = useRef(createChordToggleGate(CHANGES_TOGGLE_DEDUPE_MS));
+  const reviewToggleGate = useRef(createChordToggleGate(REVIEW_TOGGLE_DEDUPE_MS));
   // IPC and the renderer can both deliver one chord. Collapse only that pair so
   // a quick second press still toggles.
   const paletteGates = useRef({
@@ -196,9 +196,9 @@ export function useDesktopCommands(input: DesktopCommandsInput) {
     [desktopCommands.toggleTerminal]: () => toggleWorkbenchTool("terminal"),
     [desktopCommands.toggleSidePanel]: toggleSidePanel,
     [desktopCommands.toggleReview]: () => {
-      // IPC and the renderer can both see one Cmd+R. Collapse that same-tick
-      // pair while preserving a deliberate second press.
-      if (changesToggleGate.current(performance.now())) toggleWorkbenchTool("changes");
+      // A chord replayed from the early buffer can also arrive over IPC. Collapse
+      // that same-tick pair while preserving a deliberate second press.
+      if (reviewToggleGate.current(performance.now())) toggleWorkbenchTool("changes");
     },
     [desktopCommands.closeFocusedSurface]: closeFocusedSurface,
     [desktopCommands.toggleSidebar]: togglePrimarySidebar,

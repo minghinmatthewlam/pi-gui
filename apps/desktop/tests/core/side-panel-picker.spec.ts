@@ -79,6 +79,22 @@ test("one icon and keyboard shortcuts toggle the selected workspace tool", async
     await expect(
       window.getByRole("tablist", { name: "Workspace tools" }).getByRole("tab"),
     ).toHaveCount(3);
+
+    // Cmd+R reaches Review from the terminal on macOS; Ctrl+R stays with the shell elsewhere.
+    await terminal.locator(".xterm").click();
+    await harness.electronApp.evaluate(({ BrowserWindow }, keyModifier) => {
+      BrowserWindow.getAllWindows()[0]?.webContents.sendInputEvent({
+        type: "keyDown",
+        keyCode: "r",
+        modifiers: [keyModifier],
+      });
+    }, modifier);
+    if (process.platform === "darwin") {
+      await expect(window.locator(".diff-panel")).toBeVisible();
+    } else {
+      await expect(terminal.locator(".xterm-rows")).toContainText(/i-search/);
+      await expect(window.locator(".diff-panel")).toHaveCount(0);
+    }
   } finally {
     await harness.close();
   }

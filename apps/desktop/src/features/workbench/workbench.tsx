@@ -231,6 +231,11 @@ export function Workbench({
             <p>Keep the tools you need alongside your conversation.</p>
             {BUILTIN_TOOL_ENTRIES.map(({ kind, label, description, Icon, shortcutKey }) => (
               <button
+                aria-keyshortcuts={
+                  shortcutKey
+                    ? `${platform === "darwin" ? "Meta" : "Control"}+${shortcutKey}`
+                    : undefined
+                }
                 aria-label={label}
                 className="workbench__choice"
                 key={kind}
