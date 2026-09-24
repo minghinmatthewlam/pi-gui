@@ -215,6 +215,15 @@ export const desktopCommands = {
   selectRecentThread7: "select-recent-thread-7",
   selectRecentThread8: "select-recent-thread-8",
   selectRecentThread9: "select-recent-thread-9",
+  selectSidePanelTab1: "select-side-panel-tab-1",
+  selectSidePanelTab2: "select-side-panel-tab-2",
+  selectSidePanelTab3: "select-side-panel-tab-3",
+  selectSidePanelTab4: "select-side-panel-tab-4",
+  selectSidePanelTab5: "select-side-panel-tab-5",
+  selectSidePanelTab6: "select-side-panel-tab-6",
+  selectSidePanelTab7: "select-side-panel-tab-7",
+  selectSidePanelTab8: "select-side-panel-tab-8",
+  selectSidePanelTab9: "select-side-panel-tab-9",
 } as const;
 
 const RECENT_THREAD_COMMANDS = [
@@ -233,6 +242,71 @@ export const THREAD_SHORTCUT_SLOT_COUNT = RECENT_THREAD_COMMANDS.length;
 
 export function isRecentThreadCommand(command: PiDesktopCommand | undefined): boolean {
   return (RECENT_THREAD_COMMANDS as readonly (PiDesktopCommand | undefined)[]).includes(command);
+}
+
+const SIDE_PANEL_TAB_COMMANDS = [
+  desktopCommands.selectSidePanelTab1,
+  desktopCommands.selectSidePanelTab2,
+  desktopCommands.selectSidePanelTab3,
+  desktopCommands.selectSidePanelTab4,
+  desktopCommands.selectSidePanelTab5,
+  desktopCommands.selectSidePanelTab6,
+  desktopCommands.selectSidePanelTab7,
+  desktopCommands.selectSidePanelTab8,
+  desktopCommands.selectSidePanelTab9,
+] as const;
+
+export const SIDE_PANEL_TAB_SHORTCUT_SLOT_COUNT = SIDE_PANEL_TAB_COMMANDS.length;
+
+/** The zero-based side panel tab a command selects, or undefined for other commands. */
+export function sidePanelTabIndex(command: PiDesktopCommand | undefined): number | undefined {
+  const index = (SIDE_PANEL_TAB_COMMANDS as readonly (PiDesktopCommand | undefined)[]).indexOf(
+    command,
+  );
+  return index < 0 ? undefined : index;
+}
+
+/**
+ * The side panel tab modifier: Control on macOS, where Command switches threads,
+ * and Alt elsewhere, where Control does. It must be the only modifier held.
+ */
+export function sidePanelTabModifierHeld(
+  platform: NodeJS.Platform,
+  input: {
+    readonly meta: boolean;
+    readonly control: boolean;
+    readonly alt: boolean;
+    readonly shift: boolean;
+  },
+): boolean {
+  if (input.shift || input.meta) return false;
+  return platform === "darwin" ? input.control && !input.alt : input.alt && !input.control;
+}
+
+/**
+ * Control+1-9 on macOS and Alt+1-9 elsewhere select side panel tab N. Keypad
+ * digits are left alone so Windows Alt codes keep typing characters.
+ */
+export function getSidePanelTabCommand(
+  platform: NodeJS.Platform,
+  input: {
+    readonly meta: boolean;
+    readonly control: boolean;
+    readonly alt: boolean;
+    readonly shift: boolean;
+    readonly key: string;
+    readonly code?: string;
+  },
+): PiDesktopCommand | undefined {
+  if (!sidePanelTabModifierHeld(platform, input) || input.code?.startsWith("Numpad")) {
+    return undefined;
+  }
+  const digit = input.code?.match(/^Digit([1-9])$/)?.[1] ?? input.key.match(/^[1-9]$/)?.[0];
+  return digit ? SIDE_PANEL_TAB_COMMANDS[Number(digit) - 1] : undefined;
+}
+
+export function getSidePanelTabShortcutLabel(platform: NodeJS.Platform, slot: number): string {
+  return `${platform === "darwin" ? "⌃" : "Alt+"}${slot}`;
 }
 
 export function getDesktopShortcutLabel(platform: NodeJS.Platform, key: string): string {

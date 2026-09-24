@@ -1,9 +1,14 @@
 import { useEffect, useId, useRef, type KeyboardEvent, type ReactNode } from "react";
-import { formatShortcut } from "../../../contracts/ipc";
+import {
+  formatShortcut,
+  getSidePanelTabShortcutLabel,
+  SIDE_PANEL_TAB_SHORTCUT_SLOT_COUNT,
+} from "../../../contracts/ipc";
 import { toolRefId, type TaskWorkbenchTemplate, type ToolRef } from "../../../contracts/workbench";
 import type { DesktopExtensionViewInfo } from "../../../contracts/extension-views";
 import { CloseIcon, ExtensionIcon, PlusIcon, SidePanelIcon } from "../../ui/icons";
 import { BUILTIN_TOOL_ENTRIES, BUILTIN_TOOLS } from "./builtin-tools";
+import { useSidePanelTabHintsVisible } from "./side-panel-tab-hints";
 import { WorkbenchResizeHandle } from "./workbench-resize-handle";
 import { activeWorkbenchTool } from "./workbench-state";
 
@@ -58,6 +63,7 @@ export function Workbench({
   const addRef = useRef<HTMLButtonElement | null>(null);
   const tabRefs = useRef(new Map<string, HTMLButtonElement>());
   const activeTool = activeWorkbenchTool(view);
+  const tabHintsVisible = useSidePanelTabHintsVisible(platform);
   const activeExtension =
     activeTool?.kind === "extension"
       ? extensionViews.find(
@@ -139,13 +145,19 @@ export function Workbench({
                   )?.title ?? workbenchToolLabel(tool))
                 : workbenchToolLabel(tool);
             const selected = view.selection.kind === "tool" && view.selection.toolId === toolId;
+            const slot = index < SIDE_PANEL_TAB_SHORTCUT_SLOT_COUNT ? index + 1 : undefined;
+            const shortcut = slot ? getSidePanelTabShortcutLabel(platform, slot) : undefined;
             return (
               <div className="workbench__tab-wrapper" key={toolId} role="presentation">
                 <button
                   aria-controls={panelId}
+                  aria-keyshortcuts={
+                    slot ? `${platform === "darwin" ? "Control" : "Alt"}+${slot}` : undefined
+                  }
                   aria-label={label}
                   aria-selected={selected}
                   className={`workbench__tab${selected ? " workbench__tab--active" : ""}`}
+                  data-tab-shortcut={tabHintsVisible && slot ? String(slot) : undefined}
                   data-testid={`workbench-tab-${toolId}`}
                   disabled={loading}
                   id={tabId(toolId)}
@@ -157,10 +169,16 @@ export function Workbench({
                   }}
                   role="tab"
                   tabIndex={selected || (view.selection.kind === "chooser" && index === 0) ? 0 : -1}
-                  title={label}
+                  title={shortcut ? `${label} (${shortcut})` : label}
                   type="button"
                 >
-                  <ToolIcon tool={tool} />
+                  {tabHintsVisible && shortcut ? (
+                    <span className="workbench__tab-shortcut" aria-hidden="true">
+                      {shortcut}
+                    </span>
+                  ) : (
+                    <ToolIcon tool={tool} />
+                  )}
                   <span>{label}</span>
                 </button>
                 <button

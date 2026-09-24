@@ -1,7 +1,11 @@
 import { SettingsGroup, SettingsRow } from "./settings-utils";
 
-/** "Mod" is Cmd on macOS and Ctrl elsewhere; "Ctrl" is Control on every platform. */
-type Modifier = "Ctrl" | "Alt" | "Shift" | "Mod";
+/**
+ * "Mod" is Cmd on macOS and Ctrl elsewhere; "Ctrl" is Control on every platform.
+ * "TabMod" is Control on macOS and Alt elsewhere, the side panel tab modifier.
+ */
+type KeyModifier = "Ctrl" | "Alt" | "Shift" | "Mod";
+type Modifier = KeyModifier | "TabMod";
 
 interface Shortcut {
   readonly title: string;
@@ -49,13 +53,14 @@ const SHORTCUT_GROUPS: readonly {
       { title: "Toggle terminal", modifiers: ["Mod"], key: "J" },
       { title: "New terminal tab", modifiers: ["Mod"], key: "T" },
       { title: "Toggle review", modifiers: ["Mod"], key: "R" },
+      { title: "Switch to side panel tab", modifiers: ["TabMod"], key: "1–9" },
       { title: "Close workbench tab", modifiers: ["Mod"], key: "W" },
     ],
   },
 ];
 
 // Apple's modifier order is ⌃⌥⇧⌘, matching the menu bar and the command palette hints.
-const MAC_MODIFIERS: readonly (readonly [Modifier, string])[] = [
+const MAC_MODIFIERS: readonly (readonly [KeyModifier, string])[] = [
   ["Ctrl", "⌃"],
   ["Alt", "⌥"],
   ["Shift", "⇧"],
@@ -63,16 +68,17 @@ const MAC_MODIFIERS: readonly (readonly [Modifier, string])[] = [
 ];
 
 function shortcutKeys(platform: NodeJS.Platform, shortcut: Shortcut): readonly string[] {
+  const held = shortcut.modifiers.map((modifier): KeyModifier =>
+    modifier === "TabMod" ? (platform === "darwin" ? "Ctrl" : "Alt") : modifier,
+  );
   if (platform === "darwin") {
-    const modifiers = MAC_MODIFIERS.filter(([modifier]) =>
-      shortcut.modifiers.includes(modifier),
-    ).map(([, symbol]) => symbol);
+    const modifiers = MAC_MODIFIERS.filter(([modifier]) => held.includes(modifier)).map(
+      ([, symbol]) => symbol,
+    );
     return [...modifiers, shortcut.key === "Enter" ? "↩" : shortcut.key];
   }
   const modifiers = (["Ctrl", "Alt", "Shift"] as const).filter(
-    (modifier) =>
-      shortcut.modifiers.includes(modifier) ||
-      (modifier === "Ctrl" && shortcut.modifiers.includes("Mod")),
+    (modifier) => held.includes(modifier) || (modifier === "Ctrl" && held.includes("Mod")),
   );
   return [...modifiers, shortcut.key];
 }

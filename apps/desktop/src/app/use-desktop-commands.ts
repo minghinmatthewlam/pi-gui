@@ -20,11 +20,13 @@ import {
   desktopCommands,
   earlyModifierChords,
   getDesktopCommandFromShortcut,
+  getSidePanelTabCommand,
   isCloseFocusedSurfaceShortcut,
   isPaletteCommand,
   isRecentThreadCommand,
   isSinglePressCommand,
   platformShortcutModifier,
+  sidePanelTabIndex,
   type ChordSource,
   type PiDesktopApi,
   type PiDesktopCommand,
@@ -43,6 +45,7 @@ import {
 } from "../features/threads/thread-groups";
 import type { ThreadAction, ThreadActionId } from "../features/threads/thread-actions";
 import { dismissThreadShortcutHints } from "../features/threads/thread-shortcut-hints";
+import { dismissSidePanelTabHints } from "../features/workbench/side-panel-tab-hints";
 import type { useWorkbench } from "../features/workbench/use-workbench";
 import {
   canTogglePrimarySidebar,
@@ -137,6 +140,10 @@ export function useDesktopCommands(input: DesktopCommandsInput) {
   const toggleSidePanel = () => {
     if (sidePanelAvailable) workbench.toggleVisibility();
   };
+  const selectSidePanelTab = (index: number) => {
+    const tool = sidePanelAvailable ? workbench.view.tools[index] : undefined;
+    if (tool) workbench.activateTool(toolRefId(tool));
+  };
   const closeFocusedSurface = () => {
     if (!closableSurfaceFromTarget(document.activeElement)) return;
     if (workbench.view.selection.kind === "tool")
@@ -215,6 +222,15 @@ export function useDesktopCommands(input: DesktopCommandsInput) {
     [desktopCommands.selectRecentThread7]: () => selectRecentThread(6),
     [desktopCommands.selectRecentThread8]: () => selectRecentThread(7),
     [desktopCommands.selectRecentThread9]: () => selectRecentThread(8),
+    [desktopCommands.selectSidePanelTab1]: () => selectSidePanelTab(0),
+    [desktopCommands.selectSidePanelTab2]: () => selectSidePanelTab(1),
+    [desktopCommands.selectSidePanelTab3]: () => selectSidePanelTab(2),
+    [desktopCommands.selectSidePanelTab4]: () => selectSidePanelTab(3),
+    [desktopCommands.selectSidePanelTab5]: () => selectSidePanelTab(4),
+    [desktopCommands.selectSidePanelTab6]: () => selectSidePanelTab(5),
+    [desktopCommands.selectSidePanelTab7]: () => selectSidePanelTab(6),
+    [desktopCommands.selectSidePanelTab8]: () => selectSidePanelTab(7),
+    [desktopCommands.selectSidePanelTab9]: () => selectSidePanelTab(8),
   };
   handleCommandRef.current = (command, source = "renderer") => {
     // Any other shortcut acts on the app behind the palette, so close it first.
@@ -242,6 +258,20 @@ export function useDesktopCommands(input: DesktopCommandsInput) {
     if (closeSurfaceShortcut && closableSurfaceFromTarget(event.target)) {
       event.preventDefault();
       closeFocusedSurface();
+      return;
+    }
+    // Main consumes these chords in the app; this path serves keydowns it never saw.
+    const sidePanelTabCommand = getSidePanelTabCommand(api?.platform ?? "linux", {
+      meta: event.metaKey,
+      control: event.ctrlKey,
+      alt: event.altKey,
+      shift: event.shiftKey,
+      key: event.key,
+      code: event.code,
+    });
+    if (sidePanelTabCommand) {
+      event.preventDefault();
+      if (!event.repeat) handleCommandRef.current(sidePanelTabCommand);
       return;
     }
     if (isEventInsideTerminal(event)) {
@@ -312,8 +342,9 @@ export function useDesktopCommands(input: DesktopCommandsInput) {
     // Bind once. Re-subscribing when session or search identity changes drops
     // Cmd+R and 1-9 in the gap after a thread switch or relaunch.
     const dispatch = (command: PiDesktopCommand, source: ChordSource) => {
-      // Thread switches keep the 1-9 hints up while the modifier stays held.
+      // Thread and tab switches keep their 1-9 hints up while the modifier stays held.
       if (!isRecentThreadCommand(command)) dismissThreadShortcutHints();
+      if (sidePanelTabIndex(command) === undefined) dismissSidePanelTabHints();
       handleCommandRef.current(command, source);
     };
     const removeCommandListener = window.piApp?.onCommand?.((command) => dispatch(command, "main"));

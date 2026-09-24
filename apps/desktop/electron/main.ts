@@ -56,6 +56,7 @@ import {
   getDesktopCommandFromShortcut,
   isSinglePressCommand,
   isCloseFocusedSurfaceShortcut,
+  getSidePanelTabCommand,
   platformShortcutModifier,
   type CustomProviderProbeInput,
   type CustomProviderProbeResult,
@@ -446,6 +447,15 @@ function createWindow(): BrowserWindow {
   });
   window.webContents.on("before-input-event", (event, input) => {
     if (input.type !== "keyDown") {
+      return;
+    }
+
+    // Side panel tab chords act from the terminal too: it is itself a side panel
+    // tab, and these chords are the way out of it.
+    const sidePanelTabCommand = getSidePanelTabCommand(process.platform, input);
+    if (sidePanelTabCommand) {
+      event.preventDefault();
+      if (!input.isAutoRepeat) window.webContents.send(desktopIpc.appCommand, sidePanelTabCommand);
       return;
     }
 

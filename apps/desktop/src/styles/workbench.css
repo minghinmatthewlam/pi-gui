@@ -65,6 +65,14 @@
   height: 14px;
 }
 
+.workbench__tab .workbench__tab-shortcut {
+  flex: none;
+  min-width: 14px;
+  color: var(--muted-strong);
+  font-weight: 560;
+  font-variant-numeric: tabular-nums;
+}
+
 .workbench__tab--active {
   color: var(--theme-selection-ink, var(--text-strong));
 }
