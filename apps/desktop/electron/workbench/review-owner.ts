@@ -91,14 +91,24 @@ export class ReviewOwner {
       }
       const turns = (await this.options.checkpoints?.listTurns?.(input.target)) ?? [];
       const summaries = await Promise.all(
-        turns.map(async (turn): Promise<TurnChangeSummary> => ({
-          checkpointId: turn.checkpointId,
-          checkoutId: turn.checkoutId,
-          entryIds: turn.entryIds,
-          files: await this.turnChangedFiles(turn),
-        })),
+        turns.map(async (turn): Promise<TurnChangeSummary | null> => {
+          try {
+            return {
+              checkpointId: turn.checkpointId,
+              checkoutId: turn.checkoutId,
+              entryIds: turn.entryIds,
+              files: await this.turnChangedFiles(turn),
+            };
+          } catch {
+            // One unreadable capture drops only its own card; its Review still reports why.
+            return null;
+          }
+        }),
       );
-      return { state: "available", turns: summaries.filter((turn) => turn.files.length > 0) };
+      return {
+        state: "available",
+        turns: summaries.filter((turn): turn is TurnChangeSummary => Boolean(turn?.files.length)),
+      };
     } catch (error: unknown) {
       return failed(error);
     }

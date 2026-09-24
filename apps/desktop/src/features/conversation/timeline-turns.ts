@@ -92,12 +92,16 @@ function turnChangeCardPositions(
   for (const turn of turnChanges) {
     let index = lastIndex.get(turn);
     if (index === undefined) continue;
-    while (index + 1 < transcript.length && !isUserMessage(transcript[index + 1])) index += 1;
+    while (index + 1 < transcript.length && !startsAnotherTurn(transcript[index + 1], turn)) {
+      index += 1;
+    }
     positions.set(index, [...(positions.get(index) ?? []), turn]);
   }
   return positions;
-}
 
-function isUserMessage(item: TranscriptMessage | undefined): boolean {
-  return item?.kind === "message" && item.role === "user";
+  function startsAnotherTurn(item: TranscriptMessage | undefined, turn: TurnChangeSummary) {
+    if (item?.kind !== "message") return false;
+    const owner = turnByEntry.get(item.sourceMessageId ?? item.id);
+    return item.role === "user" || (owner !== undefined && owner !== turn);
+  }
 }

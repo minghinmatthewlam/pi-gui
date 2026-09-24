@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { TurnChangeSummary, TurnChangedFile } from "../../../contracts/review";
 import { FileDiffIcon } from "../../ui/icons";
 
@@ -15,6 +15,7 @@ export function TurnChangesCard({
   readonly onOpen?: OpenTurnChange;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const listRef = useRef<HTMLUListElement | null>(null);
   const { files } = turn;
   const hidden = expanded ? 0 : Math.max(0, files.length - COLLAPSED_FILE_COUNT);
   const shown = hidden ? files.slice(0, COLLAPSED_FILE_COUNT) : files;
@@ -53,7 +54,7 @@ export function TurnChangesCard({
           </button>
         ) : null}
       </header>
-      <ul className="turn-changes__files">
+      <ul className="turn-changes__files" ref={listRef}>
         {shown.map((file) => (
           <li key={file.path}>
             <button
@@ -74,7 +75,15 @@ export function TurnChangesCard({
             <button
               type="button"
               className="turn-changes__file turn-changes__more"
-              onClick={() => setExpanded(true)}
+              onClick={() => {
+                setExpanded(true);
+                // The button unmounts; keep keyboard focus on the first newly shown file.
+                requestAnimationFrame(() =>
+                  listRef.current
+                    ?.querySelectorAll<HTMLButtonElement>(".turn-changes__file")
+                    [COLLAPSED_FILE_COUNT]?.focus(),
+                );
+              }}
             >
               {`Show ${hidden} more`}
             </button>

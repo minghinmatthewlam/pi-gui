@@ -697,9 +697,13 @@ export async function summarizeGitTreeChanges(
   for (let index = 0; index < records.length && files.length < MAX_FILES; index += 1) {
     const record = records[index];
     if (!record) continue;
-    const [added, removed, inlinePath] = record.split("\t");
-    if (added === undefined || removed === undefined || inlinePath === undefined)
-      throw new Error("Invalid Git change summary.");
+    // With -z paths are not quoted, so a path may itself contain tabs.
+    const addedEnd = record.indexOf("\t");
+    const removedEnd = record.indexOf("\t", addedEnd + 1);
+    if (addedEnd < 0 || removedEnd < 0) throw new Error("Invalid Git change summary.");
+    const added = record.slice(0, addedEnd);
+    const removed = record.slice(addedEnd + 1, removedEnd);
+    const inlinePath = record.slice(removedEnd + 1);
     // A rename leaves the inline path empty and lists the old and new paths next.
     const previousPath = inlinePath ? undefined : records[++index];
     const path = inlinePath || records[++index];

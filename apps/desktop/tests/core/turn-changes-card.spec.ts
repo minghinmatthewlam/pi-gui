@@ -137,17 +137,17 @@ test("a turn that edits files gets a changes card whose rows open that file's di
     await expect(
       panel.locator('.diff-panel__file--selected[data-file-path="src/nested/f.txt"]'),
     ).toBeVisible();
-    await expect(panel.getByRole("region", { name: "Combined changes", exact: true })).toContainText(
-      "line two",
-    );
+    await expect(
+      panel.getByRole("region", { name: "Combined changes", exact: true }),
+    ).toContainText("line two");
 
     await card.getByRole("button", { name: "Review", exact: true }).click();
     await expect(
       panel.locator('.diff-panel__file--selected[data-file-path="a.txt"]'),
     ).toBeVisible();
-    await expect(panel.getByRole("region", { name: "Combined changes", exact: true })).toContainText(
-      "old line",
-    );
+    await expect(
+      panel.getByRole("region", { name: "Combined changes", exact: true }),
+    ).toContainText("old line");
 
     // A turn that changes nothing gets no card and no Review action.
     await window.getByTestId("composer").fill("just talk");

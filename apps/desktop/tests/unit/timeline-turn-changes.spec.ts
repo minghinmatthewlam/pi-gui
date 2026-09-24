@@ -78,11 +78,13 @@ test("tree summaries report per-file line counts, renames and binary files", asy
   await writeFile(join(repo, "edited.txt"), "one\n2\nthree\n");
   await rename(join(repo, "moved.txt"), join(repo, "renamed.txt"));
   await writeFile(join(repo, "image.bin"), Buffer.from([0, 1, 2, 0]));
+  await writeFile(join(repo, "tab\tname.txt"), "x\n");
   await git("add", "-A");
   const after = (await git("write-tree")).stdout.trim();
   expect(await summarizeGitTreeChanges(repo, before, after)).toEqual([
     { path: "edited.txt", lines: { added: 2, removed: 1 } },
     { path: "image.bin", lines: null },
     { path: "renamed.txt", previousPath: "moved.txt", lines: { added: 0, removed: 0 } },
+    { path: "tab\tname.txt", lines: { added: 1, removed: 0 } },
   ]);
 });
