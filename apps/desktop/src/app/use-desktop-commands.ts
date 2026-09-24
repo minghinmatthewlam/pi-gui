@@ -260,7 +260,8 @@ export function useDesktopCommands(input: DesktopCommandsInput) {
       closeFocusedSurface();
       return;
     }
-    // Main consumes these chords in the app; this path serves keydowns it never saw.
+    // Main consumes these chords in the app, the terminal included; this path
+    // serves keydowns it never saw, such as Playwright key presses.
     const sidePanelTabCommand = getSidePanelTabCommand(api?.platform ?? "linux", {
       meta: event.metaKey,
       control: event.ctrlKey,

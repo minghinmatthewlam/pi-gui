@@ -66,3 +66,8 @@ test("ignores the modifier when Shift or AltGr is part of the press", () => {
   expect(run("darwin", ["down Shift shift", "down Meta meta shift"])).toBe(false);
   expect(run("win32", ["down Control ctrl", "down AltGraph ctrl alt"])).toBe(false);
 });
+
+test("ends thread hints when Alt joins the held modifier", () => {
+  expect(run("darwin", ["down Meta meta", "down Alt meta alt"])).toBe(false);
+  expect(run("linux", ["down Control ctrl", "down Alt ctrl alt"])).toBe(false);
+});
