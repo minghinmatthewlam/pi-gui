@@ -1520,9 +1520,6 @@ const ThreadSessionRow = forwardRef<HTMLDivElement, ThreadSessionRowProps>(
               {showContext ? (
                 <span className="session-row__context">{thread.contextLabel}</span>
               ) : null}
-              {thread.session.preview ? (
-                <span className="session-row__preview">{thread.session.preview}</span>
-              ) : null}
             </span>
           </button>
           <span className="session-row__trailing">
