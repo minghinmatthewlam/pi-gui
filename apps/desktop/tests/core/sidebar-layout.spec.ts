@@ -7,10 +7,6 @@ import {
   waitForWorkspaceByPath,
 } from "../helpers/electron-app";
 
-// Demo recordings set this to pause on each step; tests run at full speed.
-const pause = (window: Page) =>
-  window.waitForTimeout(Number(process.env.PI_APP_DEMO_PAUSE_MS ?? 0));
-
 test("folder rows start a new thread in that folder", async () => {
   test.setTimeout(60_000);
   const userDataDir = await makeUserDataDir();
@@ -22,14 +18,15 @@ test("folder rows start a new thread in that folder", async () => {
     const window = await harness.firstWindow();
     await waitForWorkspaceByPath(window, workspaceA);
     await waitForWorkspaceByPath(window, workspaceB);
-    await pause(window);
 
     const workspacePicker = window.getByRole("combobox", { name: "Workspace" });
     for (const path of [workspaceB, workspaceA]) {
       await window.getByRole("button", { name: `New thread in ${basename(path)}` }).click();
       await expect(window.getByTestId("new-thread-composer")).toBeVisible();
       await expect(workspacePicker.locator("option:checked")).toHaveText(basename(path));
-      await pause(window);
+      await expect(window.getByTestId("topbar").locator(".topbar__workspace")).toHaveText(
+        basename(path),
+      );
     }
   } finally {
     await harness.close();
@@ -48,7 +45,6 @@ test("the sidebar can be dragged wider, remembers its width and resets on double
     const window = await harness.firstWindow();
     await waitForWorkspaceByPath(window, workspace);
     const defaultWidth = await sidebarWidth(window);
-    await pause(window);
 
     const handle = window.getByRole("separator", { name: "Sidebar width" });
     const start = (await handle.boundingBox())!;
@@ -57,7 +53,6 @@ test("the sidebar can be dragged wider, remembers its width and resets on double
     await window.mouse.move(start.x + 103, start.y + 200, { steps: 10 });
     await window.mouse.up();
     await expect.poll(() => sidebarWidth(window)).toBe(defaultWidth + 100);
-    await pause(window);
 
     // Dragging far past the limit stops at the maximum instead of swallowing the window.
     const widened = (await handle.boundingBox())!;
@@ -68,14 +63,12 @@ test("the sidebar can be dragged wider, remembers its width and resets on double
     const max = Number(await handle.getAttribute("aria-valuemax"));
     expect(max).toBeGreaterThan(defaultWidth + 100);
     await expect.poll(() => sidebarWidth(window)).toBe(max);
-    await pause(window);
 
     await handle.focus();
     await window.keyboard.press("Home");
     await expect.poll(() => sidebarWidth(window)).toBe(200);
     await window.keyboard.press("ArrowRight");
     await expect.poll(() => sidebarWidth(window)).toBe(220);
-    await pause(window);
   } finally {
     await harness.close();
   }
@@ -85,7 +78,6 @@ test("the sidebar can be dragged wider, remembers its width and resets on double
     const window = await harness.firstWindow();
     await waitForWorkspaceByPath(window, workspace);
     await expect.poll(() => sidebarWidth(window)).toBe(220);
-    await pause(window);
 
     await window.getByRole("separator", { name: "Sidebar width" }).dblclick();
     const defaultWidth = await window.evaluate(() =>
@@ -94,7 +86,6 @@ test("the sidebar can be dragged wider, remembers its width and resets on double
       ),
     );
     await expect.poll(() => sidebarWidth(window)).toBe(defaultWidth);
-    await pause(window);
   } finally {
     await harness.close();
   }

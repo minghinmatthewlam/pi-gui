@@ -970,7 +970,11 @@ export default function App() {
       <main className={mainClassName} style={workbenchWidth.style}>
         <Topbar
           activeView={snapshot.activeView}
-          rootWorkspace={rootWorkspace}
+          rootWorkspace={
+            snapshot.activeView === "new-thread"
+              ? (newThread.workspace ?? rootWorkspace)
+              : rootWorkspace
+          }
           selectedWorkspace={selectedWorkspace}
           selectedWorktree={selectedWorktree}
           api={api}

@@ -36,7 +36,10 @@ test("queues follow-ups with Enter and steers the current run with Cmd+Enter", a
   try {
     const window = await harness.firstWindow();
 
-    await window.getByRole("complementary").getByRole("button", { name: "New thread", exact: true }).click();
+    await window
+      .getByRole("complementary")
+      .getByRole("button", { name: "New thread", exact: true })
+      .click();
     await window
       .getByLabel("New thread prompt")
       .fill(

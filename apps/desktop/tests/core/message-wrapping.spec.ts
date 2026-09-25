@@ -80,7 +80,10 @@ test("wraps long markdown content inside transcript message bubbles", async () =
   try {
     const window = await harness.firstWindow();
     await waitForWorkspaceByPath(window, workspacePath);
-    await window.getByRole("complementary").getByRole("button", { name: "New thread", exact: true }).click();
+    await window
+      .getByRole("complementary")
+      .getByRole("button", { name: "New thread", exact: true })
+      .click();
 
     const prompt = window.getByLabel("New thread prompt");
     await expect(prompt).toBeVisible();

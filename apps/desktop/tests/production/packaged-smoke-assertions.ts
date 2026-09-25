@@ -27,7 +27,10 @@ export async function assertPackagedAppCanStartThread(
   await waitForWorkspaceByPath(window, options.workspacePath);
   await expect(window.getByTestId("workspace-list")).toContainText(basename(options.workspacePath));
 
-  await window.getByRole("complementary").getByRole("button", { name: "New thread", exact: true }).click();
+  await window
+    .getByRole("complementary")
+    .getByRole("button", { name: "New thread", exact: true })
+    .click();
   const prompt = window.getByLabel("New thread prompt");
   await expect(prompt).toBeVisible();
   await prompt.fill(options.promptText);
