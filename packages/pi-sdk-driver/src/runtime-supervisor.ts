@@ -9,7 +9,7 @@ import {
   SettingsManager,
   parseFrontmatter,
   stripFrontmatter,
-  type ExtensionFactory,
+  type InlineExtension,
   type PathMetadata,
   type ResolvedPaths,
   type ResolvedResource,
@@ -33,6 +33,11 @@ import {
   isGlobalNpmLookupError,
 } from "./npm-package-fallback.js";
 import { skillSlashCommand } from "./runtime-command-utils.js";
+import {
+  findBuiltinExtension,
+  type BuiltinExtension,
+  type BuiltinExtensionEnabled,
+} from "./builtin-extensions.js";
 import {
   BUILT_IN_PROVIDER_IDS,
   CustomProviderStore,
@@ -84,15 +89,10 @@ interface RuntimeContext {
   modelRuntime: ModelRuntime;
 }
 
-export interface RuntimeInlineExtensionMetadata {
-  readonly displayName: string;
-  readonly description?: string;
-}
-
 export interface RuntimeSupervisorOptions {
   readonly agentDir?: string;
-  readonly extensionFactories?: readonly ExtensionFactory[];
-  readonly inlineExtensionMetadata?: readonly RuntimeInlineExtensionMetadata[];
+  readonly builtinExtensions?: readonly BuiltinExtension[];
+  readonly isBuiltinExtensionEnabled?: BuiltinExtensionEnabled;
   readonly customProviderStore?: CustomProviderStore;
 }
 
@@ -108,8 +108,8 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
   private readonly agentDir: string;
   private readonly modelsJsonPath: string;
   private readonly authPath: string;
-  private readonly extensionFactories: readonly ExtensionFactory[];
-  private readonly inlineExtensionMetadata: readonly RuntimeInlineExtensionMetadata[];
+  private readonly builtinExtensions: readonly BuiltinExtension[];
+  private readonly isBuiltinExtensionEnabled: BuiltinExtensionEnabled;
   private readonly customProviderStore: CustomProviderStore;
   private readonly contexts = new Map<string, RuntimeContext>();
 
@@ -118,8 +118,8 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
     this.agentDir = deps.agentDir;
     this.modelsJsonPath = deps.modelsJsonPath;
     this.authPath = deps.authPath;
-    this.extensionFactories = options.extensionFactories ?? [];
-    this.inlineExtensionMetadata = options.inlineExtensionMetadata ?? [];
+    this.builtinExtensions = options.builtinExtensions ?? [];
+    this.isBuiltinExtensionEnabled = options.isBuiltinExtensionEnabled ?? (() => true);
     this.customProviderStore = deps.customProviderStore;
   }
 
@@ -409,6 +409,16 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
     return this.buildSnapshot(context);
   }
 
+  /** The built-in's name when `path` is a pi-gui built-in extension, which Settings toggles app-wide. */
+  builtinExtensionName(path: string): string | undefined {
+    return findBuiltinExtension(this.builtinExtensions, path)?.name;
+  }
+
+  /** Every built-in loads ungated here so Settings can list a switched-off one with its tools. */
+  private inventoryExtensionFactories(): InlineExtension[] {
+    return this.builtinExtensions.map(({ name, factory }) => ({ name, factory }));
+  }
+
   private async ensureContext(workspace: WorkspaceRef): Promise<RuntimeContext> {
     const existing = this.contexts.get(workspace.workspaceId);
     if (existing) {
@@ -425,7 +435,7 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
       cwd: workspace.path,
       agentDir: this.agentDir,
       settingsManager,
-      extensionFactories: [...this.extensionFactories],
+      extensionFactories: this.inventoryExtensionFactories(),
     });
     try {
       await resourceLoader.reload();
@@ -455,7 +465,7 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
         cwd: workspace.path,
         agentDir: this.agentDir,
         settingsManager,
-        extensionFactories: [...this.extensionFactories],
+        extensionFactories: this.inventoryExtensionFactories(),
       });
       await resourceLoader.reload();
     }
@@ -874,12 +884,12 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
   private buildInlineExtensionRecord(
     extension: ReturnType<DefaultResourceLoader["getExtensions"]>["extensions"][number],
   ): RuntimeExtensionRecord {
-    const metadata = inlineExtensionMetadataForPath(extension.path, this.inlineExtensionMetadata);
+    const builtin = findBuiltinExtension(this.builtinExtensions, extension.path);
     return {
       path: extension.path,
-      displayName: metadata.displayName,
-      ...(metadata.description ? { description: metadata.description } : {}),
-      enabled: true,
+      displayName: builtin?.displayName ?? extension.path,
+      ...(builtin?.description ? { description: builtin.description } : {}),
+      enabled: builtin ? this.isBuiltinExtensionEnabled(builtin.name) : true,
       sourceInfo: {
         path: extension.path,
         source: "builtin",
@@ -1253,15 +1263,6 @@ function toRuntimeSourceInfo(path: string, metadata: PathMetadata): RuntimeSourc
     origin: metadata.origin,
     ...(metadata.baseDir ? { baseDir: metadata.baseDir } : {}),
   };
-}
-
-function inlineExtensionMetadataForPath(
-  path: string,
-  metadata: readonly RuntimeInlineExtensionMetadata[],
-): RuntimeInlineExtensionMetadata {
-  const match = /^<inline:(\d+)>$/.exec(path);
-  const index = match?.[1] ? Number.parseInt(match[1], 10) - 1 : -1;
-  return metadata[index] ?? { displayName: path };
 }
 
 function titleForResourceKind(kind: ToggleableResourceKind): string {

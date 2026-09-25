@@ -894,24 +894,24 @@ app
         onInvalidated: ({ target, generation }) =>
           extensionViews.invalidateRuntime(target, generation),
       },
-      extensionFactories: [
-        createOrchestrationRuntimeExtension(orchestrationRuntimeBridge),
-        createScheduledTaskRuntimeExtension(scheduledTaskRuntimeBridge, (ctx) => {
-          try {
-            return sessionRefFromExtensionContext(ctx).workspaceId;
-          } catch {
-            return undefined;
-          }
-        }),
-      ],
-      inlineExtensionMetadata: [
+      builtinExtensions: [
         {
+          name: "pi-gui-thread-orchestration",
           displayName: "Thread orchestration",
-          description: "Start child pi-gui threads from transcript tool calls",
+          description: "Lets pi start, read and message other pi-gui threads",
+          factory: createOrchestrationRuntimeExtension(orchestrationRuntimeBridge),
         },
         {
+          name: "pi-gui-scheduled-tasks",
           displayName: "Scheduled tasks",
-          description: "Create and update local pi-gui scheduled tasks from transcript tool calls",
+          description: "Lets pi create and update local pi-gui scheduled tasks",
+          factory: createScheduledTaskRuntimeExtension(scheduledTaskRuntimeBridge, (ctx) => {
+            try {
+              return sessionRefFromExtensionContext(ctx).workspaceId;
+            } catch {
+              return undefined;
+            }
+          }),
         },
       ],
     };

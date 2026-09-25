@@ -8,7 +8,7 @@ import {
   type AgentSession,
   type AgentSessionEvent,
   type CreateAgentSessionOptions,
-  type ExtensionFactory,
+  type InlineExtension,
   type ExtensionCommandContextActions,
   type ExtensionUIDialogOptions,
   type ExtensionUIContext,
@@ -52,6 +52,11 @@ import { isMissingFileError, JsonCatalogStore } from "@pi-gui/catalogs/node";
 import type { SessionFileCatalogStorage } from "@pi-gui/catalogs";
 import { sessionKey } from "@pi-gui/session-driver";
 import { buildSessionSchemaInfo, readSessionFileSchemaVersion } from "./session-schema.js";
+import {
+  gatedBuiltinExtensions,
+  type BuiltinExtension,
+  type BuiltinExtensionEnabled,
+} from "./builtin-extensions.js";
 import {
   acquireLeaseFile,
   currentLeaseIdentity,
@@ -152,7 +157,9 @@ export interface PiSdkDriverOptions {
     options?: PiCreateAgentSessionOptions,
   ) => Promise<AgentSessionRuntime>;
   readonly agentDir?: string;
-  readonly extensionFactories?: readonly ExtensionFactory[];
+  readonly builtinExtensions?: readonly BuiltinExtension[];
+  /** Read each time a session loads or reloads its extensions; defaults to enabled. */
+  readonly isBuiltinExtensionEnabled?: BuiltinExtensionEnabled;
   readonly desktopExtensions?: PiDesktopExtensionObserver;
   readonly onTurnCaptureBoundary?: import("@pi-gui/session-driver").TurnCaptureObserver;
   readonly turnCaptureTimeoutMs?: number;
@@ -240,7 +247,7 @@ export class SessionSupervisor {
     options?: PiCreateAgentSessionOptions,
   ) => Promise<AgentSessionRuntime>;
   private readonly agentDir: string | undefined;
-  private readonly extensionFactories: readonly ExtensionFactory[];
+  private readonly builtinExtensions: readonly InlineExtension[];
   private readonly desktopExtensions: PiDesktopExtensionObserver | undefined;
   private readonly onTurnCaptureBoundary: PiSdkDriverOptions["onTurnCaptureBoundary"];
   private readonly turnCaptureTimeoutMs: number | undefined;
@@ -263,7 +270,10 @@ export class SessionSupervisor {
         : new JsonCatalogStore());
     this.createAgentSessionRuntimeImpl =
       options.createAgentSessionRuntimeImpl ?? createAgentSessionRuntimeWithNpmFallback;
-    this.extensionFactories = options.extensionFactories ?? [];
+    this.builtinExtensions = gatedBuiltinExtensions(
+      options.builtinExtensions ?? [],
+      options.isBuiltinExtensionEnabled ?? (() => true),
+    );
     this.desktopExtensions = options.desktopExtensions;
     this.onTurnCaptureBoundary = options.onTurnCaptureBoundary;
     this.turnCaptureTimeoutMs = options.turnCaptureTimeoutMs;
@@ -287,7 +297,7 @@ export class SessionSupervisor {
       sessionManager,
       resourceLoaderOptions: {
         extensionFactories: [
-          ...this.extensionFactories,
+          ...this.builtinExtensions,
           {
             name: "pi-gui-plan-limits",
             hidden: true,

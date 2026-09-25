@@ -33,6 +33,8 @@ export interface PersistedUiState {
     readonly ExtensionCommandCompatibilityRecord[]
   >;
   readonly notificationPreferences?: Partial<NotificationPreferences>;
+  /** Names of pi-gui built-in extensions the user switched off. */
+  readonly disabledBuiltinExtensions?: readonly string[];
   readonly integratedTerminalShell?: string;
   readonly lastViewedAtBySession?: Record<string, string>;
   readonly lastInteractedAtBySession?: Record<string, string>;
@@ -95,6 +97,7 @@ export function decodePersistedUiState(parsed: unknown): LegacyPersistedUiState 
       candidate.extensionCommandCompatibilityByWorkspace,
     ),
     notificationPreferences: toNotificationPreferences(candidate.notificationPreferences),
+    disabledBuiltinExtensions: toStringArray(candidate.disabledBuiltinExtensions),
     integratedTerminalShell:
       typeof candidate.integratedTerminalShell === "string"
         ? candidate.integratedTerminalShell
@@ -197,6 +200,7 @@ function validateUiState(value: unknown): Record<string, unknown> {
       "composerDraftsBySession",
       "extensionCommandCompatibilityByWorkspace",
       "notificationPreferences",
+      "disabledBuiltinExtensions",
       "integratedTerminalShell",
       "lastViewedAtBySession",
       "lastInteractedAtBySession",
@@ -253,7 +257,8 @@ function validateUiState(value: unknown): Record<string, unknown> {
     "pinnedAtBySession",
   ])
     optional(root, key, stringRecord);
-  for (const key of ["pinnedSessionOrder", "workspaceOrder"]) optional(root, key, strings);
+  for (const key of ["pinnedSessionOrder", "workspaceOrder", "disabledBuiltinExtensions"])
+    optional(root, key, strings);
   for (const key of ["sidebarCollapsed", "allowMultiple", "enableTransparency"])
     optional(root, key, boolean);
   optional(root, "activeView", (v) => toAppView(v) !== undefined);

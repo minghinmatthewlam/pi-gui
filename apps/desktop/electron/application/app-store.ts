@@ -164,11 +164,7 @@ export interface DesktopAppStoreOptions {
   readonly shouldKeepSessionDialogs?: (sessionRef: SessionRef) => boolean;
   readonly driverOptions?: Pick<
     PiSdkDriverConfig,
-    | "extensionFactories"
-    | "inlineExtensionMetadata"
-    | "desktopExtensions"
-    | "onTurnCaptureBoundary"
-    | "turnCaptureTimeoutMs"
+    "builtinExtensions" | "desktopExtensions" | "onTurnCaptureBoundary" | "turnCaptureTimeoutMs"
   >;
   readonly generateThreadTitleOverride?: (
     workspace: WorkspaceRef,
@@ -263,6 +259,8 @@ export class DesktopAppStore {
   private readonly workspaceOwner: WorkspaceOwner;
   private readonly orchestrationOwner: OrchestrationOwner;
   private readonly scheduledTaskOwner: ScheduledTaskOwner;
+  /** App-wide: built-in pi-gui extensions the user switched off in Settings. */
+  private readonly disabledBuiltinExtensions = new Set<string>();
 
   constructor(options: DesktopAppStoreOptions) {
     const catalogFilePath = join(options.userDataDir, "catalogs.json");
@@ -270,6 +268,7 @@ export class DesktopAppStore {
     const driverOptions: PiSdkDriverConfig = {
       catalogStorage: this.catalogStore,
       ...(options.driverOptions ?? {}),
+      isBuiltinExtensionEnabled: (name) => !this.disabledBuiltinExtensions.has(name),
       ...(options.generateThreadTitleOverride
         ? { generateThreadTitleOverride: options.generateThreadTitleOverride }
         : {}),
@@ -1673,11 +1672,64 @@ export class DesktopAppStore {
     filePath: string,
     enabled: boolean,
   ): Promise<DesktopAppState> {
+    const builtinName = this.driver.runtimeSupervisor.builtinExtensionName(filePath);
+    if (builtinName) {
+      return this.setBuiltinExtensionEnabled(workspaceId, builtinName, enabled);
+    }
     return this.withRuntimeUpdate(
       workspaceId,
       (ws) => this.driver.runtimeSupervisor.setExtensionEnabled(ws, filePath, enabled),
       { reloadSessions: true },
     );
+  }
+
+  /** pi-gui owns built-in extensions, so their switch is app-wide rather than in pi's settings. */
+  private async setBuiltinExtensionEnabled(
+    workspaceId: string,
+    name: string,
+    enabled: boolean,
+  ): Promise<DesktopAppState> {
+    await this.initialize();
+    const ws = this.workspaceRefFromState(workspaceId);
+    if (!ws) {
+      return this.withError(`Unknown workspace: ${workspaceId}`);
+    }
+    const wasDisabled = this.disabledBuiltinExtensions.has(name);
+    const setDisabled = (disabled: boolean) =>
+      disabled
+        ? this.disabledBuiltinExtensions.add(name)
+        : this.disabledBuiltinExtensions.delete(name);
+    setDisabled(!enabled);
+    try {
+      await this.persistUiState();
+    } catch (error) {
+      // New sessions read the set directly, so an unsaved change must not stay in effect.
+      setDisabled(wasDisabled);
+      return this.withError(error);
+    }
+
+    return this.withErrorHandling(async () => {
+      const snapshot = await this.driver.runtimeSupervisor.refreshRuntime(ws);
+      await this.refreshRuntimeForAllWorkspaces(workspaceId, snapshot);
+      // One workspace failing to reload must not keep the others, or Settings, on the old tools.
+      const reloads = await Promise.allSettled(
+        this.state.workspaces.map((workspace) => {
+          this.clearExtensionUiForWorkspace(workspace.id);
+          return this.reloadSessionsForWorkspace(workspace.id);
+        }),
+      );
+      await this.refreshSessionCommandsForAllWorkspaces();
+      const failed = reloads.filter((result) => result.status === "rejected");
+      for (const result of failed) {
+        console.error("[app-store] reload after pi-gui tool switch failed", result.reason);
+      }
+      const state = await this.refreshState({ clearLastError: true });
+      return failed.length === 0
+        ? state
+        : this.withError(
+            "Some open threads could not reload; they pick up the pi-gui tools change when reopened.",
+          );
+    });
   }
 
   private async withRuntimeUpdate(
@@ -1947,6 +1999,10 @@ export class DesktopAppStore {
   }
 
   private restorePersistedUiState(persisted: LegacyPersistedUiState): void {
+    this.disabledBuiltinExtensions.clear();
+    for (const name of persisted.disabledBuiltinExtensions ?? []) {
+      this.disabledBuiltinExtensions.add(name);
+    }
     this.taskWorkbenchTemplatesBySession.clear();
     for (const [key, template] of Object.entries(persisted.taskWorkbenchTemplatesBySession ?? {})) {
       this.taskWorkbenchTemplatesBySession.set(key, template);
@@ -3631,6 +3687,10 @@ export class DesktopAppStore {
         this.extensionCommandCompatibilityByWorkspace,
       ),
       notificationPreferences: this.state.notificationPreferences,
+      disabledBuiltinExtensions:
+        this.disabledBuiltinExtensions.size > 0
+          ? [...this.disabledBuiltinExtensions].sort()
+          : undefined,
       integratedTerminalShell: this.state.integratedTerminalShell || undefined,
       lastViewedAtBySession: mapToRecord(this.sessionState.lastViewedAtBySession),
       lastInteractedAtBySession: mapToRecord(this.sessionState.lastInteractedAtBySession),

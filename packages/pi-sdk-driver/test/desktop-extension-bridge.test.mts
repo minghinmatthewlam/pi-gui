@@ -72,9 +72,13 @@ export default function extension(pi) {
     const driver = new PiSdkDriver({
       agentDir,
       catalogFilePath: join(root, "catalogs.json"),
-      extensionFactories: [
-        () => {
-          externalFactoryCalls += 1;
+      builtinExtensions: [
+        {
+          name: "external",
+          displayName: "External",
+          factory: () => {
+            externalFactoryCalls += 1;
+          },
         },
       ],
       desktopExtensions: {

@@ -5,11 +5,15 @@ import type {
 } from "../../../contracts/desktop-state";
 import { ExtensionIcon } from "../../ui/icons";
 import { SettingsGroup, SettingsRow } from "../settings/settings-utils";
-import { extensionGroupLabel } from "./extension-display";
+import {
+  extensionGroupLabel,
+  isPiGuiBuiltinExtension,
+  PI_GUI_TOOLS_LABEL,
+} from "./extension-display";
 import { displayPath, ResourceDetail } from "./resource-detail";
 import { ResourceEmptyState, ResourceList, type ResourceListGroup } from "./resource-list";
 
-const GROUP_ORDER = ["Workspace", "User", "This session", "Built-in"];
+const GROUP_ORDER = ["Workspace", "User", "This session", PI_GUI_TOOLS_LABEL];
 
 interface ExtensionsTabProps {
   readonly workspace: WorkspaceRecord;
@@ -81,14 +85,14 @@ function ExtensionDetail({
 }: Omit<ExtensionsTabProps, "extensions" | "searching" | "selected"> & {
   readonly selected: RuntimeExtensionRecord;
 }) {
-  const manageable = isManageableExtension(selected);
+  const hasFolder = isFolderExtension(selected);
   const compatibilityRecords = commandCompatibility
     .filter((record) => record.extensionPath === selected.path)
     .sort((left, right) => left.commandName.localeCompare(right.commandName));
   return (
     <ResourceDetail
       actions={
-        manageable ? (
+        hasFolder ? (
           <button
             className="button button--secondary"
             type="button"
@@ -104,7 +108,11 @@ function ExtensionDetail({
       subtitle={selected.sourceInfo.source}
       title={selected.displayName}
       onBack={() => onSelect(undefined)}
-      onToggle={manageable ? (enabled) => onToggleExtension(selected.path, enabled) : undefined}
+      onToggle={
+        isToggleableExtension(selected)
+          ? (enabled) => onToggleExtension(selected.path, enabled)
+          : undefined
+      }
     >
       {selected.description ? (
         <p className="resource-detail__description">{selected.description}</p>
@@ -120,7 +128,7 @@ function ExtensionDetail({
         >
           <span className="settings-row__value">{extensionGroupLabel(selected)}</span>
         </SettingsRow>
-        {extensionGroupLabel(selected) === "Built-in" ? null : (
+        {isPiGuiBuiltinExtension(selected) ? null : (
           <SettingsRow title="Location">
             <code className="resource-detail__code" title={selected.path}>
               {displayPath(selected.path, workspace.path)}
@@ -155,7 +163,7 @@ function groupExtensions(
         title: extension.displayName,
         description: describeExtension(extension),
         enabled: extension.enabled,
-        onToggle: isManageableExtension(extension)
+        onToggle: isToggleableExtension(extension)
           ? (enabled: boolean) => onToggleExtension(extension.path, enabled)
           : undefined,
       })),
@@ -177,8 +185,12 @@ function countLabel(count: number, noun: string): string {
   return count === 0 ? "" : `${count} ${noun}${count === 1 ? "" : "s"}`;
 }
 
-function isManageableExtension(extension: RuntimeExtensionRecord): boolean {
+function isFolderExtension(extension: RuntimeExtensionRecord): boolean {
   return extension.sourceInfo.scope === "project" || extension.sourceInfo.scope === "user";
+}
+
+function isToggleableExtension(extension: RuntimeExtensionRecord): boolean {
+  return isFolderExtension(extension) || isPiGuiBuiltinExtension(extension);
 }
 
 function ExtensionContributionSection({

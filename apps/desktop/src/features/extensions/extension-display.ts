@@ -7,11 +7,15 @@ export function extensionSourceSummary(extension: RuntimeExtensionRecord): strin
   return `${extensionScopeLabel(extension)} · ${extension.sourceInfo.origin}`;
 }
 
+export const PI_GUI_TOOLS_LABEL = "pi-gui tools";
+
+/** Extensions pi-gui itself adds to every session; switched on and off app-wide. */
+export function isPiGuiBuiltinExtension(extension: RuntimeExtensionRecord): boolean {
+  return extension.sourceInfo.source === "builtin" && extension.sourceInfo.origin === "top-level";
+}
+
 export function extensionScopeLabel(extension: RuntimeExtensionRecord): string {
-  if (extension.sourceInfo.source === "builtin" && extension.sourceInfo.origin === "top-level") {
-    return "Built-in";
-  }
-  return extension.sourceInfo.scope;
+  return isPiGuiBuiltinExtension(extension) ? PI_GUI_TOOLS_LABEL : extension.sourceInfo.scope;
 }
 
 /** Group heading for where a skill or extension was discovered. */
@@ -27,7 +31,7 @@ export function sourceScopeGroupLabel(scope: RuntimeSourceScope): string {
 }
 
 export function extensionGroupLabel(extension: RuntimeExtensionRecord): string {
-  return extensionScopeLabel(extension) === "Built-in"
-    ? "Built-in"
+  return isPiGuiBuiltinExtension(extension)
+    ? PI_GUI_TOOLS_LABEL
     : sourceScopeGroupLabel(extension.sourceInfo.scope);
 }
