@@ -306,3 +306,46 @@ test("settings do not show stale enabled-model pills when no providers are conne
     await harness.close();
   }
 });
+
+test("new thread starts once when Enter is pressed twice before it opens", async () => {
+  test.setTimeout(60_000);
+  const userDataDir = await makeUserDataDir();
+  const agentDir = join(userDataDir, "agent");
+  const workspacePath = await makeWorkspace("new-thread-double-submit-workspace");
+  await seedAgentDir(agentDir);
+  const harness = await launchDesktop(userDataDir, {
+    agentDir,
+    initialWorkspaces: [workspacePath],
+    testMode: "background",
+  });
+
+  try {
+    const window = await harness.firstWindow();
+    const sessionCount = async () =>
+      (await getDesktopState(window)).workspaces.reduce(
+        (count, workspace) => count + workspace.sessions.length,
+        0,
+      );
+    const before = await sessionCount();
+    await openNewThread(window);
+
+    const composer = window.getByTestId("new-thread-composer");
+    await composer.fill("start exactly one thread");
+    // Both key presses land before the first start returns, as a fast double Enter does.
+    await composer.evaluate((element) => {
+      for (let press = 0; press < 2; press += 1) {
+        element.dispatchEvent(
+          new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }),
+        );
+      }
+    });
+
+    await expect(window.getByTestId("composer")).toBeVisible({ timeout: 15_000 });
+    await expect.poll(sessionCount, { timeout: 5_000 }).toBe(before + 1);
+    // Give a late second start time to land before asserting it never did.
+    await window.waitForTimeout(1_000);
+    expect(await sessionCount()).toBe(before + 1);
+  } finally {
+    await harness.close();
+  }
+});
