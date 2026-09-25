@@ -120,7 +120,19 @@ await test("Stop pressed while Pi is still starting a run cancels that run", asy
     { initialModel: { provider: "stop-test", modelId: "scripted" } },
   );
   const events: SessionDriverEvent[] = [];
-  const unsubscribe = driver.subscribe(ref, (event) => events.push(event));
+  let stopWhenMarkedRunning = false;
+  const unsubscribe = driver.subscribe(ref, async (event) => {
+    events.push(event);
+    if (
+      stopWhenMarkedRunning &&
+      event.type === "sessionUpdated" &&
+      event.snapshot.status === "running"
+    ) {
+      // The driver awaits listeners, so this Stop lands before it calls session.prompt().
+      stopWhenMarkedRunning = false;
+      await driver.cancelCurrentRun(ref);
+    }
+  });
   t.after(async () => {
     unsubscribe();
     await driver.closeSession(ref);
@@ -161,4 +173,11 @@ await test("Stop pressed while Pi is still starting a run cancels that run", asy
     1,
     "only the second, unstopped run reports completion",
   );
+
+  // Stop while the driver is still saving the running state, before it hands the prompt to Pi.
+  stopWhenMarkedRunning = true;
+  await driver.sendUserMessage(ref, { text: "third" });
+  await runtime.session.waitForIdle();
+  assert.equal(stopWhenMarkedRunning, false, "Stop was pressed");
+  assert.deepEqual(assistantReplies().at(-1), ["aborted", ""]);
 });

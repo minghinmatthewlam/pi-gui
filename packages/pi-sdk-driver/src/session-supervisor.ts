@@ -899,7 +899,12 @@ export class SessionSupervisor {
 
     const isQueuedMessage = session.isStreaming && !isExtensionCommand && Boolean(input.deliverAs);
     const runId = isQueuedMessage || isExtensionCommand ? undefined : crypto.randomUUID();
-    if (!isQueuedMessage && !isExtensionCommand) record.cancellationRequested = false;
+    if (!isQueuedMessage && !isExtensionCommand) {
+      record.cancellationRequested = false;
+      record.abortOnRunStart = false;
+      // Stop can arrive from here on, before Pi has a run to abort.
+      record.promptStarting = true;
+    }
     record.runningRunId = runId ?? record.runningRunId;
     record.status = isQueuedMessage || isExtensionCommand ? record.status : "running";
     record.updatedAt = nowIso();
@@ -911,8 +916,13 @@ export class SessionSupervisor {
         queuedMessageFromInput(input, record.updatedAt),
       ];
     }
-    await this.persistSnapshot(record);
-    await this.emit(record, sessionUpdatedEvent(record));
+    try {
+      await this.persistSnapshot(record);
+      await this.emit(record, sessionUpdatedEvent(record));
+    } catch (error) {
+      record.promptStarting = false;
+      throw error;
+    }
 
     try {
       const images = input.attachments?.flatMap(
@@ -946,7 +956,6 @@ export class SessionSupervisor {
           source: "interactive",
         });
       } else {
-        record.promptStarting = true;
         try {
           await session.prompt(promptText, {
             ...(images && images.length > 0 ? { images } : {}),
@@ -971,6 +980,9 @@ export class SessionSupervisor {
       }
       if (!isQueuedMessage) {
         record.runningRunId = undefined;
+      }
+      if (!isQueuedMessage && !isExtensionCommand) {
+        record.promptStarting = false;
       }
       record.status = isQueuedMessage ? "running" : isExtensionCommand ? "idle" : "failed";
       record.updatedAt = nowIso();
