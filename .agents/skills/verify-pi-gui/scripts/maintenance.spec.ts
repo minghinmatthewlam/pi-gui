@@ -227,10 +227,8 @@ test("maintenance: skills, pin, thread list, worktree, queued follow-ups", async
       );
       expect(listed).toContain(selectedPath);
       expect(selectedPath).not.toBe(realpathSync(workspace));
-      await page
-        .getByRole("complementary")
-        .getByRole("button", { name: "New thread", exact: true })
-        .click();
+      // A thread still waiting for its title is also named "New thread" in Workspace grouping.
+      await page.locator(".sidebar__new").click();
       await expect(page.getByTestId("new-thread-composer")).toBeVisible();
       await expect(page.getByRole("button", { name: "Local", exact: true })).toBeVisible();
       await expect(page.getByRole("button", { name: "Worktree", exact: true })).toBeVisible();

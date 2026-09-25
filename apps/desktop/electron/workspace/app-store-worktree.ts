@@ -286,6 +286,12 @@ export async function forkThread(
   });
 }
 
+/**
+ * Rebuild every folder's worktree rows. Worktrees the app created nest under the
+ * folder that claimed them (the one that created them, else the repo's main
+ * checkout); every folder the user opened, including their own git worktrees,
+ * stays its own sidebar entry and never owns rows for other checkouts.
+ */
 export async function syncAndListWorktrees(
   store: WorkspaceOwnerHost,
   workspaces: readonly {
@@ -296,89 +302,52 @@ export async function syncAndListWorktrees(
     lastOpenedAt: string;
   }[],
 ): Promise<readonly WorktreeCatalogEntry[]> {
-  const existing = await store.catalogStore.worktrees.listWorktrees();
-  const existingPrimaryByWorkspaceId = new Set(
-    existing.worktrees
-      .filter((worktree) => worktree.kind === "primary")
-      .map((worktree) => worktree.workspaceId),
-  );
   const inspected = await Promise.all(
     workspaces.map(async (workspace) => {
-      try {
-        const inspection = await store.worktreeManager.inspectWorkspace(workspace);
-        return {
-          workspace,
-          ...inspection,
-        };
-      } catch {
-        return {
-          workspace,
-          canonicalPath: workspace.path,
-          commonDir: `workspace:${workspace.workspaceId}`,
-        };
-      }
+      const inspection = await store.worktreeManager
+        .inspectWorkspace(workspace)
+        .catch(() => undefined);
+      return {
+        workspace,
+        isAppWorktree: await store.isAppWorktreePath(workspace.path),
+        isMainCheckout: Boolean(
+          inspection && inspection.commonDir === join(inspection.canonicalPath, ".git"),
+        ),
+      };
     }),
   );
-  const groups = new Map<string, typeof inspected>();
 
-  for (const entry of inspected) {
-    const group = groups.get(entry.commonDir);
-    if (group) {
-      group.push(entry);
-    } else {
-      groups.set(entry.commonDir, [entry]);
-    }
+  // App worktrees opened as folders never own rows; their owner lists them.
+  await Promise.all(
+    inspected
+      .filter((entry) => entry.isAppWorktree)
+      .map((entry) =>
+        store.catalogStore.worktrees
+          .replaceWorkspaceWorktrees(entry.workspace.workspaceId, [])
+          .catch(() => undefined),
+      ),
+  );
+
+  // Sequential, main checkouts first: an app worktree no folder has claimed yet
+  // goes to the first folder that refreshes, and existing claims are kept.
+  const owners = inspected
+    .filter((entry) => !entry.isAppWorktree)
+    .sort(
+      (left, right) =>
+        Number(right.isMainCheckout) - Number(left.isMainCheckout) ||
+        left.workspace.sortOrder - right.workspace.sortOrder ||
+        left.workspace.lastOpenedAt.localeCompare(right.workspace.lastOpenedAt) ||
+        left.workspace.path.localeCompare(right.workspace.path),
+    );
+  for (const { workspace } of owners) {
+    await store.worktreeManager
+      .refreshWorktrees({
+        workspaceId: workspace.workspaceId,
+        path: workspace.path,
+        displayName: workspace.displayName,
+      })
+      .catch(() => undefined);
   }
-
-  const syncRoots = [...groups.values()]
-    .map(
-      (group) =>
-        [...group].sort((left, right) => {
-          const leftIsExistingPrimary = existingPrimaryByWorkspaceId.has(
-            left.workspace.workspaceId,
-          );
-          const rightIsExistingPrimary = existingPrimaryByWorkspaceId.has(
-            right.workspace.workspaceId,
-          );
-          if (leftIsExistingPrimary !== rightIsExistingPrimary) {
-            return leftIsExistingPrimary ? -1 : 1;
-          }
-          if (left.workspace.sortOrder !== right.workspace.sortOrder) {
-            return left.workspace.sortOrder - right.workspace.sortOrder;
-          }
-          if (left.workspace.lastOpenedAt !== right.workspace.lastOpenedAt) {
-            return left.workspace.lastOpenedAt.localeCompare(right.workspace.lastOpenedAt);
-          }
-          if (left.canonicalPath.length !== right.canonicalPath.length) {
-            return left.canonicalPath.length - right.canonicalPath.length;
-          }
-          return left.workspace.displayName.localeCompare(right.workspace.displayName);
-        })[0],
-    )
-    .filter((entry): entry is (typeof inspected)[number] => Boolean(entry));
-  const syncRootWorkspaceIds = new Set(syncRoots.map((entry) => entry.workspace.workspaceId));
-  const staleWorkspaceIds = inspected
-    .map((entry) => entry.workspace.workspaceId)
-    .filter((workspaceId) => !syncRootWorkspaceIds.has(workspaceId));
-
-  await Promise.all(
-    syncRoots.map((entry) =>
-      store.worktreeManager
-        .refreshWorktrees({
-          workspaceId: entry.workspace.workspaceId,
-          path: entry.workspace.path,
-          displayName: entry.workspace.displayName,
-        })
-        .catch(() => undefined),
-    ),
-  );
-  await Promise.all(
-    staleWorkspaceIds.map((workspaceId) =>
-      store.catalogStore.worktrees
-        .replaceWorkspaceWorktrees(workspaceId, [])
-        .catch(() => undefined),
-    ),
-  );
 
   return (await store.catalogStore.worktrees.listWorktrees()).worktrees;
 }

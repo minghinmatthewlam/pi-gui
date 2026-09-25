@@ -1,9 +1,11 @@
 import { execFile } from "node:child_process";
-import { realpath, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { promisify } from "node:util";
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import type { WorkspaceRecord } from "../../contracts/desktop-state";
 import {
+  assertExists,
   commitAllInGitRepo,
   createNamedThread,
   initGitRepo,
@@ -21,17 +23,21 @@ async function git(cwd: string, ...args: string[]): Promise<string> {
   return (await execFileAsync("git", args, { cwd })).stdout;
 }
 
-async function openReview(workspacePath: string, additionalWorkspaces: readonly string[] = []) {
+async function openReview(
+  workspacePath: string,
+  beforeThread?: (window: Page, workspace: WorkspaceRecord) => Promise<void>,
+) {
   const userDataDir = await makeUserDataDir();
   const agentDir = join(userDataDir, "agent");
   await seedAgentDir(agentDir, { withOpenAiAuth: false });
   const harness = await launchDesktop(userDataDir, {
     agentDir,
-    initialWorkspaces: [workspacePath, ...additionalWorkspaces],
+    initialWorkspaces: [workspacePath],
     testMode: "background",
   });
   const window = await harness.firstWindow();
   const workspace = await waitForWorkspaceByPath(window, workspacePath);
+  await beforeThread?.(window, workspace);
   await createNamedThread(window, "Review scope task", { workspaceName: workspace.name });
   await selectSidePanel(window, "Review");
   const panel = window.getByRole("region", { name: "Review", exact: true });
@@ -239,17 +245,32 @@ test("binary, oversized, and conflicted files show incomplete review coverage", 
 
 test("choosing another review checkout preserves the task and terminal checkout", async () => {
   const workspacePath = await makeWorkspace("review-checkout-root");
-  const worktreePath = join(await makeUserDataDir(), "linked-checkout");
   await initGitRepo(workspacePath);
   await commitAllInGitRepo(workspacePath, "Baseline");
-  await git(workspacePath, "worktree", "add", "-b", "review-linked", worktreePath);
   await writeFile(join(workspacePath, "root-only.txt"), "root changes\n");
-  await writeFile(join(worktreePath, "linked-only.txt"), "linked changes\n");
   await writeFile(join(workspacePath, "shared.txt"), "root version\n");
-  await writeFile(join(worktreePath, "shared.txt"), "linked version\n");
-  const { harness, window, panel, workspace } = await openReview(workspacePath, [worktreePath]);
+  let linked: WorkspaceRecord | undefined;
+  // Only worktrees pi-gui created are offered as other checkouts of this folder.
+  const { harness, window, panel, workspace } = await openReview(
+    workspacePath,
+    async (window, root) => {
+      const state = await window.evaluate(
+        (workspaceId) => globalThis.window.piApp.createWorktree({ workspaceId }),
+        root.id,
+      );
+      linked = state.workspaces.find((candidate) => candidate.id === state.selectedWorkspaceId);
+      assertExists(linked, "Expected the new worktree to be selected");
+      expect(linked.rootWorkspaceId).toBe(root.id);
+      await writeFile(join(linked.path, "linked-only.txt"), "linked changes\n");
+      await writeFile(join(linked.path, "shared.txt"), "linked version\n");
+      await window.evaluate(
+        (workspaceId) => globalThis.window.piApp.selectWorkspace(workspaceId),
+        root.id,
+      );
+    },
+  );
   try {
-    const linked = await waitForWorkspaceByPath(window, await realpath(worktreePath));
+    assertExists(linked, "Expected a pi-gui worktree");
     await window.getByTestId("composer").fill("Draft belongs to the original task");
     await expect(fileRow(panel, "root-only.txt")).toBeVisible();
     await expect(fileRow(panel, "linked-only.txt")).toHaveCount(0);

@@ -51,6 +51,7 @@ export interface WorkspaceOwnerHost {
   readonly catalogStore: JsonCatalogStore;
   readonly worktreeManager: GitWorktreeManager;
   readonly worktreeRoot: string;
+  readonly isAppWorktreePath: (path: string) => Promise<boolean>;
   setRuntimeSnapshot(workspaceId: string, snapshot: RuntimeSnapshot): void;
   refreshRuntime(workspace: WorkspaceRef): Promise<RuntimeSnapshot>;
   initialize(): Promise<void>;
