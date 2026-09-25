@@ -14,6 +14,7 @@ import { toSessionRef } from "../application/app-store-utils";
 import { assertComposerAttachmentsAccepted } from "../../contracts/composer-attachments";
 import {
   formatSessionConfigStatus,
+  composerSubmitNeedsSenderView,
   hasRuntimeSlashCommand,
   incompleteComposerCommandMessage,
   parseComposerCommand,
@@ -162,6 +163,7 @@ export interface ConversationOwner {
     textInput: string,
     options?: { readonly deliverAs?: "steer" | "followUp" },
   ): Promise<DesktopAppState>;
+  composerSubmitNeedsSenderView(sessionRef: SessionRef | undefined, textInput: string): boolean;
   submitComposerToSession(
     sessionRef: SessionRef,
     textInput: string,
@@ -199,6 +201,14 @@ export function createConversationOwner(store: ConversationOwnerHost): Conversat
     steerQueuedComposerMessage: (sessionRef, messageId) =>
       steerQueuedComposerMessage(store, sessionRef, messageId),
     submitComposer: (sessionRef, text, options) => submitComposer(store, sessionRef, text, options),
+    composerSubmitNeedsSenderView: (sessionRef, text) =>
+      sessionRef
+        ? composerSubmitNeedsSenderView(
+            text,
+            store.runtimeForWorkspace(sessionRef.workspaceId),
+            store.conversationState.sessionCommandsBySession.get(sessionKey(sessionRef)),
+          )
+        : text.trimStart().startsWith("/"),
     submitComposerToSession: (sessionRef, text, attachments, options) =>
       submitComposerToSession(store, sessionRef, text, attachments, options),
     setSessionModel: (target, provider, modelId) =>

@@ -94,6 +94,36 @@ export function resolveRuntimeSlashCommand(
   );
 }
 
+/**
+ * Whether submitting this text can change the sender window's selection, so it must run
+ * in that window's serialized action queue. Local composer commands and extension
+ * commands can (an extension may create or select a session). Skills, prompt templates
+ * and plain text starting with "/" are ordinary prompts that await the whole turn, so
+ * they must not hold the queue. Until the session's commands are known, any "/" text may
+ * be an extension command, so it stays serialized.
+ */
+export function composerSubmitNeedsSenderView(
+  text: string,
+  runtime: RuntimeSnapshot | undefined,
+  sessionCommands: readonly RuntimeCommandRecord[] | undefined,
+): boolean {
+  const trimmed = text.trim();
+  if (!trimmed.startsWith("/")) {
+    return false;
+  }
+  if (!sessionCommands) {
+    return true;
+  }
+  const runtimeCommand = resolveRuntimeSlashCommand(trimmed, runtime, sessionCommands);
+  if (runtimeCommand) {
+    return runtimeCommand.source === "extension";
+  }
+  return (
+    parseComposerCommand(trimmed) !== undefined ||
+    incompleteComposerCommandMessage(trimmed) !== undefined
+  );
+}
+
 function normalizeRuntimeCommandName(value: string): string {
   return value.trim().replace(/^\/+/, "");
 }
