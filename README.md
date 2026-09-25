@@ -84,7 +84,7 @@ the review tab, your worktrees, and tabs from desktop extensions. Each task keep
 
 ## Install
 
-pi-gui is in public beta for macOS (Apple Silicon), Linux (x64) and Windows (x64).
+pi-gui runs on macOS (Apple Silicon), Linux (x64) and Windows (x64).
 
 Download the latest `.dmg` (macOS), `.AppImage` or `.deb` (Linux), or `.exe` (Windows) from the
 [Releases page](https://github.com/minghinmatthewlam/pi-gui/releases).
@@ -101,7 +101,7 @@ brew tap minghinmatthewlam/tap
 brew install --cask pi-gui
 ```
 
-Update with `brew upgrade --cask pi-gui`. During the beta, a Homebrew upgrade may ask you to
+Update with `brew upgrade --cask pi-gui`. A Homebrew upgrade may ask you to
 re-confirm macOS permissions or Dock placement. Other installs tell you when a new release is
 out and update from the Releases page.
 

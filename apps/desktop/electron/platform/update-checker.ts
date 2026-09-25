@@ -1,6 +1,8 @@
 import { app, net, Notification, shell } from "electron";
 
-const RELEASES_URL = "https://api.github.com/repos/minghinmatthewlam/pi-gui/releases?per_page=1";
+// /releases/latest skips drafts and prereleases, so stable installs are only
+// told about stable releases.
+const RELEASES_URL = "https://api.github.com/repos/minghinmatthewlam/pi-gui/releases/latest";
 const RELEASES_PAGE = "https://github.com/minghinmatthewlam/pi-gui/releases";
 
 const CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000; // 4 hours
@@ -72,6 +74,9 @@ export async function checkForUpdate(): Promise<UpdateCheckResult> {
     clearTimeout(timeout);
   }
 
+  if (res.status === 404) {
+    return { status: "error", message: "No stable pi-gui release has been published yet." };
+  }
   if (!res.ok) {
     return {
       status: "error",
@@ -79,14 +84,13 @@ export async function checkForUpdate(): Promise<UpdateCheckResult> {
     };
   }
 
-  let releases: GitHubRelease[];
+  let release: GitHubRelease;
   try {
-    releases = (await res.json()) as GitHubRelease[];
+    release = (await res.json()) as GitHubRelease;
   } catch {
     return { status: "error", message: "GitHub Releases returned an unreadable response." };
   }
 
-  const release = releases[0];
   if (!release?.tag_name) {
     return {
       status: "error",
