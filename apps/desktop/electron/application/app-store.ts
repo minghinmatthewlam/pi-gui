@@ -130,6 +130,7 @@ import {
 } from "../orchestration/app-store-orchestration";
 import {
   createScheduledTaskOwner,
+  isScheduledTaskInFlight,
   type ScheduledTaskOwner,
 } from "../scheduled-tasks/app-store-scheduled-tasks";
 import { earliestScheduledWakeAt } from "../scheduled-tasks/scheduled-task-schedule";
@@ -750,7 +751,10 @@ export class DesktopAppStore {
       this.scheduledTaskWakeAt = undefined;
       return;
     }
-    const nextRunAt = earliestScheduledWakeAt(this.state.scheduledTasks);
+    // A task whose run is still in flight re-arms the timer when that run settles.
+    const nextRunAt = earliestScheduledWakeAt(
+      this.state.scheduledTasks.filter((task) => !isScheduledTaskInFlight(task.id)),
+    );
     if (nextRunAt && nextRunAt === this.scheduledTaskWakeAt && this.scheduledTaskTimer) {
       return;
     }

@@ -135,7 +135,7 @@ test("queue persist failure pauses without advancing lastRunAt or nextRunAt", as
   expect(host.tasks[0]?.lastError).toMatch(/persist queued messages/i);
 });
 
-test("successful fire persists lastRunAt only after background delivery", async () => {
+test("successful fire records a started run after background delivery", async () => {
   const due = dueIntervalTask();
   const host = createHost({ tasks: [due] });
   const owner = createScheduledTaskOwner(host);
@@ -145,6 +145,95 @@ test("successful fire persists lastRunAt only after background delivery", async 
   expect(host.tasks[0]?.lastRunAt).toBe("2026-09-21T12:00:01.000Z");
   expect(host.tasks[0]?.nextRunAt).toBe("2026-09-21T12:01:01.000Z");
   expect(host.tasks[0]?.runs[0]?.outcome).toBe("started");
+});
+
+test("a due task is claimed and persisted before its run is delivered", async () => {
+  let claimSeenByDelivery: ScheduledTaskRecord | undefined;
+  let persistedBeforeDelivery = 0;
+  let persisted = 0;
+  const host = createHost({
+    tasks: [dueIntervalTask()],
+    deliver: async () => {
+      claimSeenByDelivery = { ...host.tasks[0]! };
+      persistedBeforeDelivery = persisted;
+      return undefined;
+    },
+  });
+  host.persistScheduledTasks = async () => {
+    persisted += 1;
+  };
+  const owner = createScheduledTaskOwner(host);
+  await owner.fireDueScheduledTasks(new Date("2026-09-21T12:00:01.000Z"));
+  expect(persistedBeforeDelivery).toBe(1);
+  expect(claimSeenByDelivery?.lastRunAt).toBe("2026-09-21T12:00:01.000Z");
+  expect(claimSeenByDelivery?.nextRunAt).toBe("2026-09-21T12:01:01.000Z");
+});
+
+test("scheduled-task tools and edits work while a fired run is still going", async () => {
+  let finishRun: (() => void) | undefined;
+  let runStarted: (() => void) | undefined;
+  const started = new Promise<void>((resolve) => {
+    runStarted = resolve;
+  });
+  const host = createHost({
+    tasks: [dueIntervalTask()],
+    deliver: () => {
+      runStarted?.();
+      return new Promise((resolve) => {
+        finishRun = () => resolve(undefined);
+      });
+    },
+  });
+  const owner = createScheduledTaskOwner(host);
+  const firing = owner.fireDueScheduledTasks(new Date("2026-09-21T12:00:01.000Z"));
+  await started;
+  const withinRun = <T>(work: Promise<T>) =>
+    Promise.race([
+      work,
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("blocked until the run finished")), 1_000),
+      ),
+    ]);
+  const listed = await withinRun(owner.listScheduledTasksToolResult());
+  expect(listed.details.tasks).toHaveLength(1);
+  await withinRun(owner.updateScheduledTask("task-1", { status: "paused" }));
+  expect(host.tasks[0]?.status).toBe("paused");
+  finishRun?.();
+  await firing;
+  expect(host.tasks[0]?.status).toBe("paused");
+  expect(host.tasks[0]?.runs.map((run) => run.outcome)).toEqual(["started"]);
+});
+
+test("a one-time task completes after delivery and can be renamed mid-run", async () => {
+  let finishRun: (() => void) | undefined;
+  let runStarted: (() => void) | undefined;
+  const started = new Promise<void>((resolve) => {
+    runStarted = resolve;
+  });
+  const host = createHost({
+    tasks: [
+      dueIntervalTask({
+        schedule: { kind: "once", at: "2026-09-21T12:00:00.000Z" },
+      }),
+    ],
+    deliver: () => {
+      runStarted?.();
+      return new Promise((resolve) => {
+        finishRun = () => resolve(undefined);
+      });
+    },
+  });
+  const owner = createScheduledTaskOwner(host);
+  const firing = owner.fireDueScheduledTasks(new Date("2026-09-21T12:00:01.000Z"));
+  await started;
+  const renamed = await owner.updateScheduledTask("task-1", { title: "Renamed" });
+  expect(renamed.lastError).toBeUndefined();
+  expect(host.tasks[0]?.status).toBe("active");
+  finishRun?.();
+  await firing;
+  expect(host.tasks[0]?.title).toBe("Renamed");
+  expect(host.tasks[0]?.status).toBe("completed");
+  expect(host.tasks[0]?.runs.map((run) => run.outcome)).toEqual(["started"]);
 });
 
 test("invalid timeZone pauses a due task without delivering", async () => {
