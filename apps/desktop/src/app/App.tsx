@@ -951,8 +951,10 @@ export default function App() {
           api={api}
           setSnapshot={setSnapshot}
           updateSnapshot={updateSnapshot}
-          onNewThread={() =>
-            newThread.openSurface(selectedWorkspace?.rootWorkspaceId ?? selectedWorkspace?.id)
+          onNewThread={(workspaceId) =>
+            newThread.openSurface(
+              workspaceId ?? selectedWorkspace?.rootWorkspaceId ?? selectedWorkspace?.id,
+            )
           }
           onSetActiveView={setActiveView}
           onOpenSkills={openSkills}

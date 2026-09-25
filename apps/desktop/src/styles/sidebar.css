@@ -9,7 +9,7 @@
   width: 100%;
   height: 100%;
   display: grid;
-  grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr);
   gap: 0;
   padding: 0;
   position: relative;
@@ -31,6 +31,9 @@
 }
 
 .sidebar {
+  position: relative;
+  /* A remembered width never crowds out the main area on a smaller window. */
+  width: min(var(--sidebar-width), 45vw);
   display: grid;
   grid-template-rows: auto 1fr auto;
   overflow: hidden;
@@ -109,6 +112,9 @@
 
 .sidebar__section {
   overflow: auto;
+  /* Keeps the scrollbar clear of the resize handle on the right edge. */
+  margin-right: 4px;
+  padding-right: 8px;
 }
 
 .section__head {
@@ -387,11 +393,32 @@
   font-weight: 500;
 }
 
+.workspace-row__actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
 .workspace-row__menu-wrap {
   position: relative;
   display: grid;
   align-items: center;
   justify-items: end;
+}
+
+.workspace-row__action-button {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-lg);
+  color: var(--muted-soft);
+  background: transparent;
+}
+
+.workspace-row__action-button svg {
+  width: 14px;
+  height: 14px;
 }
 
 .workspace-row__menu-button {
@@ -928,6 +955,35 @@
     z-index: 40;
     box-shadow: var(--shadow-xl);
   }
+}
+
+/* Sits over the sidebar's right border; the sidebar owns its own width. */
+.sidebar__resize-handle {
+  -webkit-app-region: no-drag;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 4px;
+  z-index: 30;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.sidebar__resize-handle:hover,
+.sidebar__resize-handle:focus-visible,
+.sidebar__resize-handle[data-resizing="true"] {
+  background: var(--theme-selection-bg, var(--surface-muted));
+  box-shadow: inset -2px 0 var(--accent);
+}
+
+.shell:has(.sidebar__resize-handle[data-resizing="true"]) {
+  cursor: col-resize;
+  user-select: none;
+}
+
+.shell:has(.sidebar__resize-handle[data-resizing="true"]) iframe {
+  pointer-events: none;
 }
 
 /* Transparency mode re-enables the sidebar backdrop blur in dark. */

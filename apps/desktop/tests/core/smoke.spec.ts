@@ -44,7 +44,7 @@ test("boots an existing workspace and starts a new thread through the real UI", 
 
     await waitForWorkspaceByPath(window, workspacePath);
     await expect(window.getByTestId("workspace-list")).toContainText(basename(workspacePath));
-    await window.getByRole("complementary").getByRole("button", { name: "New thread" }).click();
+    await window.getByRole("complementary").getByRole("button", { name: "New thread", exact: true }).click();
 
     const prompt = window.getByLabel("New thread prompt");
     await expect(prompt).toBeVisible();
