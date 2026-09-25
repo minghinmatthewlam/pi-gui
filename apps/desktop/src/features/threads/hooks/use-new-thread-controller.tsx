@@ -141,8 +141,13 @@ export function useNewThreadController(params: UseNewThreadControllerParams) {
     });
   }, []);
 
+  // Each fresh New thread surface gets a generation, so a start still in flight from an
+  // earlier surface neither blocks nor clears what the user types into this one.
+  const surfaceGenerationRef = useRef(0);
+  const startingGenerationRef = useRef<number | undefined>(undefined);
   const resetSurface = useCallback(
     (workspaceId?: string) => {
+      surfaceGenerationRef.current += 1;
       const nextWorkspaceId =
         (workspaceId &&
           (rootWorkspaceOptions.find((w) => w.id === workspaceId)?.id ||
@@ -258,11 +263,11 @@ export function useNewThreadController(params: UseNewThreadControllerParams) {
     onEnableExtension: enableMentionExtension,
   });
 
-  // The prompt clears only once the thread exists, so a second Enter or click before
-  // then would otherwise start the same thread again (a worktree start takes seconds).
-  const startingThreadRef = useRef(false);
   const startThread = useCallback(() => {
-    if (!api || startingThreadRef.current) {
+    // The prompt clears only once the thread exists, so a second Enter or click before
+    // then would otherwise start the same thread again (a worktree start takes seconds).
+    const generation = surfaceGenerationRef.current;
+    if (!api || startingGenerationRef.current === generation) {
       return;
     }
     if (!rootWorkspaceId || (!prompt.trim() && attachments.length === 0)) {
@@ -289,9 +294,12 @@ export function useNewThreadController(params: UseNewThreadControllerParams) {
       modelId: resolvedModelId,
       thinkingLevel: resolvedThinkingLevel,
     };
-    startingThreadRef.current = true;
+    startingGenerationRef.current = generation;
     void updateSnapshot(setSnapshot, () => api.startThread(input))
       .then(() => {
+        if (surfaceGenerationRef.current !== generation) {
+          return;
+        }
         setPrompt("");
         setAttachments([]);
         setProvider(undefined);
@@ -303,7 +311,9 @@ export function useNewThreadController(params: UseNewThreadControllerParams) {
         setComposerError(error instanceof Error ? error.message : String(error));
       })
       .finally(() => {
-        startingThreadRef.current = false;
+        if (startingGenerationRef.current === generation) {
+          startingGenerationRef.current = undefined;
+        }
       });
   }, [
     api,
