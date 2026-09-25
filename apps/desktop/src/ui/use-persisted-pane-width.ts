@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 /**
  * A pane width the user dragged, remembered in this browser profile. `undefined`
@@ -19,22 +19,38 @@ export function usePersistedPaneWidth(
     return undefined;
   });
 
-  useEffect(() => {
-    const save = () => {
-      try {
-        if (width === undefined) localStorage.removeItem(storageKey);
-        else localStorage.setItem(storageKey, String(width));
-      } catch {
-        // Width remains a live window preference even if it cannot be saved.
-      }
-    };
-    const timer = window.setTimeout(save, 150);
-    window.addEventListener("pagehide", save);
-    return () => {
-      window.clearTimeout(timer);
-      window.removeEventListener("pagehide", save);
-    };
-  }, [storageKey, width]);
+  // The latest width not yet written; flushed on a timer, on page hide and on unmount
+  // (collapsing the sidebar or opening Settings right after a drag must keep it).
+  const unsaved = useRef<{ readonly width: number | undefined } | null>(null);
+  const flush = useCallback(() => {
+    const pending = unsaved.current;
+    if (!pending) return;
+    unsaved.current = null;
+    try {
+      if (pending.width === undefined) localStorage.removeItem(storageKey);
+      else localStorage.setItem(storageKey, String(pending.width));
+    } catch {
+      // Width remains a live window preference even if it cannot be saved.
+    }
+  }, [storageKey]);
 
-  return [width, setWidth] as const;
+  const setAndRemember = useCallback((next: number | undefined) => {
+    unsaved.current = { width: next };
+    setWidth(next);
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(flush, 150);
+    return () => window.clearTimeout(timer);
+  }, [flush, width]);
+
+  useEffect(() => {
+    window.addEventListener("pagehide", flush);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      flush();
+    };
+  }, [flush]);
+
+  return [width, setAndRemember] as const;
 }

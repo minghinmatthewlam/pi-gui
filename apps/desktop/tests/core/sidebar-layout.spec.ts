@@ -64,6 +64,12 @@ test("the sidebar can be dragged wider, remembers its width and resets on double
     await window.mouse.up();
     await expect.poll(() => sidebarWidth(window)).toBe(defaultWidth + 100);
 
+    // Hiding the sidebar right after a drag still keeps the new width.
+    await window.getByTestId("sidebar-toggle").click();
+    await expect(window.locator("aside.sidebar")).toHaveCount(0);
+    await window.getByTestId("sidebar-toggle").click();
+    await expect.poll(() => sidebarWidth(window)).toBe(defaultWidth + 100);
+
     // Dragging far past the limit stops at the maximum instead of swallowing the window.
     const widened = (await handle.boundingBox())!;
     await window.mouse.move(widened.x + 3, widened.y + 200);
