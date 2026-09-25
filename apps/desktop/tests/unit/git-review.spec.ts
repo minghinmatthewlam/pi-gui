@@ -103,6 +103,24 @@ test("Staged and Unstaged list only their side and count untracked lines", async
   expect(await git(cwd, "diff", "--cached", "--name-only")).toBe("file.txt\nnotes.txt\n");
 });
 
+test("Staged ignores working-tree edits and each side reports its own status", async () => {
+  const cwd = await repository();
+  await writeFile(join(cwd, "file.txt"), "base\nstaged\n");
+  await git(cwd, "add", "file.txt");
+  await writeFile(join(cwd, "added.txt"), "new\n");
+  await git(cwd, "add", "added.txt");
+  await writeFile(join(cwd, "added.txt"), "new\nedited\n");
+  const staged = await uncommitted(cwd, "staged");
+  const file = staged.files.find((entry) => entry.path === "file.txt")!;
+  await writeFile(join(cwd, "file.txt"), "working edit after the review\n");
+  expect(await checkGitReviewFileCurrent(staged, file.id)).toBeNull();
+  expect((await fileContent(staged, "file.txt")).result.patch).toContain("+staged");
+  expect((await changeGitReviewFileStage(staged, file.id, "unstage")).state).toBe("applied");
+  const unstaged = await uncommitted(cwd, "unstaged");
+  expect(unstaged.files.find((entry) => entry.path === "added.txt")?.status).toBe("modified");
+  expect(staged.files.find((entry) => entry.path === "added.txt")?.status).toBe("added");
+});
+
 test("compares HEAD with actual bytes after a staged deletion is recreated untracked", async () => {
   const cwd = await repository();
   await git(cwd, "rm", "file.txt");

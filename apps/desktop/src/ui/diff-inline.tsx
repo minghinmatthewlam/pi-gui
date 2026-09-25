@@ -77,9 +77,16 @@ function parseDiff(diff: string, unmodifiedGaps: boolean): DiffLine[] {
   let lineNumber = 0;
   // The next new-file line not yet shown, so a hunk header can count the lines it skips.
   let nextUnshown = 1;
+  // File headers only come before a file's first hunk; inside one, "---" is a removed "--" line.
+  let inHunk = false;
 
   for (const line of lines) {
+    if (line.startsWith("diff ")) {
+      inHunk = false;
+      continue;
+    }
     if (line.startsWith("@@")) {
+      inHunk = true;
       const match = /^@@ -\d+(?:,\d+)? \+(\d+)/.exec(line);
       lineNumber = match ? parseInt(match[1] ?? "0", 10) : 0;
       if (!unmodifiedGaps) {
@@ -98,7 +105,7 @@ function parseDiff(diff: string, unmodifiedGaps: boolean): DiffLine[] {
       nextUnshown = lineNumber;
       continue;
     }
-    if (line.startsWith("---") || line.startsWith("+++")) {
+    if (!inHunk && (line.startsWith("---") || line.startsWith("+++"))) {
       continue;
     }
     if (line.startsWith("+")) {

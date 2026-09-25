@@ -186,6 +186,10 @@ test("an outdated comparison cannot mark or stage newer working content", async 
   const { harness, panel } = await openReview(workspacePath);
   try {
     await expect(fileRow(panel, "result.txt")).toBeVisible();
+    // The first file's diff opens on its own; let that read finish before the file changes.
+    await expect(panel.getByRole("region", { name: "Diff", exact: true })).toContainText(
+      "first edit",
+    );
     await writeFile(join(workspacePath, "result.txt"), "changed after comparison\n");
     // The filesystem mutation models another editor after the visible list was loaded.
     await fileRow(panel, "result.txt").getByRole("checkbox").click();

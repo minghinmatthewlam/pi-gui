@@ -373,7 +373,12 @@ function workingIdentity(working: WorkingFile | undefined) {
   return working ? { mode: working.mode, digest: working.digest } : undefined;
 }
 
-function fingerprint(source: FileSource): string {
+/**
+ * Everything a comparison's actions depend on. Staged compares HEAD with the index, so
+ * working-tree edits (and the status column that reports them) never make it stale.
+ */
+function fingerprint(source: FileSource, kind: ReviewScope["kind"]): string {
+  if (kind === "staged") return digest(JSON.stringify({ base: source.base, index: source.index }));
   return digest(JSON.stringify({ ...source, working: workingIdentity(source.working) }));
 }
 
@@ -467,35 +472,46 @@ export async function createGitReview(
       const files: GitReviewFile[] = [];
       let remainingBytes = MAX_PREPARATION_BYTES;
       for (const entry of included) {
-        const working = await readWorkingFile(
-          checkoutPath,
-          entry.path,
-          Date.now() < deadline ? Math.min(remainingBytes, MAX_CONTENT_BYTES) : 0,
-        );
-        remainingBytes -= working.bytes?.length ?? 0;
+        // Staged never shows the working tree, so it does not spend the read budget on it.
+        const working =
+          scope.kind === "staged"
+            ? undefined
+            : await readWorkingFile(
+                checkoutPath,
+                entry.path,
+                Date.now() < deadline ? Math.min(remainingBytes, MAX_CONTENT_BYTES) : 0,
+              );
+        remainingBytes -= working?.bytes?.length ?? 0;
         const source: FileSource = {
           base: baseBlobs.get(entry.previousPath ?? entry.path)?.[0],
           index: indexBlobs.get(entry.path) ?? [],
-          working: {
-            mode: working.mode,
-            digest: working.digest,
-            ...(working.note ? { note: working.note } : {}),
-          },
+          ...(working
+            ? {
+                working: {
+                  mode: working.mode,
+                  digest: working.digest,
+                  ...(working.note ? { note: working.note } : {}),
+                },
+              }
+            : {}),
           statusRecords: entry.records,
         };
-        const { records: _records, ...fields } = entry;
+        const { records, ...fields } = entry;
+        const untracked = records.some((record) => record.startsWith("?? "));
         files.push({
           ...fields,
-          // Git diff does not list untracked files, so their added lines are counted directly.
+          ...scopedStatus(entry, scope.kind),
           lines:
-            entry.status === "untracked" && scope.kind !== "staged"
-              ? countTextLines(working.bytes)
-              : counts
-                ? // Git leaves out a file whose sides match, such as cancelling staged edits.
-                  (counts.get(entry.path) ?? { added: 0, removed: 0 })
-                : null,
+            entry.conflicted || (untracked && entry.status !== "untracked")
+              ? null
+              : entry.status === "untracked"
+                ? // Git diff does not list untracked files, so their added lines are counted here.
+                  countTextLines(working?.bytes)
+                : (counts?.get(entry.path) ??
+                  // Git leaves out a file whose sides match, such as cancelling staged edits.
+                  (counts && !counts.truncated ? { added: 0, removed: 0 } : null)),
           id: digest(entry.path),
-          fingerprint: fingerprint(source),
+          fingerprint: fingerprint(source, scope.kind),
           contentFingerprint: contentFingerprint(source, scope.kind),
           source,
         });
@@ -670,7 +686,7 @@ export async function createGitReview(
         conflicted: false,
         lines: counts.get(path) ?? null,
         source,
-        fingerprint: fingerprint(source),
+        fingerprint: fingerprint(source, scope.kind),
         contentFingerprint: contentFingerprint(source, scope.kind),
       });
     }
@@ -760,18 +776,54 @@ async function numstat(
   return files;
 }
 
+interface LineCountMap {
+  readonly get: (path: string) => ReviewLineCounts | null | undefined;
+  /** The listing stopped at the file cap, so a missing path may still have changes. */
+  readonly truncated: boolean;
+}
+
 /** Tracked-file line counts for a working scope, keyed by current path; null when uncountable. */
 async function workingLineCounts(
   cwd: string,
   kind: "uncommitted" | "staged" | "unstaged",
   headOid: string | null,
   maxGitBytes: number,
-): Promise<Map<string, ReviewLineCounts | null> | null> {
+): Promise<LineCountMap | null> {
   const comparison =
     kind === "staged" ? ["--cached"] : kind === "unstaged" ? [] : headOid ? [headOid] : null;
   if (!comparison) return null;
   const files = await numstat(cwd, comparison, maxGitBytes);
-  return new Map(files.map((file) => [file.path, file.lines]));
+  const counts = new Map(files.map((file) => [file.path, file.lines]));
+  return { get: (path) => counts.get(path), truncated: files.length >= MAX_FILES };
+}
+
+const STATUS_CODES: Partial<Record<string, ReviewFileStatus>> = {
+  M: "modified",
+  A: "added",
+  D: "deleted",
+  R: "renamed",
+  C: "copied",
+  T: "typechanged",
+  "?": "untracked",
+};
+
+/** Staged and Unstaged report the status of their own side: Git's X column for the index, Y for the working tree. */
+function scopedStatus(
+  entry: StatusFile,
+  kind: "uncommitted" | "staged" | "unstaged",
+): { status: ReviewFileStatus; previousPath?: string } {
+  const { status, previousPath } = entry;
+  if (kind === "uncommitted" || entry.conflicted)
+    return { status, ...(previousPath ? { previousPath } : {}) };
+  const column = kind === "staged" ? 0 : 1;
+  const code = entry.records
+    .filter((record) => record.length > 3 && record[2] === " ")
+    .map((record) => record[column])
+    .find((value) => value !== undefined && value !== " " && (kind !== "staged" || value !== "?"));
+  return {
+    status: (code ? STATUS_CODES[code] : undefined) ?? status,
+    ...(previousPath ? { previousPath } : {}),
+  };
 }
 
 function countTextLines(bytes: Buffer | undefined): ReviewLineCounts | null {
@@ -800,6 +852,7 @@ export async function checkGitReviewFileCurrent(
   if (!file)
     return issue("unavailable", "missing-file", "This file does not belong to the review.");
   if (!isWorkingReviewScope(snapshot.scope)) return null;
+  const staged = snapshot.scope.kind === "staged";
   try {
     // Path-limited status only pairs a rename when both sides are in the pathspec, so include
     // the other half of any rename touching this file, or its records differ from the review's.
@@ -815,28 +868,33 @@ export async function checkGitReviewFileCurrent(
       await gitText(snapshot.checkoutPath, ["ls-files", "--stage", "-z", "--", ...paths]),
       true,
     );
-    const status = parseStatus(
-      await gitText(snapshot.checkoutPath, [
-        "status",
-        "--porcelain=v1",
-        "-z",
-        "--untracked-files=all",
-        "--",
-        ...paths,
-      ]),
-    );
-    const working = await readWorkingFile(
-      snapshot.checkoutPath,
-      file.path,
-      file.source.working?.note ? 0 : MAX_CONTENT_BYTES,
-    );
+    // Staged compares HEAD with the index only, so it skips the status and working reads.
+    const current = staged
+      ? {}
+      : {
+          statusRecords:
+            parseStatus(
+              await gitText(snapshot.checkoutPath, [
+                "status",
+                "--porcelain=v1",
+                "-z",
+                "--untracked-files=all",
+                "--",
+                ...paths,
+              ]),
+            ).find((entry) => entry.path === file.path)?.records ?? [],
+          working: await readWorkingFile(
+            snapshot.checkoutPath,
+            file.path,
+            file.source.working?.note ? 0 : MAX_CONTENT_BYTES,
+          ),
+        };
     const source: FileSource = {
       ...file.source,
       index: index.get(file.path) ?? [],
-      statusRecords: status.find((entry) => entry.path === file.path)?.records ?? [],
-      working,
+      ...current,
     };
-    return fingerprint(source) === file.fingerprint
+    return fingerprint(source, snapshot.scope.kind) === file.fingerprint
       ? null
       : issue(
           "stale",

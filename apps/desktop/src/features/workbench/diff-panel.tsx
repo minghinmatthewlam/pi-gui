@@ -75,13 +75,14 @@ export function DiffPanel({
   const review = result?.state === "available" ? result : null;
   const reviewRef = useRef(review);
   reviewRef.current = review;
-  // Without a chosen file the diff shows the first file in the tree, as Codex does, without
-  // saving that default as the user's selection.
-  const shownPath = useMemo(
-    () => selection.selectedPath ?? (review ? (reviewTreeOrder(review.files)[0] ?? null) : null),
-    [review, selection.selectedPath],
-  );
-  const selectedFile = review?.files.find((file) => file.path === shownPath);
+  // Without a chosen file in this comparison (none yet, or it was staged away or reverted),
+  // the diff shows the first file in the tree, as Codex does, without saving that default.
+  const selectedFile = useMemo(() => {
+    if (!review) return undefined;
+    const chosen = review.files.find((file) => file.path === selection.selectedPath);
+    const first = reviewTreeOrder(review.files)[0];
+    return chosen ?? review.files.find((file) => file.path === first);
+  }, [review, selection.selectedPath]);
   const stale = actionIssue?.state === "stale" || fileResult?.state === "stale";
 
   useEffect(() => {
@@ -154,7 +155,7 @@ export function DiffPanel({
     if (
       previous === "running" &&
       sessionStatus !== "running" &&
-      (requestedScope.kind === "uncommitted" ||
+      (isWorkingReviewScope(requestedScope) ||
         (requestedScope.kind === "turn" && !requestedScope.checkpointId))
     )
       refresh();
@@ -324,13 +325,9 @@ export function DiffPanel({
       <div className="review-panel__toolbar">
         <ReviewMenu
           label="Review scope"
+          value={SCOPE_LABELS[selectedScope]}
           buttonClassName="review-panel__scope"
-          buttonContent={
-            <>
-              <span>{SCOPE_LABELS[selectedScope]}</span>
-              <ChevronDownIcon />
-            </>
-          }
+          buttonContent={<ChevronDownIcon />}
           align="start"
           options={SCOPE_OPTIONS.filter(
             (option) => option.id !== "selected-turn" || selectedScope === "selected-turn",

@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { CheckIcon } from "../../ui/icons";
 
 export interface ReviewMenuOption {
@@ -18,6 +18,8 @@ interface ReviewMenuProps {
   readonly onSelect: (id: string) => void;
   /** Read-only lines shown above the options, such as the resolved comparison. */
   readonly details?: readonly string[];
+  /** The current choice, shown on the button and announced alongside its label. */
+  readonly value?: string;
 }
 
 /** A small single-choice popover menu for the Review toolbar. */
@@ -29,7 +31,9 @@ export function ReviewMenu({
   options,
   onSelect,
   details,
+  value,
 }: ReviewMenuProps) {
+  const valueId = useId();
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
 
@@ -53,7 +57,13 @@ export function ReviewMenu({
   }, [open]);
 
   return (
-    <div className="review-menu" ref={rootRef}>
+    <div
+      className="review-menu"
+      ref={rootRef}
+      onBlur={(event) => {
+        if (!rootRef.current?.contains(event.relatedTarget as Node | null)) setOpen(false);
+      }}
+    >
       <button
         className={buttonClassName}
         type="button"
@@ -61,8 +71,10 @@ export function ReviewMenu({
         aria-haspopup="menu"
         aria-expanded={open}
         title={label}
+        aria-describedby={value ? valueId : undefined}
         onClick={() => setOpen((value) => !value)}
       >
+        {value ? <span id={valueId}>{value}</span> : null}
         {buttonContent}
       </button>
       {open ? (

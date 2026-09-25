@@ -88,6 +88,12 @@ test("Review shows the diff beside a filterable file tree with Staged and Unstag
       .getByRole("button", { name: "Stage", exact: true })
       .click();
     await expect(panel.locator(".diff-panel__file")).toHaveCount(1);
+    // The staged file left this comparison, so the diff falls back to the remaining file.
+    await expect(diff.locator(".diff-line--added .diff-line__content")).toHaveText([
+      "one",
+      "two",
+      "three",
+    ]);
     expect(
       (await execFileAsync("git", ["diff", "--cached", "--name-only"], { cwd: workspacePath }))
         .stdout,

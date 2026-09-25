@@ -199,7 +199,10 @@ export class ReviewOwner {
         files: snapshot.files.map((file) => ({
           id: file.id,
           path: file.path,
-          ...(file.previousPath === undefined ? {} : { previousPath: file.previousPath }),
+          // An unstaged change is shown at its current path, so it reports no rename.
+          ...(file.previousPath === undefined || snapshot.scope.kind === "unstaged"
+            ? {}
+            : { previousPath: file.previousPath }),
           status: file.status,
           hasStagedChanges: file.hasStagedChanges,
           hasUnstagedChanges: file.hasUnstagedChanges,
