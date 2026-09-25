@@ -115,6 +115,10 @@ test("Staged ignores working-tree edits and each side reports its own status", a
   await writeFile(join(cwd, "file.txt"), "working edit after the review\n");
   expect(await checkGitReviewFileCurrent(staged, file.id)).toBeNull();
   expect((await fileContent(staged, "file.txt")).result.patch).toContain("+staged");
+  // Staged shows only the index, so it cannot stage working edits it never displayed.
+  expect(await changeGitReviewFileStage(staged, file.id, "stage")).toMatchObject({
+    code: "unseen-stage-change",
+  });
   expect((await changeGitReviewFileStage(staged, file.id, "unstage")).state).toBe("applied");
   const unstaged = await uncommitted(cwd, "unstaged");
   expect(unstaged.files.find((entry) => entry.path === "added.txt")?.status).toBe("modified");
@@ -134,6 +138,8 @@ test("compares HEAD with actual bytes after a staged deletion is recreated untra
   expect(staged.result.patch).toContain("deleted file mode");
   const unstaged = await fileContent(await uncommitted(cwd, "unstaged"), "file.txt");
   expect(unstaged.result.patch).toContain("+recreated");
+  expect(unstaged.file.lines).toEqual({ added: 1, removed: 0 });
+  expect(staged.file.lines).toEqual({ added: 0, removed: 1 });
 });
 
 test("a new file at a staged rename's old path stays current, readable and stageable", async () => {
@@ -309,6 +315,10 @@ test("makes binary, deleted, empty, conflict, and submodule coverage explicit", 
   expect(await changeGitReviewFileStage(review, unmerged.file.id, "stage")).toMatchObject({
     state: "unavailable",
   });
+  // Staged never reads the working tree, so a conflict there is summarized without a patch.
+  const stagedConflict = await fileContent(await uncommitted(conflict, "staged"), "file.txt");
+  expect(stagedConflict.result.patch).toBe("");
+  expect(stagedConflict.result.summary).toMatch(/Unmerged index stages/);
 });
 
 test("renders symlink text without following its target and reports oversized content", async () => {
@@ -515,4 +525,14 @@ test("reviews list only changed paths, so a huge repository's full listings cann
   expect(branchRename.previousPath).toBe(names[1]);
   expect(branchRename.source.base?.oid).toBe(renamed.source.base?.oid);
   expect(branchRename.source.head).toBeDefined();
+});
+
+test("Uncommitted counts staged additions before the first commit", async () => {
+  const cwd = await repository(true);
+  await writeFile(join(cwd, "first.txt"), "a\nb\nc\n");
+  await git(cwd, "add", "first.txt");
+  const review = await uncommitted(cwd);
+  expect(review.files.map((file) => [file.path, file.lines])).toEqual([
+    ["first.txt", { added: 3, removed: 0 }],
+  ]);
 });

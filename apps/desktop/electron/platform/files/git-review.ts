@@ -24,7 +24,7 @@ import type {
   ReviewScope,
   TurnChangedFile,
 } from "../../../contracts/review";
-import { isWorkingReviewScope } from "../../../contracts/review";
+import { isWorkingReviewScope, reviewStageActions } from "../../../contracts/review";
 import { isolatedGitEnvironment } from "./git-environment";
 
 const MAX_FILES = 2_000;
@@ -501,15 +501,18 @@ export async function createGitReview(
         files.push({
           ...fields,
           ...scopedStatus(entry, scope.kind),
-          lines:
-            entry.conflicted || (untracked && entry.status !== "untracked")
-              ? null
-              : entry.status === "untracked"
-                ? // Git diff does not list untracked files, so their added lines are counted here.
-                  countTextLines(working?.bytes)
-                : (counts?.get(entry.path) ??
+          lines: entry.conflicted
+            ? null
+            : // Git diff does not list untracked files, so their added lines are counted here.
+              // A staged deletion recreated untracked is all-added in Unstaged, and a
+              // replacement Git cannot count in Uncommitted.
+              untracked && (entry.status === "untracked" || scope.kind === "unstaged")
+              ? countTextLines(working?.bytes)
+              : untracked && scope.kind === "uncommitted"
+                ? null
+                : (counts.get(entry.path) ??
                   // Git leaves out a file whose sides match, such as cancelling staged edits.
-                  (counts && !counts.truncated ? { added: 0, removed: 0 } : null)),
+                  (counts.truncated ? null : { added: 0, removed: 0 })),
           id: digest(entry.path),
           fingerprint: fingerprint(source, scope.kind),
           contentFingerprint: contentFingerprint(source, scope.kind),
@@ -776,22 +779,29 @@ async function numstat(
   return files;
 }
 
+async function emptyTree(cwd: string): Promise<string> {
+  const format = (await gitText(cwd, ["rev-parse", "--show-object-format"])).trim();
+  return format === "sha256"
+    ? "6ef19b41225c5369f1c104d45d8d85efa9b057b53b14b4b9b939dd74decc5321"
+    : "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
+}
+
 interface LineCountMap {
   readonly get: (path: string) => ReviewLineCounts | null | undefined;
   /** The listing stopped at the file cap, so a missing path may still have changes. */
   readonly truncated: boolean;
 }
 
-/** Tracked-file line counts for a working scope, keyed by current path; null when uncountable. */
+/** Tracked-file line counts for a working scope, keyed by current path. */
 async function workingLineCounts(
   cwd: string,
   kind: "uncommitted" | "staged" | "unstaged",
   headOid: string | null,
   maxGitBytes: number,
-): Promise<LineCountMap | null> {
-  const comparison =
-    kind === "staged" ? ["--cached"] : kind === "unstaged" ? [] : headOid ? [headOid] : null;
-  if (!comparison) return null;
+): Promise<LineCountMap> {
+  // Before the first commit, Uncommitted compares Git's built-in empty tree with the working tree.
+  const base = headOid ?? (await emptyTree(cwd));
+  const comparison = kind === "staged" ? ["--cached"] : kind === "unstaged" ? [] : [base];
   const files = await numstat(cwd, comparison, maxGitBytes);
   const counts = new Map(files.map((file) => [file.path, file.lines]));
   return { get: (path) => counts.get(path), truncated: files.length >= MAX_FILES };
@@ -1004,18 +1014,23 @@ export async function readGitReviewFile(
       );
     const readWorking = async () =>
       file.source.working?.note ? file.source.working : readWorkingFile(checkoutPath, file.path);
-    // A conflict has no single index side, so every working scope shows HEAD → working tree.
+    // A conflict has no single index side. Uncommitted and Unstaged show HEAD → working tree;
+    // Staged never reads the working tree, so it shows only the summary of index stages.
     const side = file.conflicted && isWorkingReviewScope(scope) ? "uncommitted" : scope.kind;
-    const before =
-      side === "unstaged" ? await readIndex() : await readBlob(checkoutPath, file.source.base);
-    const after =
-      side === "staged"
-        ? await readIndex()
-        : side === "uncommitted" || side === "unstaged"
-          ? await readWorking()
-          : await readBlob(checkoutPath, file.source.head);
+    const conflictedStaged = file.conflicted && scope.kind === "staged";
     const beforePath = side === "unstaged" ? file.path : (file.previousPath ?? file.path);
-    const { patch, coverage } = await readPatch(file.path, beforePath, before, after);
+    const { patch, coverage } = conflictedStaged
+      ? { patch: "", coverage: COMPLETE }
+      : await readPatch(
+          file.path,
+          beforePath,
+          side === "unstaged" ? await readIndex() : await readBlob(checkoutPath, file.source.base),
+          side === "staged"
+            ? await readIndex()
+            : side === "uncommitted" || side === "unstaged"
+              ? await readWorking()
+              : await readBlob(checkoutPath, file.source.head),
+        );
     let summary: string | undefined;
     if (file.conflicted) {
       summary = `Unmerged index stages: ${file.source.index.map((blob) => `${blob.stage === 1 ? "base" : blob.stage === 2 ? "ours" : "theirs"} ${blob.oid}`).join("; ")}. Resolve the conflict before staging through review.`;
@@ -1060,6 +1075,16 @@ export async function changeGitReviewFileStage(
       "unavailable",
       "immutable-comparison",
       "Only Uncommitted, Staged and Unstaged review can change the index.",
+    );
+  // Staged and Unstaged only move the side they show: staging from Staged or unstaging from
+  // Unstaged would change content that comparison never displayed.
+  if (!reviewStageActions(snapshot.scope).includes(action))
+    return issue(
+      "unavailable",
+      "unseen-stage-change",
+      action === "stage"
+        ? "Staged review cannot stage working-tree edits it does not show."
+        : "Unstaged review cannot unstage index changes it does not show.",
     );
   const file = snapshot.files.find((entry) => entry.id === fileId);
   if (!file)

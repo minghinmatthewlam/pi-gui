@@ -14,7 +14,7 @@ import type {
   ReviewResult,
   ReviewScope,
 } from "../../../contracts/review";
-import { isWorkingReviewScope } from "../../../contracts/review";
+import { isWorkingReviewScope, reviewStageActions } from "../../../contracts/review";
 import { InlineDiff } from "../../ui/diff-inline";
 import { ChevronDownIcon, FileIcon, MoreIcon, RefreshIcon, SidePanelIcon } from "../../ui/icons";
 import { extensionToLanguage } from "../../ui/syntax-highlight";
@@ -520,7 +520,7 @@ export function DiffPanel({
             checkoutId={review.checkoutId}
             files={review.files}
             selectedPath={selectedFile?.path ?? null}
-            canStage={isWorkingReviewScope(review.scope)}
+            stageActions={reviewStageActions(review.scope)}
             busyFiles={busyFiles}
             stale={stale}
             onSelect={(path) => onSelectionChange({ ...selection, selectedPath: path })}

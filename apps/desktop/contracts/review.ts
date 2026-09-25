@@ -131,6 +131,14 @@ export function isWorkingReviewScope(scope: ReviewScope): scope is WorkingReview
   return scope.kind === "uncommitted" || scope.kind === "staged" || scope.kind === "unstaged";
 }
 
+/** The index moves a comparison may make: only those whose content it shows. */
+export function reviewStageActions(scope: ReviewScope): readonly ("stage" | "unstage")[] {
+  if (scope.kind === "uncommitted") return ["stage", "unstage"];
+  if (scope.kind === "staged") return ["unstage"];
+  if (scope.kind === "unstaged") return ["stage"];
+  return [];
+}
+
 export function decodeReviewScope(value: unknown): ReviewScope {
   const scope = record(value, ["kind", "baseRef", "checkpointId"]);
   if (scope.kind === "uncommitted" || scope.kind === "staged" || scope.kind === "unstaged") {

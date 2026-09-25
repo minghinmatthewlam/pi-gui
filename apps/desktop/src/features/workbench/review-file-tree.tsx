@@ -7,7 +7,8 @@ interface ReviewFileTreeProps {
   readonly checkoutId: string;
   readonly files: readonly ReviewFileEntry[];
   readonly selectedPath: string | null;
-  readonly canStage: boolean;
+  /** The index moves this comparison allows; empty for read-only comparisons. */
+  readonly stageActions: readonly ("stage" | "unstage")[];
   readonly busyFiles: ReadonlySet<string>;
   readonly stale: boolean;
   readonly onSelect: (path: string) => void;
@@ -20,7 +21,7 @@ export function ReviewFileTree({
   checkoutId,
   files,
   selectedPath,
-  canStage,
+  stageActions,
   busyFiles,
   stale,
   onSelect,
@@ -100,9 +101,9 @@ export function ReviewFileTree({
         >
           <span className="diff-panel__file-path">{formatPathForDisplay(node.name)}</span>
         </button>
-        {canStage ? (
+        {stageActions.length ? (
           <span className="review-panel__stage-actions">
-            {file.hasStagedChanges ? (
+            {file.hasStagedChanges && stageActions.includes("unstage") ? (
               <button
                 className="icon-button review-tree__stage"
                 type="button"
@@ -114,7 +115,7 @@ export function ReviewFileTree({
                 <MinusIcon />
               </button>
             ) : null}
-            {file.hasUnstagedChanges ? (
+            {file.hasUnstagedChanges && stageActions.includes("stage") ? (
               <button
                 className="icon-button review-tree__stage"
                 type="button"
