@@ -117,6 +117,7 @@ import {
   createEmptyExtensionUiState,
   serializeExtensionUiState,
 } from "../conversation/session-state-map";
+import { appWorktreeRootMatcher } from "../platform/worktrees/app-worktree-roots";
 import { GitWorktreeManager } from "../platform/worktrees/worktree-manager";
 import { createWorkspaceOwner, type WorkspaceOwner } from "../workspace/app-store-workspace";
 import {
@@ -225,6 +226,7 @@ export class DesktopAppStore {
   private readonly catalogStore: JsonCatalogStore;
   private readonly worktreeManager: GitWorktreeManager;
   private readonly worktreeRoot: string;
+  private readonly isAppWorktreePath: (path: string) => Promise<boolean>;
   private readonly uiStateFilePath: string;
   private readonly scheduledTasksFilePath: string;
   private scheduledTasksWritable = false;
@@ -274,8 +276,12 @@ export class DesktopAppStore {
     };
 
     this.driver = new PiSdkDriver(driverOptions);
-    this.worktreeManager = new GitWorktreeManager({ catalogStorage: this.catalogStore });
     this.worktreeRoot = join(options.userDataDir, "worktrees");
+    this.isAppWorktreePath = appWorktreeRootMatcher(this.worktreeRoot);
+    this.worktreeManager = new GitWorktreeManager({
+      catalogStorage: this.catalogStore,
+      isAppWorktreePath: this.isAppWorktreePath,
+    });
     this.uiStateFilePath = join(options.userDataDir, "ui-state.json");
     this.scheduledTasksFilePath = join(options.userDataDir, "scheduled-tasks.json");
     this.attachmentStore = new AttachmentStore(options.userDataDir);
@@ -391,6 +397,7 @@ export class DesktopAppStore {
       catalogStore: this.catalogStore,
       worktreeManager: this.worktreeManager,
       worktreeRoot: this.worktreeRoot,
+      isAppWorktreePath: this.isAppWorktreePath,
       setRuntimeSnapshot: (workspaceId, snapshot) => {
         this.runtimeByWorkspace.set(workspaceId, snapshot);
       },

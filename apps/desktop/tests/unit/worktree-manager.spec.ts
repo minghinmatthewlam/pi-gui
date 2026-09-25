@@ -1,11 +1,12 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, mkdir, realpath, rm, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, realpath, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { expect, test } from "@playwright/test";
 import type { CatalogStorage, WorktreeCatalogEntry } from "@pi-gui/catalogs";
 import type { WorkspaceRef } from "@pi-gui/session-driver";
+import { appWorktreeRootMatcher } from "../../electron/platform/worktrees/app-worktree-roots";
 import { GitWorktreeManager } from "../../electron/platform/worktrees/worktree-manager";
 
 const execFileAsync = promisify(execFile);
@@ -86,9 +87,15 @@ async function branchExists(repo: string, branch: string): Promise<boolean> {
   return output.includes(branch);
 }
 
-function makeManager(): { manager: GitWorktreeManager; catalog: FakeCatalog } {
+function makeManager(appWorktreeRoot?: string): {
+  manager: GitWorktreeManager;
+  catalog: FakeCatalog;
+} {
   const catalog = new FakeCatalog();
-  const manager = new GitWorktreeManager({ catalogStorage: catalog as unknown as CatalogStorage });
+  const manager = new GitWorktreeManager({
+    catalogStorage: catalog as unknown as CatalogStorage,
+    ...(appWorktreeRoot ? { isAppWorktreePath: appWorktreeRootMatcher(appWorktreeRoot) } : {}),
+  });
   return { manager, catalog };
 }
 
@@ -224,6 +231,69 @@ test("pruneOrphanedWorktrees removes clean merged orphans and fails closed for p
       expect(result.skipped).toContain(protectedId);
     }
     expect(await branchExists(repo, "feature/manual")).toBe(true);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("app worktree paths are matched inside the profile root only, even before it exists", async () => {
+  const root = await mkdtemp(join(tmpdir(), "wt-roots-"));
+  try {
+    const isAppWorktreePath = appWorktreeRootMatcher(join(root, "worktrees"));
+    expect(await isAppWorktreePath(join(root, "worktrees", "repo", "task-1"))).toBe(true);
+    expect(await isAppWorktreePath(join(root, "worktrees"))).toBe(false);
+    expect(await isAppWorktreePath(join(root, "worktrees-old", "repo", "task-1"))).toBe(false);
+    expect(await isAppWorktreePath(join(root, "worktrees", "..", "repo"))).toBe(false);
+    // Git reports resolved paths; a root reached through a symlink must still match.
+    await mkdir(join(root, "real", "worktrees", "repo", "task-2"), { recursive: true });
+    await symlink(join(root, "real"), join(root, "linked"));
+    const throughLink = appWorktreeRootMatcher(join(root, "linked", "worktrees"));
+    expect(
+      await throughLink(await realpath(join(root, "real", "worktrees", "repo", "task-2"))),
+    ).toBe(true);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("folders list only the app worktrees they own and never remove the user's own checkouts", async () => {
+  const root = await mkdtemp(join(tmpdir(), "wt-owner-"));
+  try {
+    const repo = await makeRepo(root);
+    const userCheckout = join(root, "elsewhere", "feature");
+    await mkdir(join(root, "elsewhere"), { recursive: true });
+    await git(repo, "worktree", "add", "-b", "feature/mine", userCheckout, "HEAD");
+    const main: WorkspaceRef = { workspaceId: "main", path: repo, displayName: "repo" };
+    const mine: WorkspaceRef = {
+      workspaceId: "mine",
+      path: await realpath(userCheckout),
+      displayName: "feature",
+    };
+    const { manager } = makeManager(join(root, "worktrees"));
+
+    const created = await manager.createWorktree(mine, {
+      path: join(root, "worktrees", "repo", "task-1"),
+      branchName: "pi/task-1",
+      startPoint: "HEAD",
+    });
+    const linkedPaths = async (workspace: WorkspaceRef) =>
+      (await manager.refreshWorktrees(workspace)).worktrees
+        .filter((entry) => entry.kind === "linked")
+        .map((entry) => entry.path);
+
+    // The main checkout sees neither the user's checkout nor the worktree the other folder made.
+    expect(await linkedPaths(main)).toEqual([]);
+    expect(await linkedPaths(mine)).toEqual([created.path]);
+
+    // Even a checkout no folder has opened, which the catalog does not know, is refused.
+    const unopened = join(root, "elsewhere", "unopened");
+    await git(repo, "worktree", "add", "-b", "feature/unopened", unopened, "HEAD");
+    await expect(manager.removeWorktree(main, unopened)).rejects.toThrow(
+      "Only worktrees created by pi-gui can be removed here.",
+    );
+    expect(await pathExists(unopened)).toBe(true);
+    await manager.removeWorktree(mine, created.worktreeId);
+    expect(await pathExists(created.path)).toBe(false);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

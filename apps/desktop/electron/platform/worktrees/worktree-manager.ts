@@ -13,6 +13,12 @@ const execFileAsync = promisify(execFile);
 
 export interface GitWorktreeManagerOptions {
   readonly catalogStorage: CatalogStorage;
+  /**
+   * Which linked worktrees the app created and may list or remove. Others are
+   * the user's own checkouts and are left out of every folder's worktree list.
+   * Defaults to every linked worktree.
+   */
+  readonly isAppWorktreePath?: (path: string) => Promise<boolean>;
 }
 
 export interface CreateWorktreeOptions {
@@ -60,12 +66,43 @@ export class GitWorktreeManager {
     const existing = await this.options.catalogStorage.worktrees.listWorktrees(
       workspace.workspaceId,
     );
-    const discovered = await listGitWorktrees(repoRoot, workspace, existing.worktrees);
+    const discovered = await this.ownLinkedWorktrees(
+      workspace,
+      await listGitWorktrees(repoRoot, workspace, existing.worktrees),
+    );
     await this.options.catalogStorage.worktrees.replaceWorkspaceWorktrees(
       workspace.workspaceId,
       discovered,
     );
     return { worktrees: discovered.map((entry) => ({ ...entry })) };
+  }
+
+  /**
+   * Keep the workspace's own row and the app worktrees no other folder has
+   * claimed, so each app worktree nests under exactly one folder.
+   */
+  private async ownLinkedWorktrees(
+    workspace: WorkspaceRef,
+    discovered: readonly WorktreeCatalogEntry[],
+  ): Promise<WorktreeCatalogEntry[]> {
+    const catalog = await this.options.catalogStorage.worktrees.listWorktrees();
+    const claimedElsewhere = new Set(
+      catalog.worktrees
+        .filter((entry) => entry.kind === "linked" && entry.workspaceId !== workspace.workspaceId)
+        .map((entry) => entry.path),
+    );
+    const isAppWorktreePath = this.options.isAppWorktreePath;
+    const owned: WorktreeCatalogEntry[] = [];
+    for (const entry of discovered) {
+      if (
+        entry.kind === "primary" ||
+        (!claimedElsewhere.has(entry.path) &&
+          (!isAppWorktreePath || (await isAppWorktreePath(entry.path))))
+      ) {
+        owned.push(entry);
+      }
+    }
+    return owned;
   }
 
   async inspectWorkspace(workspace: WorkspaceRef): Promise<GitWorkspaceInspection> {
@@ -122,6 +159,9 @@ export class GitWorktreeManager {
       (!existing && targetPath === (await canonicalPath(workspace.path)))
     ) {
       throw new Error("The primary workspace cannot be removed as a git worktree.");
+    }
+    if (this.options.isAppWorktreePath && !(await this.options.isAppWorktreePath(targetPath))) {
+      throw new Error("Only worktrees created by pi-gui can be removed here.");
     }
 
     try {

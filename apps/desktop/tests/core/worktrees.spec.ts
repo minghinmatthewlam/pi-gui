@@ -332,3 +332,69 @@ test("keeps orphaned worktree workspaces visible after removing the root workspa
     await harness.close();
   }
 });
+
+test("a git worktree the user opens is its own folder and nests the worktrees made from it", async () => {
+  test.setTimeout(120_000);
+  const userDataDir = await makeUserDataDir();
+  const workspacePath = await makeGitWorkspace("worktree-user-checkout");
+  const userCheckout = join(dirname(workspacePath), "my-feature");
+  await addLinkedWorktree(workspacePath, userCheckout, "feature/user-checkout");
+  const checkoutPath = await realpath(userCheckout);
+
+  let harness = await launchDesktop(userDataDir, {
+    initialWorkspaces: [workspacePath, userCheckout],
+    testMode: "background",
+  });
+  let createdPath: string | undefined;
+  try {
+    const window = await harness.firstWindow();
+    const root = await waitForWorkspaceByPath(window, workspacePath);
+    const checkout = await waitForWorkspaceByPath(window, checkoutPath);
+    expect(checkout.kind).toBe("primary");
+    for (const folder of [root, checkout]) {
+      await expect(
+        window
+          .getByTestId("workspace-list")
+          .getByRole("button", { name: folder.name, exact: true }),
+      ).toBeVisible();
+    }
+
+    // The user's own checkout offers to make a worktree, never to delete itself.
+    await window.getByRole("button", { name: `Workspace actions for ${checkout.name}` }).click();
+    await expect(window.getByRole("button", { name: "Remove worktree" })).toHaveCount(0);
+    await window.getByRole("button", { name: "Create permanent worktree" }).click();
+
+    await expect
+      .poll(async () => {
+        const state = await getDesktopState(window);
+        return state.workspaces.find((workspace) => workspace.id === state.selectedWorkspaceId)
+          ?.rootWorkspaceId;
+      })
+      .toBe(checkout.id);
+    const state = await getDesktopState(window);
+    createdPath = state.workspaces.find(
+      (workspace) => workspace.id === state.selectedWorkspaceId,
+    )?.path;
+    expect(state.worktreesByWorkspace[checkout.id]?.map((worktree) => worktree.path)).toEqual([
+      createdPath,
+    ]);
+    expect(state.worktreesByWorkspace[root.id] ?? []).toEqual([]);
+  } finally {
+    await harness.close();
+  }
+
+  harness = await launchDesktop(userDataDir, { initialWorkspaces: [], testMode: "background" });
+  try {
+    const window = await harness.firstWindow();
+    const root = await waitForWorkspaceByPath(window, workspacePath);
+    const checkout = await waitForWorkspaceByPath(window, checkoutPath);
+    assertExists(createdPath, "Expected the created worktree path");
+    const created = await waitForWorkspaceByPath(window, createdPath);
+    expect(root.kind).toBe("primary");
+    expect(checkout.kind).toBe("primary");
+    expect(created.kind).toBe("worktree");
+    expect(created.rootWorkspaceId).toBe(checkout.id);
+  } finally {
+    await harness.close();
+  }
+});
