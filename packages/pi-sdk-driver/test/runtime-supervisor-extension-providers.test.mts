@@ -103,24 +103,28 @@ async function createSharedAgentDir(): Promise<{ root: string; agentDir: string 
 function createSupervisor(agentDir: string) {
   return new RuntimeSupervisor({
     agentDir,
-    extensionFactories: [
-      (pi) => {
-        pi.registerProvider(EXTENSION_PROVIDER, {
-          baseUrl: "http://localhost:9/v1",
-          apiKey: "test-key",
-          api: "openai-completions",
-          models: [
-            {
-              id: EXTENSION_MODEL,
-              name: "Extension Test Model",
-              reasoning: false,
-              input: ["text"],
-              cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-              contextWindow: 128000,
-              maxTokens: 16384,
-            },
-          ],
-        });
+    builtinExtensions: [
+      {
+        name: "test-provider",
+        displayName: "Test provider",
+        factory: (pi) => {
+          pi.registerProvider(EXTENSION_PROVIDER, {
+            baseUrl: "http://localhost:9/v1",
+            apiKey: "test-key",
+            api: "openai-completions",
+            models: [
+              {
+                id: EXTENSION_MODEL,
+                name: "Extension Test Model",
+                reasoning: false,
+                input: ["text"],
+                cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+                contextWindow: 128000,
+                maxTokens: 16384,
+              },
+            ],
+          });
+        },
       },
     ],
   });

@@ -646,3 +646,63 @@ test("keeps a single subscription path when an extension creates a child session
     await harness.close();
   }
 });
+
+test("switches pi-gui tools off app-wide and keeps them off after a restart", async () => {
+  test.setTimeout(90_000);
+  const userDataDir = await makeUserDataDir();
+  const workspacePath = await makeWorkspace("pi-gui-tools-workspace");
+  const orchestrationPath = "<inline:pi-gui-thread-orchestration>";
+  const orchestrationEnabled = async (window: Page) => {
+    const state = await getDesktopState(window);
+    const workspace = state.workspaces.find((entry) => entry.path === workspacePath);
+    return workspace
+      ? state.runtimeByWorkspace[workspace.id]?.extensions.find(
+          (entry) => entry.path === orchestrationPath,
+        )?.enabled
+      : undefined;
+  };
+  const openPiGuiTools = async (window: Page) => {
+    const list = window.getByTestId("extensions-list");
+    const openButton = window.getByRole("button", { name: "Extensions", exact: true });
+    // A restart restores the last open view, so Settings may already show the list.
+    await expect(list.or(openButton)).toBeVisible();
+    if (!(await list.isVisible())) {
+      await openButton.click();
+    }
+    await expect(list.getByRole("heading", { name: /pi-gui tools/ })).toBeVisible();
+    return list.getByRole("switch", { name: "Enable Thread orchestration" });
+  };
+
+  let harness = await launchDesktop(userDataDir, {
+    initialWorkspaces: [workspacePath],
+    testMode: "background",
+  });
+  try {
+    const window = await harness.firstWindow();
+    const toggle = await openPiGuiTools(window);
+    await expect(toggle).toBeChecked();
+    await expect(toggle).toBeEnabled();
+    await toggle.click();
+    await expect(toggle).not.toBeChecked();
+    await expect.poll(() => orchestrationEnabled(window)).toBe(false);
+  } finally {
+    await harness.close();
+  }
+
+  harness = await launchDesktop(userDataDir, {
+    initialWorkspaces: [workspacePath],
+    testMode: "background",
+  });
+  try {
+    const window = await harness.firstWindow();
+    const toggle = await openPiGuiTools(window);
+    await expect(toggle).not.toBeChecked();
+    await expect(
+      window.getByTestId("extensions-list").getByRole("switch", { name: "Enable Scheduled tasks" }),
+    ).toBeChecked();
+    await toggle.click();
+    await expect.poll(() => orchestrationEnabled(window)).toBe(true);
+  } finally {
+    await harness.close();
+  }
+});

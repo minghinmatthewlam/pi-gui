@@ -163,11 +163,7 @@ export interface DesktopAppStoreOptions {
   readonly shouldKeepSessionDialogs?: (sessionRef: SessionRef) => boolean;
   readonly driverOptions?: Pick<
     PiSdkDriverConfig,
-    | "extensionFactories"
-    | "inlineExtensionMetadata"
-    | "desktopExtensions"
-    | "onTurnCaptureBoundary"
-    | "turnCaptureTimeoutMs"
+    "builtinExtensions" | "desktopExtensions" | "onTurnCaptureBoundary" | "turnCaptureTimeoutMs"
   >;
   readonly generateThreadTitleOverride?: (
     workspace: WorkspaceRef,
@@ -261,6 +257,8 @@ export class DesktopAppStore {
   private readonly workspaceOwner: WorkspaceOwner;
   private readonly orchestrationOwner: OrchestrationOwner;
   private readonly scheduledTaskOwner: ScheduledTaskOwner;
+  /** App-wide: built-in pi-gui extensions the user switched off in Settings. */
+  private readonly disabledBuiltinExtensions = new Set<string>();
 
   constructor(options: DesktopAppStoreOptions) {
     const catalogFilePath = join(options.userDataDir, "catalogs.json");
@@ -268,6 +266,7 @@ export class DesktopAppStore {
     const driverOptions: PiSdkDriverConfig = {
       catalogStorage: this.catalogStore,
       ...(options.driverOptions ?? {}),
+      isBuiltinExtensionEnabled: (name) => !this.disabledBuiltinExtensions.has(name),
       ...(options.generateThreadTitleOverride
         ? { generateThreadTitleOverride: options.generateThreadTitleOverride }
         : {}),
@@ -1666,10 +1665,34 @@ export class DesktopAppStore {
     filePath: string,
     enabled: boolean,
   ): Promise<DesktopAppState> {
+    const builtinName = this.driver.runtimeSupervisor.builtinExtensionName(filePath);
+    if (builtinName) {
+      return this.setBuiltinExtensionEnabled(workspaceId, builtinName, enabled);
+    }
     return this.withRuntimeUpdate(
       workspaceId,
       (ws) => this.driver.runtimeSupervisor.setExtensionEnabled(ws, filePath, enabled),
       { reloadSessions: true },
+    );
+  }
+
+  /** pi-gui owns built-in extensions, so their switch is app-wide rather than in pi's settings. */
+  private async setBuiltinExtensionEnabled(
+    workspaceId: string,
+    name: string,
+    enabled: boolean,
+  ): Promise<DesktopAppState> {
+    await this.initialize();
+    if (enabled) {
+      this.disabledBuiltinExtensions.delete(name);
+    } else {
+      this.disabledBuiltinExtensions.add(name);
+    }
+    await this.persistUiState();
+    return this.withRuntimeUpdate(
+      workspaceId,
+      (ws) => this.driver.runtimeSupervisor.refreshRuntime(ws),
+      { reloadSessions: true, refreshAllWorkspaces: true },
     );
   }
 
@@ -1698,8 +1721,13 @@ export class DesktopAppStore {
         this.runtimeByWorkspace.set(workspaceId, snapshot);
       }
       if (options?.reloadSessions) {
-        this.clearExtensionUiForWorkspace(workspaceId);
-        await this.reloadSessionsForWorkspace(workspaceId);
+        const reloadWorkspaceIds = options.refreshAllWorkspaces
+          ? this.state.workspaces.map((workspace) => workspace.id)
+          : [workspaceId];
+        for (const id of reloadWorkspaceIds) {
+          this.clearExtensionUiForWorkspace(id);
+          await this.reloadSessionsForWorkspace(id);
+        }
       }
       if (options?.refreshAllWorkspaces) {
         await this.refreshSessionCommandsForAllWorkspaces();
@@ -1940,6 +1968,10 @@ export class DesktopAppStore {
   }
 
   private restorePersistedUiState(persisted: LegacyPersistedUiState): void {
+    this.disabledBuiltinExtensions.clear();
+    for (const name of persisted.disabledBuiltinExtensions ?? []) {
+      this.disabledBuiltinExtensions.add(name);
+    }
     this.taskWorkbenchTemplatesBySession.clear();
     for (const [key, template] of Object.entries(persisted.taskWorkbenchTemplatesBySession ?? {})) {
       this.taskWorkbenchTemplatesBySession.set(key, template);
@@ -3624,6 +3656,10 @@ export class DesktopAppStore {
         this.extensionCommandCompatibilityByWorkspace,
       ),
       notificationPreferences: this.state.notificationPreferences,
+      disabledBuiltinExtensions:
+        this.disabledBuiltinExtensions.size > 0
+          ? [...this.disabledBuiltinExtensions].sort()
+          : undefined,
       integratedTerminalShell: this.state.integratedTerminalShell || undefined,
       lastViewedAtBySession: mapToRecord(this.sessionState.lastViewedAtBySession),
       lastInteractedAtBySession: mapToRecord(this.sessionState.lastInteractedAtBySession),

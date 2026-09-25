@@ -8,6 +8,7 @@ export type {
   ExtensionUiState,
   ExtensionUiWidgetState,
 } from "./extension-ui-state.js";
+export type { BuiltinExtension } from "./builtin-extensions.js";
 export type { PiSdkDriverConfig } from "./pi-sdk-driver.js";
 export { createPiSdkDriver, PiSdkDriver } from "./pi-sdk-driver.js";
 export {
