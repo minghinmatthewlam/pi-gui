@@ -1470,10 +1470,13 @@ export class SessionSupervisor {
         if (result === "lost" && record.leasePath === leasePath) {
           // Only possible if this process stopped refreshing for a whole TTL
           // (e.g. it was suspended) and another writer took the file over.
+          // Stop writing it: close the runtime so a later open has to claim
+          // the lease again and reports who holds it.
           console.warn(
-            `[pi-sdk-driver] lost session lease for ${sessionKey(record.ref)} to another writer.`,
+            `[pi-sdk-driver] lost session lease for ${sessionKey(record.ref)} to another writer; closing it.`,
           );
           record.leasePath = undefined;
+          await this.closeSession(record.ref);
         }
       } catch (error) {
         console.warn(

@@ -323,3 +323,24 @@ await test("processes racing to take over a dead lease: exactly one acquires", a
     });
   }
 });
+
+await test("releaseLeaseFile waits for an in-progress takeover before checking ownership", async () => {
+  await withTempDir(async (dir) => {
+    const leasePath = join(dir, "session.jsonl.lease");
+    await acquireLeaseFile(leasePath, stalenessFor(SELF_TOKENED, Date.now()));
+    // Another process holds the takeover guard.
+    await writeFile(`${leasePath}.takeover`, "999\n", "utf8");
+
+    let released = false;
+    const release = releaseLeaseFile(leasePath, SELF_TOKENED).then(() => {
+      released = true;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    assert.equal(released, false, "release must wait for the guard");
+    assert.ok(await readLeaseSnapshot(leasePath));
+
+    await rm(`${leasePath}.takeover`);
+    await release;
+    assert.equal(await readLeaseSnapshot(leasePath), undefined);
+  });
+});

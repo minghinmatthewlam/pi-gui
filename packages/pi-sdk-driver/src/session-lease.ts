@@ -234,17 +234,38 @@ export async function acquireLeaseFile(
  * could each delete the other's fresh lease and both believe they won.
  */
 async function takeOverDeadLease(leasePath: string, judged: LeaseFileState): Promise<void> {
-  const guardPath = `${leasePath}.takeover`;
-  if (!(await createFileExclusive(guardPath, `${process.pid}\n`))) {
-    await removeAbandonedGuard(guardPath);
-    await delay(ACQUIRE_RETRY_DELAY_MS);
-    return;
-  }
-  try {
+  const ran = await tryWithTakeoverGuard(leasePath, async () => {
     const again = await readLeaseFileState(leasePath);
     if (again && again.raw === judged.raw && again.mtimeMs === judged.mtimeMs) {
       await rm(leasePath, { force: true });
     }
+  });
+  if (!ran) {
+    await delay(ACQUIRE_RETRY_DELAY_MS);
+  }
+}
+
+/** Run `fn` holding the guard, waiting for another holder to finish first. */
+async function withTakeoverGuard(leasePath: string, fn: () => Promise<void>): Promise<void> {
+  for (let attempt = 0; attempt < ACQUIRE_ATTEMPTS; attempt += 1) {
+    if (await tryWithTakeoverGuard(leasePath, fn)) {
+      return;
+    }
+    await delay(ACQUIRE_RETRY_DELAY_MS);
+  }
+  throw new Error(`Timed out waiting for the takeover guard of ${leasePath}.`);
+}
+
+/** Run `fn` if the guard is free; returns false when another process holds it. */
+async function tryWithTakeoverGuard(leasePath: string, fn: () => Promise<void>): Promise<boolean> {
+  const guardPath = `${leasePath}.takeover`;
+  if (!(await createFileExclusive(guardPath, `${process.pid}\n`))) {
+    await removeAbandonedGuard(guardPath);
+    return false;
+  }
+  try {
+    await fn();
+    return true;
   } finally {
     await rm(guardPath, { force: true });
   }
@@ -286,12 +307,18 @@ export async function refreshLeaseFile(
   return "refreshed";
 }
 
-/** Remove the lease only if we own it, so we never delete a successor's lease. */
+/**
+ * Remove the lease only if we own it. The check and the removal run under the
+ * takeover guard, so a process taking over our (expired) lease in between can
+ * never have its fresh lease deleted by us.
+ */
 export async function releaseLeaseFile(leasePath: string, self: LeaseIdentity): Promise<void> {
-  const snapshot = await readLeaseSnapshot(leasePath);
-  if (snapshot && isSameHolder(snapshot.info, self)) {
-    await removeLeaseFile(leasePath);
-  }
+  await withTakeoverGuard(leasePath, async () => {
+    const snapshot = await readLeaseSnapshot(leasePath);
+    if (snapshot && isSameHolder(snapshot.info, self)) {
+      await removeLeaseFile(leasePath);
+    }
+  });
 }
 
 function serializeLease(info: LeaseInfo): string {
