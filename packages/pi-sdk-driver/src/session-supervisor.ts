@@ -181,6 +181,10 @@ interface ManagedSessionRecord {
   config: SessionConfig | undefined;
   runningRunId: string | undefined;
   cancellationRequested: boolean;
+  /** A prompt is in Pi's pre-run steps (input handlers, auth, before_agent_start). */
+  promptStarting: boolean;
+  /** Stop arrived during those steps, where Pi's abort is a no-op; abort at agent_start. */
+  abortOnRunStart: boolean;
   pendingRunOutcome: RunOutcome | undefined;
   queuedMessages: SessionQueuedMessage[];
   closed: boolean;
@@ -936,11 +940,26 @@ export class SessionSupervisor {
           );
         }
         await this.queuePrompt(session, promptText, input.deliverAs!, images);
-      } else {
+      } else if (isExtensionCommand) {
         await session.prompt(promptText, {
           ...(images && images.length > 0 ? { images } : {}),
           source: "interactive",
         });
+      } else {
+        record.promptStarting = true;
+        try {
+          await session.prompt(promptText, {
+            ...(images && images.length > 0 ? { images } : {}),
+            source: "interactive",
+          });
+        } finally {
+          record.promptStarting = false;
+          if (record.abortOnRunStart) {
+            // Pi never started a run for this prompt, so nothing is left to stop.
+            record.abortOnRunStart = false;
+            record.cancellationRequested = false;
+          }
+        }
       }
 
       if (isExtensionCommand) {
@@ -1007,6 +1026,9 @@ export class SessionSupervisor {
     }
 
     record.cancellationRequested = true;
+    if (record.promptStarting && !record.session.isStreaming) {
+      record.abortOnRunStart = true;
+    }
     try {
       await record.session.abort();
     } catch (error) {
@@ -1296,6 +1318,8 @@ export class SessionSupervisor {
       config: deriveSessionConfig(session.sessionManager),
       runningRunId: undefined,
       cancellationRequested: false,
+      promptStarting: false,
+      abortOnRunStart: false,
       pendingRunOutcome: undefined,
       queuedMessages: [],
       closed: false,
@@ -2078,6 +2102,12 @@ export class SessionSupervisor {
 
     switch (event.type) {
       case "agent_start":
+        if (record.abortOnRunStart && record.session) {
+          record.abortOnRunStart = false;
+          record.session.abort().catch((error: unknown) => {
+            console.warn("[pi-sdk-driver] deferred abort failed", error);
+          });
+        }
         record.runningRunId ??= crypto.randomUUID();
         record.pendingRunOutcome = undefined;
         record.status = "running";
