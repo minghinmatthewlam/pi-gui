@@ -71,6 +71,9 @@ export function useNewThreadController(params: UseNewThreadControllerParams) {
   const [composerError, setComposerError] = useState<string | undefined>();
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const previousActiveViewRef = useRef<AppView | null>(null);
+  // Set while an in-app open is switching to New thread, so its chosen folder
+  // is not replaced by the selected one when the view change arrives.
+  const openedInAppRef = useRef(false);
 
   const workspace =
     rootWorkspaceOptions.find((entry) => entry.id === rootWorkspaceId) ?? rootWorkspaceOptions[0];
@@ -175,6 +178,7 @@ export function useNewThreadController(params: UseNewThreadControllerParams) {
       flushComposerDraft();
       setPendingWorkspaceId("");
       resetSurface(workspaceId);
+      openedInAppRef.current = true;
       if (api) {
         void updateSnapshot(setSnapshot, () => api.setActiveView("new-thread")).catch(
           (error: unknown) => {
@@ -430,7 +434,11 @@ export function useNewThreadController(params: UseNewThreadControllerParams) {
     if (!snapshot) {
       return;
     }
-    if (snapshot.activeView === "new-thread" && previousActiveViewRef.current !== "new-thread") {
+    if (
+      snapshot.activeView === "new-thread" &&
+      previousActiveViewRef.current !== "new-thread" &&
+      !openedInAppRef.current
+    ) {
       const nextRootWorkspaceId = resolveRepoWorkspaceId(
         snapshot.workspaces,
         selectedWorkspace?.id,
@@ -439,6 +447,7 @@ export function useNewThreadController(params: UseNewThreadControllerParams) {
         setRootWorkspaceId(nextRootWorkspaceId);
       }
     }
+    if (snapshot.activeView === "new-thread") openedInAppRef.current = false;
     previousActiveViewRef.current = snapshot.activeView;
   }, [selectedWorkspace?.id, snapshot]);
 
