@@ -194,6 +194,28 @@ test("reviewed marks survive relaunch and apply only to the reviewed file revisi
   }
 });
 
+test("a new file at a renamed file's old path can be marked reviewed", async () => {
+  test.setTimeout(45_000);
+  const { harness, window, workspacePath } = await launchSeeded("Review UX rename");
+  try {
+    await execFileAsync("git", ["mv", "notes.md", "renamed.md"], { cwd: workspacePath });
+    await writeFile(join(workspacePath, "notes.md"), "# a new notes file\n", "utf8");
+    await selectSidePanel(window, "Review");
+    const diffPanel = window.locator(".diff-panel");
+    await expect(diffPanel).toBeVisible();
+    await diffPanel.locator('button[aria-label="Refresh"]').click();
+    const recreated = diffPanel.getByTestId("diff-panel-reviewed-notes.md");
+    await expect(recreated).toBeVisible();
+    await recreated.click();
+    await expect(recreated).toBeChecked();
+    await expect(diffPanel.locator('.diff-panel__file[data-file-path="notes.md"]')).toHaveClass(
+      /diff-panel__file--reviewed/,
+    );
+  } finally {
+    await harness.close();
+  }
+});
+
 test("Files mode shows a file browser and reader instead of the changes reviewer", async () => {
   test.setTimeout(45_000);
   const { harness, window } = await launchSeeded("Review UX files mode");
