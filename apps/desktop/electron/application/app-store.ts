@@ -3,7 +3,7 @@ import { sessionKey } from "@pi-gui/session-driver";
 import type { SessionSchemaInfo } from "@pi-gui/session-driver";
 import type { BrowserWindow } from "electron";
 import { readFile, stat } from "node:fs/promises";
-import { homedir } from "node:os";
+import { homedir, hostname } from "node:os";
 import { join, resolve } from "node:path";
 import {
   applyHostUiRequestToExtensionUiState,
@@ -4412,7 +4412,11 @@ function describeStoreError(error: unknown): string {
   if (isSessionLeasedError(error)) {
     const { holder } = error;
     const where = holder.surface === "pi-cli" ? "the pi CLI" : "another pi instance";
-    return `This session is currently open in ${where} (pid ${holder.pid} on host ${holder.hostname}). Close it there or wait a few minutes before continuing here.`;
+    // A holder on this machine keeps its lease while it runs; one elsewhere
+    // may have crashed, and its lease then expires after a few minutes.
+    const next =
+      holder.hostname === hostname() ? "Close it there" : "Close it there or wait a few minutes";
+    return `This session is currently open in ${where} (pid ${holder.pid} on host ${holder.hostname}). ${next} to continue here.`;
   }
   return error instanceof Error ? error.message : String(error);
 }
