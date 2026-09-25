@@ -10,6 +10,10 @@ import {
   createScheduledTaskOwner,
   type ScheduledTaskOwnerHost,
 } from "../../electron/scheduled-tasks/app-store-scheduled-tasks";
+import {
+  createScheduledTaskRuntimeTools,
+  updateScheduledTaskToolName,
+} from "../../electron/scheduled-tasks/scheduled-task-runtime";
 
 const workspaceId = "ws-1";
 const sessionId = "session-1";
@@ -78,6 +82,7 @@ function createHost(
       host.tasks = [...tasks];
     },
     persistScheduledTasks: async () => undefined,
+    rescheduleScheduledTasks: () => undefined,
     canWriteScheduledTasks: () => true,
     emit: () => snapshotFrom(host),
     refreshState: async () => snapshotFrom(host),
@@ -135,7 +140,7 @@ test("queue persist failure pauses without advancing lastRunAt or nextRunAt", as
   expect(host.tasks[0]?.lastError).toMatch(/persist queued messages/i);
 });
 
-test("successful fire persists lastRunAt only after background delivery", async () => {
+test("successful fire records a started run after background delivery", async () => {
   const due = dueIntervalTask();
   const host = createHost({ tasks: [due] });
   const owner = createScheduledTaskOwner(host);
@@ -145,6 +150,186 @@ test("successful fire persists lastRunAt only after background delivery", async 
   expect(host.tasks[0]?.lastRunAt).toBe("2026-09-21T12:00:01.000Z");
   expect(host.tasks[0]?.nextRunAt).toBe("2026-09-21T12:01:01.000Z");
   expect(host.tasks[0]?.runs[0]?.outcome).toBe("started");
+});
+
+test("a due task is claimed and persisted before its run is delivered", async () => {
+  let claimSeenByDelivery: ScheduledTaskRecord | undefined;
+  let persistedBeforeDelivery = 0;
+  let persisted = 0;
+  const host = createHost({
+    tasks: [dueIntervalTask()],
+    deliver: async () => {
+      claimSeenByDelivery = { ...host.tasks[0]! };
+      persistedBeforeDelivery = persisted;
+      return undefined;
+    },
+  });
+  host.persistScheduledTasks = async () => {
+    persisted += 1;
+  };
+  const owner = createScheduledTaskOwner(host);
+  await owner.fireDueScheduledTasks(new Date("2026-09-21T12:00:01.000Z"));
+  expect(persistedBeforeDelivery).toBe(1);
+  expect(claimSeenByDelivery?.lastRunAt).toBe("2026-09-21T12:00:01.000Z");
+  expect(claimSeenByDelivery?.nextRunAt).toBe("2026-09-21T12:01:01.000Z");
+});
+
+test("scheduled-task tools and edits work while a fired run is still going", async () => {
+  let finishRun: (() => void) | undefined;
+  let runStarted: (() => void) | undefined;
+  const started = new Promise<void>((resolve) => {
+    runStarted = resolve;
+  });
+  const host = createHost({
+    tasks: [dueIntervalTask()],
+    deliver: () => {
+      runStarted?.();
+      return new Promise((resolve) => {
+        finishRun = () => resolve(undefined);
+      });
+    },
+  });
+  const owner = createScheduledTaskOwner(host);
+  const firing = owner.fireDueScheduledTasks(new Date("2026-09-21T12:00:01.000Z"));
+  await started;
+  const withinRun = <T>(work: Promise<T>) =>
+    Promise.race([
+      work,
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("blocked until the run finished")), 1_000),
+      ),
+    ]);
+  const listed = await withinRun(owner.listScheduledTasksToolResult());
+  expect(listed.details.tasks).toHaveLength(1);
+  await withinRun(owner.updateScheduledTask("task-1", { status: "paused" }));
+  expect(host.tasks[0]?.status).toBe("paused");
+  finishRun?.();
+  await firing;
+  expect(host.tasks[0]?.status).toBe("paused");
+  expect(host.tasks[0]?.runs.map((run) => run.outcome)).toEqual(["started"]);
+});
+
+test("the timer is re-armed once a run is claimed, not only when it finishes", async () => {
+  let rescheduledDuringRun = 0;
+  let rescheduled = 0;
+  const host = createHost({
+    tasks: [dueIntervalTask()],
+    deliver: async () => {
+      rescheduledDuringRun = rescheduled;
+      return undefined;
+    },
+  });
+  host.rescheduleScheduledTasks = () => {
+    rescheduled += 1;
+  };
+  const owner = createScheduledTaskOwner(host);
+  await owner.fireDueScheduledTasks(new Date("2026-09-21T12:00:01.000Z"));
+  expect(rescheduledDuringRun).toBe(1);
+  expect(rescheduled).toBe(2);
+});
+
+test("a failed claim save does not leave the task stuck in flight", async () => {
+  const host = createHost({ tasks: [dueIntervalTask()] });
+  host.persistScheduledTasks = async () => {
+    throw new Error("disk full");
+  };
+  const owner = createScheduledTaskOwner(host);
+  await expect(owner.fireDueScheduledTasks(new Date("2026-09-21T12:00:01.000Z"))).rejects.toThrow(
+    "disk full",
+  );
+  expect(host.deliverCalls).toHaveLength(0);
+  host.persistScheduledTasks = async () => undefined;
+  await owner.fireDueScheduledTasks(new Date("2026-09-21T12:01:02.000Z"));
+  expect(host.deliverCalls).toHaveLength(1);
+});
+
+test("a failed claim save still delivers the tasks claimed before it", async () => {
+  let persisted = 0;
+  const host = createHost({
+    tasks: [dueIntervalTask(), dueIntervalTask({ id: "task-2", instruction: "Say pong" })],
+  });
+  host.persistScheduledTasks = async () => {
+    persisted += 1;
+    if (persisted === 2) throw new Error("disk full");
+  };
+  const owner = createScheduledTaskOwner(host);
+  await expect(owner.fireDueScheduledTasks(new Date("2026-09-21T12:00:01.000Z"))).rejects.toThrow(
+    "disk full",
+  );
+  expect(host.deliverCalls.map((call) => call.text)).toEqual(["Say ping"]);
+  expect(host.tasks.find((task) => task.id === "task-1")?.runs[0]?.outcome).toBe("started");
+});
+
+test("a failed save of a run's result is reported", async () => {
+  let persisted = 0;
+  const host = createHost({ tasks: [dueIntervalTask()] });
+  host.persistScheduledTasks = async () => {
+    persisted += 1;
+    if (persisted === 2) throw new Error("disk full");
+  };
+  const owner = createScheduledTaskOwner(host);
+  await expect(owner.fireDueScheduledTasks(new Date("2026-09-21T12:00:01.000Z"))).rejects.toThrow(
+    "disk full",
+  );
+  expect(host.deliverCalls).toHaveLength(1);
+});
+
+test("a run that fails after the task was completed keeps it completed", async () => {
+  let failRun: (() => void) | undefined;
+  let runStarted: (() => void) | undefined;
+  const started = new Promise<void>((resolve) => {
+    runStarted = resolve;
+  });
+  const host = createHost({
+    tasks: [dueIntervalTask()],
+    deliver: () => {
+      runStarted?.();
+      return new Promise((_, reject) => {
+        failRun = () => reject(new Error("send failed"));
+      });
+    },
+  });
+  const owner = createScheduledTaskOwner(host);
+  const firing = owner.fireDueScheduledTasks(new Date("2026-09-21T12:00:01.000Z"));
+  await started;
+  await owner.updateScheduledTask("task-1", { status: "completed" });
+  failRun?.();
+  await firing;
+  expect(host.tasks[0]?.status).toBe("completed");
+  expect(host.tasks[0]?.runs.map((run) => run.outcome)).toEqual(["failed"]);
+  expect(host.tasks[0]?.lastError).toMatch(/send failed/);
+});
+
+test("a one-time task completes after delivery and can be renamed mid-run", async () => {
+  let finishRun: (() => void) | undefined;
+  let runStarted: (() => void) | undefined;
+  const started = new Promise<void>((resolve) => {
+    runStarted = resolve;
+  });
+  const host = createHost({
+    tasks: [
+      dueIntervalTask({
+        schedule: { kind: "once", at: "2026-09-21T12:00:00.000Z" },
+      }),
+    ],
+    deliver: () => {
+      runStarted?.();
+      return new Promise((resolve) => {
+        finishRun = () => resolve(undefined);
+      });
+    },
+  });
+  const owner = createScheduledTaskOwner(host);
+  const firing = owner.fireDueScheduledTasks(new Date("2026-09-21T12:00:01.000Z"));
+  await started;
+  const renamed = await owner.updateScheduledTask("task-1", { title: "Renamed" });
+  expect(renamed.lastError).toBeUndefined();
+  expect(host.tasks[0]?.status).toBe("active");
+  finishRun?.();
+  await firing;
+  expect(host.tasks[0]?.title).toBe("Renamed");
+  expect(host.tasks[0]?.status).toBe("completed");
+  expect(host.tasks[0]?.runs.map((run) => run.outcome)).toEqual(["started"]);
 });
 
 test("invalid timeZone pauses a due task without delivering", async () => {
@@ -196,4 +381,110 @@ test("title-only update keeps timezone and nextRunAt", async () => {
     timeZone: "America/Los_Angeles",
   });
   expect(host.tasks[0]?.nextRunAt).toBe(nextRunAt);
+});
+
+async function runUpdateTool(host: ScheduledTaskTestHost, params: Record<string, unknown>) {
+  const owner = createScheduledTaskOwner(host);
+  const tools = createScheduledTaskRuntimeTools(
+    {
+      createScheduledTask: async () => {
+        throw new Error("create should not run");
+      },
+      listScheduledTasks: () => owner.listScheduledTasksToolResult(),
+      updateScheduledTask: (_ctx, input) => owner.updateScheduledTaskToolResult(input),
+    },
+    () => workspaceId,
+  );
+  const tool = tools.find((entry) => entry.name === updateScheduledTaskToolName);
+  if (!tool) {
+    throw new Error("update tool missing");
+  }
+  return tool.execute("call-1", params, undefined, undefined, {} as never);
+}
+
+test("update tool changing only the time keeps a weekly task's days and time zone", async () => {
+  const host = createHost({
+    tasks: [
+      dueIntervalTask({
+        schedule: {
+          kind: "weekly",
+          days: [1, 5],
+          hour: 8,
+          minute: 30,
+          timeZone: "America/New_York",
+        },
+      }),
+    ],
+  });
+  const result = await runUpdateTool(host, { task_id: "task-1", time: "09:00" });
+  expect(result.details).not.toHaveProperty("error");
+  expect(host.tasks[0]?.schedule).toEqual({
+    kind: "weekly",
+    days: [1, 5],
+    hour: 9,
+    minute: 0,
+    timeZone: "America/New_York",
+  });
+});
+
+test("update tool changing only days or the interval keeps the task's other fields", async () => {
+  const weekly = createHost({
+    tasks: [
+      dueIntervalTask({
+        schedule: { kind: "weekly", days: [1], hour: 8, minute: 30, timeZone: "UTC" },
+      }),
+    ],
+  });
+  await runUpdateTool(weekly, { task_id: "task-1", days: ["tue", "thu"] });
+  expect(weekly.tasks[0]?.schedule).toEqual({
+    kind: "weekly",
+    days: [2, 4],
+    hour: 8,
+    minute: 30,
+    timeZone: "UTC",
+  });
+
+  const interval = createHost({ tasks: [dueIntervalTask()] });
+  await runUpdateTool(interval, { task_id: "task-1", every_minutes: 30 });
+  expect(interval.tasks[0]?.schedule).toEqual({ kind: "interval", everyMs: 30 * 60_000 });
+});
+
+test("update tool with an explicit repeat still replaces the schedule", async () => {
+  const host = createHost({
+    tasks: [
+      dueIntervalTask({
+        schedule: { kind: "weekly", days: [1], hour: 8, minute: 30, timeZone: "UTC" },
+      }),
+    ],
+  });
+  await runUpdateTool(host, { task_id: "task-1", repeat: "daily", time: "07:15" });
+  expect(host.tasks[0]?.schedule).toEqual({
+    kind: "daily",
+    hour: 7,
+    minute: 15,
+    timeZone: "UTC",
+  });
+});
+
+test("update tool infers the schedule kind from the fields it is given", async () => {
+  const daily = createHost({
+    tasks: [
+      dueIntervalTask({
+        schedule: { kind: "daily", hour: 8, minute: 30, timeZone: "UTC" },
+      }),
+    ],
+  });
+  await runUpdateTool(daily, { task_id: "task-1", days: ["mon", "fri"] });
+  expect(daily.tasks[0]?.schedule).toEqual({
+    kind: "weekly",
+    days: [1, 5],
+    hour: 8,
+    minute: 30,
+    timeZone: "UTC",
+  });
+
+  const interval = createHost({ tasks: [dueIntervalTask()] });
+  const result = await runUpdateTool(interval, { task_id: "task-1", time: "09:00" });
+  expect(result.details).toHaveProperty("error");
+  expect(interval.tasks[0]?.schedule).toEqual({ kind: "interval", everyMs: 60_000 });
 });

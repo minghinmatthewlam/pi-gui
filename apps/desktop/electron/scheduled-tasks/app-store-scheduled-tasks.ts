@@ -30,6 +30,7 @@ import { NEW_THREAD_PLACEHOLDER_TITLE } from "../conversation/thread-title-const
 import type { RefreshStateOptions } from "../application/refresh-state-options";
 import { nextRunAt } from "./scheduled-task-schedule";
 import type {
+  ScheduledTaskToolUpdate,
   CreateScheduledTaskToolDetails,
   ListScheduledTasksToolDetails,
   UpdateScheduledTaskToolDetails,
@@ -43,6 +44,7 @@ export interface ScheduledTaskOwnerHost {
   scheduledTasks(): readonly ScheduledTaskRecord[];
   replaceScheduledTasks(tasks: readonly ScheduledTaskRecord[]): void;
   persistScheduledTasks(): Promise<void>;
+  rescheduleScheduledTasks(): void;
   canWriteScheduledTasks(): boolean;
   emit(): DesktopAppState;
   refreshState(options?: RefreshStateOptions): Promise<DesktopAppState>;
@@ -73,13 +75,16 @@ export interface ScheduledTaskOwner {
     input: CreateScheduledTaskInput,
   ): Promise<AgentToolResult<CreateScheduledTaskToolDetails>>;
   listScheduledTasksToolResult(): Promise<AgentToolResult<ListScheduledTasksToolDetails>>;
-  updateScheduledTaskToolResult(input: {
-    readonly taskId: string;
-    readonly patch: UpdateScheduledTaskInput;
-  }): Promise<AgentToolResult<UpdateScheduledTaskToolDetails>>;
+  updateScheduledTaskToolResult(
+    input: ScheduledTaskToolUpdate,
+  ): Promise<AgentToolResult<UpdateScheduledTaskToolDetails>>;
 }
 
 const inFlightTaskIds = new Set<string>();
+
+export function isScheduledTaskInFlight(taskId: string): boolean {
+  return inFlightTaskIds.has(taskId);
+}
 let mutationTail: Promise<void> = Promise.resolve();
 
 function enqueueMutation<T>(work: () => Promise<T>): Promise<T> {
@@ -200,8 +205,7 @@ export function createScheduledTaskOwner(store: ScheduledTaskOwnerHost): Schedul
       enqueueMutation(() => updateScheduledTask(store, id, patch)),
     deleteScheduledTask: (id) => enqueueMutation(() => deleteScheduledTask(store, id)),
     beginScheduledTaskInterview: () => enqueueMutation(() => beginScheduledTaskInterview(store)),
-    fireDueScheduledTasks: (now) =>
-      enqueueMutation(() => fireDueScheduledTasks(store, now ?? new Date())),
+    fireDueScheduledTasks: (now) => fireDueScheduledTasks(store, now ?? new Date()),
     createScheduledTaskToolResult: (parentRef, input) =>
       enqueueMutation(() => createScheduledTaskToolResult(store, parentRef, input)),
     listScheduledTasksToolResult: () => enqueueMutation(() => listScheduledTasksToolResult(store)),
@@ -369,7 +373,13 @@ async function updateScheduledTask(
   let nextRunAtValue = existing.nextRunAt;
   let lastRunAt = scheduleChanged ? undefined : existing.lastRunAt;
   let completedAt = existing.completedAt;
-  if (status === "active" && onceActivationNeedsNewTime(schedule, lastRunAt, now)) {
+  // A one-time run in flight holds its claim until it records its result.
+  const claimInFlight = inFlightTaskIds.has(id) && !scheduleChanged;
+  if (
+    status === "active" &&
+    !claimInFlight &&
+    onceActivationNeedsNewTime(schedule, lastRunAt, now)
+  ) {
     return store.withError(
       "This one-time task already claimed its run. Set a new time to run it again.",
     );
@@ -484,13 +494,56 @@ async function deliverInstruction(
   return lastUserMessageId(store.transcriptFor(sessionRef), instruction, firedAt) ?? deliveredId;
 }
 
+interface ClaimedScheduledRun {
+  readonly task: ScheduledTaskRecord;
+  readonly claimedAt: string;
+  readonly firedAt: string;
+  readonly sessionRef: SessionRef;
+}
+
+// Claims run inside the mutation queue and are persisted before delivery, so a
+// quit mid-run cannot re-fire. Delivery then runs outside the queue: it lasts as
+// long as the target's turn, and that turn may itself call the scheduled-task tools.
 async function fireDueScheduledTasks(
   store: ScheduledTaskOwnerHost,
   now: Date,
 ): Promise<DesktopAppState> {
+  const claimed = await enqueueMutation(() => claimDueScheduledTasks(store, now));
+  if (!claimed) {
+    return store.emit();
+  }
+  // Re-arm and publish now and as each run settles, so other tasks keep their times and
+  // their results show during a long run.
+  store.rescheduleScheduledTasks();
+  store.emit();
+  const settled = await Promise.allSettled(
+    claimed.claims.map((claim) =>
+      deliverClaimedRun(store, claim).finally(() => {
+        store.rescheduleScheduledTasks();
+        store.emit();
+      }),
+    ),
+  );
+  // Deliver every saved claim before reporting a failure, so one bad save costs no other run.
+  const failure = settled.find((result) => result.status === "rejected");
+  if (claimed.error !== undefined) throw claimed.error;
+  if (failure) throw failure.reason;
+  return store.refreshState({
+    clearLastError: true,
+    persistState: false,
+    markSelectedSessionViewed: false,
+  });
+}
+
+async function claimDueScheduledTasks(
+  store: ScheduledTaskOwnerHost,
+  now: Date,
+): Promise<
+  { readonly claims: readonly ClaimedScheduledRun[]; readonly error?: unknown } | undefined
+> {
   await store.initialize();
   if (!store.canWriteScheduledTasks()) {
-    return store.emit();
+    return undefined;
   }
   const leftover = store.scheduledTasks().map((task) => leftoverClaimedOnce(task, now));
   if (leftover.some((task, index) => task !== store.scheduledTasks()[index])) {
@@ -499,12 +552,12 @@ async function fireDueScheduledTasks(
 
   const due = leftover.filter((task) => isDue(task, now));
   if (due.length === 0) {
-    return store.emit();
+    return undefined;
   }
 
-  for (const dueTask of due) {
-    inFlightTaskIds.add(dueTask.id);
-    try {
+  const claims: ClaimedScheduledRun[] = [];
+  try {
+    for (const dueTask of due) {
       const claimed = store.scheduledTasks().find((task) => task.id === dueTask.id);
       if (!claimed || !isClaimable(claimed, now)) {
         continue;
@@ -542,73 +595,115 @@ async function fireDueScheduledTasks(
             throw new Error("Scheduled task target thread is missing or archived.");
           }
         }
-        const userMessageId = await deliverInstruction(
-          store,
-          sessionRef,
-          claimed.instruction,
-          firedAt,
-        );
-        const run: ScheduledTaskRun = {
-          id: randomUUID(),
-          sessionId: sessionRef.sessionId,
-          workspaceId: sessionRef.workspaceId,
-          firedAt,
-          instruction: claimed.instruction,
-          ...(userMessageId ? { userMessageId } : {}),
-          outcome: "started",
-        };
-        const afterSend: ScheduledTaskRecord =
-          claimed.schedule.kind === "once"
-            ? {
-                ...appendRun(claimed, run),
-                status: "completed",
-                lastRunAt: nowIso(now),
-                completedAt: nowIso(now),
-                nextRunAt: undefined,
-                lastError: undefined,
-                updatedAt: nowIso(now),
-              }
-            : {
-                ...appendRun(claimed, run),
-                lastRunAt: nowIso(now),
-                nextRunAt: advancedNext,
-                lastError: undefined,
-                updatedAt: nowIso(now),
-              };
-        await writeTask(store, afterSend);
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        const failedMessageId = sessionRef
-          ? lastUserMessageId(store.transcriptFor(sessionRef), claimed.instruction, firedAt)
-          : undefined;
-        const failedRun: ScheduledTaskRun | undefined = sessionRef
-          ? {
-              id: randomUUID(),
-              sessionId: sessionRef.sessionId,
-              workspaceId: sessionRef.workspaceId,
-              firedAt,
-              instruction: claimed.instruction,
-              ...(failedMessageId ? { userMessageId: failedMessageId } : {}),
-              outcome: "failed",
-              error: message,
-            }
-          : undefined;
-        const failed = pauseWithError(
-          failedRun ? appendRun(claimed, failedRun) : claimed,
-          now,
-          message,
-        );
-        await writeTask(store, failed);
+        await writeTask(store, failedRunTask(store, claimed, sessionRef, firedAt, now, error));
+        continue;
       }
-    } finally {
-      inFlightTaskIds.delete(dueTask.id);
+      const claimedAt = nowIso(now);
+      await writeTask(store, {
+        ...claimed,
+        lastRunAt: claimedAt,
+        nextRunAt: advancedNext,
+        updatedAt: claimedAt,
+      });
+      inFlightTaskIds.add(claimed.id);
+      claims.push({ task: claimed, claimedAt, firedAt, sessionRef });
     }
+  } catch (error) {
+    // Claims already saved are still delivered; the error is reported after them.
+    return { claims, error };
   }
-  return store.refreshState({
-    clearLastError: true,
-    persistState: false,
-    markSelectedSessionViewed: false,
-  });
+  return { claims };
+}
+
+async function deliverClaimedRun(
+  store: ScheduledTaskOwnerHost,
+  claim: ClaimedScheduledRun,
+): Promise<void> {
+  const { task, claimedAt, firedAt, sessionRef } = claim;
+  try {
+    let outcome: { readonly userMessageId?: string } | { readonly error: unknown };
+    try {
+      outcome = {
+        userMessageId: await deliverInstruction(store, sessionRef, task.instruction, firedAt),
+      };
+    } catch (error) {
+      outcome = { error };
+    }
+    await enqueueMutation(async () => {
+      // The task may have been edited, paused or deleted while the run was in flight.
+      const current = store.scheduledTasks().find((entry) => entry.id === task.id);
+      if (!current) {
+        return;
+      }
+      const stillClaimed = current.lastRunAt === claimedAt;
+      const now = new Date(claimedAt);
+      if ("error" in outcome) {
+        const failed = failedRunTask(store, current, sessionRef, firedAt, now, outcome.error);
+        // A run that never started gives its claim back, as if it had not fired. If the
+        // task was rescheduled, paused or completed meanwhile, keep that and only record the
+        // failure.
+        await writeTask(
+          store,
+          stillClaimed && current.status === "active"
+            ? { ...failed, lastRunAt: task.lastRunAt }
+            : { ...current, runs: failed.runs, lastError: failed.lastError },
+        );
+        return;
+      }
+      const run: ScheduledTaskRun = {
+        id: randomUUID(),
+        sessionId: sessionRef.sessionId,
+        workspaceId: sessionRef.workspaceId,
+        firedAt,
+        instruction: task.instruction,
+        ...(outcome.userMessageId ? { userMessageId: outcome.userMessageId } : {}),
+        outcome: "started",
+      };
+      const withRun = { ...appendRun(current, run), lastError: undefined };
+      await writeTask(
+        store,
+        stillClaimed && current.status === "active" && current.schedule.kind === "once"
+          ? {
+              ...withRun,
+              status: "completed",
+              completedAt: claimedAt,
+              nextRunAt: undefined,
+              updatedAt: claimedAt,
+            }
+          : withRun,
+      );
+    });
+  } finally {
+    inFlightTaskIds.delete(task.id);
+  }
+}
+
+function failedRunTask(
+  store: ScheduledTaskOwnerHost,
+  task: ScheduledTaskRecord,
+  sessionRef: SessionRef | undefined,
+  firedAt: string,
+  now: Date,
+  error: unknown,
+): ScheduledTaskRecord {
+  const message = error instanceof Error ? error.message : String(error);
+  const failedMessageId = sessionRef
+    ? lastUserMessageId(store.transcriptFor(sessionRef), task.instruction, firedAt)
+    : undefined;
+  const failedRun: ScheduledTaskRun | undefined = sessionRef
+    ? {
+        id: randomUUID(),
+        sessionId: sessionRef.sessionId,
+        workspaceId: sessionRef.workspaceId,
+        firedAt,
+        instruction: task.instruction,
+        ...(failedMessageId ? { userMessageId: failedMessageId } : {}),
+        outcome: "failed",
+        error: message,
+      }
+    : undefined;
+  return pauseWithError(failedRun ? appendRun(task, failedRun) : task, now, message);
 }
 
 async function createScheduledTaskToolResult(
@@ -690,9 +785,29 @@ async function listScheduledTasksToolResult(
 
 async function updateScheduledTaskToolResult(
   store: ScheduledTaskOwnerHost,
-  input: { readonly taskId: string; readonly patch: UpdateScheduledTaskInput },
+  input: ScheduledTaskToolUpdate,
 ): Promise<AgentToolResult<UpdateScheduledTaskToolDetails>> {
-  const state = await updateScheduledTask(store, input.taskId, input.patch);
+  let patch = input.patch;
+  if (input.resolveSchedule) {
+    await store.initialize();
+    const existing = store.scheduledTasks().find((task) => task.id === input.taskId);
+    if (existing) {
+      try {
+        patch = { ...patch, schedule: input.resolveSchedule(existing.schedule) };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return {
+          content: [{ type: "text", text: message }],
+          details: {
+            action: "pi_gui_update_scheduled_task",
+            taskId: input.taskId,
+            error: message,
+          },
+        };
+      }
+    }
+  }
+  const state = await updateScheduledTask(store, input.taskId, patch);
   const task = state.scheduledTasks.find((entry) => entry.id === input.taskId);
   if (!task || state.lastError) {
     return {

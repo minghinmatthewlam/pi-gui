@@ -505,7 +505,13 @@ export class TurnCheckpointStore {
           );
         paths.add(match[5]!);
       }
-      for (const path of nulRecords(otherOutput)) paths.add(path);
+      // Git lists an untracked nested repository (or linked worktree) as one "dir/" entry.
+      // Its files belong to that repository, so the capture skips it and says so.
+      let skippedNestedRepository = false;
+      for (const path of nulRecords(otherOutput)) {
+        if (path.endsWith("/")) skippedNestedRepository = true;
+        else paths.add(path);
+      }
       if (paths.size > this.limits.maxFiles)
         throw new CaptureError(
           "file-limit",
@@ -654,7 +660,9 @@ export class TurnCheckpointStore {
         state: "available",
         treeOid,
         capturedAt: new Date().toISOString(),
-        coverage: { state: "complete", notes: [] },
+        coverage: skippedNestedRepository
+          ? { state: "partial", notes: [NESTED_REPOSITORY_NOTE] }
+          : { state: "complete", notes: [] },
         fileCount,
         byteCount,
         durationMs: Date.now() - started,
@@ -1127,6 +1135,9 @@ function targetKey(target: SessionRef): string {
 function sameTarget(left: SessionRef, right: SessionRef): boolean {
   return left.workspaceId === right.workspaceId && left.sessionId === right.sessionId;
 }
+
+const NESTED_REPOSITORY_NOTE =
+  "Nested Git repositories inside this checkout are not included in turn captures.";
 
 function unavailableCapture(code: string, message: string): CheckpointCapture {
   return {
