@@ -2,8 +2,8 @@ import test from "node:test";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import assert from "node:assert/strict";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
+import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   acquireLeaseFile,
@@ -199,7 +199,10 @@ await test("acquireLeaseFile takes over dead and corrupt leases", async () => {
     assert.equal(result.status, "acquired");
     assert.equal((await readLeaseSnapshot(leasePath))!.info.token, "token-a");
 
+    // An unparseable lease is abandoned once it is older than the settle window.
     await writeFile(leasePath, "{ not json", "utf8");
+    const old = new Date(Date.now() - 60_000);
+    await utimes(leasePath, old, old);
     assert.equal(
       (await acquireLeaseFile(leasePath, stalenessFor(SELF_TOKENED, Date.now()))).status,
       "acquired",
@@ -248,49 +251,75 @@ await test("releaseLeaseFile removes only the caller's own lease", async () => {
   });
 });
 
-await test("processes racing for one session lease: exactly one acquires", async () => {
-  await withTempDir(async (dir) => {
-    const leasePath = join(dir, "session.jsonl.lease");
-    const startAt = Date.now() + 750;
-    const leaseModule = new URL("../dist/session-lease.js", import.meta.url).href;
-    // Each child waits for a shared start time, races, prints its result, then
-    // stays alive (so its lease is live) until the parent closes stdin.
-    const script = `
-      const { acquireLeaseFile, currentLeaseIdentity, defaultIsPidAlive } = await import(${JSON.stringify(leaseModule)});
-      while (Date.now() < ${startAt}) {}
-      const result = await acquireLeaseFile(${JSON.stringify(leasePath)}, {
-        now: Date.now(), ttlMs: 60000, self: currentLeaseIdentity(), isPidAlive: defaultIsPidAlive,
-      });
-      process.stdout.write(result.status + "\\n");
-      process.stdin.resume();
-      process.stdin.on("end", () => process.exit(0));
-    `;
-    const children = Array.from({ length: 6 }, () =>
-      spawn(process.execPath, ["--input-type=module", "-e", script], {
-        stdio: ["pipe", "pipe", "inherit"],
-      }),
+async function raceForLease(leasePath: string, processes: number): Promise<string[]> {
+  const startAt = Date.now() + 1_000;
+  const leaseModule = new URL("../dist/session-lease.js", import.meta.url).href;
+  // Each child waits for a shared start time, races, prints its result, then
+  // stays alive (so its lease is live) until the parent closes stdin.
+  const script = `
+    const { acquireLeaseFile, currentLeaseIdentity, defaultIsPidAlive } = await import(${JSON.stringify(leaseModule)});
+    if (Date.now() > ${startAt}) { process.stdout.write("late\\n"); }
+    while (Date.now() < ${startAt}) {}
+    const result = await acquireLeaseFile(${JSON.stringify(leasePath)}, {
+      now: Date.now(), ttlMs: 60000, self: currentLeaseIdentity(), isPidAlive: defaultIsPidAlive,
+    });
+    process.stdout.write(result.status + "\\n");
+    process.stdin.resume();
+    process.stdin.on("end", () => process.exit(0));
+  `;
+  const children = Array.from({ length: processes }, () =>
+    spawn(process.execPath, ["--input-type=module", "-e", script], {
+      stdio: ["pipe", "pipe", "inherit"],
+    }),
+  );
+  try {
+    return await Promise.all(
+      children.map(
+        (child) =>
+          new Promise<string>((resolve, reject) => {
+            let out = "";
+            child.stdout.on("data", (chunk: Buffer) => {
+              out += chunk.toString();
+              const lines = out.split("\n").filter(Boolean);
+              if (lines.includes("late")) reject(new Error("child started after the race"));
+              if (lines.length > 0) resolve(lines[0]!);
+            });
+            child.on("exit", (code) => reject(new Error(`child exited early (${code})`)));
+          }),
+      ),
     );
-    try {
-      const statuses = await Promise.all(
-        children.map(
-          (child) =>
-            new Promise<string>((resolve, reject) => {
-              let out = "";
-              child.stdout.on("data", (chunk: Buffer) => {
-                out += chunk.toString();
-                if (out.includes("\n")) resolve(out.trim());
-              });
-              child.on("exit", (code) => reject(new Error(`child exited early (${code})`)));
-            }),
-        ),
-      );
-      assert.equal(statuses.filter((status) => status === "acquired").length, 1, statuses.join());
-      assert.equal(statuses.filter((status) => status === "held").length, 5, statuses.join());
-    } finally {
-      for (const child of children) {
-        child.stdin.end();
-      }
-      await Promise.all(children.map((child) => once(child, "exit")));
+  } finally {
+    const running = children.filter((child) => child.exitCode === null);
+    for (const child of running) {
+      child.stdin.end();
     }
+    await Promise.all(running.map((child) => once(child, "exit")));
+  }
+}
+
+await test("processes racing for an absent session lease: exactly one acquires", async () => {
+  await withTempDir(async (dir) => {
+    const statuses = await raceForLease(join(dir, "session.jsonl.lease"), 6);
+    assert.equal(statuses.filter((status) => status === "acquired").length, 1, statuses.join());
+    assert.equal(statuses.filter((status) => status === "held").length, 5, statuses.join());
   });
+});
+
+await test("processes racing to take over a dead lease: exactly one acquires", async () => {
+  for (let round = 0; round < 5; round += 1) {
+    await withTempDir(async (dir) => {
+      const leasePath = join(dir, "session.jsonl.lease");
+      // A lease left by a process on this host that no longer runs.
+      await writeLeaseFile(leasePath, {
+        pid: 2 ** 22 + 7,
+        hostname: hostname(),
+        startedAt: "2026-01-01T00:00:00.000Z",
+        surface: "pi-gui",
+        token: "crashed",
+      });
+      const statuses = await raceForLease(leasePath, 6);
+      assert.equal(statuses.filter((status) => status === "acquired").length, 1, statuses.join());
+      assert.notEqual((await readLeaseSnapshot(leasePath))!.info.token, "crashed");
+    });
+  }
 });

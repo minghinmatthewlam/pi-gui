@@ -182,14 +182,21 @@ export function buildOwnLease(self: LeaseIdentity, now: number): LeaseInfo {
 export type LeaseAcquireResult =
   { readonly status: "acquired" } | { readonly status: "held"; readonly holder: LeaseInfo };
 
-const ACQUIRE_ATTEMPTS = 3;
+const ACQUIRE_ATTEMPTS = 200;
+const ACQUIRE_RETRY_DELAY_MS = 25;
+/**
+ * An unparseable lease or takeover guard younger than this may still be being
+ * written or used by a live process, so it is not treated as abandoned yet.
+ */
+const LEASE_SETTLE_MS = 10_000;
 
 /**
  * Claim `leasePath` for `opts.self`. Succeeds when the lease is absent, already
  * ours, or provably dead; reports the holder when a live foreign lease exists.
- * Creation is exclusive, so two processes racing for an absent lease cannot
- * both win. Filesystem failures throw: a caller that cannot hold the lease
- * must not bind a writable runtime.
+ * Creation is exclusive and taking over a dead lease is serialized by a
+ * `.takeover` guard file, so two processes can never both win. Filesystem
+ * failures throw: a caller that cannot hold the lease must not bind a
+ * writable runtime.
  */
 export async function acquireLeaseFile(
   leasePath: string,
@@ -197,7 +204,7 @@ export async function acquireLeaseFile(
 ): Promise<LeaseAcquireResult> {
   const content = serializeLease(buildOwnLease(opts.self, opts.now));
   for (let attempt = 0; attempt < ACQUIRE_ATTEMPTS; attempt += 1) {
-    if (await createLeaseExclusive(leasePath, content)) {
+    if (await createFileExclusive(leasePath, content)) {
       return { status: "acquired" };
     }
     const current = await readLeaseFileState(leasePath);
@@ -212,15 +219,53 @@ export async function acquireLeaseFile(
       if (!isLeaseDead(current.snapshot, opts)) {
         return { status: "held", holder: current.snapshot.info };
       }
+    } else if (Date.now() - current.mtimeMs < LEASE_SETTLE_MS) {
+      await delay(ACQUIRE_RETRY_DELAY_MS); // Possibly mid-write; look again.
+      continue;
     }
-    // Dead or unreadable: remove it only if nobody replaced it since we looked,
-    // so a racing taker's fresh lease is never deleted.
-    const again = await readLeaseFileState(leasePath);
-    if (again && again.raw === current.raw && again.mtimeMs === current.mtimeMs) {
-      await rm(leasePath, { force: true });
-    }
+    await takeOverDeadLease(leasePath, current);
   }
   throw new Error(`Could not acquire session lease ${leasePath}: it kept changing.`);
+}
+
+/**
+ * Remove a dead or abandoned lease while holding the takeover guard, and only
+ * if it is still the exact file we judged dead. Without the guard, two takers
+ * could each delete the other's fresh lease and both believe they won.
+ */
+async function takeOverDeadLease(leasePath: string, judged: LeaseFileState): Promise<void> {
+  const guardPath = `${leasePath}.takeover`;
+  if (!(await createFileExclusive(guardPath, `${process.pid}\n`))) {
+    await removeAbandonedGuard(guardPath);
+    await delay(ACQUIRE_RETRY_DELAY_MS);
+    return;
+  }
+  try {
+    const again = await readLeaseFileState(leasePath);
+    if (again && again.raw === judged.raw && again.mtimeMs === judged.mtimeMs) {
+      await rm(leasePath, { force: true });
+    }
+  } finally {
+    await rm(guardPath, { force: true });
+  }
+}
+
+/** A guard left behind by a process that crashed mid-takeover. */
+async function removeAbandonedGuard(guardPath: string): Promise<void> {
+  try {
+    const { mtimeMs } = await stat(guardPath);
+    if (Date.now() - mtimeMs > LEASE_SETTLE_MS) {
+      await rm(guardPath, { force: true });
+    }
+  } catch (error) {
+    if (!isMissingFileError(error)) {
+      throw error;
+    }
+  }
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**
@@ -254,12 +299,13 @@ function serializeLease(info: LeaseInfo): string {
 }
 
 /**
- * Create the lease only if no file exists. Writes a temp file and hard-links it
- * into place, so readers never see a half-written lease. Filesystems without
- * hard links fall back to an exclusive create.
+ * Create `filePath` only if no file exists. Writes a temp file and hard-links it
+ * into place, so readers never see a half-written file. Filesystems without
+ * hard links fall back to an exclusive create, whose brief empty-file window
+ * acquireLeaseFile tolerates.
  */
-async function createLeaseExclusive(leasePath: string, content: string): Promise<boolean> {
-  const tmpPath = `${leasePath}.${process.pid}.${randomBytes(6).toString("hex")}.tmp`;
+async function createFileExclusive(filePath: string, content: string): Promise<boolean> {
+  const tmpPath = `${filePath}.${process.pid}.${randomBytes(6).toString("hex")}.tmp`;
   const tmp = await open(tmpPath, "wx");
   try {
     await tmp.writeFile(content);
@@ -268,7 +314,7 @@ async function createLeaseExclusive(leasePath: string, content: string): Promise
     await tmp.close();
   }
   try {
-    await link(tmpPath, leasePath);
+    await link(tmpPath, filePath);
     return true;
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
@@ -276,7 +322,7 @@ async function createLeaseExclusive(leasePath: string, content: string): Promise
       return false;
     }
     if (code === "EPERM" || code === "ENOTSUP" || code === "ENOSYS" || code === "EXDEV") {
-      return createLeaseWithExclusiveOpen(leasePath, content);
+      return createWithExclusiveOpen(filePath, content);
     }
     throw error;
   } finally {
@@ -284,10 +330,10 @@ async function createLeaseExclusive(leasePath: string, content: string): Promise
   }
 }
 
-async function createLeaseWithExclusiveOpen(leasePath: string, content: string): Promise<boolean> {
+async function createWithExclusiveOpen(filePath: string, content: string): Promise<boolean> {
   let handle;
   try {
-    handle = await open(leasePath, "wx");
+    handle = await open(filePath, "wx");
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "EEXIST") {
       return false;

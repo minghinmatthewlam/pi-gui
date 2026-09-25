@@ -60,8 +60,6 @@ import {
   DEFAULT_LEASE_TTL_MS,
   type LeaseIdentity,
   type LeaseStalenessOptions,
-  leaseBlocksBinding,
-  readLeaseSnapshot,
   refreshLeaseFile,
   releaseLeaseFile,
   sessionLeasePath,
@@ -682,7 +680,7 @@ export class SessionSupervisor {
     }
 
     this.records.set(sessionKey(record.ref), record);
-    await this.bindSessionRuntime(record);
+    await this.bindSessionRuntimeOrDispose(record);
     await this.persistSnapshot(record);
     const snapshot = buildSnapshot(record);
     await this.emit(record, {
@@ -815,7 +813,7 @@ export class SessionSupervisor {
     }
 
     this.records.set(sessionKey(record.ref), record);
-    await this.bindSessionRuntime(record);
+    await this.bindSessionRuntimeOrDispose(record);
     await this.persistSnapshot(record);
     const snapshot = buildSnapshot(record);
     await this.emit(record, {
@@ -1278,7 +1276,7 @@ export class SessionSupervisor {
 
     this.records.set(key, record);
     this.syncLeaseHeartbeat();
-    await this.bindSessionRuntime(record);
+    await this.bindSessionRuntimeOrDispose(record);
     return record;
   }
 
@@ -1387,23 +1385,6 @@ export class SessionSupervisor {
     };
   }
 
-  /**
-   * Throw {@link SessionLeasedError} if a live foreign writer already holds this
-   * session file. A cheap pre-check before switchSession; the lease itself is
-   * claimed when the runtime rebinds. Unreadable leases do not block here.
-   */
-  private async assertSessionNotForeignLeased(sessionFile: string): Promise<void> {
-    let snapshot;
-    try {
-      snapshot = await readLeaseSnapshot(sessionLeasePath(sessionFile));
-    } catch {
-      return;
-    }
-    if (snapshot && leaseBlocksBinding(snapshot, this.leaseStaleness())) {
-      throw new SessionLeasedError(sessionFile, snapshot.info);
-    }
-  }
-
   /** Claim the lease for `sessionFile` or throw. Returns the lease path now held. */
   private async claimSessionLease(sessionFile: string): Promise<string> {
     const leasePath = sessionLeasePath(sessionFile);
@@ -1426,7 +1407,10 @@ export class SessionSupervisor {
       return;
     }
     const nextLeasePath = sessionLeasePath(sessionFile);
-    if (record.leasePath && record.leasePath !== nextLeasePath) {
+    if (record.leasePath === nextLeasePath) {
+      return; // Already held; the heartbeat keeps it fresh.
+    }
+    if (record.leasePath) {
       await this.releaseSessionLease(record);
     }
     try {
@@ -1483,18 +1467,13 @@ export class SessionSupervisor {
       }
       try {
         const result = await refreshLeaseFile(leasePath, this.leaseIdentity, Date.now());
-        if (result === "lost" && record.leasePath === leasePath && record.sessionFile) {
-          // Someone removed or replaced our lease. Reclaim it if it is free;
-          // otherwise stop claiming a file another writer now holds.
-          await this.claimSessionLease(record.sessionFile).catch((error: unknown) => {
-            console.warn(
-              `[pi-sdk-driver] lost session lease for ${sessionKey(record.ref)}:`,
-              error,
-            );
-            if (record.leasePath === leasePath) {
-              record.leasePath = undefined;
-            }
-          });
+        if (result === "lost" && record.leasePath === leasePath) {
+          // Only possible if this process stopped refreshing for a whole TTL
+          // (e.g. it was suspended) and another writer took the file over.
+          console.warn(
+            `[pi-sdk-driver] lost session lease for ${sessionKey(record.ref)} to another writer.`,
+          );
+          record.leasePath = undefined;
         }
       } catch (error) {
         console.warn(
@@ -1570,6 +1549,19 @@ export class SessionSupervisor {
     this.refreshUsage(record);
   }
 
+  /**
+   * Bind a freshly opened runtime; if binding fails, dispose it (releasing its
+   * lease) so a half-bound record never keeps holding the session.
+   */
+  private async bindSessionRuntimeOrDispose(record: ManagedSessionRecord): Promise<void> {
+    try {
+      await this.bindSessionRuntime(record);
+    } catch (error) {
+      await this.disposeRecordRuntimeSafely(record);
+      throw error;
+    }
+  }
+
   private async bindSessionRuntime(record: ManagedSessionRecord): Promise<void> {
     const runtime = this.requireRuntime(record);
     runtime.setRebindSession(async (session) => {
@@ -1625,11 +1617,25 @@ export class SessionSupervisor {
         return { cancelled: result.cancelled };
       },
       switchSession: async (sessionPath, options) => {
-        // switchSession adopts an arbitrary existing JSONL. Refuse before the
-        // runtime opens it if a live foreign writer holds it, mirroring the
-        // reopen path so this seam can't silently fork a leased session.
-        await this.assertSessionNotForeignLeased(sessionPath);
-        const { cancelled } = await this.requireRuntime(record).switchSession(sessionPath, options);
+        // switchSession adopts an arbitrary existing JSONL. Claim it before the
+        // runtime opens it, mirroring the reopen path, so this seam can't fork
+        // a session another process holds. The rebind then moves our lease.
+        const claimedPath = await this.claimSessionLease(sessionPath);
+        const releaseUnusedClaim = async () => {
+          if (record.leasePath !== claimedPath) {
+            await this.releaseLeasePath(claimedPath);
+          }
+        };
+        let cancelled: boolean;
+        try {
+          ({ cancelled } = await this.requireRuntime(record).switchSession(sessionPath, options));
+        } catch (error) {
+          await releaseUnusedClaim();
+          throw error;
+        }
+        if (cancelled) {
+          await releaseUnusedClaim();
+        }
         await this.syncRecordAfterSessionMutation(record, { emitUpdate: true });
         return { cancelled };
       },
