@@ -10,6 +10,10 @@ import {
   createScheduledTaskOwner,
   type ScheduledTaskOwnerHost,
 } from "../../electron/scheduled-tasks/app-store-scheduled-tasks";
+import {
+  createScheduledTaskRuntimeTools,
+  updateScheduledTaskToolName,
+} from "../../electron/scheduled-tasks/scheduled-task-runtime";
 
 const workspaceId = "ws-1";
 const sessionId = "session-1";
@@ -320,4 +324,110 @@ test("title-only update keeps timezone and nextRunAt", async () => {
     timeZone: "America/Los_Angeles",
   });
   expect(host.tasks[0]?.nextRunAt).toBe(nextRunAt);
+});
+
+async function runUpdateTool(host: ScheduledTaskTestHost, params: Record<string, unknown>) {
+  const owner = createScheduledTaskOwner(host);
+  const tools = createScheduledTaskRuntimeTools(
+    {
+      createScheduledTask: async () => {
+        throw new Error("create should not run");
+      },
+      listScheduledTasks: () => owner.listScheduledTasksToolResult(),
+      updateScheduledTask: (_ctx, input) => owner.updateScheduledTaskToolResult(input),
+    },
+    () => workspaceId,
+  );
+  const tool = tools.find((entry) => entry.name === updateScheduledTaskToolName);
+  if (!tool) {
+    throw new Error("update tool missing");
+  }
+  return tool.execute("call-1", params, undefined, undefined, {} as never);
+}
+
+test("update tool changing only the time keeps a weekly task's days and time zone", async () => {
+  const host = createHost({
+    tasks: [
+      dueIntervalTask({
+        schedule: {
+          kind: "weekly",
+          days: [1, 5],
+          hour: 8,
+          minute: 30,
+          timeZone: "America/New_York",
+        },
+      }),
+    ],
+  });
+  const result = await runUpdateTool(host, { task_id: "task-1", time: "09:00" });
+  expect(result.details).not.toHaveProperty("error");
+  expect(host.tasks[0]?.schedule).toEqual({
+    kind: "weekly",
+    days: [1, 5],
+    hour: 9,
+    minute: 0,
+    timeZone: "America/New_York",
+  });
+});
+
+test("update tool changing only days or the interval keeps the task's other fields", async () => {
+  const weekly = createHost({
+    tasks: [
+      dueIntervalTask({
+        schedule: { kind: "weekly", days: [1], hour: 8, minute: 30, timeZone: "UTC" },
+      }),
+    ],
+  });
+  await runUpdateTool(weekly, { task_id: "task-1", days: ["tue", "thu"] });
+  expect(weekly.tasks[0]?.schedule).toEqual({
+    kind: "weekly",
+    days: [2, 4],
+    hour: 8,
+    minute: 30,
+    timeZone: "UTC",
+  });
+
+  const interval = createHost({ tasks: [dueIntervalTask()] });
+  await runUpdateTool(interval, { task_id: "task-1", every_minutes: 30 });
+  expect(interval.tasks[0]?.schedule).toEqual({ kind: "interval", everyMs: 30 * 60_000 });
+});
+
+test("update tool with an explicit repeat still replaces the schedule", async () => {
+  const host = createHost({
+    tasks: [
+      dueIntervalTask({
+        schedule: { kind: "weekly", days: [1], hour: 8, minute: 30, timeZone: "UTC" },
+      }),
+    ],
+  });
+  await runUpdateTool(host, { task_id: "task-1", repeat: "daily", time: "07:15" });
+  expect(host.tasks[0]?.schedule).toEqual({
+    kind: "daily",
+    hour: 7,
+    minute: 15,
+    timeZone: "UTC",
+  });
+});
+
+test("update tool infers the schedule kind from the fields it is given", async () => {
+  const daily = createHost({
+    tasks: [
+      dueIntervalTask({
+        schedule: { kind: "daily", hour: 8, minute: 30, timeZone: "UTC" },
+      }),
+    ],
+  });
+  await runUpdateTool(daily, { task_id: "task-1", days: ["mon", "fri"] });
+  expect(daily.tasks[0]?.schedule).toEqual({
+    kind: "weekly",
+    days: [1, 5],
+    hour: 8,
+    minute: 30,
+    timeZone: "UTC",
+  });
+
+  const interval = createHost({ tasks: [dueIntervalTask()] });
+  const result = await runUpdateTool(interval, { task_id: "task-1", time: "09:00" });
+  expect(result.details).toHaveProperty("error");
+  expect(interval.tasks[0]?.schedule).toEqual({ kind: "interval", everyMs: 60_000 });
 });

@@ -12,6 +12,7 @@ import {
   parseClockTime,
   parseWeekday,
   type CreateScheduledTaskInput,
+  type ScheduledTaskSchedule,
   type ScheduledTaskStatus,
   type UpdateScheduledTaskInput,
   type Weekday,
@@ -62,8 +63,15 @@ export interface ScheduledTaskRuntimeBridge {
   ) => Promise<AgentToolResult<ListScheduledTasksToolDetails>>;
   readonly updateScheduledTask: (
     ctx: ExtensionContext,
-    input: { readonly taskId: string; readonly patch: UpdateScheduledTaskInput },
+    input: ScheduledTaskToolUpdate,
   ) => Promise<AgentToolResult<UpdateScheduledTaskToolDetails>>;
+}
+
+export interface ScheduledTaskToolUpdate {
+  readonly taskId: string;
+  readonly patch: UpdateScheduledTaskInput;
+  /** Applies the tool's schedule fields on top of the task's current schedule. */
+  readonly resolveSchedule?: (existing: ScheduledTaskSchedule) => ScheduledTaskSchedule;
 }
 
 type ScheduledToolDetails =
@@ -177,9 +185,9 @@ function parseCreateInput(
   };
 }
 
-function parseUpdatePatch(params: unknown): UpdateScheduledTaskInput {
+function parseUpdate(taskId: string, params: unknown): ScheduledTaskToolUpdate {
   if (!isRecord(params)) {
-    return {};
+    return { taskId, patch: {} };
   }
   const patch: UpdateScheduledTaskInput = {
     ...(stringParam(params, "title") ? { title: stringParam(params, "title") } : {}),
@@ -194,17 +202,70 @@ function parseUpdatePatch(params: unknown): UpdateScheduledTaskInput {
     params.time !== undefined ||
     params.days !== undefined ||
     params.every_minutes !== undefined ||
-    params.at !== undefined;
-  if (hasSchedule) {
-    return { ...patch, schedule: parseRepeatSchedule(params) };
+    params.at !== undefined ||
+    params.timezone !== undefined;
+  const withTarget =
+    stringParam(params, "workspace_id") || stringParam(params, "session_id")
+      ? { ...patch, target: parseTarget(params, stringParam(params, "workspace_id")) }
+      : patch;
+  return hasSchedule
+    ? {
+        taskId,
+        patch: withTarget,
+        resolveSchedule: (existing) => parseRepeatSchedule(mergeScheduleFields(existing, params)),
+      }
+    : { taskId, patch: withTarget };
+}
+
+/**
+ * Fill the schedule fields an update leaves out from the task's current schedule, so
+ * "move it to 9:00" keeps a weekly task's days and time zone. Without an explicit repeat,
+ * days, every_minutes and at imply weekly, interval and once.
+ */
+function mergeScheduleFields(
+  existing: ScheduledTaskSchedule,
+  params: Record<string, unknown>,
+): Record<string, unknown> {
+  const repeat =
+    stringParam(params, "repeat") ??
+    stringParam(params, "kind") ??
+    (params.days !== undefined
+      ? "weekly"
+      : params.every_minutes !== undefined
+        ? "interval"
+        : params.at !== undefined
+          ? "once"
+          : existing.kind);
+  const usesClock = repeat === "daily" || repeat === "weekly";
+  if (!usesClock && (params.time !== undefined || params.timezone !== undefined)) {
+    throw new Error(`time and timezone do not apply to a ${repeat} schedule; pass repeat.`);
   }
-  if (stringParam(params, "workspace_id") || stringParam(params, "session_id")) {
-    return {
-      ...patch,
-      target: parseTarget(params, stringParam(params, "workspace_id")),
-    };
+  const merged: Record<string, unknown> = { ...params, repeat };
+  if (repeat === "once" && existing.kind === "once" && params.at === undefined) {
+    merged.at = existing.at;
   }
-  return patch;
+  if (
+    repeat === "interval" &&
+    existing.kind === "interval" &&
+    params.every_minutes === undefined &&
+    params.everyMinutes === undefined &&
+    params.everyMs === undefined
+  ) {
+    merged.everyMs = existing.everyMs;
+  }
+  if ((repeat === "daily" || repeat === "weekly") && "timeZone" in existing) {
+    if (params.time === undefined && params.hour === undefined && params.minute === undefined) {
+      merged.hour = existing.hour;
+      merged.minute = existing.minute;
+    }
+    if (params.timezone === undefined && params.timeZone === undefined) {
+      merged.timeZone = existing.timeZone;
+    }
+  }
+  if (repeat === "weekly" && existing.kind === "weekly" && params.days === undefined) {
+    merged.days = existing.days;
+  }
+  return merged;
 }
 
 function createCreateScheduledTaskTool(
@@ -333,10 +394,7 @@ function createUpdateScheduledTaskTool(
         };
       }
       try {
-        return bridge.updateScheduledTask(ctx, {
-          taskId,
-          patch: parseUpdatePatch(params),
-        });
+        return bridge.updateScheduledTask(ctx, parseUpdate(taskId, params));
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         return {

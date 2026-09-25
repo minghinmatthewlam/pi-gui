@@ -30,6 +30,7 @@ import { NEW_THREAD_PLACEHOLDER_TITLE } from "../conversation/thread-title-const
 import type { RefreshStateOptions } from "../application/refresh-state-options";
 import { nextRunAt } from "./scheduled-task-schedule";
 import type {
+  ScheduledTaskToolUpdate,
   CreateScheduledTaskToolDetails,
   ListScheduledTasksToolDetails,
   UpdateScheduledTaskToolDetails,
@@ -74,10 +75,9 @@ export interface ScheduledTaskOwner {
     input: CreateScheduledTaskInput,
   ): Promise<AgentToolResult<CreateScheduledTaskToolDetails>>;
   listScheduledTasksToolResult(): Promise<AgentToolResult<ListScheduledTasksToolDetails>>;
-  updateScheduledTaskToolResult(input: {
-    readonly taskId: string;
-    readonly patch: UpdateScheduledTaskInput;
-  }): Promise<AgentToolResult<UpdateScheduledTaskToolDetails>>;
+  updateScheduledTaskToolResult(
+    input: ScheduledTaskToolUpdate,
+  ): Promise<AgentToolResult<UpdateScheduledTaskToolDetails>>;
 }
 
 const inFlightTaskIds = new Set<string>();
@@ -776,9 +776,29 @@ async function listScheduledTasksToolResult(
 
 async function updateScheduledTaskToolResult(
   store: ScheduledTaskOwnerHost,
-  input: { readonly taskId: string; readonly patch: UpdateScheduledTaskInput },
+  input: ScheduledTaskToolUpdate,
 ): Promise<AgentToolResult<UpdateScheduledTaskToolDetails>> {
-  const state = await updateScheduledTask(store, input.taskId, input.patch);
+  let patch = input.patch;
+  if (input.resolveSchedule) {
+    await store.initialize();
+    const existing = store.scheduledTasks().find((task) => task.id === input.taskId);
+    if (existing) {
+      try {
+        patch = { ...patch, schedule: input.resolveSchedule(existing.schedule) };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return {
+          content: [{ type: "text", text: message }],
+          details: {
+            action: "pi_gui_update_scheduled_task",
+            taskId: input.taskId,
+            error: message,
+          },
+        };
+      }
+    }
+  }
+  const state = await updateScheduledTask(store, input.taskId, patch);
   const task = state.scheduledTasks.find((entry) => entry.id === input.taskId);
   if (!task || state.lastError) {
     return {
