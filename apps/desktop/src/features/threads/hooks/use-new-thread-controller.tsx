@@ -258,8 +258,11 @@ export function useNewThreadController(params: UseNewThreadControllerParams) {
     onEnableExtension: enableMentionExtension,
   });
 
+  // The prompt clears only once the thread exists, so a second Enter or click before
+  // then would otherwise start the same thread again (a worktree start takes seconds).
+  const startingThreadRef = useRef(false);
   const startThread = useCallback(() => {
-    if (!api) {
+    if (!api || startingThreadRef.current) {
       return;
     }
     if (!rootWorkspaceId || (!prompt.trim() && attachments.length === 0)) {
@@ -286,6 +289,7 @@ export function useNewThreadController(params: UseNewThreadControllerParams) {
       modelId: resolvedModelId,
       thinkingLevel: resolvedThinkingLevel,
     };
+    startingThreadRef.current = true;
     void updateSnapshot(setSnapshot, () => api.startThread(input))
       .then(() => {
         setPrompt("");
@@ -297,6 +301,9 @@ export function useNewThreadController(params: UseNewThreadControllerParams) {
       })
       .catch((error: unknown) => {
         setComposerError(error instanceof Error ? error.message : String(error));
+      })
+      .finally(() => {
+        startingThreadRef.current = false;
       });
   }, [
     api,
