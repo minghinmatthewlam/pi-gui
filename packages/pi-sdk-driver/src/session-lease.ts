@@ -188,7 +188,7 @@ const ACQUIRE_RETRY_DELAY_MS = 25;
  * An unparseable lease or takeover guard younger than this may still be being
  * written or used by a live process, so it is not treated as abandoned yet.
  */
-const LEASE_SETTLE_MS = 10_000;
+const LEASE_SETTLE_MS = 3_000;
 
 /**
  * Claim `leasePath` for `opts.self`. Succeeds when the lease is absent, already
