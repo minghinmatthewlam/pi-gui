@@ -53,17 +53,19 @@ import type { SessionFileCatalogStorage } from "@pi-gui/catalogs";
 import { sessionKey } from "@pi-gui/session-driver";
 import { buildSessionSchemaInfo, readSessionFileSchemaVersion } from "./session-schema.js";
 import {
-  buildOwnLease,
+  acquireLeaseFile,
   currentLeaseIdentity,
   defaultIsPidAlive,
+  DEFAULT_LEASE_HEARTBEAT_MS,
   DEFAULT_LEASE_TTL_MS,
   type LeaseIdentity,
+  type LeaseStalenessOptions,
   leaseBlocksBinding,
   readLeaseSnapshot,
-  removeLeaseFile,
+  refreshLeaseFile,
+  releaseLeaseFile,
   sessionLeasePath,
   SessionLeasedError,
-  writeLeaseFile,
 } from "./session-lease.js";
 import {
   applyHostUiRequestToExtensionUiState,
@@ -199,7 +201,7 @@ interface ManagedSessionRecord {
   sessionCommands: RuntimeCommandRecord[];
   /** Context, cache and usage read from pi at the last turn boundary. */
   usage: SessionUsageSnapshot | undefined;
-  /** Path of the advisory lease file this record currently holds, if any. */
+  /** Path of the lease file this record currently holds, if any. */
   leasePath: string | undefined;
   /** mtime (epoch ms) of the JSONL last reconciled into the served transcript. */
   transcriptDiskMtimeMs: number | undefined;
@@ -249,6 +251,7 @@ export class SessionSupervisor {
   private readonly leaseIdentity: LeaseIdentity = currentLeaseIdentity();
   private readonly leaseTtlMs = DEFAULT_LEASE_TTL_MS;
   private readonly isPidAlive = defaultIsPidAlive;
+  private leaseHeartbeat: ReturnType<typeof setInterval> | undefined;
 
   constructor(options: PiSdkDriverOptions = {}) {
     this.catalogs =
@@ -1243,14 +1246,20 @@ export class SessionSupervisor {
       throw new Error(`Session ${key} cannot be reopened because no session file is tracked.`);
     }
 
-    // Advisory single-writer check: if another live writer already holds this
-    // file, refuse to bind so the app can warn instead of blind-forking the
-    // conversation. Absent/dead/own leases never block (fully advisory).
-    await this.assertSessionNotForeignLeased(sessionFile);
+    // Claim the lease before opening a writable runtime. A live foreign holder
+    // or a lease we cannot write both refuse the reopen, so two pi-gui
+    // processes never write the same file.
+    const leasePath = await this.claimSessionLease(sessionFile);
 
-    const runtime = await this.createAgentSessionRuntimeImpl(
-      this.baseCreateOptions(workspace, SessionManager.open(sessionFile)),
-    );
+    let runtime: AgentSessionRuntime;
+    try {
+      runtime = await this.createAgentSessionRuntimeImpl(
+        this.baseCreateOptions(workspace, SessionManager.open(sessionFile)),
+      );
+    } catch (error) {
+      await this.releaseLeasePath(leasePath);
+      throw error;
+    }
     const session = runtime.session;
 
     const record =
@@ -1265,8 +1274,10 @@ export class SessionSupervisor {
     record.preview = sessionEntry.previewSnippet ?? undefined;
     record.config = deriveSessionConfig(session.sessionManager);
     record.closed = false;
+    record.leasePath = leasePath;
 
     this.records.set(key, record);
+    this.syncLeaseHeartbeat();
     await this.bindSessionRuntime(record);
     return record;
   }
@@ -1341,7 +1352,7 @@ export class SessionSupervisor {
     record.runtime = undefined;
     record.session = undefined;
     record.sessionCommands = [];
-    // Release the advisory lease before disposing so another writer can take
+    // Release the lease before disposing so another writer can take
     // over promptly. Runs on every teardown path (close/remove/sync/rebind).
     await this.releaseSessionLease(record);
     if (runtime) {
@@ -1367,37 +1378,47 @@ export class SessionSupervisor {
     }
   }
 
-  /**
-   * Throw {@link SessionLeasedError} if a live foreign writer already holds this
-   * session file. Absent, corrupt, dead, or our own leases never block — the
-   * lease is purely advisory, so any read/stat failure is swallowed.
-   */
-  private async assertSessionNotForeignLeased(sessionFile: string): Promise<void> {
-    const leasePath = sessionLeasePath(sessionFile);
-    let snapshot;
-    try {
-      snapshot = await readLeaseSnapshot(leasePath);
-    } catch {
-      return;
-    }
-    if (!snapshot) {
-      return;
-    }
-    const blocks = leaseBlocksBinding(snapshot, {
+  private leaseStaleness(): LeaseStalenessOptions {
+    return {
       now: Date.now(),
       ttlMs: this.leaseTtlMs,
       self: this.leaseIdentity,
       isPidAlive: this.isPidAlive,
-    });
-    if (blocks) {
+    };
+  }
+
+  /**
+   * Throw {@link SessionLeasedError} if a live foreign writer already holds this
+   * session file. A cheap pre-check before switchSession; the lease itself is
+   * claimed when the runtime rebinds. Unreadable leases do not block here.
+   */
+  private async assertSessionNotForeignLeased(sessionFile: string): Promise<void> {
+    let snapshot;
+    try {
+      snapshot = await readLeaseSnapshot(sessionLeasePath(sessionFile));
+    } catch {
+      return;
+    }
+    if (snapshot && leaseBlocksBinding(snapshot, this.leaseStaleness())) {
       throw new SessionLeasedError(sessionFile, snapshot.info);
     }
   }
 
+  /** Claim the lease for `sessionFile` or throw. Returns the lease path now held. */
+  private async claimSessionLease(sessionFile: string): Promise<string> {
+    const leasePath = sessionLeasePath(sessionFile);
+    const result = await acquireLeaseFile(leasePath, this.leaseStaleness());
+    if (result.status === "held") {
+      throw new SessionLeasedError(sessionFile, result.holder);
+    }
+    return leasePath;
+  }
+
   /**
-   * Claim (or refresh) the advisory lease for the record's current session file,
-   * moving it if the file changed under a rebind. Best-effort: a write failure
-   * must not stop the runtime from binding.
+   * Hold the lease for the record's current session file, moving it if a
+   * rebind (fork/newSession/switch) changed the file. Freshly created files
+   * cannot be contested, so a failure here is logged rather than thrown; the
+   * reopen path, where a foreign writer can exist, claims before binding.
    */
   private async acquireSessionLease(record: ManagedSessionRecord): Promise<void> {
     const sessionFile = record.sessionFile;
@@ -1409,11 +1430,11 @@ export class SessionSupervisor {
       await this.releaseSessionLease(record);
     }
     try {
-      await writeLeaseFile(nextLeasePath, buildOwnLease(this.leaseIdentity, Date.now()));
-      record.leasePath = nextLeasePath;
+      record.leasePath = await this.claimSessionLease(sessionFile);
+      this.syncLeaseHeartbeat();
     } catch (error) {
       console.warn(
-        `[pi-sdk-driver] failed to write session lease for ${sessionKey(record.ref)}:`,
+        `[pi-sdk-driver] failed to claim session lease for ${sessionKey(record.ref)}:`,
         error,
       );
     }
@@ -1425,14 +1446,64 @@ export class SessionSupervisor {
       return;
     }
     record.leasePath = undefined;
+    this.syncLeaseHeartbeat();
+    await this.releaseLeasePath(leasePath);
+  }
+
+  private async releaseLeasePath(leasePath: string): Promise<void> {
     try {
-      await removeLeaseFile(leasePath);
+      await releaseLeaseFile(leasePath, this.leaseIdentity);
     } catch (error) {
-      console.warn(
-        `[pi-sdk-driver] failed to remove session lease for ${sessionKey(record.ref)}:`,
-        error,
-      );
+      console.warn(`[pi-sdk-driver] failed to release session lease ${leasePath}:`, error);
     }
+  }
+
+  /** Run the heartbeat only while this process holds at least one lease. */
+  private syncLeaseHeartbeat(): void {
+    const holdsLease = [...this.records.values()].some((record) => record.leasePath);
+    if (holdsLease && !this.leaseHeartbeat) {
+      this.leaseHeartbeat = setInterval(() => {
+        this.refreshHeldLeases().catch((error: unknown) => {
+          console.warn("[pi-sdk-driver] session lease heartbeat failed:", error);
+        });
+      }, DEFAULT_LEASE_HEARTBEAT_MS);
+      // Never keep the process alive just to refresh leases.
+      this.leaseHeartbeat.unref?.();
+    } else if (!holdsLease && this.leaseHeartbeat) {
+      clearInterval(this.leaseHeartbeat);
+      this.leaseHeartbeat = undefined;
+    }
+  }
+
+  private async refreshHeldLeases(): Promise<void> {
+    for (const record of this.records.values()) {
+      const leasePath = record.leasePath;
+      if (!leasePath) {
+        continue;
+      }
+      try {
+        const result = await refreshLeaseFile(leasePath, this.leaseIdentity, Date.now());
+        if (result === "lost" && record.leasePath === leasePath && record.sessionFile) {
+          // Someone removed or replaced our lease. Reclaim it if it is free;
+          // otherwise stop claiming a file another writer now holds.
+          await this.claimSessionLease(record.sessionFile).catch((error: unknown) => {
+            console.warn(
+              `[pi-sdk-driver] lost session lease for ${sessionKey(record.ref)}:`,
+              error,
+            );
+            if (record.leasePath === leasePath) {
+              record.leasePath = undefined;
+            }
+          });
+        }
+      } catch (error) {
+        console.warn(
+          `[pi-sdk-driver] failed to refresh session lease for ${sessionKey(record.ref)}:`,
+          error,
+        );
+      }
+    }
+    this.syncLeaseHeartbeat();
   }
 
   private async rebindRuntimeSession(

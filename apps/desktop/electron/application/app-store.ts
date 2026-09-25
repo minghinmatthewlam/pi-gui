@@ -4408,7 +4408,7 @@ function describeStoreError(error: unknown): string {
   if (isSessionLeasedError(error)) {
     const { holder } = error;
     const where = holder.surface === "pi-cli" ? "the pi CLI" : "another pi instance";
-    return `This session is currently open in ${where} (pid ${holder.pid} on host ${holder.hostname}). Close it there or wait a few minutes before continuing here.`;
+    return `This session is currently open in ${where} (pid ${holder.pid} on host ${holder.hostname}). Close it there to continue here.`;
   }
   return error instanceof Error ? error.message : String(error);
 }
