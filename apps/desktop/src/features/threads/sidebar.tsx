@@ -58,6 +58,8 @@ import {
   type PiDesktopApi,
 } from "../../../contracts/ipc";
 import { formatRelativeTime } from "../../lib/string-utils";
+import { PaneResizeHandle, type PaneWidthBounds } from "../../ui/pane-resize-handle";
+import { usePersistedPaneWidth } from "../../ui/use-persisted-pane-width";
 import { sessionLastInteractedAt } from "../../../contracts/thread-recency";
 import type { WorkspaceMenuState } from "./hooks/use-workspace-menu";
 import type { ThreadMenuState } from "./hooks/use-thread-actions";
@@ -93,7 +95,7 @@ interface SidebarProps {
     setSnapshot: Dispatch<SetStateAction<DesktopAppState | null>>,
     action: () => Promise<DesktopAppState>,
   ) => Promise<DesktopAppState>;
-  readonly onNewThread: () => void;
+  readonly onNewThread: (workspaceId?: string) => void;
   readonly onSetActiveView: (view: AppView) => void;
   readonly onOpenSkills: (workspaceId?: string) => void;
   readonly onOpenExtensions: (workspaceId?: string) => void;
@@ -106,6 +108,15 @@ interface SidebarProps {
   ) => void;
   readonly onUnarchiveSession: (target: { workspaceId: string; sessionId: string }) => void;
   readonly threadShortcutOrderRef: MutableRefObject<readonly ThreadListEntry[] | null>;
+}
+
+const SIDEBAR_WIDTH_RANGE = { min: 200, max: 520 } as const;
+
+function sidebarWidthBounds(_sidebar: HTMLElement, shell: HTMLElement): PaneWidthBounds {
+  return {
+    min: SIDEBAR_WIDTH_RANGE.min,
+    max: Math.floor(Math.min(SIDEBAR_WIDTH_RANGE.max, shell.clientWidth * 0.45)),
+  };
 }
 
 const IS_MAC = typeof navigator !== "undefined" && /Mac/i.test(navigator.userAgent);
@@ -145,6 +156,12 @@ export function Sidebar(props: SidebarProps) {
     threadShortcutOrderRef,
   } = props;
 
+  const [sidebarWidth, setSidebarWidth] = usePersistedPaneWidth(
+    "pi-gui.sidebar-width",
+    SIDEBAR_WIDTH_RANGE,
+  );
+  const sidebarWidthStyle: (CSSProperties & { "--sidebar-width": string }) | undefined =
+    sidebarWidth === undefined ? undefined : { "--sidebar-width": `${sidebarWidth}px` };
   const [activeId, setActiveId] = useState<string | null>(null);
   const [archivedOpen, setArchivedOpen] = useState(false);
   const [expandedHistory, setExpandedHistory] = useState<ReadonlySet<string>>(() => new Set());
@@ -358,13 +375,22 @@ export function Sidebar(props: SidebarProps) {
   }
 
   return (
-    <aside className="sidebar">
+    <aside className="sidebar" id="primary-sidebar" style={sidebarWidthStyle}>
+      <PaneResizeHandle
+        className="sidebar__resize-handle"
+        label="Sidebar width"
+        controls="primary-sidebar"
+        edge="right"
+        bounds={sidebarWidthBounds}
+        onResize={setSidebarWidth}
+        onReset={() => setSidebarWidth(undefined)}
+      />
       <div className="sidebar__top">
         <button
           className="sidebar__new"
           type="button"
           disabled={!selectedWorkspace}
-          onClick={onNewThread}
+          onClick={() => onNewThread()}
         >
           <PlusIcon />
           <span>New thread</span>
@@ -498,6 +524,7 @@ export function Sidebar(props: SidebarProps) {
                       wsMenu={wsMenu}
                       api={api}
                       threadMenu={threadMenu}
+                      onNewThread={onNewThread}
                       onArchiveSession={onArchiveSession}
                       onSelectSession={onSelectSession}
                       onSetSessionPinned={onSetSessionPinned}
@@ -526,6 +553,7 @@ export function Sidebar(props: SidebarProps) {
                       wsMenu={wsMenu}
                       api={api}
                       threadMenu={threadMenu}
+                      onNewThread={onNewThread}
                       onArchiveSession={onArchiveSession}
                       onSelectSession={onSelectSession}
                       onSetSessionPinned={onSetSessionPinned}
@@ -628,6 +656,7 @@ interface WorkspaceFolderProps {
   readonly wsMenu: WorkspaceMenuState;
   readonly api: PiDesktopApi;
   readonly threadMenu?: ThreadMenuState;
+  readonly onNewThread?: (workspaceId: string) => void;
   readonly onArchiveSession?: (target: { workspaceId: string; sessionId: string }) => void;
   readonly onSelectSession?: (target: { workspaceId: string; sessionId: string }) => void;
   readonly onSetSessionPinned?: (
@@ -684,6 +713,7 @@ function WorkspaceFolderContent(
     wsMenu,
     api,
     threadMenu,
+    onNewThread,
     onArchiveSession,
     onSelectSession,
     onSetSessionPinned,
@@ -715,85 +745,100 @@ function WorkspaceFolderContent(
           </span>
           <span className="workspace-row__name">{workspace.name}</span>
         </button>
-        <span
-          className="workspace-row__menu-wrap"
-          ref={wsMenu.workspaceMenuId === workspace.id ? wsMenu.workspaceMenuWrapRef : undefined}
-        >
-          <button
-            aria-label={`Workspace actions for ${workspace.name}`}
-            aria-haspopup="menu"
-            className="icon-button workspace-row__menu-button"
-            aria-expanded={wsMenu.workspaceMenuId === workspace.id}
-            type="button"
-            onClick={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              wsMenu.openWorkspaceMenu(workspace.id);
-            }}
+        <span className="workspace-row__actions">
+          {onNewThread ? (
+            <button
+              aria-label={`New thread in ${workspace.name}`}
+              className="icon-button workspace-row__action-button"
+              title="New thread"
+              type="button"
+              onClick={() => onNewThread(workspace.id)}
+            >
+              <PlusIcon />
+            </button>
+          ) : null}
+          <span
+            className="workspace-row__menu-wrap"
+            ref={wsMenu.workspaceMenuId === workspace.id ? wsMenu.workspaceMenuWrapRef : undefined}
           >
-            …
-          </button>
-          {wsMenu.workspaceMenuId === workspace.id ? (
-            <div className="workspace-menu">
-              <button
-                className="workspace-menu__item"
-                type="button"
-                onClick={(event) =>
-                  wsMenu.runWorkspaceMenuAction(event, () => {
-                    void api.openWorkspaceInFinder(workspace.id).catch((error: unknown) => {
-                      console.error("[renderer] openWorkspaceInFinder failed", error);
-                    });
-                  })
-                }
-              >
-                Open folder
-              </button>
-              {linkedWorktree ? (
-                <button
-                  className="workspace-menu__item workspace-menu__item--danger"
-                  type="button"
-                  onClick={(event) =>
-                    wsMenu.runWorkspaceMenuAction(event, () =>
-                      wsMenu.removeWorktree(
-                        linkedWorktree.rootWorkspaceId || workspace.id,
-                        linkedWorktree,
-                      ),
-                    )
-                  }
-                >
-                  Remove worktree
-                </button>
-              ) : (
+            <button
+              aria-label={`Workspace actions for ${workspace.name}`}
+              aria-haspopup="menu"
+              className="icon-button workspace-row__menu-button"
+              aria-expanded={wsMenu.workspaceMenuId === workspace.id}
+              type="button"
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                wsMenu.openWorkspaceMenu(workspace.id);
+              }}
+            >
+              …
+            </button>
+            {wsMenu.workspaceMenuId === workspace.id ? (
+              <div className="workspace-menu">
                 <button
                   className="workspace-menu__item"
                   type="button"
                   onClick={(event) =>
-                    wsMenu.runWorkspaceMenuAction(event, () => wsMenu.createWorktree(workspace.id))
+                    wsMenu.runWorkspaceMenuAction(event, () => {
+                      void api.openWorkspaceInFinder(workspace.id).catch((error: unknown) => {
+                        console.error("[renderer] openWorkspaceInFinder failed", error);
+                      });
+                    })
                   }
                 >
-                  Create permanent worktree
+                  Open folder
                 </button>
-              )}
-              <button
-                className="workspace-menu__item"
-                type="button"
-                onClick={(event) =>
-                  wsMenu.runWorkspaceMenuAction(event, () => wsMenu.startRename(workspace))
-                }
-              >
-                Edit name
-              </button>
-              <button
-                className="workspace-menu__item workspace-menu__item--danger"
-                type="button"
-                onClick={(event) =>
-                  wsMenu.runWorkspaceMenuAction(event, () => wsMenu.removeWorkspace(workspace))
-                }
-              >
-                Remove
-              </button>
-            </div>
-          ) : null}
+                {linkedWorktree ? (
+                  <button
+                    className="workspace-menu__item workspace-menu__item--danger"
+                    type="button"
+                    onClick={(event) =>
+                      wsMenu.runWorkspaceMenuAction(event, () =>
+                        wsMenu.removeWorktree(
+                          linkedWorktree.rootWorkspaceId || workspace.id,
+                          linkedWorktree,
+                        ),
+                      )
+                    }
+                  >
+                    Remove worktree
+                  </button>
+                ) : (
+                  <button
+                    className="workspace-menu__item"
+                    type="button"
+                    onClick={(event) =>
+                      wsMenu.runWorkspaceMenuAction(event, () =>
+                        wsMenu.createWorktree(workspace.id),
+                      )
+                    }
+                  >
+                    Create permanent worktree
+                  </button>
+                )}
+                <button
+                  className="workspace-menu__item"
+                  type="button"
+                  onClick={(event) =>
+                    wsMenu.runWorkspaceMenuAction(event, () => wsMenu.startRename(workspace))
+                  }
+                >
+                  Edit name
+                </button>
+                <button
+                  className="workspace-menu__item workspace-menu__item--danger"
+                  type="button"
+                  onClick={(event) =>
+                    wsMenu.runWorkspaceMenuAction(event, () => wsMenu.removeWorkspace(workspace))
+                  }
+                >
+                  Remove
+                </button>
+              </div>
+            ) : null}
+          </span>
         </span>
       </div>
       {wsMenu.workspaceRenameId === workspace.id ? (

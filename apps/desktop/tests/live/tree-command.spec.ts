@@ -21,7 +21,10 @@ test("runs /tree summarize flow against a real provider and surfaces the branch 
 
   try {
     const window = await harness.firstWindow();
-    await window.getByRole("complementary").getByRole("button", { name: "New thread" }).click();
+    await window
+      .getByRole("complementary")
+      .getByRole("button", { name: "New thread", exact: true })
+      .click();
 
     const newThreadComposer = window.getByTestId("new-thread-composer");
     await newThreadComposer.fill("Reply with exactly ROOT-ONE.");
