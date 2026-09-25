@@ -1683,20 +1683,46 @@ export class DesktopAppStore {
     enabled: boolean,
   ): Promise<DesktopAppState> {
     await this.initialize();
-    if (!this.workspaceRefFromState(workspaceId)) {
+    const ws = this.workspaceRefFromState(workspaceId);
+    if (!ws) {
       return this.withError(`Unknown workspace: ${workspaceId}`);
     }
-    if (enabled) {
-      this.disabledBuiltinExtensions.delete(name);
-    } else {
-      this.disabledBuiltinExtensions.add(name);
+    const wasDisabled = this.disabledBuiltinExtensions.has(name);
+    const setDisabled = (disabled: boolean) =>
+      disabled
+        ? this.disabledBuiltinExtensions.add(name)
+        : this.disabledBuiltinExtensions.delete(name);
+    setDisabled(!enabled);
+    try {
+      await this.persistUiState();
+    } catch (error) {
+      // New sessions read the set directly, so an unsaved change must not stay in effect.
+      setDisabled(wasDisabled);
+      return this.withError(error);
     }
-    await this.persistUiState();
-    return this.withRuntimeUpdate(
-      workspaceId,
-      (ws) => this.driver.runtimeSupervisor.refreshRuntime(ws),
-      { reloadSessions: true, refreshAllWorkspaces: true },
-    );
+
+    return this.withErrorHandling(async () => {
+      const snapshot = await this.driver.runtimeSupervisor.refreshRuntime(ws);
+      await this.refreshRuntimeForAllWorkspaces(workspaceId, snapshot);
+      // One workspace failing to reload must not keep the others, or Settings, on the old tools.
+      const reloads = await Promise.allSettled(
+        this.state.workspaces.map((workspace) => {
+          this.clearExtensionUiForWorkspace(workspace.id);
+          return this.reloadSessionsForWorkspace(workspace.id);
+        }),
+      );
+      await this.refreshSessionCommandsForAllWorkspaces();
+      const failed = reloads.filter((result) => result.status === "rejected");
+      for (const result of failed) {
+        console.error("[app-store] reload after pi-gui tool switch failed", result.reason);
+      }
+      const state = await this.refreshState({ clearLastError: true });
+      return failed.length === 0
+        ? state
+        : this.withError(
+            "Some open threads could not reload; they pick up the pi-gui tools change when reopened.",
+          );
+    });
   }
 
   private async withRuntimeUpdate(
@@ -1724,15 +1750,8 @@ export class DesktopAppStore {
         this.runtimeByWorkspace.set(workspaceId, snapshot);
       }
       if (options?.reloadSessions) {
-        const reloadWorkspaceIds = options.refreshAllWorkspaces
-          ? this.state.workspaces.map((workspace) => workspace.id)
-          : [workspaceId];
-        await Promise.all(
-          reloadWorkspaceIds.map((id) => {
-            this.clearExtensionUiForWorkspace(id);
-            return this.reloadSessionsForWorkspace(id);
-          }),
-        );
+        this.clearExtensionUiForWorkspace(workspaceId);
+        await this.reloadSessionsForWorkspace(workspaceId);
       }
       if (options?.refreshAllWorkspaces) {
         await this.refreshSessionCommandsForAllWorkspaces();
