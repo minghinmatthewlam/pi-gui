@@ -83,7 +83,7 @@ test("syntax-highlights known languages and leaves unknown extensions plain", as
     await expect(tsRow).toBeVisible();
     await tsRow.locator(".diff-panel__file-name").click();
     const tsDiff = diffPanel
-      .getByRole("region", { name: "Combined changes", exact: true })
+      .getByRole("region", { name: "Diff", exact: true })
       .locator(".diff-inline");
     await expect(tsDiff).toHaveAttribute("data-language", "typescript");
     await expect(tsDiff.locator('[class*="hljs-"]').first()).toBeVisible();
@@ -91,13 +91,11 @@ test("syntax-highlights known languages and leaves unknown extensions plain", as
     const pyRow = diffPanel.locator('.diff-panel__file[data-file-path="script.py"]');
     await pyRow.locator(".diff-panel__file-name").click();
     await expect(
-      diffPanel
-        .getByRole("region", { name: "Combined changes", exact: true })
-        .locator(".diff-inline"),
+      diffPanel.getByRole("region", { name: "Diff", exact: true }).locator(".diff-inline"),
     ).toHaveAttribute("data-language", "python");
     await expect(
       diffPanel
-        .getByRole("region", { name: "Combined changes", exact: true })
+        .getByRole("region", { name: "Diff", exact: true })
         .locator('.diff-inline [class*="hljs-"]')
         .first(),
     ).toBeVisible();
@@ -105,7 +103,7 @@ test("syntax-highlights known languages and leaves unknown extensions plain", as
     const mdRow = diffPanel.locator('.diff-panel__file[data-file-path="notes.md"]');
     await mdRow.locator(".diff-panel__file-name").click();
     const mdDiff = diffPanel
-      .getByRole("region", { name: "Combined changes", exact: true })
+      .getByRole("region", { name: "Diff", exact: true })
       .locator(".diff-inline");
     await expect(mdDiff).not.toHaveAttribute("data-language", /.*/);
     await expect(mdDiff.locator('[class*="hljs-"]')).toHaveCount(0);
@@ -223,16 +221,14 @@ test("Files mode shows a file browser and reader instead of the changes reviewer
     await selectSidePanel(window, "Review");
     const diffPanel = window.locator(".diff-panel");
     await expect(diffPanel).toBeVisible();
-    await expect(diffPanel.locator(".diff-panel__title")).toHaveText("Review");
+    await expect(diffPanel).toHaveAttribute("aria-label", "Review");
     await expect(diffPanel.getByTestId("diff-panel-counter")).toHaveText("Reviewed 0 of 3");
 
     await diffPanel
       .locator('.diff-panel__file[data-file-path="src/foo.ts"] .diff-panel__file-name')
       .click();
     await expect(
-      diffPanel
-        .getByRole("region", { name: "Combined changes", exact: true })
-        .locator(".diff-inline"),
+      diffPanel.getByRole("region", { name: "Diff", exact: true }).locator(".diff-inline"),
     ).toBeVisible();
 
     await selectSidePanel(window, "Files");
@@ -305,9 +301,7 @@ test("view-in-changes button on a write tool row opens the diff panel without to
     const selectedRow = diffPanel.locator('.diff-panel__file[data-file-path="src/foo.ts"]');
     await expect(selectedRow).toHaveClass(/diff-panel__file--selected/);
     await expect(
-      diffPanel
-        .getByRole("region", { name: "Combined changes", exact: true })
-        .locator(".diff-inline"),
+      diffPanel.getByRole("region", { name: "Diff", exact: true }).locator(".diff-inline"),
     ).toHaveAttribute("data-language", "typescript");
 
     await toolHeader.click();
@@ -328,7 +322,7 @@ test("highlighting tokens swap palettes when the dark class flips", async () => 
       .locator('.diff-panel__file[data-file-path="src/foo.ts"] .diff-panel__file-name')
       .click();
     const token = diffPanel
-      .getByRole("region", { name: "Combined changes", exact: true })
+      .getByRole("region", { name: "Diff", exact: true })
       .locator('.diff-inline [class*="hljs-"]')
       .first();
     await expect(token).toBeVisible();

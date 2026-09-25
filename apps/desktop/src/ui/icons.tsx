@@ -714,3 +714,21 @@ export function PlugIcon() {
     </Icon>
   );
 }
+
+export function MoreIcon() {
+  return (
+    <Icon>
+      <circle cx="5" cy="10" r="1.25" fill="currentColor" />
+      <circle cx="10" cy="10" r="1.25" fill="currentColor" />
+      <circle cx="15" cy="10" r="1.25" fill="currentColor" />
+    </Icon>
+  );
+}
+
+export function MinusIcon() {
+  return (
+    <Icon>
+      <path d="M4.25 10h11.5" stroke="currentColor" strokeLinecap="round" strokeWidth="1.7" />
+    </Icon>
+  );
+}

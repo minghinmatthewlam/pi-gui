@@ -17,6 +17,7 @@ import type {
   TurnChangesInput,
   TurnChangesResult,
 } from "../../contracts/review";
+import { isWorkingReviewScope } from "../../contracts/review";
 import {
   changeGitReviewFileStage,
   checkGitReviewFileCurrent,
@@ -203,6 +204,7 @@ export class ReviewOwner {
           hasStagedChanges: file.hasStagedChanges,
           hasUnstagedChanges: file.hasUnstagedChanges,
           conflicted: file.conflicted,
+          lines: file.lines,
           reviewed: marks.has(markKey(owned, file)),
         })),
       };
@@ -251,12 +253,12 @@ export class ReviewOwner {
       const resolved = await this.resolveFile(input);
       if (isIssue(resolved)) return resolved;
       if (
-        resolved.review.snapshot.scope.kind !== "uncommitted" ||
+        !isWorkingReviewScope(resolved.review.snapshot.scope) ||
         resolved.review.checkoutPath === null
       ) {
         return unavailable(
           "read-only-comparison",
-          "Staging is available only for Uncommitted changes.",
+          "Staging is available only for Uncommitted, Staged and Unstaged changes.",
         );
       }
       return await this.withMutation(resolved.review.checkoutPath, async () => {

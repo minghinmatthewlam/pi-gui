@@ -514,25 +514,10 @@
   background: var(--surface-muted);
 }
 
-.file-workbench__status-label {
-  margin-left: auto;
-  color: var(--muted-soft);
-  font-family: var(--font-ui);
-  font-size: 11px;
-}
-
 .file-workbench__viewer {
   flex: 1 1 58%;
   min-height: 220px;
   border-top: 0;
-}
-
-.file-workbench--changes .file-workbench__body {
-  flex: 0 0 min(42%, 280px);
-}
-
-.file-workbench--changes .file-workbench__viewer {
-  min-height: 260px;
 }
 
 .file-workbench__viewer-header {
@@ -542,7 +527,6 @@
   gap: 10px;
 }
 
-.file-workbench__viewer-path,
 .diff-panel__file-path {
   min-width: 0;
   white-space: pre-wrap;
@@ -569,29 +553,6 @@
   font-size: 12px;
   line-height: 1.5;
   white-space: pre-wrap;
-}
-
-.diff-panel__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 16px 10px;
-  border-bottom: 1px solid var(--border);
-}
-
-.diff-panel__title {
-  font-size: 14px;
-  font-weight: 600;
-  margin: 0;
-  color: var(--ink-strong);
-}
-
-.diff-panel__counter {
-  margin-left: auto;
-  margin-right: 8px;
-  font-size: 12px;
-  color: var(--muted-strong);
-  font-variant-numeric: tabular-nums;
 }
 
 .diff-panel__reviewed-checkbox {
@@ -814,66 +775,9 @@
   background: var(--surface-muted);
 }
 
-.diff-panel__status-dot {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: var(--radius-round);
-  flex-shrink: 0;
-}
-
-.diff-panel__status-dot--modified,
-.diff-panel__status-dot--renamed {
-  background: var(--diff-modified-ink);
-}
-
-.diff-panel__status-dot--added,
-.diff-panel__status-dot--copied {
-  background: var(--diff-added-ink);
-}
-
-.diff-panel__status-dot--deleted {
-  background: var(--diff-removed-ink);
-}
-
-.diff-panel__status-dot--untracked {
-  background: var(--diff-untracked-ink);
-}
-
-.diff-panel__stage-btn {
-  padding: 2px 8px;
-  margin-right: 8px;
-  font-size: 11px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-xs);
-  background: none;
-  cursor: pointer;
-  color: var(--muted-strong);
-}
-
-.diff-panel__stage-btn:hover:not(:disabled) {
-  background: var(--surface-muted);
-}
-
-.diff-panel__stage-btn:disabled {
-  opacity: 0.55;
-  cursor: default;
-  color: var(--muted-soft);
-}
-
 .diff-panel__viewer {
   flex: 1;
   overflow-y: auto;
-}
-
-.diff-panel__viewer-header {
-  padding: 8px 12px;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  font-weight: 600;
-  background: var(--surface-muted);
-  border-bottom: 1px solid var(--border);
-  color: var(--ink);
 }
 
 .icon-button--active {
