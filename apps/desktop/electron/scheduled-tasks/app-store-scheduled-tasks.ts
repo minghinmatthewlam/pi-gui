@@ -43,6 +43,7 @@ export interface ScheduledTaskOwnerHost {
   scheduledTasks(): readonly ScheduledTaskRecord[];
   replaceScheduledTasks(tasks: readonly ScheduledTaskRecord[]): void;
   persistScheduledTasks(): Promise<void>;
+  rescheduleScheduledTasks(): void;
   canWriteScheduledTasks(): boolean;
   emit(): DesktopAppState;
   refreshState(options?: RefreshStateOptions): Promise<DesktopAppState>;
@@ -511,7 +512,13 @@ async function fireDueScheduledTasks(
   if (!claims) {
     return store.emit();
   }
-  await Promise.all(claims.map((claim) => deliverClaimedRun(store, claim)));
+  // Re-arm now and as each run settles, so other tasks keep their times during a long run.
+  store.rescheduleScheduledTasks();
+  await Promise.allSettled(
+    claims.map((claim) =>
+      deliverClaimedRun(store, claim).finally(() => store.rescheduleScheduledTasks()),
+    ),
+  );
   return store.refreshState({
     clearLastError: true,
     persistState: false,
@@ -538,57 +545,65 @@ async function claimDueScheduledTasks(
   }
 
   const claims: ClaimedScheduledRun[] = [];
-  for (const dueTask of due) {
-    const claimed = store.scheduledTasks().find((task) => task.id === dueTask.id);
-    if (!claimed || !isClaimable(claimed, now)) {
-      continue;
-    }
-    let advancedNext: string | undefined;
-    try {
-      advancedNext =
-        claimed.schedule.kind === "once" ? claimed.nextRunAt : nextRunAt(claimed.schedule, now);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      await writeTask(store, pauseWithError(claimed, now, message));
-      continue;
-    }
-    if (claimed.schedule.kind !== "once" && !advancedNext) {
-      await writeTask(store, pauseWithError(claimed, now, "Scheduled task has no next run."));
-      continue;
-    }
-
-    const firedAt = nowIso(new Date());
-    let sessionRef: SessionRef | undefined;
-    try {
-      if (claimed.target.kind === "new-thread") {
-        sessionRef = await createBackgroundSession(
-          store,
-          claimed.target.workspaceId,
-          claimed.title,
-        );
-      } else {
-        sessionRef = {
-          workspaceId: claimed.target.workspaceId,
-          sessionId: claimed.target.sessionId,
-        };
-        const session = store.sessionFromState(sessionRef);
-        if (!session || session.archivedAt) {
-          throw new Error("Scheduled task target thread is missing or archived.");
-        }
+  try {
+    for (const dueTask of due) {
+      const claimed = store.scheduledTasks().find((task) => task.id === dueTask.id);
+      if (!claimed || !isClaimable(claimed, now)) {
+        continue;
       }
-    } catch (error) {
-      await writeTask(store, failedRunTask(store, claimed, sessionRef, firedAt, now, error));
-      continue;
+      let advancedNext: string | undefined;
+      try {
+        advancedNext =
+          claimed.schedule.kind === "once" ? claimed.nextRunAt : nextRunAt(claimed.schedule, now);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        await writeTask(store, pauseWithError(claimed, now, message));
+        continue;
+      }
+      if (claimed.schedule.kind !== "once" && !advancedNext) {
+        await writeTask(store, pauseWithError(claimed, now, "Scheduled task has no next run."));
+        continue;
+      }
+
+      const firedAt = nowIso(new Date());
+      let sessionRef: SessionRef | undefined;
+      try {
+        if (claimed.target.kind === "new-thread") {
+          sessionRef = await createBackgroundSession(
+            store,
+            claimed.target.workspaceId,
+            claimed.title,
+          );
+        } else {
+          sessionRef = {
+            workspaceId: claimed.target.workspaceId,
+            sessionId: claimed.target.sessionId,
+          };
+          const session = store.sessionFromState(sessionRef);
+          if (!session || session.archivedAt) {
+            throw new Error("Scheduled task target thread is missing or archived.");
+          }
+        }
+      } catch (error) {
+        await writeTask(store, failedRunTask(store, claimed, sessionRef, firedAt, now, error));
+        continue;
+      }
+      const claimedAt = nowIso(now);
+      await writeTask(store, {
+        ...claimed,
+        lastRunAt: claimedAt,
+        nextRunAt: advancedNext,
+        updatedAt: claimedAt,
+      });
+      inFlightTaskIds.add(claimed.id);
+      claims.push({ task: claimed, claimedAt, firedAt, sessionRef });
     }
-    const claimedAt = nowIso(now);
-    inFlightTaskIds.add(claimed.id);
-    await writeTask(store, {
-      ...claimed,
-      lastRunAt: claimedAt,
-      nextRunAt: advancedNext,
-      updatedAt: claimedAt,
-    });
-    claims.push({ task: claimed, claimedAt, firedAt, sessionRef });
+  } catch (error) {
+    // Claims that will not be delivered must not stay in flight.
+    for (const claim of claims) {
+      inFlightTaskIds.delete(claim.task.id);
+    }
+    throw error;
   }
   return claims;
 }
@@ -617,8 +632,14 @@ async function deliverClaimedRun(
       const now = new Date(claimedAt);
       if ("error" in outcome) {
         const failed = failedRunTask(store, current, sessionRef, firedAt, now, outcome.error);
-        // A run that never started gives its claim back, as if it had not fired.
-        await writeTask(store, stillClaimed ? { ...failed, lastRunAt: task.lastRunAt } : failed);
+        // A run that never started gives its claim back, as if it had not fired. If the
+        // task was rescheduled meanwhile, keep the new schedule and only record the failure.
+        await writeTask(
+          store,
+          stillClaimed
+            ? { ...failed, lastRunAt: task.lastRunAt }
+            : { ...current, runs: failed.runs, lastError: failed.lastError },
+        );
         return;
       }
       const run: ScheduledTaskRun = {

@@ -78,6 +78,7 @@ function createHost(
       host.tasks = [...tasks];
     },
     persistScheduledTasks: async () => undefined,
+    rescheduleScheduledTasks: () => undefined,
     canWriteScheduledTasks: () => true,
     emit: () => snapshotFrom(host),
     refreshState: async () => snapshotFrom(host),
@@ -202,6 +203,40 @@ test("scheduled-task tools and edits work while a fired run is still going", asy
   await firing;
   expect(host.tasks[0]?.status).toBe("paused");
   expect(host.tasks[0]?.runs.map((run) => run.outcome)).toEqual(["started"]);
+});
+
+test("the timer is re-armed once a run is claimed, not only when it finishes", async () => {
+  let rescheduledDuringRun = 0;
+  let rescheduled = 0;
+  const host = createHost({
+    tasks: [dueIntervalTask()],
+    deliver: async () => {
+      rescheduledDuringRun = rescheduled;
+      return undefined;
+    },
+  });
+  host.rescheduleScheduledTasks = () => {
+    rescheduled += 1;
+  };
+  const owner = createScheduledTaskOwner(host);
+  await owner.fireDueScheduledTasks(new Date("2026-09-21T12:00:01.000Z"));
+  expect(rescheduledDuringRun).toBe(1);
+  expect(rescheduled).toBe(2);
+});
+
+test("a failed claim save does not leave the task stuck in flight", async () => {
+  const host = createHost({ tasks: [dueIntervalTask()] });
+  host.persistScheduledTasks = async () => {
+    throw new Error("disk full");
+  };
+  const owner = createScheduledTaskOwner(host);
+  await expect(owner.fireDueScheduledTasks(new Date("2026-09-21T12:00:01.000Z"))).rejects.toThrow(
+    "disk full",
+  );
+  expect(host.deliverCalls).toHaveLength(0);
+  host.persistScheduledTasks = async () => undefined;
+  await owner.fireDueScheduledTasks(new Date("2026-09-21T12:01:02.000Z"));
+  expect(host.deliverCalls).toHaveLength(1);
 });
 
 test("a one-time task completes after delivery and can be renamed mid-run", async () => {

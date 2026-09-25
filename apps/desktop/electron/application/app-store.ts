@@ -504,6 +504,7 @@ export class DesktopAppStore {
         this.state = { ...this.state, scheduledTasks: [...tasks] };
       },
       persistScheduledTasks: () => this.persistScheduledTasks(),
+      rescheduleScheduledTasks: () => this.scheduleScheduledTasks(),
       canWriteScheduledTasks: () => this.scheduledTasksWritable,
       emit: () => this.emit(),
       refreshState: (refreshOptions) => this.refreshState(refreshOptions),
