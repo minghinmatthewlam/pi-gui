@@ -729,7 +729,13 @@ export async function checkGitReviewFileCurrent(
     return issue("unavailable", "missing-file", "This file does not belong to the review.");
   if (snapshot.scope.kind !== "uncommitted") return null;
   try {
-    const paths = [...new Set([file.path, ...(file.previousPath ? [file.previousPath] : [])])];
+    // Path-limited status only pairs a rename when both sides are in the pathspec, so include
+    // the other half of any rename touching this file, or its records differ from the review's.
+    const ownPaths = [file.path, ...(file.previousPath ? [file.previousPath] : [])];
+    const renamePartners = snapshot.files
+      .filter((entry) => entry.previousPath && ownPaths.includes(entry.previousPath))
+      .map((entry) => entry.path);
+    const paths = [...new Set([...ownPaths, ...renamePartners])];
     const head = await resolveRevision(snapshot.checkoutPath, "HEAD");
     if (head !== snapshot.headOid)
       return issue("stale", "head-changed", "HEAD changed. Refresh the review.");

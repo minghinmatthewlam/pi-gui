@@ -92,6 +92,19 @@ test("compares HEAD with actual bytes after a staged deletion is recreated untra
   expect(result.sections[2]!.patch).toContain("+recreated");
 });
 
+test("a new file at a staged rename's old path stays current, readable and stageable", async () => {
+  const cwd = await repository();
+  await git(cwd, "mv", "file.txt", "moved.txt");
+  await writeFile(join(cwd, "file.txt"), "new at the old path\n");
+  const review = await uncommitted(cwd);
+  const recreated = review.files.find((entry) => entry.path === "file.txt");
+  expect(recreated?.status).toBe("untracked");
+  expect(await checkGitReviewFileCurrent(review, recreated!.id)).toBeNull();
+  const { result } = await fileContent(review, "file.txt");
+  expect(JSON.stringify(result.sections)).toContain("+new at the old path");
+  expect((await changeGitReviewFileStage(review, recreated!.id, "stage")).state).toBe("applied");
+});
+
 test("detects same-status byte and executable-mode changes before reading or staging", async () => {
   const cwd = await repository();
   await writeFile(join(cwd, "file.txt"), "first edit\n");
