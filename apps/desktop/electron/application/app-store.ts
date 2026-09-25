@@ -1683,6 +1683,9 @@ export class DesktopAppStore {
     enabled: boolean,
   ): Promise<DesktopAppState> {
     await this.initialize();
+    if (!this.workspaceRefFromState(workspaceId)) {
+      return this.withError(`Unknown workspace: ${workspaceId}`);
+    }
     if (enabled) {
       this.disabledBuiltinExtensions.delete(name);
     } else {
@@ -1724,10 +1727,12 @@ export class DesktopAppStore {
         const reloadWorkspaceIds = options.refreshAllWorkspaces
           ? this.state.workspaces.map((workspace) => workspace.id)
           : [workspaceId];
-        for (const id of reloadWorkspaceIds) {
-          this.clearExtensionUiForWorkspace(id);
-          await this.reloadSessionsForWorkspace(id);
-        }
+        await Promise.all(
+          reloadWorkspaceIds.map((id) => {
+            this.clearExtensionUiForWorkspace(id);
+            return this.reloadSessionsForWorkspace(id);
+          }),
+        );
       }
       if (options?.refreshAllWorkspaces) {
         await this.refreshSessionCommandsForAllWorkspaces();
