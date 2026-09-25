@@ -108,6 +108,7 @@ type ConversationOwner = Pick<
   | "steerQueuedComposerMessage"
   | "updateComposerDraft"
   | "submitComposer"
+  | "composerSubmitNeedsSenderView"
   | "getSessionTree"
   | "navigateSessionTree"
   | "respondToHostUiRequest"
@@ -795,11 +796,13 @@ export function registerDesktopIpc({
     const target = windows.targetForSender(event.sender);
     const text = expectString(rawText, "text");
     const options = expectOptionalDeliverOptions(rawOptions);
-    // Ordinary prompts target a captured session and may await the entire turn.
-    // Keep that wait outside the window queue so selection and other windows stay usable.
-    // Slash commands can change selection (for example an extension creating a child
-    // session), so retain their serialized sender-view context.
-    const dispatch = text.trimStart().startsWith("/") ? run : immediate;
+    // Ordinary prompts, skills and prompt templates target a captured session and may await
+    // the entire turn. Keep that wait outside the window queue so selection and other windows
+    // stay usable. Local and extension commands can change selection (for example an
+    // extension creating a child session), so retain their serialized sender-view context.
+    const dispatch = owners.conversation.composerSubmitNeedsSenderView(target, text)
+      ? run
+      : immediate;
     return dispatch(event, () => owners.conversation.submitComposer(target, text, options));
   });
   ipcMain.handle(desktopIpc.getSessionTree, (event, rawTarget: unknown) => {

@@ -1067,6 +1067,10 @@ export class DesktopAppStore {
     return this.conversationOwner.submitComposer(sessionRef, textInput, options);
   }
 
+  composerSubmitNeedsSenderView(sessionRef: SessionRef | undefined, textInput: string): boolean {
+    return this.conversationOwner.composerSubmitNeedsSenderView(sessionRef, textInput);
+  }
+
   async editQueuedComposerMessage(
     sessionRef: SessionRef | undefined,
     messageId: string,
