@@ -1,35 +1,36 @@
-import { rm, stat } from "node:fs/promises";
-import { readFile } from "node:fs/promises";
+import { randomBytes, randomUUID } from "node:crypto";
+import { link, open, readFile, rm, stat, utimes } from "node:fs/promises";
 import { hostname } from "node:os";
 import { writeJsonFileAtomic } from "@pi-gui/catalogs/node/atomic-write";
 import { isMissingFileError } from "@pi-gui/catalogs/node";
 
 /**
- * Advisory single-writer lease convention for pi session files.
+ * Single-writer lease convention for pi session files.
  *
- * When pi-gui binds a live runtime to a session's JSONL, it drops a sibling
- * `<sessionFile>.lease` file recording who holds it. The lease is *advisory*:
- * the pi CLI knows nothing about it, so its presence must never block reading
- * or displaying a session, and its absence must be completely harmless. It only
- * lets one pi-gui runtime notice that another live writer (another GUI window,
- * or a future lease-aware CLI) is already appending to the same file, so it can
- * warn instead of blind-forking the conversation from a divergent leaf pointer.
+ * When pi-gui binds a live runtime to a session's JSONL, it claims a sibling
+ * `<sessionFile>.lease` file recording who holds it. Between pi-gui processes
+ * the lease is exclusive: it is created with an atomic exclusive link, kept
+ * fresh by a heartbeat while the holder lives, and removed only by its owner.
+ * The pi CLI knows nothing about it, so its presence must never block reading
+ * or displaying a session.
  *
  * The suffix is `.lease`, chosen because pi's SessionManager discovers and
  * opens sessions strictly by `endsWith(".jsonl")` (verified in
  * node_modules/@earendil-works/pi-coding-agent/dist/core/session-manager.js),
  * so a `.jsonl.lease` sibling is invisible to its listing and open logic.
  *
- * A lease is considered dead (and may be silently overwritten) when we can
- * prove the holder is gone: on the same host, when its pid is no longer alive;
- * on any host, when its file mtime is older than the TTL. Both checks are
- * conservative — a live holder is never treated as dead.
+ * A lease is dead (and may be taken over) when we can prove the holder is
+ * gone: on the same host, when its pid is no longer alive; on any host, when
+ * its heartbeat has not refreshed the file mtime within the TTL.
  */
 
 export const LEASE_SUFFIX = ".lease";
 
 /** A lease is stale after this long without its holder refreshing the mtime. */
 export const DEFAULT_LEASE_TTL_MS = 5 * 60_000;
+
+/** How often a holder refreshes its leases; comfortably below the TTL. */
+export const DEFAULT_LEASE_HEARTBEAT_MS = DEFAULT_LEASE_TTL_MS / 5;
 
 /** Surface tag written into leases held by this app. */
 export const PI_GUI_LEASE_SURFACE = "pi-gui";
@@ -39,6 +40,8 @@ export interface LeaseInfo {
   readonly hostname: string;
   readonly startedAt: string;
   readonly surface: string;
+  /** Per-process owner token. Absent in leases written before tokens existed. */
+  readonly token?: string;
 }
 
 export interface LeaseSnapshot {
@@ -50,6 +53,7 @@ export interface LeaseSnapshot {
 export interface LeaseIdentity {
   readonly pid: number;
   readonly hostname: string;
+  readonly token?: string;
 }
 
 export interface LeaseStalenessOptions {
@@ -78,10 +82,14 @@ export function sessionLeasePath(sessionFile: string): string {
 }
 
 export function currentLeaseIdentity(): LeaseIdentity {
-  return { pid: process.pid, hostname: hostname() };
+  return { pid: process.pid, hostname: hostname(), token: randomUUID() };
 }
 
+/** Tokens decide ownership when both sides have one; older leases fall back to pid + host. */
 export function isSameHolder(info: LeaseInfo | LeaseIdentity, self: LeaseIdentity): boolean {
+  if (info.token && self.token) {
+    return info.token === self.token;
+  }
   return info.pid === self.pid && info.hostname === self.hostname;
 }
 
@@ -123,50 +131,33 @@ export function leaseBlocksBinding(snapshot: LeaseSnapshot, opts: LeaseStaleness
   return !isLeaseDead(snapshot, opts);
 }
 
+/** Read a lease. Missing and corrupt leases both read as undefined. */
 export async function readLeaseSnapshot(leasePath: string): Promise<LeaseSnapshot | undefined> {
-  let raw: string;
-  try {
-    raw = await readFile(leasePath, "utf8");
-  } catch (error) {
-    if (isMissingFileError(error)) {
-      return undefined;
-    }
-    throw error;
-  }
+  return (await readLeaseFileState(leasePath))?.snapshot;
+}
 
-  let info: LeaseInfo;
+function parseLeaseInfo(raw: string): LeaseInfo | undefined {
+  let parsed: Partial<LeaseInfo>;
   try {
-    const parsed = JSON.parse(raw) as Partial<LeaseInfo>;
-    if (
-      typeof parsed?.pid !== "number" ||
-      typeof parsed.hostname !== "string" ||
-      typeof parsed.startedAt !== "string" ||
-      typeof parsed.surface !== "string"
-    ) {
-      return undefined;
-    }
-    info = {
-      pid: parsed.pid,
-      hostname: parsed.hostname,
-      startedAt: parsed.startedAt,
-      surface: parsed.surface,
-    };
+    parsed = JSON.parse(raw) as Partial<LeaseInfo>;
   } catch {
-    // A corrupt lease is treated as absent: advisory data must never wedge us.
     return undefined;
   }
-
-  let mtimeMs: number;
-  try {
-    mtimeMs = (await stat(leasePath)).mtimeMs;
-  } catch (error) {
-    if (isMissingFileError(error)) {
-      return undefined;
-    }
-    throw error;
+  if (
+    typeof parsed?.pid !== "number" ||
+    typeof parsed.hostname !== "string" ||
+    typeof parsed.startedAt !== "string" ||
+    typeof parsed.surface !== "string"
+  ) {
+    return undefined;
   }
-
-  return { info, mtimeMs };
+  return {
+    pid: parsed.pid,
+    hostname: parsed.hostname,
+    startedAt: parsed.startedAt,
+    surface: parsed.surface,
+    ...(typeof parsed.token === "string" ? { token: parsed.token } : {}),
+  };
 }
 
 export async function writeLeaseFile(leasePath: string, info: LeaseInfo): Promise<void> {
@@ -184,5 +175,227 @@ export function buildOwnLease(self: LeaseIdentity, now: number): LeaseInfo {
     hostname: self.hostname,
     startedAt: new Date(now).toISOString(),
     surface: PI_GUI_LEASE_SURFACE,
+    ...(self.token ? { token: self.token } : {}),
   };
+}
+
+export type LeaseAcquireResult =
+  { readonly status: "acquired" } | { readonly status: "held"; readonly holder: LeaseInfo };
+
+const ACQUIRE_ATTEMPTS = 200;
+const ACQUIRE_RETRY_DELAY_MS = 25;
+/**
+ * An unparseable lease or takeover guard younger than this may still be being
+ * written or used by a live process, so it is not treated as abandoned yet.
+ */
+const LEASE_SETTLE_MS = 3_000;
+
+/**
+ * Claim `leasePath` for `opts.self`. Succeeds when the lease is absent, already
+ * ours, or provably dead; reports the holder when a live foreign lease exists.
+ * Creation is exclusive and taking over a dead lease is serialized by a
+ * `.takeover` guard file, so two processes can never both win. Filesystem
+ * failures throw: a caller that cannot hold the lease must not bind a
+ * writable runtime.
+ */
+export async function acquireLeaseFile(
+  leasePath: string,
+  opts: LeaseStalenessOptions,
+): Promise<LeaseAcquireResult> {
+  const content = serializeLease(buildOwnLease(opts.self, opts.now));
+  for (let attempt = 0; attempt < ACQUIRE_ATTEMPTS; attempt += 1) {
+    if (await createFileExclusive(leasePath, content)) {
+      return { status: "acquired" };
+    }
+    const current = await readLeaseFileState(leasePath);
+    if (!current) {
+      continue; // Released between our create and read; try again.
+    }
+    if (current.snapshot) {
+      if (isSameHolder(current.snapshot.info, opts.self)) {
+        await writeLeaseFile(leasePath, buildOwnLease(opts.self, opts.now));
+        return { status: "acquired" };
+      }
+      if (!isLeaseDead(current.snapshot, opts)) {
+        return { status: "held", holder: current.snapshot.info };
+      }
+    } else if (Date.now() - current.mtimeMs < LEASE_SETTLE_MS) {
+      await delay(ACQUIRE_RETRY_DELAY_MS); // Possibly mid-write; look again.
+      continue;
+    }
+    await takeOverDeadLease(leasePath, current);
+  }
+  throw new Error(`Could not acquire session lease ${leasePath}: it kept changing.`);
+}
+
+/**
+ * Remove a dead or abandoned lease while holding the takeover guard, and only
+ * if it is still the exact file we judged dead. Without the guard, two takers
+ * could each delete the other's fresh lease and both believe they won.
+ */
+async function takeOverDeadLease(leasePath: string, judged: LeaseFileState): Promise<void> {
+  const ran = await tryWithTakeoverGuard(leasePath, async () => {
+    const again = await readLeaseFileState(leasePath);
+    if (again && again.raw === judged.raw && again.mtimeMs === judged.mtimeMs) {
+      await rm(leasePath, { force: true });
+    }
+  });
+  if (!ran) {
+    await delay(ACQUIRE_RETRY_DELAY_MS);
+  }
+}
+
+/** Run `fn` holding the guard, waiting for another holder to finish first. */
+async function withTakeoverGuard(leasePath: string, fn: () => Promise<void>): Promise<void> {
+  for (let attempt = 0; attempt < ACQUIRE_ATTEMPTS; attempt += 1) {
+    if (await tryWithTakeoverGuard(leasePath, fn)) {
+      return;
+    }
+    await delay(ACQUIRE_RETRY_DELAY_MS);
+  }
+  throw new Error(`Timed out waiting for the takeover guard of ${leasePath}.`);
+}
+
+/** Run `fn` if the guard is free; returns false when another process holds it. */
+async function tryWithTakeoverGuard(leasePath: string, fn: () => Promise<void>): Promise<boolean> {
+  const guardPath = `${leasePath}.takeover`;
+  if (!(await createFileExclusive(guardPath, `${process.pid}\n`))) {
+    await removeAbandonedGuard(guardPath);
+    return false;
+  }
+  try {
+    await fn();
+    return true;
+  } finally {
+    await rm(guardPath, { force: true });
+  }
+}
+
+/** A guard left behind by a process that crashed mid-takeover. */
+async function removeAbandonedGuard(guardPath: string): Promise<void> {
+  try {
+    const { mtimeMs } = await stat(guardPath);
+    if (Date.now() - mtimeMs > LEASE_SETTLE_MS) {
+      await rm(guardPath, { force: true });
+    }
+  } catch (error) {
+    if (!isMissingFileError(error)) {
+      throw error;
+    }
+  }
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Heartbeat: bump the lease mtime if we still own it. Returns "lost" when the
+ * lease is gone or now belongs to someone else.
+ */
+export async function refreshLeaseFile(
+  leasePath: string,
+  self: LeaseIdentity,
+  now: number,
+): Promise<"refreshed" | "lost"> {
+  const snapshot = await readLeaseSnapshot(leasePath);
+  if (!snapshot || !isSameHolder(snapshot.info, self)) {
+    return "lost";
+  }
+  const time = new Date(now);
+  await utimes(leasePath, time, time);
+  return "refreshed";
+}
+
+/**
+ * Remove the lease only if we own it. The check and the removal run under the
+ * takeover guard, so a process taking over our (expired) lease in between can
+ * never have its fresh lease deleted by us.
+ */
+export async function releaseLeaseFile(leasePath: string, self: LeaseIdentity): Promise<void> {
+  await withTakeoverGuard(leasePath, async () => {
+    const snapshot = await readLeaseSnapshot(leasePath);
+    if (snapshot && isSameHolder(snapshot.info, self)) {
+      await removeLeaseFile(leasePath);
+    }
+  });
+}
+
+function serializeLease(info: LeaseInfo): string {
+  return `${JSON.stringify(info, null, 2)}\n`;
+}
+
+/**
+ * Create `filePath` only if no file exists. Writes a temp file and hard-links it
+ * into place, so readers never see a half-written file. Filesystems without
+ * hard links fall back to an exclusive create, whose brief empty-file window
+ * acquireLeaseFile tolerates.
+ */
+async function createFileExclusive(filePath: string, content: string): Promise<boolean> {
+  const tmpPath = `${filePath}.${process.pid}.${randomBytes(6).toString("hex")}.tmp`;
+  const tmp = await open(tmpPath, "wx");
+  try {
+    await tmp.writeFile(content);
+    await tmp.sync();
+  } finally {
+    await tmp.close();
+  }
+  try {
+    await link(tmpPath, filePath);
+    return true;
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === "EEXIST") {
+      return false;
+    }
+    if (code === "EPERM" || code === "ENOTSUP" || code === "ENOSYS" || code === "EXDEV") {
+      return createWithExclusiveOpen(filePath, content);
+    }
+    throw error;
+  } finally {
+    await rm(tmpPath, { force: true });
+  }
+}
+
+async function createWithExclusiveOpen(filePath: string, content: string): Promise<boolean> {
+  let handle;
+  try {
+    handle = await open(filePath, "wx");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "EEXIST") {
+      return false;
+    }
+    throw error;
+  }
+  try {
+    await handle.writeFile(content);
+  } finally {
+    await handle.close();
+  }
+  return true;
+}
+
+interface LeaseFileState {
+  readonly raw: string;
+  readonly mtimeMs: number;
+  /** Undefined when the file exists but does not parse as a lease. */
+  readonly snapshot: LeaseSnapshot | undefined;
+}
+
+async function readLeaseFileState(leasePath: string): Promise<LeaseFileState | undefined> {
+  let raw: string;
+  let mtimeMs: number;
+  try {
+    [raw, mtimeMs] = await Promise.all([
+      readFile(leasePath, "utf8"),
+      stat(leasePath).then((stats) => stats.mtimeMs),
+    ]);
+  } catch (error) {
+    if (isMissingFileError(error)) {
+      return undefined;
+    }
+    throw error;
+  }
+  const info = parseLeaseInfo(raw);
+  return { raw, mtimeMs, snapshot: info ? { info, mtimeMs } : undefined };
 }
