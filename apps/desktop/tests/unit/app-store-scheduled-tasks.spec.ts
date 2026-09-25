@@ -243,6 +243,63 @@ test("a failed claim save does not leave the task stuck in flight", async () => 
   expect(host.deliverCalls).toHaveLength(1);
 });
 
+test("a failed claim save still delivers the tasks claimed before it", async () => {
+  let persisted = 0;
+  const host = createHost({
+    tasks: [dueIntervalTask(), dueIntervalTask({ id: "task-2", instruction: "Say pong" })],
+  });
+  host.persistScheduledTasks = async () => {
+    persisted += 1;
+    if (persisted === 2) throw new Error("disk full");
+  };
+  const owner = createScheduledTaskOwner(host);
+  await expect(owner.fireDueScheduledTasks(new Date("2026-09-21T12:00:01.000Z"))).rejects.toThrow(
+    "disk full",
+  );
+  expect(host.deliverCalls.map((call) => call.text)).toEqual(["Say ping"]);
+  expect(host.tasks.find((task) => task.id === "task-1")?.runs[0]?.outcome).toBe("started");
+});
+
+test("a failed save of a run's result is reported", async () => {
+  let persisted = 0;
+  const host = createHost({ tasks: [dueIntervalTask()] });
+  host.persistScheduledTasks = async () => {
+    persisted += 1;
+    if (persisted === 2) throw new Error("disk full");
+  };
+  const owner = createScheduledTaskOwner(host);
+  await expect(owner.fireDueScheduledTasks(new Date("2026-09-21T12:00:01.000Z"))).rejects.toThrow(
+    "disk full",
+  );
+  expect(host.deliverCalls).toHaveLength(1);
+});
+
+test("a run that fails after the task was completed keeps it completed", async () => {
+  let failRun: (() => void) | undefined;
+  let runStarted: (() => void) | undefined;
+  const started = new Promise<void>((resolve) => {
+    runStarted = resolve;
+  });
+  const host = createHost({
+    tasks: [dueIntervalTask()],
+    deliver: () => {
+      runStarted?.();
+      return new Promise((_, reject) => {
+        failRun = () => reject(new Error("send failed"));
+      });
+    },
+  });
+  const owner = createScheduledTaskOwner(host);
+  const firing = owner.fireDueScheduledTasks(new Date("2026-09-21T12:00:01.000Z"));
+  await started;
+  await owner.updateScheduledTask("task-1", { status: "completed" });
+  failRun?.();
+  await firing;
+  expect(host.tasks[0]?.status).toBe("completed");
+  expect(host.tasks[0]?.runs.map((run) => run.outcome)).toEqual(["failed"]);
+  expect(host.tasks[0]?.lastError).toMatch(/send failed/);
+});
+
 test("a one-time task completes after delivery and can be renamed mid-run", async () => {
   let finishRun: (() => void) | undefined;
   let runStarted: (() => void) | undefined;

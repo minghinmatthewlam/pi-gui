@@ -508,17 +508,26 @@ async function fireDueScheduledTasks(
   store: ScheduledTaskOwnerHost,
   now: Date,
 ): Promise<DesktopAppState> {
-  const claims = await enqueueMutation(() => claimDueScheduledTasks(store, now));
-  if (!claims) {
+  const claimed = await enqueueMutation(() => claimDueScheduledTasks(store, now));
+  if (!claimed) {
     return store.emit();
   }
-  // Re-arm now and as each run settles, so other tasks keep their times during a long run.
+  // Re-arm and publish now and as each run settles, so other tasks keep their times and
+  // their results show during a long run.
   store.rescheduleScheduledTasks();
-  await Promise.allSettled(
-    claims.map((claim) =>
-      deliverClaimedRun(store, claim).finally(() => store.rescheduleScheduledTasks()),
+  store.emit();
+  const settled = await Promise.allSettled(
+    claimed.claims.map((claim) =>
+      deliverClaimedRun(store, claim).finally(() => {
+        store.rescheduleScheduledTasks();
+        store.emit();
+      }),
     ),
   );
+  // Deliver every saved claim before reporting a failure, so one bad save costs no other run.
+  const failure = settled.find((result) => result.status === "rejected");
+  if (claimed.error !== undefined) throw claimed.error;
+  if (failure) throw failure.reason;
   return store.refreshState({
     clearLastError: true,
     persistState: false,
@@ -529,7 +538,9 @@ async function fireDueScheduledTasks(
 async function claimDueScheduledTasks(
   store: ScheduledTaskOwnerHost,
   now: Date,
-): Promise<ClaimedScheduledRun[] | undefined> {
+): Promise<
+  { readonly claims: readonly ClaimedScheduledRun[]; readonly error?: unknown } | undefined
+> {
   await store.initialize();
   if (!store.canWriteScheduledTasks()) {
     return undefined;
@@ -599,13 +610,10 @@ async function claimDueScheduledTasks(
       claims.push({ task: claimed, claimedAt, firedAt, sessionRef });
     }
   } catch (error) {
-    // Claims that will not be delivered must not stay in flight.
-    for (const claim of claims) {
-      inFlightTaskIds.delete(claim.task.id);
-    }
-    throw error;
+    // Claims already saved are still delivered; the error is reported after them.
+    return { claims, error };
   }
-  return claims;
+  return { claims };
 }
 
 async function deliverClaimedRun(
@@ -633,10 +641,11 @@ async function deliverClaimedRun(
       if ("error" in outcome) {
         const failed = failedRunTask(store, current, sessionRef, firedAt, now, outcome.error);
         // A run that never started gives its claim back, as if it had not fired. If the
-        // task was rescheduled meanwhile, keep the new schedule and only record the failure.
+        // task was rescheduled, paused or completed meanwhile, keep that and only record the
+        // failure.
         await writeTask(
           store,
-          stillClaimed
+          stillClaimed && current.status === "active"
             ? { ...failed, lastRunAt: task.lastRunAt }
             : { ...current, runs: failed.runs, lastError: failed.lastError },
         );
