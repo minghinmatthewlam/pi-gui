@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { mkdtemp, mkdir, realpath, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import { expect, test } from "@playwright/test";
 import type { CatalogStorage, WorktreeCatalogEntry } from "@pi-gui/catalogs";
@@ -294,6 +294,58 @@ test("folders list only the app worktrees they own and never remove the user's o
     expect(await pathExists(unopened)).toBe(true);
     await manager.removeWorktree(mine, created.worktreeId);
     expect(await pathExists(created.path)).toBe(false);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("a user's checkout inside the app worktree folder still cannot be removed", async () => {
+  const root = await mkdtemp(join(tmpdir(), "wt-managed-user-"));
+  try {
+    const repo = await makeRepo(root);
+    const main: WorkspaceRef = { workspaceId: "main", path: repo, displayName: "repo" };
+    const { manager } = makeManager(join(root, "worktrees"));
+    const manual = join(root, "worktrees", "repo", "manual");
+    await mkdir(join(root, "worktrees", "repo"), { recursive: true });
+    await git(repo, "worktree", "add", "-b", "feature/manual", manual, "HEAD");
+
+    await expect(manager.removeWorktree(main, manual)).rejects.toThrow(
+      "Only worktrees created by pi-gui can be removed here.",
+    );
+    expect(await pathExists(manual)).toBe(true);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("the folder that creates a worktree keeps it even if another folder listed it first", async () => {
+  const root = await mkdtemp(join(tmpdir(), "wt-claim-"));
+  try {
+    const repo = await makeRepo(root);
+    const main: WorkspaceRef = { workspaceId: "main", path: repo, displayName: "repo" };
+    const other: WorkspaceRef = {
+      workspaceId: "other",
+      path: join(root, "other"),
+      displayName: "other",
+    };
+    await git(repo, "worktree", "add", "-b", "feature/other", other.path, "HEAD");
+    const { manager } = makeManager(join(root, "worktrees"));
+    const created = join(root, "worktrees", "repo", "task-1");
+    await mkdir(dirname(created), { recursive: true });
+    await git(repo, "worktree", "add", "-b", "pi/task-1", created, "HEAD");
+    const createdPath = await realpath(created);
+
+    // Another folder refreshes between `git worktree add` and the creator's refresh.
+    await manager.refreshWorktrees({ ...other, path: await realpath(other.path) });
+    expect((await manager.listWorktrees(other)).worktrees.map((entry) => entry.path)).toContain(
+      createdPath,
+    );
+
+    const claimed = await manager.refreshWorktrees(main, { claimPath: createdPath });
+    expect(claimed.worktrees.map((entry) => entry.path)).toContain(createdPath);
+    expect((await manager.listWorktrees(other)).worktrees.map((entry) => entry.path)).not.toContain(
+      createdPath,
+    );
   } finally {
     await rm(root, { recursive: true, force: true });
   }

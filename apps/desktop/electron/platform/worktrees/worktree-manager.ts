@@ -61,8 +61,30 @@ export class GitWorktreeManager {
     return this.options.catalogStorage.worktrees.listWorktrees(workspace.workspaceId);
   }
 
-  async refreshWorktrees(workspace: WorkspaceRef): Promise<WorktreeCatalogSnapshot> {
+  /**
+   * Rebuild one folder's worktree rows. Refreshes run one at a time so two
+   * folders never both claim the same app worktree. `claimPath` hands a
+   * worktree the folder just created to that folder, whoever listed it first.
+   */
+  async refreshWorktrees(
+    workspace: WorkspaceRef,
+    options: { readonly claimPath?: string } = {},
+  ): Promise<WorktreeCatalogSnapshot> {
+    const run = this.refreshQueue.then(() => this.refreshWorktreesNow(workspace, options));
+    this.refreshQueue = run.catch(() => undefined);
+    return run;
+  }
+
+  private refreshQueue: Promise<unknown> = Promise.resolve();
+
+  private async refreshWorktreesNow(
+    workspace: WorkspaceRef,
+    options: { readonly claimPath?: string },
+  ): Promise<WorktreeCatalogSnapshot> {
     const repoRoot = await resolveRepositoryRoot(workspace.path);
+    if (options.claimPath) {
+      await this.releaseClaimsElsewhere(workspace.workspaceId, options.claimPath);
+    }
     const existing = await this.options.catalogStorage.worktrees.listWorktrees(
       workspace.workspaceId,
     );
@@ -75,6 +97,21 @@ export class GitWorktreeManager {
       discovered,
     );
     return { worktrees: discovered.map((entry) => ({ ...entry })) };
+  }
+
+  private async releaseClaimsElsewhere(workspaceId: string, path: string): Promise<void> {
+    const catalog = await this.options.catalogStorage.worktrees.listWorktrees();
+    const claimants = new Set(
+      catalog.worktrees
+        .filter((entry) => entry.path === path && entry.workspaceId !== workspaceId)
+        .map((entry) => entry.workspaceId),
+    );
+    for (const claimant of claimants) {
+      await this.options.catalogStorage.worktrees.replaceWorkspaceWorktrees(
+        claimant,
+        catalog.worktrees.filter((entry) => entry.workspaceId === claimant && entry.path !== path),
+      );
+    }
   }
 
   /**
@@ -130,7 +167,7 @@ export class GitWorktreeManager {
     await runGit(args);
 
     const canonicalWorktreePath = await canonicalPath(worktreePath);
-    const snapshot = await this.refreshWorktrees(workspace);
+    const snapshot = await this.refreshWorktrees(workspace, { claimPath: canonicalWorktreePath });
     const created = snapshot.worktrees.find((entry) => entry.worktreeId === canonicalWorktreePath);
     if (!created) {
       throw new Error(
@@ -160,7 +197,7 @@ export class GitWorktreeManager {
     ) {
       throw new Error("The primary workspace cannot be removed as a git worktree.");
     }
-    if (this.options.isAppWorktreePath && !(await this.options.isAppWorktreePath(targetPath))) {
+    if (this.options.isAppWorktreePath && !(await this.isRemovableAppWorktree(targetPath))) {
       throw new Error("Only worktrees created by pi-gui can be removed here.");
     }
 
@@ -184,6 +221,18 @@ export class GitWorktreeManager {
 
     await this.refreshWorktrees(workspace);
     await deleteAppWorktreeBranch(repoRoot, existing?.branchName);
+  }
+
+  /**
+   * Location alone does not prove pi-gui made a checkout, so removal also needs
+   * the `pi/*` branch every app worktree is created on (as the startup prune does).
+   */
+  private async isRemovableAppWorktree(path: string): Promise<boolean> {
+    if (!(await this.options.isAppWorktreePath?.(path))) {
+      return false;
+    }
+    const info = await inspectLinkedWorktree(path).catch(() => undefined);
+    return Boolean(info?.branchName?.startsWith("pi/"));
   }
 
   /**
