@@ -65,6 +65,8 @@ export function DiffPanel({
     selection.scope.kind === "branch" ? (selection.scope.baseRef ?? "") : "",
   );
   const requestNonce = useRef(0);
+  // A focus that arrives while other work is running is kept and re-read once that work ends.
+  const quietPending = useRef(false);
   const fileNonce = useRef(0);
   const [treeVisible, setTreeVisible] = useReviewTreeVisible();
   const selectedCheckout = contexts.find(
@@ -77,12 +79,14 @@ export function DiffPanel({
   reviewRef.current = review;
   // Without a chosen file in this comparison (none yet, or it was staged away or reverted),
   // the diff shows the first file in the tree, as Codex does, without saving that default.
-  const selectedFile = useMemo(() => {
-    if (!review) return undefined;
-    const chosen = review.files.find((file) => file.path === selection.selectedPath);
-    const first = reviewTreeOrder(review.files)[0];
-    return chosen ?? review.files.find((file) => file.path === first);
-  }, [review, selection.selectedPath]);
+  // A quiet refresh holds whichever file was on screen so new files don't take its place.
+  const [heldPath, setHeldPath] = useState<{ readonly queryKey: string; readonly path: string }>();
+  const shownFallback = heldPath?.queryKey === queryKey ? heldPath.path : null;
+  useEffect(() => setHeldPath(undefined), [selection.selectedPath]);
+  const selectedFile = useMemo(
+    () => (review ? pickReviewFile(review, [selection.selectedPath, shownFallback]) : undefined),
+    [review, selection.selectedPath, shownFallback],
+  );
   const stale = actionIssue?.state === "stale" || fileResult?.state === "stale";
 
   useEffect(() => {
@@ -91,6 +95,8 @@ export function DiffPanel({
 
   const refresh = useCallback(() => {
     const nonce = ++requestNonce.current;
+    setHeldPath(undefined);
+    quietPending.current = false;
     fileNonce.current += 1;
     setLoading(true);
     setFileResult(null);
@@ -161,7 +167,104 @@ export function DiffPanel({
       refresh();
   }, [refresh, requestedScope, sessionStatus]);
 
+  // A quiet refresh swaps in the new comparison and the shown file's diff together, so the
+  // panel never blanks. It stands aside while a load or a file action is in flight.
+  const loadingRef = useRef(loading);
+  loadingRef.current = loading;
+  const busyRef = useRef(busyFiles);
+  busyRef.current = busyFiles;
+  const selectedPathRef = useRef(selection.selectedPath);
+  selectedPathRef.current = selection.selectedPath;
+  const shownPathRef = useRef(selectedFile?.path);
+  shownPathRef.current = selectedFile?.path;
+  const fileRequestNonceRef = useRef(fileRequest?.nonce);
+  fileRequestNonceRef.current = fileRequest?.nonce;
+  const prefetchedFileKey = useRef<string | null>(null);
+  const quietInFlight = useRef(false);
+  const actionCount = useRef(0);
+  const refreshQuietlyRef = useRef<() => void>(() => undefined);
+  const refreshQuietly = useCallback(() => {
+    if (!checkoutAvailable) return;
+    if (quietInFlight.current || loadingRef.current || busyRef.current.size > 0) {
+      quietPending.current = true;
+      return;
+    }
+    quietPending.current = false;
+    // The request nonce is left alone so actions against the comparison on screen still land.
+    const requestAtStart = requestNonce.current;
+    const actionsAtStart = actionCount.current;
+    // A load, scope change or file action (such as a reviewed mark) that started meanwhile may
+    // be newer than this read.
+    const current = () =>
+      requestNonce.current === requestAtStart &&
+      activeQueryKey.current === queryKey &&
+      actionCount.current === actionsAtStart;
+    quietInFlight.current = true;
+    void (async () => {
+      const next = await api.getReview({
+        target: { workspaceId, sessionId },
+        checkoutId: selection.workspaceId,
+        scope: requestedScope,
+      });
+      const shown =
+        next.state === "available"
+          ? pickReviewFile(next, [selectedPathRef.current, shownPathRef.current])
+          : undefined;
+      const file =
+        next.state === "available" && shown
+          ? await api.getReviewFile({ reviewId: next.reviewId, fileId: shown.id })
+          : null;
+      if (!current()) {
+        if (activeQueryKey.current === queryKey) quietPending.current = true;
+        return;
+      }
+      fileNonce.current += 1;
+      prefetchedFileKey.current =
+        next.state === "available" && shown
+          ? fileKey(next.reviewId, shown.id, fileRequestNonceRef.current)
+          : null;
+      setLoaded({ queryKey, result: next });
+      if (shown && shown.path !== selectedPathRef.current)
+        setHeldPath({ queryKey, path: shown.path });
+      setFileResult(file);
+      setFileLoading(false);
+      setActionIssue((issue) =>
+        file?.state === "stale" ? file : issue?.state === "stale" ? null : issue,
+      );
+    })()
+      .catch(() => {
+        // The comparison on screen stays; the Refresh button reports errors.
+      })
+      .finally(() => {
+        quietInFlight.current = false;
+        if (quietPending.current) refreshQuietlyRef.current();
+      });
+  }, [
+    api,
+    checkoutAvailable,
+    queryKey,
+    requestedScope,
+    selection.workspaceId,
+    sessionId,
+    workspaceId,
+  ]);
+  refreshQuietlyRef.current = refreshQuietly;
   useEffect(() => {
+    if (!loading && busyFiles.size === 0 && quietPending.current) refreshQuietly();
+  }, [busyFiles, loading, refreshQuietly]);
+  // The repository may have changed in another editor or terminal while pi-gui was in the
+  // background. The integrated terminal shares this side panel, so returning to Review reloads it.
+  const refreshOnFocus = isWorkingReviewScope(requestedScope) || requestedScope.kind === "branch";
+  useEffect(() => {
+    if (refreshOnFocus) return api.onWindowFocused(refreshQuietly);
+  }, [api, refreshOnFocus, refreshQuietly]);
+
+  useEffect(() => {
+    const key =
+      review && selectedFile ? fileKey(review.reviewId, selectedFile.id, fileRequest?.nonce) : null;
+    const prefetched = key !== null && key === prefetchedFileKey.current;
+    prefetchedFileKey.current = null;
+    if (prefetched && !loading) return;
     const nonce = ++fileNonce.current;
     setFileResult(null);
     setFileLoading(false);
@@ -190,6 +293,7 @@ export function DiffPanel({
   }, [api, loading, queryKey, review?.reviewId, selectedFile?.id, fileRequest?.nonce]);
 
   const setBusy = (fileId: string, busy: boolean) => {
+    if (busy) actionCount.current += 1;
     setBusyFiles((previous) => {
       const next = new Set(previous);
       if (busy) next.add(fileId);
@@ -531,6 +635,23 @@ export function DiffPanel({
       </div>
     </section>
   );
+}
+
+/** The first preferred path still in the comparison, else the first file in the tree. */
+function pickReviewFile(
+  review: AvailableReview,
+  preferredPaths: readonly (string | null | undefined)[],
+): ReviewFileEntry | undefined {
+  for (const path of preferredPaths) {
+    const file = path ? review.files.find((entry) => entry.path === path) : undefined;
+    if (file) return file;
+  }
+  const first = reviewTreeOrder(review.files)[0];
+  return review.files.find((file) => file.path === first);
+}
+
+function fileKey(reviewId: string, fileId: string, requestNonce: number | undefined): string {
+  return JSON.stringify([reviewId, fileId, requestNonce ?? null]);
 }
 
 type ScopeOptionId = "turn" | "selected-turn" | "uncommitted" | "unstaged" | "staged" | "branch";
