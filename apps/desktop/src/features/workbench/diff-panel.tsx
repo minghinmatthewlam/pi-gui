@@ -65,6 +65,8 @@ export function DiffPanel({
     selection.scope.kind === "branch" ? (selection.scope.baseRef ?? "") : "",
   );
   const requestNonce = useRef(0);
+  // A focus that arrives while other work is running is kept and re-read once that work ends.
+  const quietPending = useRef(false);
   const fileNonce = useRef(0);
   const [treeVisible, setTreeVisible] = useReviewTreeVisible();
   const selectedCheckout = contexts.find(
@@ -94,6 +96,7 @@ export function DiffPanel({
   const refresh = useCallback(() => {
     const nonce = ++requestNonce.current;
     setHeldPath(undefined);
+    quietPending.current = false;
     fileNonce.current += 1;
     setLoading(true);
     setFileResult(null);
@@ -179,14 +182,21 @@ export function DiffPanel({
   const prefetchedFileKey = useRef<string | null>(null);
   const quietInFlight = useRef(false);
   const actionCount = useRef(0);
+  const refreshQuietlyRef = useRef<() => void>(() => undefined);
   const refreshQuietly = useCallback(() => {
-    if (!checkoutAvailable || quietInFlight.current || loadingRef.current) return;
-    if (busyRef.current.size > 0) return;
-    const nonce = ++requestNonce.current;
+    if (!checkoutAvailable) return;
+    if (quietInFlight.current || loadingRef.current || busyRef.current.size > 0) {
+      quietPending.current = true;
+      return;
+    }
+    quietPending.current = false;
+    // The request nonce is left alone so actions against the comparison on screen still land.
+    const requestAtStart = requestNonce.current;
     const actionsAtStart = actionCount.current;
-    // An action started meanwhile (such as a reviewed mark) may be newer than this read.
+    // A load, scope change or file action (such as a reviewed mark) that started meanwhile may
+    // be newer than this read.
     const current = () =>
-      requestNonce.current === nonce &&
+      requestNonce.current === requestAtStart &&
       activeQueryKey.current === queryKey &&
       actionCount.current === actionsAtStart;
     quietInFlight.current = true;
@@ -204,7 +214,10 @@ export function DiffPanel({
         next.state === "available" && shown
           ? await api.getReviewFile({ reviewId: next.reviewId, fileId: shown.id })
           : null;
-      if (!current()) return;
+      if (!current()) {
+        if (activeQueryKey.current === queryKey) quietPending.current = true;
+        return;
+      }
       fileNonce.current += 1;
       prefetchedFileKey.current =
         next.state === "available" && shown
@@ -224,6 +237,7 @@ export function DiffPanel({
       })
       .finally(() => {
         quietInFlight.current = false;
+        if (quietPending.current) refreshQuietlyRef.current();
       });
   }, [
     api,
@@ -234,6 +248,10 @@ export function DiffPanel({
     sessionId,
     workspaceId,
   ]);
+  refreshQuietlyRef.current = refreshQuietly;
+  useEffect(() => {
+    if (!loading && busyFiles.size === 0 && quietPending.current) refreshQuietly();
+  }, [busyFiles, loading, refreshQuietly]);
   // The repository may have changed in another editor or terminal while pi-gui was in the
   // background. The integrated terminal shares this side panel, so returning to Review reloads it.
   const refreshOnFocus = isWorkingReviewScope(requestedScope) || requestedScope.kind === "branch";
