@@ -521,12 +521,17 @@ export class WindowOwner {
     const webContentsId = window.webContents.id;
     this.stopTrackingActivation.get(webContentsId)?.();
     const handleActivation = () => this.activate(window);
+    const notifyFocused = () => {
+      if (!window.isDestroyed()) window.webContents.send(desktopIpc.windowFocused);
+    };
     const stop = () => {
+      window.off("focus", notifyFocused);
       window.off("focus", handleActivation);
       window.off("show", handleActivation);
       window.off("restore", handleActivation);
     };
     window.on("focus", handleActivation);
+    window.on("focus", notifyFocused);
     window.on("show", handleActivation);
     window.on("restore", handleActivation);
     this.stopTrackingActivation.set(webContentsId, stop);
