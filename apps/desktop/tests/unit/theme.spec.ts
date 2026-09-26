@@ -32,6 +32,9 @@ test("every preset keeps text readable in both variants", () => {
         expect(ratio("--muted-icon", background), label).toBeGreaterThanOrEqual(3);
       }
       expect(ratio("--accent", "--surface"), label).toBeGreaterThanOrEqual(3);
+      for (const status of ["--warning", "--success", "--error"] as const) {
+        expect(ratio(status, "--main"), `${label} ${status}`).toBeGreaterThanOrEqual(3);
+      }
       expect(ratio("--button-primary-ink", "--button-primary-bg"), label).toBeGreaterThanOrEqual(
         4.5,
       );

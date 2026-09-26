@@ -188,7 +188,16 @@ export type ThemeTokens = Readonly<Record<`--${string}`, string>>;
 
 export function deriveThemeTokens(seedValue: ThemeSeed, variant: ResolvedTheme): ThemeTokens {
   const light = variant === "light";
-  const { surface: s, ink, accent, added, removed, warning } = seedValue;
+  const { surface: s, ink } = seedValue;
+  // Status and accent colours also draw text and glyphs (diff letters, warnings),
+  // so pale seeds (Catppuccin Latte's yellow) are deepened toward the ink until
+  // they read at 3:1 on the main surface.
+  const [accent, added, removed, warning] = [
+    seedValue.accent,
+    seedValue.added,
+    seedValue.removed,
+    seedValue.warning,
+  ].map((color) => deepenForContrast(color, ink, s, 3)) as [string, string, string, string];
   const pick = (lightValue: number, darkValue: number): number => (light ? lightValue : darkValue);
   // Text greys are the ink faded toward the surface; lines and fills are the
   // surface tinted toward the ink. Dark "under" surfaces sink toward black.
@@ -340,6 +349,20 @@ function fadeWithContrast(
     fitted = Math.max(0, fitted - 0.01);
   }
   return mix(ink, surface, fitted);
+}
+
+/** Moves `color` toward `ink` until it reaches `minContrast` against `surface`. */
+function deepenForContrast(
+  color: string,
+  ink: string,
+  surface: string,
+  minContrast: number,
+): string {
+  let amount = 0;
+  while (amount < 1 && contrastRatio(mix(color, ink, amount), surface) < minContrast) {
+    amount = Math.min(1, amount + 0.02);
+  }
+  return mix(color, ink, amount);
 }
 
 /** WCAG contrast ratio between two #rrggbb colours. */
