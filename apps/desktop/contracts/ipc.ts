@@ -189,6 +189,7 @@ export const desktopIpc = {
   setThemeMode: "pi-gui:set-theme-mode",
   setThemePresetId: "pi-gui:set-theme-preset-id",
   themeChanged: "pi-gui:theme-changed",
+  windowFocused: "pi-gui:window-focused",
   ping: "app:ping",
   openExternal: "app:open-external",
   relaunchApplication: "pi-gui:relaunch-application",
@@ -837,5 +838,7 @@ export interface PiDesktopApi {
   getResolvedTheme(): Promise<"light" | "dark">;
   setThemeMode(mode: "system" | "light" | "dark"): Promise<DesktopAppState>;
   onThemeChanged(callback: (theme: "light" | "dark") => void): () => void;
+  /** The window came back to the foreground, so outside changes (edits, git) may need rereading. */
+  onWindowFocused(listener: () => void): () => void;
   relaunchApplication(): Promise<void>;
 }
