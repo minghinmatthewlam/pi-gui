@@ -1,0 +1,158 @@
+{
+  "name": "dracula-light",
+  "type": "light",
+  "colors": {
+    "editor.background": "#fffbeb",
+    "editor.foreground": "#1f1f1f",
+    "editor.selectionBackground": "#cfcfde",
+    "terminal.ansiBlack": "#1f1f1f",
+    "terminal.ansiBrightBlack": "#1f1f1f",
+    "terminal.ansiRed": "#cb3a2a",
+    "terminal.ansiBrightRed": "#cb3a2a",
+    "terminal.ansiGreen": "#14710a",
+    "terminal.ansiBrightGreen": "#14710a",
+    "terminal.ansiYellow": "#846e15",
+    "terminal.ansiBrightYellow": "#846e15",
+    "terminal.ansiBlue": "#644ac9",
+    "terminal.ansiBrightBlue": "#644ac9",
+    "terminal.ansiMagenta": "#a3144d",
+    "terminal.ansiBrightMagenta": "#a3144d",
+    "terminal.ansiCyan": "#036a96",
+    "terminal.ansiBrightCyan": "#036a96",
+    "terminal.ansiWhite": "#6c664b",
+    "terminal.ansiBrightWhite": "#6c664b"
+  },
+  "tokenColors": [
+    {
+      "name": "Comment",
+      "scope": ["comment", "punctuation.definition.comment"],
+      "settings": {
+        "foreground": "#6c664b",
+        "fontStyle": "italic"
+      }
+    },
+    {
+      "name": "Keyword, storage",
+      "scope": [
+        "keyword",
+        "storage",
+        "storage.type",
+        "keyword.control",
+        "keyword.operator.new",
+        "keyword.operator.expression"
+      ],
+      "settings": {
+        "foreground": "#a3144d"
+      }
+    },
+    {
+      "name": "Operator, punctuation",
+      "scope": ["keyword.operator", "punctuation.separator", "punctuation.accessor"],
+      "settings": {
+        "foreground": "#a3144d"
+      }
+    },
+    {
+      "name": "String",
+      "scope": ["string", "string.quoted", "string.template", "punctuation.definition.string"],
+      "settings": {
+        "foreground": "#846e15"
+      }
+    },
+    {
+      "name": "Escape, regexp",
+      "scope": ["constant.character.escape", "string.regexp"],
+      "settings": {
+        "foreground": "#cb3a2a"
+      }
+    },
+    {
+      "name": "Number, constant",
+      "scope": [
+        "constant.numeric",
+        "constant.language",
+        "constant.other",
+        "support.constant",
+        "variable.other.constant"
+      ],
+      "settings": {
+        "foreground": "#644ac9"
+      }
+    },
+    {
+      "name": "Function",
+      "scope": [
+        "entity.name.function",
+        "support.function",
+        "meta.function-call entity.name.function",
+        "variable.function"
+      ],
+      "settings": {
+        "foreground": "#14710a"
+      }
+    },
+    {
+      "name": "Type, class",
+      "scope": [
+        "entity.name.type",
+        "entity.name.class",
+        "support.type",
+        "support.class",
+        "entity.other.inherited-class",
+        "storage.type.primitive"
+      ],
+      "settings": {
+        "foreground": "#036a96"
+      }
+    },
+    {
+      "name": "Parameter",
+      "scope": ["variable.parameter"],
+      "settings": {
+        "foreground": "#a34d14"
+      }
+    },
+    {
+      "name": "Property",
+      "scope": [
+        "variable.other.property",
+        "variable.other.object.property",
+        "meta.object-literal.key",
+        "support.type.property-name",
+        "support.variable.property"
+      ],
+      "settings": {
+        "foreground": "#1f1f1f"
+      }
+    },
+    {
+      "name": "Variable",
+      "scope": ["variable", "variable.other.readwrite"],
+      "settings": {
+        "foreground": "#1f1f1f"
+      }
+    },
+    {
+      "name": "Tag",
+      "scope": ["entity.name.tag"],
+      "settings": {
+        "foreground": "#a3144d"
+      }
+    },
+    {
+      "name": "Attribute",
+      "scope": ["entity.other.attribute-name"],
+      "settings": {
+        "foreground": "#14710a"
+      }
+    },
+    {
+      "name": "Language variable",
+      "scope": ["variable.language"],
+      "settings": {
+        "foreground": "#a3144d",
+        "fontStyle": "italic"
+      }
+    }
+  ]
+}

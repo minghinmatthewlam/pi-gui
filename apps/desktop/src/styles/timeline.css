@@ -202,8 +202,8 @@
   min-width: 0;
   padding: 12px 16px;
   border-radius: var(--radius-xl);
-  border: 1px solid var(--theme-bubble-border, transparent);
-  background: var(--theme-bubble-bg, var(--surface-muted));
+  border: 1px solid transparent;
+  background: var(--surface-muted);
 }
 
 .timeline-item__attachments {
@@ -770,8 +770,8 @@
 .message__content :not(pre) > code {
   padding: 0.1em 0.38em;
   border-radius: var(--radius-sm);
-  background: var(--theme-code-bg, var(--code-inline-bg));
-  color: var(--theme-code-ink, var(--code-ink));
+  background: var(--code-inline-bg);
+  color: var(--code-ink);
 }
 
 .message__content pre {
@@ -781,9 +781,9 @@
   overflow: auto;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
-  background: var(--theme-code-bg, var(--code-block-bg));
-  color: var(--theme-code-ink, var(--code-ink));
-  border: 1px solid var(--theme-code-border, var(--code-border));
+  background: var(--code-block-bg);
+  color: var(--code-ink);
+  border: 1px solid var(--code-border);
 }
 
 .message__content pre code {
@@ -796,7 +796,7 @@
 
 .message__content blockquote {
   padding-left: 12px;
-  border-left: 3px solid var(--theme-control-border, var(--line-strong));
+  border-left: 3px solid var(--line-strong);
   color: var(--muted-strong);
 }
 

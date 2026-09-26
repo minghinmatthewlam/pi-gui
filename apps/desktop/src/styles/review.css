@@ -39,7 +39,7 @@
 
 .review-panel__scope:hover,
 .review-panel__scope[aria-expanded="true"] {
-  background: var(--theme-control-hover-bg, var(--overlay-hover));
+  background: var(--overlay-hover);
 }
 
 .review-panel__scope svg {
@@ -55,7 +55,7 @@
 
 .review-panel__tool--active {
   color: var(--text-strong);
-  background: var(--theme-control-hover-bg, var(--overlay-hover));
+  background: var(--overlay-hover);
 }
 
 .review-menu__popover {
@@ -361,7 +361,7 @@
 }
 
 .review-tree__folder:hover {
-  background: var(--theme-control-hover-bg, var(--overlay-hover));
+  background: var(--overlay-hover);
 }
 
 .review-tree__folder svg {
@@ -387,7 +387,7 @@
 }
 
 .review-panel .review-tree__file:hover {
-  background: var(--theme-control-hover-bg, var(--overlay-hover));
+  background: var(--overlay-hover);
 }
 
 .review-panel .review-tree__file.diff-panel__file--selected {

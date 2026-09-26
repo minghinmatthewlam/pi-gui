@@ -86,7 +86,7 @@ test("syntax-highlights known languages and leaves unknown extensions plain", as
       .getByRole("region", { name: "Diff", exact: true })
       .locator(".diff-inline");
     await expect(tsDiff).toHaveAttribute("data-language", "typescript");
-    await expect(tsDiff.locator('[class*="hljs-"]').first()).toBeVisible();
+    await expect(tsDiff.locator('span[style*="color"]').first()).toBeVisible();
 
     const pyRow = diffPanel.locator('.diff-panel__file[data-file-path="script.py"]');
     await pyRow.locator(".diff-panel__file-name").click();
@@ -96,7 +96,7 @@ test("syntax-highlights known languages and leaves unknown extensions plain", as
     await expect(
       diffPanel
         .getByRole("region", { name: "Diff", exact: true })
-        .locator('.diff-inline [class*="hljs-"]')
+        .locator('.diff-inline span[style*="color"]')
         .first(),
     ).toBeVisible();
 
@@ -106,7 +106,7 @@ test("syntax-highlights known languages and leaves unknown extensions plain", as
       .getByRole("region", { name: "Diff", exact: true })
       .locator(".diff-inline");
     await expect(mdDiff).not.toHaveAttribute("data-language", /.*/);
-    await expect(mdDiff.locator('[class*="hljs-"]')).toHaveCount(0);
+    await expect(mdDiff.locator('span[style*="color"]')).toHaveCount(0);
   } finally {
     await harness.close();
   }
@@ -311,7 +311,7 @@ test("view-in-changes button on a write tool row opens the diff panel without to
   }
 });
 
-test("highlighting tokens swap palettes when the dark class flips", async () => {
+test("highlighting follows the theme when light or dark changes", async () => {
   test.setTimeout(45_000);
   const { harness, window } = await launchSeeded("Review UX theme");
   try {
@@ -323,7 +323,7 @@ test("highlighting tokens swap palettes when the dark class flips", async () => 
       .click();
     const token = diffPanel
       .getByRole("region", { name: "Diff", exact: true })
-      .locator('.diff-inline [class*="hljs-"]')
+      .locator('.diff-inline span[style*="color"]')
       .first();
     await expect(token).toBeVisible();
 
@@ -332,12 +332,16 @@ test("highlighting tokens swap palettes when the dark class flips", async () => 
     );
     const colorBefore = await token.evaluate((el) => getComputedStyle(el).color);
 
-    await window.evaluate((wasDark) => {
-      document.documentElement.classList.toggle("dark", !wasDark);
+    await window.evaluate(async (wasDark) => {
+      await globalThis.window.piApp?.setThemeMode(wasDark ? "light" : "dark");
     }, initiallyDark);
 
-    const colorAfter = await token.evaluate((el) => getComputedStyle(el).color);
-    expect(colorAfter).not.toBe(colorBefore);
+    await expect
+      .poll(() => window.evaluate(() => document.documentElement.classList.contains("dark")))
+      .toBe(!initiallyDark);
+    await expect
+      .poll(() => token.evaluate((el) => getComputedStyle(el).color))
+      .not.toBe(colorBefore);
   } finally {
     await harness.close();
   }

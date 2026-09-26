@@ -51,7 +51,7 @@
 }
 
 .thread-switcher__item--selected {
-  background: var(--theme-control-hover-bg, var(--surface-muted));
+  background: var(--surface-muted);
 }
 
 .thread-switcher__item-title {

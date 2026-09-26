@@ -5,6 +5,7 @@ import {
   dialog,
   Menu,
   nativeImage,
+  nativeTheme,
   net,
   protocol,
   shell,
@@ -48,6 +49,7 @@ import { NotificationManager } from "./platform/notification-manager";
 import { NotificationPermissionService } from "./platform/notification-permission";
 import { checkForUpdate, initUpdateChecker, openReleasesPage } from "./platform/update-checker";
 import { ThemeManager } from "./platform/theme-manager";
+import { windowBackgroundFor } from "../contracts/theme";
 import { TerminalService } from "./platform/terminal-service";
 import type { DesktopAppState, DesktopAppViewState } from "../contracts/desktop-state";
 import {
@@ -376,6 +378,26 @@ function dispatchCloseFocusedSurface(window: BrowserWindow, event: Electron.Even
   window.webContents.send(desktopIpc.appCommand, desktopCommands.closeFocusedSurface);
 }
 
+// The native window colour matches the renderer's theme, so load, reload and
+// resize never flash another theme's colour.
+function currentWindowBackground(): string {
+  return windowBackgroundFor(
+    store?.snapshot().themePresetId ?? "default",
+    themeManager.getResolvedTheme(),
+  );
+}
+
+// Windows created transparent keep their glass until the next launch.
+const opaqueAppWindows = new Set<BrowserWindow>();
+
+function refreshWindowBackgrounds(): void {
+  if (!store) return;
+  const color = currentWindowBackground();
+  for (const window of opaqueAppWindows) {
+    if (!window.isDestroyed()) window.setBackgroundColor(color);
+  }
+}
+
 function createWindow(): BrowserWindow {
   const backgroundTestMode = windowTestMode === "background";
   const enableTransparency = store ? store.snapshot().enableTransparency : false;
@@ -388,7 +410,7 @@ function createWindow(): BrowserWindow {
     vibrancy: process.platform === "darwin" && enableTransparency ? "under-window" : undefined,
     titleBarStyle: "hiddenInset",
     autoHideMenuBar: process.platform !== "darwin",
-    backgroundColor: enableTransparency ? "#00000000" : "#f3f4f8",
+    backgroundColor: enableTransparency ? "#00000000" : currentWindowBackground(),
     trafficLightPosition: { x: 18, y: 18 },
     show: false,
     icon: appIcon,
@@ -545,6 +567,11 @@ function createWindow(): BrowserWindow {
     void window.loadURL(appRendererUrl()).catch((error: unknown) => {
       console.error("[main] loadURL failed", error);
     });
+  }
+
+  if (!enableTransparency) {
+    opaqueAppWindows.add(window);
+    window.once("closed", () => opaqueAppWindows.delete(window));
   }
 
   return window;
@@ -935,8 +962,14 @@ app
     await store.initialize();
     themeManager.setMode(store.snapshot().themeMode);
     integratedTerminalShell = (await store.getState()).integratedTerminalShell;
+    nativeTheme.on("updated", refreshWindowBackgrounds);
+    let windowBackgroundPresetId = store.snapshot().themePresetId;
     stopPruningTerminals = store.subscribe((state) => {
       integratedTerminalShell = state.integratedTerminalShell;
+      if (state.themePresetId !== windowBackgroundPresetId) {
+        windowBackgroundPresetId = state.themePresetId;
+        refreshWindowBackgrounds();
+      }
       const workspacePaths = state.workspaces.map((workspace) => workspace.path);
       const workspacePathSignature = workspacePaths.join("\0");
       if (workspacePathSignature !== retainedTerminalWorkspacePathSignature) {

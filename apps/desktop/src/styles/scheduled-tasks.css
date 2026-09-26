@@ -104,7 +104,7 @@
   z-index: 36;
   display: flex;
   justify-content: flex-end;
-  background: rgba(24, 31, 44, 0.28);
+  background: var(--scrim);
   backdrop-filter: blur(8px);
 }
 

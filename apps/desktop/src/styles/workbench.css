@@ -36,7 +36,7 @@
 }
 
 .workbench__tab-wrapper:has(.workbench__tab--active) {
-  background: var(--theme-selection-bg, var(--surface-muted));
+  background: var(--surface-muted);
 }
 
 .workbench__tab {
@@ -74,7 +74,7 @@
 }
 
 .workbench__tab--active {
-  color: var(--theme-selection-ink, var(--text-strong));
+  color: var(--text-strong);
 }
 
 .workbench__tab:hover {
@@ -222,7 +222,7 @@
 .workbench__resize-handle:hover,
 .workbench__resize-handle:focus-visible,
 .workbench__resize-handle[data-resizing="true"] {
-  background: var(--theme-selection-bg, var(--surface-muted));
+  background: var(--surface-muted);
   box-shadow: inset 2px 0 var(--accent);
 }
 

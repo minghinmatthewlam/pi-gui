@@ -4,12 +4,8 @@ import type { PiDesktopApi, WorkspaceFilePreview } from "../../../contracts/ipc"
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { CloseIcon, CopyIcon, WorktreeIcon } from "../../ui/icons";
-import {
-  MAX_HIGHLIGHTED_LINES,
-  extensionToLanguage,
-  highlightLine,
-  type HighlightLine,
-} from "../../ui/syntax-highlight";
+import { HighlightedLine } from "../../ui/highlighted-line";
+import { MAX_HIGHLIGHTED_LINES, extensionToLanguage } from "../../ui/syntax-highlight";
 import {
   breadcrumbSegments,
   fileNameFromPath,
@@ -343,27 +339,4 @@ function scrollIntoContainer(element: HTMLElement, containerSelector: string): v
     container.clientHeight / 2 +
     elementRect.height / 2;
   container.scrollTop = Math.max(0, top);
-}
-
-function HighlightedLine({
-  content,
-  language,
-}: {
-  readonly content: string;
-  readonly language: string;
-}) {
-  const tokens = useMemo(() => highlightLine(content, language), [content, language]);
-  return <>{renderTokens(tokens)}</>;
-}
-
-function renderTokens(tokens: HighlightLine): ReactNode {
-  return tokens.map((token, index) =>
-    typeof token === "string" ? (
-      token
-    ) : (
-      <span className={token.className} key={index}>
-        {renderTokens(token.children)}
-      </span>
-    ),
-  );
 }
