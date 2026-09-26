@@ -80,6 +80,7 @@ export function DiffPanel({
   // A quiet refresh holds whichever file was on screen so new files don't take its place.
   const [heldPath, setHeldPath] = useState<{ readonly queryKey: string; readonly path: string }>();
   const shownFallback = heldPath?.queryKey === queryKey ? heldPath.path : null;
+  useEffect(() => setHeldPath(undefined), [selection.selectedPath]);
   const selectedFile = useMemo(
     () => (review ? pickReviewFile(review, [selection.selectedPath, shownFallback]) : undefined),
     [review, selection.selectedPath, shownFallback],
@@ -92,6 +93,7 @@ export function DiffPanel({
 
   const refresh = useCallback(() => {
     const nonce = ++requestNonce.current;
+    setHeldPath(undefined);
     fileNonce.current += 1;
     setLoading(true);
     setFileResult(null);
@@ -176,14 +178,17 @@ export function DiffPanel({
   fileRequestNonceRef.current = fileRequest?.nonce;
   const prefetchedFileKey = useRef<string | null>(null);
   const quietInFlight = useRef(false);
+  const actionCount = useRef(0);
   const refreshQuietly = useCallback(() => {
     if (!checkoutAvailable || quietInFlight.current || loadingRef.current) return;
     if (busyRef.current.size > 0) return;
     const nonce = ++requestNonce.current;
+    const actionsAtStart = actionCount.current;
+    // An action started meanwhile (such as a reviewed mark) may be newer than this read.
     const current = () =>
       requestNonce.current === nonce &&
       activeQueryKey.current === queryKey &&
-      busyRef.current.size === 0;
+      actionCount.current === actionsAtStart;
     quietInFlight.current = true;
     void (async () => {
       const next = await api.getReview({
@@ -270,6 +275,7 @@ export function DiffPanel({
   }, [api, loading, queryKey, review?.reviewId, selectedFile?.id, fileRequest?.nonce]);
 
   const setBusy = (fileId: string, busy: boolean) => {
+    if (busy) actionCount.current += 1;
     setBusyFiles((previous) => {
       const next = new Set(previous);
       if (busy) next.add(fileId);
