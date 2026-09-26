@@ -62,11 +62,13 @@ test("tours every theme preset", async () => {
     await createNamedThread(window, "Theme tour");
     await createNamedThread(window, "Seed colours");
     await seedTranscriptMessages(harness, window, {
-      count: 2,
+      count: 12,
       textFactory: (index) =>
-        index === 0
-          ? "Every preset is a seed. Can you show a snippet with `inline code`?"
-          : 'Here is a block:\n\n```ts\nconst preset = { id: "gruvbox", accent: "#458588" };\n```\n\nBorders, icons and buttons all come from the same seed.',
+        index < 10
+          ? `Earlier note ${index + 1}: long enough history that the timeline scrolls.`
+          : index === 10
+            ? "Every preset is a seed. Can you show a snippet with `inline code`?"
+            : 'Here is a block:\n\n```ts\nconst preset = { id: "gruvbox", accent: "#458588" };\n```\n\nBorders, icons and buttons all come from the same seed.',
     });
     await window.getByTestId("composer").fill("Check the composer in this theme.");
     await selectSidePanel(window, "Review");
@@ -96,6 +98,12 @@ test("tours every theme preset", async () => {
         await shot(window, `${preset.id}-${variant}-terminal.png`);
       }
     }
+
+    // Scrollbars stay hidden until the pointer is over their scroller.
+    await window.locator(".sidebar").hover();
+    await shot(window, "scrollbar-idle.png");
+    await window.getByTestId("transcript").hover();
+    await shot(window, "scrollbar-hover.png");
   } finally {
     await harness.close();
   }

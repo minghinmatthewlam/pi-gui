@@ -83,7 +83,7 @@ import {
 import { TreeModal } from "../features/conversation/tree-modal";
 import { ForkModal } from "../features/conversation/fork-modal";
 import { getEffectiveModelRuntime } from "../features/settings/model-settings";
-import { applyTheme, useActiveTheme } from "../ui/active-theme";
+import { applyTheme, getActiveTheme, useActiveTheme } from "../ui/active-theme";
 import { deriveWorkspaceContext } from "./workspace-context";
 import { useTreeForkModals } from "../features/conversation/hooks/use-tree-fork-modals";
 import { useComposerDraftSync } from "../features/conversation/hooks/use-composer-draft-sync";
@@ -125,6 +125,8 @@ export default function App() {
       })
       .catch((error: unknown) => {
         console.error("[renderer] getResolvedTheme failed", error);
+        // Keep the variant painted at startup so preset changes still apply.
+        setResolvedTheme((current) => current ?? getActiveTheme().variant);
       });
 
     const unsub = piApi.onThemeChanged((theme) => {

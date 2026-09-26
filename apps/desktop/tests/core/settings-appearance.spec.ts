@@ -1,7 +1,12 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { themePresets, themeTokensFor, type ResolvedTheme } from "../../contracts/theme";
+import {
+  themePresets,
+  themeTokensFor,
+  windowBackgroundFor,
+  type ResolvedTheme,
+} from "../../contracts/theme";
 import {
   createNamedThread,
   desktopShortcut,
@@ -88,6 +93,14 @@ test("selects and restores theme presets", async () => {
       .toBe(true);
     await expectDerivedTokens(window, "tokyo-night", "dark");
     await expect.poll(() => rootCssVariable(window, "--accent")).toBe("#7aa2f7");
+    // The native window colour follows the change too, so resizing never flashes.
+    await expect
+      .poll(() =>
+        harness.electronApp.evaluate(({ BrowserWindow }) =>
+          BrowserWindow.getAllWindows()[0]?.getBackgroundColor().toLowerCase(),
+        ),
+      )
+      .toBe(windowBackgroundFor("tokyo-night", "dark"));
   } finally {
     await harness.close();
   }

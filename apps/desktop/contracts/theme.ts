@@ -257,7 +257,8 @@ export function deriveThemeTokens(seedValue: ThemeSeed, variant: ResolvedTheme):
     "--button-primary-disabled-border": lineStrong,
     "--button-primary-disabled-ink": mutedSoft,
     "--code-inline-bg": light ? tint(0.05, 0) : alpha(ink, 0.08),
-    "--code-block-bg": light ? tint(0.035, 0) : mix(s, "#000000", 0.25),
+    // Dark code blocks darken whatever is behind them, glass included.
+    "--code-block-bg": light ? tint(0.035, 0) : alpha("#000000", 0.25),
     "--code-ink": fade(0.08, 0.05, 7),
     "--code-border": line,
     "--diff-header-bg": alpha(accent, pick(0.08, 0.1)),

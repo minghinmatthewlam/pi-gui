@@ -5,6 +5,7 @@ import {
   dialog,
   Menu,
   nativeImage,
+  nativeTheme,
   net,
   protocol,
   shell,
@@ -377,15 +378,26 @@ function dispatchCloseFocusedSurface(window: BrowserWindow, event: Electron.Even
   window.webContents.send(desktopIpc.appCommand, desktopCommands.closeFocusedSurface);
 }
 
-function createWindow(): BrowserWindow {
-  const backgroundTestMode = windowTestMode === "background";
-  const snapshot = store?.snapshot();
-  const enableTransparency = snapshot?.enableTransparency ?? false;
-  // Match the renderer's window colour so load and resize never flash another theme.
-  const windowBackground = windowBackgroundFor(
-    snapshot?.themePresetId ?? "default",
+// The native window colour matches the renderer's theme, so load, reload and
+// resize never flash another theme's colour.
+function currentWindowBackground(): string {
+  return windowBackgroundFor(
+    store?.snapshot().themePresetId ?? "default",
     themeManager.getResolvedTheme(),
   );
+}
+
+function refreshWindowBackgrounds(): void {
+  if (!store || store.snapshot().enableTransparency) return;
+  const color = currentWindowBackground();
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (!window.isDestroyed()) window.setBackgroundColor(color);
+  }
+}
+
+function createWindow(): BrowserWindow {
+  const backgroundTestMode = windowTestMode === "background";
+  const enableTransparency = store ? store.snapshot().enableTransparency : false;
   const window = new BrowserWindow({
     width: 1480,
     height: 980,
@@ -395,7 +407,7 @@ function createWindow(): BrowserWindow {
     vibrancy: process.platform === "darwin" && enableTransparency ? "under-window" : undefined,
     titleBarStyle: "hiddenInset",
     autoHideMenuBar: process.platform !== "darwin",
-    backgroundColor: enableTransparency ? "#00000000" : windowBackground,
+    backgroundColor: enableTransparency ? "#00000000" : currentWindowBackground(),
     trafficLightPosition: { x: 18, y: 18 },
     show: false,
     icon: appIcon,
@@ -942,8 +954,14 @@ app
     await store.initialize();
     themeManager.setMode(store.snapshot().themeMode);
     integratedTerminalShell = (await store.getState()).integratedTerminalShell;
+    nativeTheme.on("updated", refreshWindowBackgrounds);
+    let windowBackgroundPresetId = store.snapshot().themePresetId;
     stopPruningTerminals = store.subscribe((state) => {
       integratedTerminalShell = state.integratedTerminalShell;
+      if (state.themePresetId !== windowBackgroundPresetId) {
+        windowBackgroundPresetId = state.themePresetId;
+        refreshWindowBackgrounds();
+      }
       const workspacePaths = state.workspaces.map((workspace) => workspace.path);
       const workspacePathSignature = workspacePaths.join("\0");
       if (workspacePathSignature !== retainedTerminalWorkspacePathSignature) {

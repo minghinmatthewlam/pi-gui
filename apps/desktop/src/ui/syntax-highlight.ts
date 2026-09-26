@@ -16,8 +16,9 @@ import gruvboxLightMedium from "@shikijs/themes/gruvbox-light-medium";
 import lightPlus from "@shikijs/themes/light-plus";
 import nord from "@shikijs/themes/nord";
 import tokyoNight from "@shikijs/themes/tokyo-night";
-import { createHighlighterCoreSync, type ThemeRegistration } from "shiki/core";
-import { createJavaScriptRegexEngine } from "shiki/engine/javascript";
+import { useSyncExternalStore } from "react";
+import { createHighlighterCore, type HighlighterCore, type ThemeRegistration } from "shiki/core";
+import { createOnigurumaEngine } from "shiki/engine/oniguruma";
 import type { SyntaxThemeId } from "../../contracts/theme";
 import draculaLight from "./syntax-themes/dracula-light.json";
 import nordLight from "./syntax-themes/nord-light.json";
@@ -46,11 +47,59 @@ export const syntaxThemes: Readonly<Record<SyntaxThemeId, ThemeRegistration>> = 
   "dark-plus": darkPlus,
 };
 
-const highlighter = createHighlighterCoreSync({
+const languages = [typescript, tsx, javascript, json, python, bash];
+
+// Oniguruma (VS Code's regex engine, as wasm) tokenises several times faster
+// than shiki's JavaScript engine. It loads asynchronously at startup; code
+// renders plain until it is ready, then each grammar is compiled while idle so
+// the first diff does not pay for it.
+let highlighter: HighlighterCore | null = null;
+const readyListeners = new Set<() => void>();
+
+export const highlighterReady: Promise<void> = createHighlighterCore({
   themes: Object.values(syntaxThemes),
-  langs: [typescript, tsx, javascript, json, python, bash],
-  engine: createJavaScriptRegexEngine({ forgiving: true }),
-});
+  langs: languages,
+  engine: createOnigurumaEngine(import("shiki/wasm")),
+}).then(
+  (created) => {
+    highlighter = created;
+    for (const listener of readyListeners) listener();
+    warmGrammars(created);
+  },
+  (error: unknown) => {
+    console.error("[renderer] syntax highlighter failed to load", error);
+  },
+);
+
+/** Re-renders the caller once the highlighter has loaded. */
+export function useHighlighterReady(): boolean {
+  return useSyncExternalStore(
+    (listener) => {
+      readyListeners.add(listener);
+      return () => {
+        readyListeners.delete(listener);
+      };
+    },
+    () => highlighter !== null,
+  );
+}
+
+function warmGrammars(created: HighlighterCore): void {
+  const idle =
+    typeof requestIdleCallback === "function"
+      ? requestIdleCallback
+      : (callback: () => void) => setTimeout(callback, 0);
+  const pending = Object.values(EXTENSION_TO_LANGUAGE).filter(
+    (language, index, all) => all.indexOf(language) === index,
+  );
+  const warmNext = (): void => {
+    const language = pending.shift();
+    if (!language) return;
+    created.codeToTokensBase("const x = 1", { lang: language, theme: "github-light-default" });
+    idle(warmNext);
+  };
+  idle(warmNext);
+}
 
 export const MAX_HIGHLIGHTED_LINES = 500;
 
@@ -90,7 +139,13 @@ export function extensionToLanguage(filePath: string): string | undefined {
 
 const lineCache = new LRUCache<string, HighlightLine>({ max: 5000 });
 
-export function highlightLine(line: string, language: string, theme: SyntaxThemeId): HighlightLine {
+/** Coloured tokens for one line, or null until the highlighter has loaded. */
+export function highlightLine(
+  line: string,
+  language: string,
+  theme: SyntaxThemeId,
+): HighlightLine | null {
+  if (!highlighter) return null;
   const cacheKey = `${theme}\0${language}\0${line}`;
   const cached = lineCache.get(cacheKey);
   if (cached) return cached;

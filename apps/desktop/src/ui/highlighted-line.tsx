@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useActiveTheme } from "./active-theme";
-import { highlightLine } from "./syntax-highlight";
+import { highlightLine, useHighlighterReady } from "./syntax-highlight";
 
 /** One line of code coloured by the active theme's syntax theme. */
 export function HighlightedLine({
@@ -11,10 +11,12 @@ export function HighlightedLine({
   readonly language: string;
 }) {
   const { syntaxTheme } = useActiveTheme();
+  const ready = useHighlighterReady();
   const tokens = useMemo(
-    () => highlightLine(content, language, syntaxTheme),
-    [content, language, syntaxTheme],
+    () => (ready ? highlightLine(content, language, syntaxTheme) : null),
+    [content, language, syntaxTheme, ready],
   );
+  if (!tokens) return <>{content}</>;
   return (
     <>
       {tokens.map((token, index) =>

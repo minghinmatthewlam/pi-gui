@@ -9,7 +9,7 @@ import {
   themeTokensFor,
   type ResolvedTheme,
 } from "../../contracts/theme";
-import { highlightLine, syntaxThemes } from "../../src/ui/syntax-highlight";
+import { highlighterReady, highlightLine, syntaxThemes } from "../../src/ui/syntax-highlight";
 
 const variants: readonly ResolvedTheme[] = ["light", "dark"];
 const stylesDir = join(__dirname, "../../src/styles");
@@ -86,14 +86,15 @@ test("each preset's surface is its syntax theme's editor background", () => {
   }
 });
 
-test("highlights code with the active preset's syntax theme", () => {
+test("highlights code with the active preset's syntax theme", async () => {
+  await highlighterReady;
   const line = 'const preset = "gruvbox"; // seed';
   const colours = new Set<string>();
   for (const preset of themePresets) {
     for (const variant of variants) {
       const tokens = highlightLine(line, "typescript", preset.variants[variant].syntaxTheme);
-      expect(tokens.map((token) => token.content).join("")).toBe(line);
-      const keyword = tokens.find((token) => token.content === "const");
+      expect(tokens?.map((token) => token.content).join("")).toBe(line);
+      const keyword = tokens?.find((token) => token.content === "const");
       expect(keyword?.color, `${preset.id} ${variant}`).toMatch(/^#[0-9a-f]{6,8}$/);
       colours.add(keyword!.color!);
     }
