@@ -54,13 +54,12 @@ test("preserves an exact changed-file path through diff and stage actions", asyn
 
     await changedRow.locator(".diff-panel__file-name").click();
     await expect(
-      diffPanel
-        .getByRole("region", { name: "Combined changes", exact: true })
-        .locator(".diff-inline"),
+      diffPanel.getByRole("region", { name: "Diff", exact: true }).locator(".diff-inline"),
     ).toContainText("exact path contents");
 
     await changedRow.getByRole("button", { name: "Stage", exact: true }).click();
-    await expect(changedRow.getByRole("button", { name: "Staged", exact: true })).toBeDisabled();
+    await expect(changedRow.getByRole("button", { name: "Unstage", exact: true })).toBeEnabled();
+    await expect(changedRow.getByRole("button", { name: "Stage", exact: true })).toHaveCount(0);
 
     const { stdout } = await execFileAsync(
       "git",
@@ -105,9 +104,6 @@ test("shows Git status as unavailable without losing reviewed files", async () =
     await diffPanel.locator('button[aria-label="Refresh"]').click();
     await expect(diffPanel.getByTestId("changed-files-unavailable")).toContainText(
       /not a git repository|unavailable/i,
-    );
-    await expect(diffPanel.locator(".file-workbench__section-header")).toContainText(
-      /unavailable/i,
     );
     await expect(diffPanel.getByText("No changes", { exact: true })).toHaveCount(0);
     await saveProof(window, "git-status-unavailable.png");

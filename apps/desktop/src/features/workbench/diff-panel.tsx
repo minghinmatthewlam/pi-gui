@@ -14,9 +14,12 @@ import type {
   ReviewResult,
   ReviewScope,
 } from "../../../contracts/review";
+import { isWorkingReviewScope, reviewStageActions } from "../../../contracts/review";
 import { InlineDiff } from "../../ui/diff-inline";
-import { RefreshIcon } from "../../ui/icons";
+import { ChevronDownIcon, FileIcon, MoreIcon, RefreshIcon, SidePanelIcon } from "../../ui/icons";
 import { extensionToLanguage } from "../../ui/syntax-highlight";
+import { formatPathForDisplay, ReviewFileTree, reviewTreeOrder } from "./review-file-tree";
+import { ReviewMenu } from "./review-menu";
 
 interface DiffPanelProps {
   readonly workspaceId: string;
@@ -63,7 +66,7 @@ export function DiffPanel({
   );
   const requestNonce = useRef(0);
   const fileNonce = useRef(0);
-  const fileListRef = useRef<HTMLDivElement | null>(null);
+  const [treeVisible, setTreeVisible] = useReviewTreeVisible();
   const selectedCheckout = contexts.find(
     (context) => context.workspace.id === selection.workspaceId,
   );
@@ -72,7 +75,14 @@ export function DiffPanel({
   const review = result?.state === "available" ? result : null;
   const reviewRef = useRef(review);
   reviewRef.current = review;
-  const selectedFile = review?.files.find((file) => file.path === selection.selectedPath);
+  // Without a chosen file in this comparison (none yet, or it was staged away or reverted),
+  // the diff shows the first file in the tree, as Codex does, without saving that default.
+  const selectedFile = useMemo(() => {
+    if (!review) return undefined;
+    const chosen = review.files.find((file) => file.path === selection.selectedPath);
+    const first = reviewTreeOrder(review.files)[0];
+    return chosen ?? review.files.find((file) => file.path === first);
+  }, [review, selection.selectedPath]);
   const stale = actionIssue?.state === "stale" || fileResult?.state === "stale";
 
   useEffect(() => {
@@ -145,7 +155,7 @@ export function DiffPanel({
     if (
       previous === "running" &&
       sessionStatus !== "running" &&
-      (requestedScope.kind === "uncommitted" ||
+      (isWorkingReviewScope(requestedScope) ||
         (requestedScope.kind === "turn" && !requestedScope.checkpointId))
     )
       refresh();
@@ -178,13 +188,6 @@ export function DiffPanel({
       fileNonce.current += 1;
     };
   }, [api, loading, queryKey, review?.reviewId, selectedFile?.id, fileRequest?.nonce]);
-
-  useEffect(() => {
-    if (!selection.selectedPath) return;
-    fileListRef.current
-      ?.querySelector<HTMLElement>(`[data-file-path="${CSS.escape(selection.selectedPath)}"]`)
-      ?.scrollIntoView({ block: "nearest", behavior: "auto" });
-  }, [review?.reviewId, selection.selectedPath]);
 
   const setBusy = (fileId: string, busy: boolean) => {
     setBusyFiles((previous) => {
@@ -272,13 +275,12 @@ export function DiffPanel({
       });
   };
 
-  const chooseScope = (kind: string) => {
+  const chooseScope = (id: string) => {
+    if (id === "selected-turn") return;
     const scope: ReviewScope =
-      kind === "branch"
-        ? { kind: "branch" }
-        : kind === "turn"
-          ? { kind: "turn" }
-          : { kind: "uncommitted" };
+      id === "branch" || id === "turn" || id === "staged" || id === "unstaged"
+        ? { kind: id }
+        : { kind: "uncommitted" };
     onSelectionChange({ ...selection, selectedPath: null, scope });
   };
   const openCurrentFile = (comparison: AvailableReview, file: ReviewFileEntry) => {
@@ -303,29 +305,44 @@ export function DiffPanel({
     requestedScope.kind === "turn" && requestedScope.checkpointId
       ? "selected-turn"
       : requestedScope.kind;
-  const reviewedCount = review?.files.filter((file) => file.reviewed).length ?? 0;
+  const totals = review && !loading ? lineTotals(review.files) : null;
   const displayedFileResult =
     fileResult?.state === "available" &&
     (fileResult.reviewId !== review?.reviewId || fileResult.fileId !== selectedFile?.id)
       ? null
       : fileResult;
+  const comparisonDetails =
+    review && !loading
+      ? [
+          review.baseLabel,
+          ...(review.headOid ? [`HEAD ${review.headOid.slice(0, 8)}`] : []),
+          ...(review.capturedAt ? [`Captured ${formatCaptureTime(review.capturedAt)}`] : []),
+        ]
+      : [];
 
   return (
-    <section
-      className="side-panel diff-panel file-workbench file-workbench--changes review-panel"
-      aria-label="Review"
-    >
-      <div className="diff-panel__header file-workbench__header">
-        <div className="file-workbench__heading">
-          <h2 className="diff-panel__title">Review</h2>
-        </div>
-        {review && review.files.length > 0 ? (
-          <span className="diff-panel__counter" data-testid="diff-panel-counter">
-            Reviewed {reviewedCount} of {review.files.length}
+    <section className="side-panel diff-panel review-panel" aria-label="Review">
+      <div className="review-panel__toolbar">
+        <ReviewMenu
+          label="Review scope"
+          value={SCOPE_LABELS[selectedScope]}
+          buttonClassName="review-panel__scope"
+          buttonContent={<ChevronDownIcon />}
+          align="start"
+          options={SCOPE_OPTIONS.filter(
+            (option) => option.id !== "selected-turn" || selectedScope === "selected-turn",
+          ).map((option) => ({ ...option, checked: option.id === selectedScope }))}
+          onSelect={chooseScope}
+        />
+        {totals ? (
+          <span className="review-panel__totals" data-testid="review-line-totals">
+            <span className="review-panel__added">+{totals.added}</span>
+            <span className="review-panel__removed">-{totals.removed}</span>
           </span>
         ) : null}
+        <span className="review-panel__toolbar-spacer" />
         <button
-          className="icon-button"
+          className="icon-button review-panel__tool"
           type="button"
           onClick={refresh}
           aria-label="Refresh"
@@ -334,49 +351,45 @@ export function DiffPanel({
         >
           <RefreshIcon />
         </button>
-      </div>
-      <div className="review-panel__controls">
-        <label>
-          Checkout
-          <select
-            aria-label="Review checkout"
-            value={selection.workspaceId}
-            onChange={(event) =>
-              onSelectionChange({
-                workspaceId: event.target.value,
-                selectedPath: null,
-                scope: requestedScope.kind === "turn" ? { kind: "uncommitted" } : requestedScope,
-              })
-            }
-          >
-            {!selectedCheckout ? (
-              <option value={selection.workspaceId}>Unavailable checkout</option>
-            ) : null}
-            {contexts.map((context) => (
-              <option value={context.workspace.id} key={context.workspace.id}>
-                {context.role === "thread" ? "Current task · " : ""}
-                {context.worktree?.branchName ??
-                  context.workspace.branchName ??
-                  context.workspace.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Compare
-          <select
-            aria-label="Review scope"
-            value={selectedScope}
-            onChange={(event) => chooseScope(event.target.value)}
-          >
-            <option value="uncommitted">Uncommitted</option>
-            <option value="branch">Branch</option>
-            <option value="turn">Last turn</option>
-            {selectedScope === "selected-turn" ? (
-              <option value="selected-turn">Selected turn</option>
-            ) : null}
-          </select>
-        </label>
+        <ReviewMenu
+          label="Review options"
+          buttonClassName="icon-button review-panel__tool"
+          buttonContent={<MoreIcon />}
+          align="end"
+          details={comparisonDetails}
+          options={[
+            ...(!selectedCheckout
+              ? [{ id: selection.workspaceId, label: "Unavailable checkout", checked: true }]
+              : []),
+            ...contexts.map((context) => ({
+              id: context.workspace.id,
+              label: `${context.role === "thread" ? "Current task · " : ""}${
+                context.worktree?.branchName ??
+                context.workspace.branchName ??
+                context.workspace.name
+              }`,
+              checked: context.workspace.id === selection.workspaceId,
+            })),
+          ]}
+          onSelect={(checkoutId) => {
+            if (checkoutId === selection.workspaceId) return;
+            onSelectionChange({
+              workspaceId: checkoutId,
+              selectedPath: null,
+              scope: requestedScope.kind === "turn" ? { kind: "uncommitted" } : requestedScope,
+            });
+          }}
+        />
+        <button
+          className={`icon-button review-panel__tool${treeVisible ? " review-panel__tool--active" : ""}`}
+          type="button"
+          onClick={() => setTreeVisible(!treeVisible)}
+          aria-label={treeVisible ? "Hide file tree" : "Show file tree"}
+          aria-pressed={treeVisible}
+          title={treeVisible ? "Hide file tree" : "Show file tree"}
+        >
+          <SidePanelIcon />
+        </button>
       </div>
       {requestedScope.kind === "branch" ? (
         <form
@@ -393,7 +406,7 @@ export function DiffPanel({
               });
           }}
         >
-          <label htmlFor="review-base-ref">Base branch</label>
+          <label htmlFor="review-base-ref">Base</label>
           <input
             id="review-base-ref"
             aria-label="Base branch"
@@ -410,33 +423,10 @@ export function DiffPanel({
           </button>
         </form>
       ) : null}
-      <p className="review-panel__scope-note">{scopeDescription(requestedScope)}</p>
-      {review && !loading ? (
-        <div className="review-panel__identity" data-testid="review-comparison-identity">
-          <span>{review.baseLabel}</span>
-          {review.headOid ? <code title={review.headOid}>{review.headOid.slice(0, 8)}</code> : null}
-          {review.capturedAt ? <span>Captured {formatCaptureTime(review.capturedAt)}</span> : null}
-        </div>
-      ) : null}
       {actionIssue ? <ReviewIssueBanner issue={actionIssue} onRefresh={refresh} /> : null}
       {review && !loading ? <CoverageNotice coverage={review.coverage} /> : null}
-      <div className="file-workbench__body">
-        <section
-          className="file-workbench__section file-workbench__section--changes"
-          aria-label="Changed files"
-        >
-          <div className="file-workbench__section-header">
-            <span>Changed files</span>
-            <span>
-              {loading
-                ? "Loading"
-                : review
-                  ? review.files.length
-                  : result
-                    ? "Unavailable"
-                    : "Loading"}
-            </span>
-          </div>
+      <div className={`review-panel__body${treeVisible ? "" : " review-panel__body--no-tree"}`}>
+        <div className="diff-panel__viewer review-panel__viewer">
           {loading || !result ? (
             <div className="diff-panel__empty" role="status">
               Loading comparison…
@@ -458,149 +448,137 @@ export function DiffPanel({
                 ? "No changes in the captured files."
                 : "No changes"}
             </div>
-          ) : (
-            <div className="diff-panel__file-list" ref={fileListRef}>
-              {result.files.map((file) => {
-                const selected = file.path === selection.selectedPath;
-                const busy = busyFiles.has(file.id);
-                return (
-                  <div
-                    className={`diff-panel__file${selected ? " diff-panel__file--selected" : ""}${file.reviewed ? " diff-panel__file--reviewed" : ""}`}
-                    key={file.id}
-                    data-workspace-id={result.checkoutId}
-                    data-file-path={file.path}
-                  >
-                    <input
-                      aria-label={`Mark ${file.path} reviewed`}
-                      className="diff-panel__reviewed-checkbox"
-                      data-testid={`diff-panel-reviewed-${file.path}`}
-                      type="checkbox"
-                      checked={file.reviewed}
-                      disabled={busy || stale}
-                      onChange={() => markReviewed(result, file)}
-                    />
-                    <button
-                      className="diff-panel__file-name"
-                      title={formatPathForDisplay(file.path)}
-                      type="button"
-                      onClick={() =>
-                        onSelectionChange({
-                          ...selection,
-                          selectedPath: selected ? null : file.path,
-                        })
-                      }
-                    >
-                      <span
-                        className={`diff-panel__status-dot diff-panel__status-dot--${file.status}`}
-                      />
-                      <span className="diff-panel__file-path">
-                        {formatPathForDisplay(file.path)}
-                      </span>
-                      <span className="file-workbench__status-label">
-                        {file.conflicted ? "Conflicted" : file.status}
-                      </span>
-                    </button>
-                    {result.scope.kind === "uncommitted" ? (
-                      <span className="review-panel__stage-actions">
-                        <button
-                          className="diff-panel__stage-btn"
-                          type="button"
-                          disabled={busy || stale || file.conflicted || !file.hasUnstagedChanges}
-                          onClick={() => stageFile(result, file, "stage")}
-                        >
-                          {file.hasUnstagedChanges ? "Stage" : "Staged"}
-                        </button>
-                        {file.hasStagedChanges ? (
-                          <button
-                            className="diff-panel__stage-btn"
-                            type="button"
-                            disabled={busy || stale || file.conflicted}
-                            onClick={() => stageFile(result, file, "unstage")}
-                          >
-                            Unstage
-                          </button>
-                        ) : null}
-                      </span>
-                    ) : null}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </section>
-      </div>
-      <div className="diff-panel__viewer file-workbench__viewer">
-        <div className="diff-panel__viewer-header file-workbench__viewer-header">
-          <span className="file-workbench__viewer-path">
-            {selection.selectedPath
-              ? formatPathForDisplay(selection.selectedPath)
-              : "Select a file"}
-          </span>
-          {review && selectedFile && selectedFile.status !== "deleted" ? (
-            <button
-              className="button review-panel__open-file"
-              type="button"
-              title="Open the current checkout file"
-              onClick={() => openCurrentFile(review, selectedFile)}
-            >
-              Open in Files
-            </button>
-          ) : null}
-        </div>
-        {selectedFile?.previousPath ? (
-          <div className="review-panel__rename">
-            Renamed from {formatPathForDisplay(selectedFile.previousPath)}
-          </div>
-        ) : null}
-        <div className="review-panel__patches">
-          {loading ? (
-            <div className="diff-panel__empty">Refreshing comparison…</div>
-          ) : !review ? (
-            <div className="diff-panel__empty">Choose an available comparison to review files.</div>
-          ) : selection.selectedPath === null ? (
-            <div className="diff-panel__empty">Select a file from the changed files.</div>
           ) : !selectedFile ? (
             <div className="diff-panel__empty">
               This file is not part of the selected comparison.
             </div>
-          ) : fileLoading ? (
-            <div className="diff-panel__empty">Loading diff…</div>
-          ) : displayedFileResult?.state === "available" ? (
-            <>
-              <CoverageNotice coverage={displayedFileResult.coverage} />
-              {displayedFileResult.summary ? (
-                <p className="review-panel__summary">{displayedFileResult.summary}</p>
-              ) : null}
-              {displayedFileResult.sections.map((section) => (
-                <section
-                  className="review-panel__patch-section"
-                  aria-label={sectionLabel(section.kind)}
-                  key={section.kind}
-                >
-                  <h3>{sectionLabel(section.kind)}</h3>
-                  <CoverageNotice coverage={section.coverage} />
-                  {section.patch ? (
-                    <InlineDiff
-                      diff={section.patch}
-                      language={extensionToLanguage(selectedFile.path)}
-                    />
-                  ) : (
-                    <p className="diff-panel__empty">No textual changes in this portion.</p>
-                  )}
-                </section>
-              ))}
-              {displayedFileResult.sections.length === 0 && !displayedFileResult.summary ? (
-                <p className="diff-panel__empty">No text diff is available for this file.</p>
-              ) : null}
-            </>
-          ) : displayedFileResult ? (
-            <ReviewIssueBanner issue={displayedFileResult} onRefresh={refresh} />
           ) : (
-            <div className="diff-panel__empty">Loading diff…</div>
+            <>
+              <div className="review-panel__file-header">
+                <span
+                  className="review-panel__file-path"
+                  title={formatPathForDisplay(selectedFile.path)}
+                >
+                  <PathLabel path={selectedFile.path} />
+                </span>
+                {selectedFile.lines ? (
+                  <span className="review-panel__totals">
+                    <span className="review-panel__added">+{selectedFile.lines.added}</span>
+                    <span className="review-panel__removed">-{selectedFile.lines.removed}</span>
+                  </span>
+                ) : null}
+                <span className="review-panel__toolbar-spacer" />
+                {selectedFile.status !== "deleted" ? (
+                  <button
+                    className="icon-button review-panel__open-file"
+                    type="button"
+                    aria-label="Open in Files"
+                    title="Open in Files"
+                    onClick={() => openCurrentFile(result, selectedFile)}
+                  >
+                    <FileIcon />
+                  </button>
+                ) : null}
+              </div>
+              {selectedFile.previousPath ? (
+                <div className="review-panel__rename">
+                  Renamed from {formatPathForDisplay(selectedFile.previousPath)}
+                </div>
+              ) : null}
+              <div className="review-panel__patches">
+                {fileLoading ? (
+                  <div className="diff-panel__empty">Loading diff…</div>
+                ) : displayedFileResult?.state === "available" ? (
+                  <>
+                    <CoverageNotice coverage={displayedFileResult.coverage} />
+                    {displayedFileResult.summary ? (
+                      <p className="review-panel__summary">{displayedFileResult.summary}</p>
+                    ) : null}
+                    {displayedFileResult.patch ? (
+                      <section className="review-panel__patch-section" aria-label="Diff">
+                        <InlineDiff
+                          diff={displayedFileResult.patch}
+                          language={extensionToLanguage(selectedFile.path)}
+                          unmodifiedGaps
+                        />
+                      </section>
+                    ) : displayedFileResult.summary ? null : (
+                      <p className="diff-panel__empty">No text diff is available for this file.</p>
+                    )}
+                  </>
+                ) : displayedFileResult ? (
+                  <ReviewIssueBanner issue={displayedFileResult} onRefresh={refresh} />
+                ) : (
+                  <div className="diff-panel__empty">Loading diff…</div>
+                )}
+              </div>
+            </>
           )}
         </div>
+        {treeVisible && review && !loading && review.files.length > 0 ? (
+          <ReviewFileTree
+            checkoutId={review.checkoutId}
+            files={review.files}
+            selectedPath={selectedFile?.path ?? null}
+            stageActions={reviewStageActions(review.scope)}
+            busyFiles={busyFiles}
+            stale={stale}
+            onSelect={(path) => onSelectionChange({ ...selection, selectedPath: path })}
+            onToggleReviewed={(file) => markReviewed(review, file)}
+            onStage={(file, action) => stageFile(review, file, action)}
+          />
+        ) : null}
       </div>
     </section>
+  );
+}
+
+type ScopeOptionId = "turn" | "selected-turn" | "uncommitted" | "unstaged" | "staged" | "branch";
+
+const SCOPE_LABELS: Record<ScopeOptionId, string> = {
+  turn: "Last Turn",
+  "selected-turn": "Selected Turn",
+  uncommitted: "Uncommitted",
+  unstaged: "Unstaged",
+  staged: "Staged",
+  branch: "Branch",
+};
+
+const SCOPE_OPTIONS: readonly {
+  readonly id: ScopeOptionId;
+  readonly label: string;
+  readonly startsGroup?: boolean;
+}[] = [
+  { id: "turn", label: SCOPE_LABELS.turn },
+  { id: "selected-turn", label: SCOPE_LABELS["selected-turn"] },
+  { id: "uncommitted", label: SCOPE_LABELS.uncommitted, startsGroup: true },
+  { id: "unstaged", label: SCOPE_LABELS.unstaged },
+  { id: "staged", label: SCOPE_LABELS.staged },
+  { id: "branch", label: SCOPE_LABELS.branch, startsGroup: true },
+];
+
+/** A path with its folder muted, like Codex's file header. */
+function PathLabel({ path }: { readonly path: string }) {
+  const display = formatPathForDisplay(path);
+  if (display !== path) return <>{display}</>;
+  const slash = path.lastIndexOf("/");
+  return slash < 0 ? (
+    <>{path}</>
+  ) : (
+    <>
+      <span className="review-panel__file-dir">{path.slice(0, slash + 1)}</span>
+      {path.slice(slash + 1)}
+    </>
+  );
+}
+
+function lineTotals(files: readonly ReviewFileEntry[]) {
+  return files.reduce(
+    (total, file) => ({
+      added: total.added + (file.lines?.added ?? 0),
+      removed: total.removed + (file.lines?.removed ?? 0),
+    }),
+    { added: 0, removed: 0 },
   );
 }
 
@@ -645,31 +623,6 @@ function CoverageNotice({ coverage }: { readonly coverage: ReviewCoverage }) {
   );
 }
 
-/**
- * Plain paths read as-is. Paths whose edges or characters would be invisible or
- * ambiguous (surrounding whitespace, control characters, a leading or trailing
- * quote) are shown JSON-quoted so they cannot be confused with another path.
- */
-function formatPathForDisplay(path: string): string {
-  const ambiguous =
-    /^[\s"]|[\s"]$/.test(path) ||
-    [...path].some((char) => char.charCodeAt(0) < 0x20 || char.charCodeAt(0) === 0x7f);
-  return ambiguous ? JSON.stringify(path) : path;
-}
-
-function sectionLabel(kind: "combined" | "staged" | "unstaged"): string {
-  return kind === "staged" ? "Staged" : kind === "unstaged" ? "Unstaged" : "Combined changes";
-}
-
-function scopeDescription(scope: ReviewScope): string {
-  if (scope.kind === "uncommitted")
-    return "Current checkout changes, including staged, unstaged, and untracked files.";
-  if (scope.kind === "branch") return "Committed branch changes. Uncommitted edits are excluded.";
-  return scope.checkpointId
-    ? "Changes captured during this selected turn. Other edits made during that interval may be included."
-    : "Changes captured during the latest completed turn. Other edits made during that interval may be included.";
-}
-
 function formatCaptureTime(value: string): string {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
@@ -677,4 +630,26 @@ function formatCaptureTime(value: string): string {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+const TREE_VISIBLE_KEY = "pi-gui.review-tree-visible";
+
+/** Whether the changed-file tree shows beside the diff; a window preference like pane widths. */
+function useReviewTreeVisible() {
+  const [visible, setVisible] = useState(() => {
+    try {
+      return localStorage.getItem(TREE_VISIBLE_KEY) !== "false";
+    } catch {
+      return true;
+    }
+  });
+  const update = useCallback((next: boolean) => {
+    setVisible(next);
+    try {
+      localStorage.setItem(TREE_VISIBLE_KEY, String(next));
+    } catch {
+      // The toggle still applies for this window when preferences cannot be saved.
+    }
+  }, []);
+  return [visible, update] as const;
 }

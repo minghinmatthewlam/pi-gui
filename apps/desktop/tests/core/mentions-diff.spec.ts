@@ -106,7 +106,7 @@ test("toggles the diff panel from the keyboard shortcut and renders changed file
 
     await window.keyboard.press(desktopShortcut("R"));
     await expect(diffPanel).toBeVisible();
-    await expect(diffPanel.locator(".diff-panel__title")).toContainText("Review");
+    await expect(diffPanel).toHaveAttribute("aria-label", "Review");
     await expect(diffPanel.locator(".diff-panel__file-path")).toHaveText("README.md");
 
     const mainBox = await window.locator(".main").boundingBox();
@@ -116,7 +116,7 @@ test("toggles the diff panel from the keyboard shortcut and renders changed file
     expect(panelBox?.x ?? 0).toBeGreaterThan((mainBox?.x ?? 0) + (mainBox?.width ?? 0) / 2);
 
     await diffPanel.locator(".diff-panel__file-name").click();
-    const combined = diffPanel.getByRole("region", { name: "Combined changes", exact: true });
+    const combined = diffPanel.getByRole("region", { name: "Diff", exact: true });
     await expect(combined.locator(".diff-inline")).toBeVisible();
     await expect(combined.locator(".diff-line--added")).toHaveCount(1);
 

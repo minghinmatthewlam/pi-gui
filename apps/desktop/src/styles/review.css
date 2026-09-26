@@ -1,28 +1,144 @@
+/* Review follows Codex's layout: one toolbar row, the diff on the left and the
+ * changed-file tree on the right. */
+
 .review-panel {
   min-height: 0;
 }
 
-.review-panel__controls {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 10px;
-  padding: 12px 16px 8px;
+.review-panel__toolbar {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+  padding: 6px 10px 6px 12px;
+  border-bottom: 1px solid var(--border);
 }
 
-.review-panel__controls label {
+.review-panel__toolbar-spacer {
+  flex: 1;
+}
+
+.review-menu {
+  position: relative;
+  display: flex;
+}
+
+.review-panel__scope {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 8px 0 10px;
+  border-radius: var(--radius-md);
+  color: var(--text-strong);
+  font-size: 13px;
+  font-weight: var(--font-medium);
+  white-space: nowrap;
+}
+
+.review-panel__scope:hover,
+.review-panel__scope[aria-expanded="true"] {
+  background: var(--theme-control-hover-bg, var(--overlay-hover));
+}
+
+.review-panel__scope svg {
+  width: 14px;
+  height: 14px;
+  color: var(--muted);
+}
+
+.review-panel__tool svg {
+  width: 16px;
+  height: 16px;
+}
+
+.review-panel__tool--active {
+  color: var(--text-strong);
+  background: var(--theme-control-hover-bg, var(--overlay-hover));
+}
+
+.review-menu__popover {
+  top: calc(100% + 6px);
+  z-index: 20;
+  min-width: 200px;
+  gap: 0;
+  padding: 5px;
+  border-radius: var(--radius-xl);
+}
+
+.review-menu__popover--start {
+  right: auto;
+  left: 0;
+}
+
+.review-menu__popover--end {
+  right: 0;
+  left: auto;
+}
+
+.review-menu__item {
+  padding: 7px 10px;
+  border-radius: var(--radius-md);
+}
+
+.review-menu__item svg {
+  width: 16px;
+  height: 16px;
+  color: var(--muted-strong);
+}
+
+.review-menu__divider {
+  height: 1px;
+  margin: 5px 6px;
+  background: var(--line);
+}
+
+.review-menu__details {
   display: grid;
-  gap: 5px;
-  min-width: 0;
+  gap: 2px;
+  padding: 6px 10px 8px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--line);
   color: var(--muted);
   font-size: 11px;
+  overflow-wrap: anywhere;
 }
 
-.review-panel__controls select,
+.review-panel__totals {
+  display: inline-flex;
+  gap: 5px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.review-panel__added {
+  color: var(--diff-added-ink);
+}
+
+.review-panel__removed {
+  color: var(--diff-removed-ink);
+}
+
+.review-panel__base {
+  display: grid;
+  flex-shrink: 0;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .review-panel__base input {
   width: 100%;
   min-width: 0;
-  height: 30px;
-  padding: 4px 7px;
+  height: 28px;
+  padding: 4px 8px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: var(--main);
@@ -30,88 +146,47 @@
   font-size: 12px;
 }
 
-.review-panel__base {
+.review-panel__body {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  flex: 1 1 0;
+  grid-template-columns: minmax(0, 1fr) clamp(180px, 38%, 300px);
+  min-height: 0;
+}
+
+.review-panel__body--no-tree {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.review-panel .review-panel__viewer {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.review-panel__file-header {
+  display: flex;
+  flex-shrink: 0;
   align-items: center;
   gap: 8px;
-  padding: 0 16px 8px;
-  color: var(--muted);
-  font-size: 11px;
+  min-height: 36px;
+  padding: 4px 8px 4px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
 }
 
-.review-panel__scope-note {
-  margin: 0;
-  padding: 0 16px 10px;
-  color: var(--muted);
-  font-size: 11px;
-  line-height: 1.5;
-}
-
-.review-panel__identity {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 12px;
-  padding: 7px 16px;
-  border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
-  color: var(--muted);
-  font-size: 11px;
-  overflow-wrap: anywhere;
-}
-
-.review-panel__identity code {
-  color: var(--muted-strong);
-  font-size: 10px;
-}
-
-.review-panel__stage-actions {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-}
-
-.review-panel .diff-panel__file-name {
+.review-panel__file-path {
   min-width: 0;
-}
-
-/* Keep large reviews cheap to scroll without removing keyboard/search targets.
- * A stable row height avoids scroll jumps as off-screen content is revealed. */
-.review-panel .diff-panel__file {
-  height: 36px;
-  content-visibility: auto;
-  contain-intrinsic-size: auto 36px;
-}
-
-.review-panel .diff-panel__file-path {
-  flex: 1;
   overflow: hidden;
+  color: var(--text-strong);
+  font-family: var(--font-mono);
   white-space: nowrap;
   text-overflow: ellipsis;
 }
 
-.review-panel .file-workbench__status-label,
-.review-panel__stage-actions {
-  flex-shrink: 0;
-}
-
-.review-panel .file-workbench__body {
-  flex: 0 1 35%;
-  min-height: 100px;
-  overflow-y: auto;
-}
-
-.review-panel .diff-panel__viewer {
-  display: flex;
-  flex-direction: column;
-  flex: 1 1 0;
-  min-height: 140px;
-  overflow: hidden;
-}
-
-.review-panel .diff-panel__viewer-header {
-  flex-shrink: 0;
+.review-panel__file-dir {
+  color: var(--muted);
 }
 
 .review-panel__patches {
@@ -120,26 +195,37 @@
   overflow: auto;
 }
 
-.review-panel__patch-section h3 {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  margin: 0;
-  padding: 9px 14px;
-  border-bottom: 1px solid var(--line);
-  background: var(--surface-muted);
-  color: var(--muted-strong);
-  font-size: 11px;
-  font-weight: var(--font-semibold);
-}
-
-.review-panel__patch-section + .review-panel__patch-section {
-  border-top: 1px solid var(--line);
-}
-
 .review-panel__patch-section .diff-inline {
   margin: 0;
+  padding: 6px 0 12px;
   overflow: visible;
+  line-height: 1.85;
+}
+
+/* Codex marks changed lines with a solid bar at the gutter edge. */
+.review-panel .diff-line--added,
+.review-panel .diff-line--removed {
+  box-shadow: inset 3px 0 0 currentColor;
+}
+
+.review-panel .diff-line--added .diff-line__content,
+.review-panel .diff-line--removed .diff-line__content {
+  color: var(--ink);
+}
+
+.review-panel .diff-line--unmodified {
+  margin: 4px 8px;
+  padding: 0;
+  border-radius: var(--radius-md);
+  background: var(--surface-muted);
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: 12px;
+}
+
+.review-panel .diff-line--unmodified .diff-line__number {
+  min-width: 0;
+  padding: 0 4px;
 }
 
 .review-panel__issue,
@@ -181,7 +267,7 @@
 .review-panel__summary,
 .review-panel__rename {
   margin: 0;
-  padding: 10px 14px;
+  padding: 8px 12px;
   color: var(--muted);
   font-size: 12px;
   overflow-wrap: anywhere;
@@ -189,10 +275,202 @@
 
 .review-panel__open-file {
   flex-shrink: 0;
-  min-height: 24px;
+  width: 26px;
+  height: 26px;
+}
+
+.review-panel__open-file svg {
+  width: 15px;
+  height: 15px;
+}
+
+/* Changed-file tree */
+
+.review-tree {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  border-left: 1px solid var(--border);
+}
+
+.review-tree__header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  flex-shrink: 0;
+  gap: 4px;
+  padding: 8px 8px 6px;
+}
+
+.review-tree__filter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
   padding: 0 8px;
-  font-family: var(--font-ui);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--main);
+  color: var(--muted);
+}
+
+.review-tree__filter svg {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+}
+
+.review-tree__filter input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text-strong);
   font-size: 12px;
-  font-weight: var(--font-medium);
+}
+
+.review-tree__counter {
+  padding: 0 2px;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.review-tree__list.diff-panel__file-list {
+  flex: 1 1 0;
+  min-height: 0;
+  max-height: none;
+  padding: 0 4px 8px;
+  border-bottom: 0;
+  overflow-y: auto;
+}
+
+.review-tree__folder {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  height: 28px;
+  padding-inline-end: 8px;
+  border-radius: var(--radius-sm);
+  color: var(--muted-strong);
+  font-size: 13px;
+  text-align: left;
   white-space: nowrap;
+}
+
+.review-tree__folder:hover {
+  background: var(--theme-control-hover-bg, var(--overlay-hover));
+}
+
+.review-tree__folder svg {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+}
+
+.review-tree__folder span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Keep large reviews cheap to scroll without removing keyboard/search targets.
+ * A stable row height avoids scroll jumps as off-screen content is revealed. */
+.review-panel .review-tree__file {
+  gap: 4px;
+  height: 30px;
+  padding-inline-end: 6px;
+  border-radius: var(--radius-sm);
+  content-visibility: auto;
+  contain-intrinsic-size: auto 30px;
+}
+
+.review-panel .review-tree__file:hover {
+  background: var(--theme-control-hover-bg, var(--overlay-hover));
+}
+
+.review-panel .review-tree__file.diff-panel__file--selected {
+  background: var(--surface-muted);
+}
+
+.review-panel .review-tree__file .diff-panel__file-name {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0 0 0 18px;
+  font-family: var(--font-ui);
+  color: var(--text-strong);
+}
+
+.review-panel .review-tree__file .diff-panel__file-name:hover {
+  background: none;
+}
+
+.review-panel .diff-panel__file-path {
+  flex: 1;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.review-panel__stage-actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0;
+}
+
+/* Row tools stay out of the way until the row is hovered or focused, like Codex's tree.
+ * A reviewed mark stays visible so the tree still shows review progress. */
+.review-tree__file:not(:hover, :focus-within) .review-panel__stage-actions {
+  opacity: 0;
+}
+
+.review-tree__stage {
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-xs);
+}
+
+.review-tree__stage svg {
+  width: 13px;
+  height: 13px;
+}
+
+.review-tree__stage:disabled {
+  opacity: 0.45;
+}
+
+.review-panel .diff-panel__reviewed-checkbox {
+  margin: 0 2px;
+}
+
+.review-tree__status {
+  flex-shrink: 0;
+  width: 14px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: var(--font-semibold);
+  text-align: center;
+}
+
+.review-tree__status--modified,
+.review-tree__status--renamed,
+.review-tree__status--typechanged {
+  color: var(--diff-modified-ink);
+}
+
+.review-tree__status--added,
+.review-tree__status--copied {
+  color: var(--diff-added-ink);
+}
+
+.review-tree__status--deleted,
+.review-tree__status--conflicted {
+  color: var(--diff-removed-ink);
+}
+
+.review-tree__status--untracked {
+  color: var(--diff-untracked-ink);
 }

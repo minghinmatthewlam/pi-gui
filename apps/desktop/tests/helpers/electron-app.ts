@@ -1644,6 +1644,39 @@ export async function selectSidePanel(
   await expect(existing).toHaveAttribute("aria-selected", "true");
 }
 
+export type ReviewScopeLabel =
+  "Last Turn" | "Selected Turn" | "Uncommitted" | "Unstaged" | "Staged" | "Branch";
+
+/** Chooses a comparison from the Review panel's scope menu. */
+export async function chooseReviewScope(window: Page, scope: ReviewScopeLabel): Promise<void> {
+  await window.getByRole("button", { name: "Review scope", exact: true }).click();
+  await window
+    .getByRole("menu", { name: "Review scope", exact: true })
+    .getByRole("menuitemradio", { name: scope, exact: true })
+    .click();
+  await expect(reviewScopeButton(window)).toHaveText(scope);
+}
+
+/** Opens the Review "…" menu, which lists checkouts and the resolved comparison. */
+export async function openReviewOptions(window: Page) {
+  await window.getByRole("button", { name: "Review options", exact: true }).click();
+  return window.getByRole("menu", { name: "Review options", exact: true });
+}
+
+export async function chooseReviewCheckout(window: Page, checkoutId: string): Promise<void> {
+  const menu = await openReviewOptions(window);
+  await menu.locator(`[role="menuitemradio"][data-option-id="${checkoutId}"]`).click();
+}
+
+/** The resolved comparison shown at the top of the Review "…" menu; press Escape to close. */
+export async function reviewComparisonIdentity(window: Page) {
+  return (await openReviewOptions(window)).getByTestId("review-comparison-identity");
+}
+
+export function reviewScopeButton(window: Page) {
+  return window.getByRole("button", { name: "Review scope", exact: true });
+}
+
 export async function clickSession(window: Page, sessionTitle: string): Promise<void> {
   await window.locator(".session-row__select", { hasText: sessionTitle }).click();
 }

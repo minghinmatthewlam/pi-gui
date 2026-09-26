@@ -147,7 +147,7 @@ test("adds singleton tool tabs, closes to a neighbor, and keeps an empty chooser
       .locator('.diff-panel__file[data-file-path="alpha.txt"] .diff-panel__file-name')
       .click();
     await expect(
-      window.getByRole("region", { name: "Combined changes", exact: true }).locator(".diff-inline"),
+      window.getByRole("region", { name: "Diff", exact: true }).locator(".diff-inline"),
     ).toContainText("Uncommitted workspace edit");
     await captureToolWidths(harness, window, testInfo, "Review");
     await expect(

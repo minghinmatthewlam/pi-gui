@@ -42,8 +42,11 @@ async function repository(unborn = false): Promise<string> {
   return cwd;
 }
 
-async function uncommitted(cwd: string): Promise<GitReviewSnapshot> {
-  const review = await createGitReview(cwd, { kind: "uncommitted" });
+async function uncommitted(
+  cwd: string,
+  kind: "uncommitted" | "staged" | "unstaged" = "uncommitted",
+): Promise<GitReviewSnapshot> {
+  const review = await createGitReview(cwd, { kind });
   expect(review.state).toBe("available");
   if (review.state !== "available") throw new Error(review.message);
   return review;
@@ -58,7 +61,7 @@ async function fileContent(review: GitReviewSnapshot, path: string) {
   return { file: file!, result };
 }
 
-test("retains staged and unstaged portions when they cancel in the working tree", async () => {
+test("Staged and Unstaged keep the portions that cancel in the working tree", async () => {
   const cwd = await repository();
   await writeFile(join(cwd, "file.txt"), "staged\n");
   await git(cwd, "add", "file.txt");
@@ -66,17 +69,60 @@ test("retains staged and unstaged portions when they cancel in the working tree"
   const review = await uncommitted(cwd);
   expect(review.files).toHaveLength(1);
   const { file, result } = await fileContent(review, "file.txt");
-  expect(file).toMatchObject({ hasStagedChanges: true, hasUnstagedChanges: true });
-  expect(result.sections.map((section) => section.kind)).toEqual([
-    "combined",
-    "staged",
-    "unstaged",
-  ]);
-  expect(result.sections[0]!.patch).toBe("");
-  expect(result.sections[1]!.patch).toContain("+staged");
-  expect(result.sections[2]!.patch).toContain("-staged");
+  expect(file).toMatchObject({
+    hasStagedChanges: true,
+    hasUnstagedChanges: true,
+    lines: { added: 0, removed: 0 },
+  });
+  expect(result.patch).toBe("");
   expect(result.summary).toContain("cancel");
   expect(result.coverage.state).toBe("complete");
+  const staged = await fileContent(await uncommitted(cwd, "staged"), "file.txt");
+  expect(staged.result.patch).toContain("+staged");
+  expect(staged.file.lines).toEqual({ added: 1, removed: 1 });
+  const unstaged = await fileContent(await uncommitted(cwd, "unstaged"), "file.txt");
+  expect(unstaged.result.patch).toContain("-staged");
+  expect(unstaged.result.patch).toContain("+base");
+});
+
+test("Staged and Unstaged list only their side and count untracked lines", async () => {
+  const cwd = await repository();
+  await writeFile(join(cwd, "file.txt"), "base\nstaged\n");
+  await git(cwd, "add", "file.txt");
+  await writeFile(join(cwd, "notes.txt"), "one\ntwo");
+  const staged = await uncommitted(cwd, "staged");
+  expect(staged.files.map((file) => [file.path, file.lines])).toEqual([
+    ["file.txt", { added: 1, removed: 0 }],
+  ]);
+  const unstaged = await uncommitted(cwd, "unstaged");
+  expect(unstaged.files.map((file) => [file.path, file.lines])).toEqual([
+    ["notes.txt", { added: 2, removed: 0 }],
+  ]);
+  const notes = unstaged.files[0]!;
+  expect((await changeGitReviewFileStage(unstaged, notes.id, "stage")).state).toBe("applied");
+  expect(await git(cwd, "diff", "--cached", "--name-only")).toBe("file.txt\nnotes.txt\n");
+});
+
+test("Staged ignores working-tree edits and each side reports its own status", async () => {
+  const cwd = await repository();
+  await writeFile(join(cwd, "file.txt"), "base\nstaged\n");
+  await git(cwd, "add", "file.txt");
+  await writeFile(join(cwd, "added.txt"), "new\n");
+  await git(cwd, "add", "added.txt");
+  await writeFile(join(cwd, "added.txt"), "new\nedited\n");
+  const staged = await uncommitted(cwd, "staged");
+  const file = staged.files.find((entry) => entry.path === "file.txt")!;
+  await writeFile(join(cwd, "file.txt"), "working edit after the review\n");
+  expect(await checkGitReviewFileCurrent(staged, file.id)).toBeNull();
+  expect((await fileContent(staged, "file.txt")).result.patch).toContain("+staged");
+  // Staged shows only the index, so it cannot stage working edits it never displayed.
+  expect(await changeGitReviewFileStage(staged, file.id, "stage")).toMatchObject({
+    code: "unseen-stage-change",
+  });
+  expect((await changeGitReviewFileStage(staged, file.id, "unstage")).state).toBe("applied");
+  const unstaged = await uncommitted(cwd, "unstaged");
+  expect(unstaged.files.find((entry) => entry.path === "added.txt")?.status).toBe("modified");
+  expect(staged.files.find((entry) => entry.path === "added.txt")?.status).toBe("added");
 });
 
 test("compares HEAD with actual bytes after a staged deletion is recreated untracked", async () => {
@@ -86,10 +132,14 @@ test("compares HEAD with actual bytes after a staged deletion is recreated untra
   const review = await uncommitted(cwd);
   expect(review.files).toHaveLength(1);
   const { result } = await fileContent(review, "file.txt");
-  expect(result.sections[0]!.patch).toContain("-base");
-  expect(result.sections[0]!.patch).toContain("+recreated");
-  expect(result.sections[1]!.patch).toContain("deleted file mode");
-  expect(result.sections[2]!.patch).toContain("+recreated");
+  expect(result.patch).toContain("-base");
+  expect(result.patch).toContain("+recreated");
+  const staged = await fileContent(await uncommitted(cwd, "staged"), "file.txt");
+  expect(staged.result.patch).toContain("deleted file mode");
+  const unstaged = await fileContent(await uncommitted(cwd, "unstaged"), "file.txt");
+  expect(unstaged.result.patch).toContain("+recreated");
+  expect(unstaged.file.lines).toEqual({ added: 1, removed: 0 });
+  expect(staged.file.lines).toEqual({ added: 0, removed: 1 });
 });
 
 test("a new file at a staged rename's old path stays current, readable and stageable", async () => {
@@ -101,7 +151,7 @@ test("a new file at a staged rename's old path stays current, readable and stage
   expect(recreated?.status).toBe("untracked");
   expect(await checkGitReviewFileCurrent(review, recreated!.id)).toBeNull();
   const { result } = await fileContent(review, "file.txt");
-  expect(JSON.stringify(result.sections)).toContain("+new at the old path");
+  expect(result.patch).toContain("+new at the old path");
   expect((await changeGitReviewFileStage(review, recreated!.id, "stage")).state).toBe("applied");
 });
 
@@ -129,7 +179,7 @@ test("stages and unstages exact pathological paths, rename pairs, and unborn add
   await writeFile(join(cwd, odd), "odd content\n");
   let review = await uncommitted(cwd);
   let file = review.files.find((entry) => entry.path === odd)!;
-  expect((await fileContent(review, odd)).result.sections[0]!.patch).toContain("+odd content");
+  expect((await fileContent(review, odd)).result.patch).toContain("+odd content");
   expect(await changeGitReviewFileStage(review, file.id, "stage")).toEqual({ state: "applied" });
   expect(await git(cwd, "diff", "--cached", "--name-only", "-z")).toBe(`${odd}\0`);
   review = await uncommitted(cwd);
@@ -149,7 +199,7 @@ test("stages and unstages exact pathological paths, rename pairs, and unborn add
   await writeFile(join(fresh, "new.txt"), "first file\n");
   review = await uncommitted(fresh);
   expect(review.headOid).toBeNull();
-  expect((await fileContent(review, "new.txt")).result.sections[0]!.patch).toContain("+first file");
+  expect((await fileContent(review, "new.txt")).result.patch).toContain("+first file");
   expect(await changeGitReviewFileStage(review, review.files[0]!.id, "stage")).toEqual({
     state: "applied",
   });
@@ -193,11 +243,11 @@ test("pins branch merge-base and HEAD while excluding staged, unstaged, and untr
   expect(review.state).toBe("available");
   if (review.state !== "available") throw new Error(review.message);
   expect(review.files.map((file) => file.path)).toEqual(["file.txt"]);
-  const patch = (await fileContent(review, "file.txt")).result.sections[0]!.patch;
+  const patch = (await fileContent(review, "file.txt")).result.patch;
   expect(patch).toContain("+committed feature");
   expect(patch).not.toContain("dirty");
   await git(cwd, "commit", "-am", "later commit");
-  expect((await fileContent(review, "file.txt")).result.sections[0]!.patch).toBe(patch);
+  expect((await fileContent(review, "file.txt")).result.patch).toBe(patch);
   expect(await changeGitReviewFileStage(review, review.files[0]!.id, "stage")).toMatchObject({
     state: "unavailable",
     code: "immutable-comparison",
@@ -240,12 +290,8 @@ test("makes binary, deleted, empty, conflict, and submodule coverage explicit", 
   const binary = (await fileContent(review, "binary.dat")).result;
   expect(binary.coverage).toMatchObject({ state: "partial" });
   expect(binary.coverage.notes.join(" ")).toContain("Binary");
-  expect((await fileContent(review, "empty.txt")).result.sections[0]!.patch).toContain(
-    "new file mode",
-  );
-  expect((await fileContent(review, "file.txt")).result.sections[0]!.patch).toContain(
-    "deleted file mode",
-  );
+  expect((await fileContent(review, "empty.txt")).result.patch).toContain("new file mode");
+  expect((await fileContent(review, "file.txt")).result.patch).toContain("deleted file mode");
   const subOid = (await git(cwd, "rev-parse", "HEAD")).trim();
   await git(cwd, "update-index", "--add", "--cacheinfo", `160000,${subOid},nested`);
   await mkdir(join(cwd, "nested"));
@@ -269,6 +315,10 @@ test("makes binary, deleted, empty, conflict, and submodule coverage explicit", 
   expect(await changeGitReviewFileStage(review, unmerged.file.id, "stage")).toMatchObject({
     state: "unavailable",
   });
+  // Staged never reads the working tree, so a conflict there is summarized without a patch.
+  const stagedConflict = await fileContent(await uncommitted(conflict, "staged"), "file.txt");
+  expect(stagedConflict.result.patch).toBe("");
+  expect(stagedConflict.result.summary).toMatch(/Unmerged index stages/);
 });
 
 test("renders symlink text without following its target and reports oversized content", async () => {
@@ -279,8 +329,8 @@ test("renders symlink text without following its target and reports oversized co
   await writeFile(join(cwd, "large.txt"), Buffer.alloc(8 * 1024 * 1024 + 1, 65));
   const review = await uncommitted(cwd);
   const link = (await fileContent(review, "link")).result;
-  expect(link.sections[0]!.patch).toContain(secret);
-  expect(link.sections[0]!.patch).not.toContain("outside-content-must-not-be-read");
+  expect(link.patch).toContain(secret);
+  expect(link.patch).not.toContain("outside-content-must-not-be-read");
   const large = (await fileContent(review, "large.txt")).result;
   expect(large.coverage.state).toBe("partial");
   expect(large.coverage.notes.join(" ")).toContain("8 MiB");
@@ -306,9 +356,7 @@ test("reads captured trees from a separate bare repository", async () => {
   if (review.state !== "available") throw new Error(review.message);
   expect(review.scope).toEqual({ kind: "turn", checkpointId: "capture-one" });
   expect(review.coverage.state).toBe("partial");
-  expect((await fileContent(review, "file.txt")).result.sections[0]!.patch).toContain(
-    "+captured after",
-  );
+  expect((await fileContent(review, "file.txt")).result.patch).toContain("+captured after");
 });
 
 test("rejects nested workspace roots and labels raw-byte conversion coverage", async () => {
@@ -462,7 +510,7 @@ test("reviews list only changed paths, so a huge repository's full listings cann
   expect(renamed.source.base?.oid).toBe((await git(cwd, "rev-parse", `HEAD:${names[1]}`)).trim());
   expect(renamed.source.index).toHaveLength(1);
   const edited = await fileContent(review, names[0]!);
-  expect(edited.result.sections[0]?.patch).toContain("+edited");
+  expect(edited.result.patch).toContain("+edited");
 
   await git(cwd, "switch", "-c", "feature");
   await git(cwd, "add", "-A");
@@ -477,4 +525,14 @@ test("reviews list only changed paths, so a huge repository's full listings cann
   expect(branchRename.previousPath).toBe(names[1]);
   expect(branchRename.source.base?.oid).toBe(renamed.source.base?.oid);
   expect(branchRename.source.head).toBeDefined();
+});
+
+test("Uncommitted counts staged additions before the first commit", async () => {
+  const cwd = await repository(true);
+  await writeFile(join(cwd, "first.txt"), "a\nb\nc\n");
+  await git(cwd, "add", "first.txt");
+  const review = await uncommitted(cwd);
+  expect(review.files.map((file) => [file.path, file.lines])).toEqual([
+    ["first.txt", { added: 3, removed: 0 }],
+  ]);
 });

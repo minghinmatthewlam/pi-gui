@@ -20,10 +20,11 @@ import type {
   ReviewFileEntry,
   ReviewFileStatus,
   ReviewIssue,
+  ReviewLineCounts,
   ReviewScope,
-  ReviewSection,
   TurnChangedFile,
 } from "../../../contracts/review";
+import { isWorkingReviewScope, reviewStageActions } from "../../../contracts/review";
 import { isolatedGitEnvironment } from "./git-environment";
 
 const MAX_FILES = 2_000;
@@ -93,7 +94,7 @@ export interface GitReviewSnapshot {
 
 export interface GitReviewFileContent {
   readonly state: "available";
-  readonly sections: readonly ReviewSection[];
+  readonly patch: string;
   readonly coverage: ReviewCoverage;
   readonly summary?: string;
 }
@@ -372,17 +373,27 @@ function workingIdentity(working: WorkingFile | undefined) {
   return working ? { mode: working.mode, digest: working.digest } : undefined;
 }
 
-function fingerprint(source: FileSource): string {
+/**
+ * Everything a comparison's actions depend on. Staged compares HEAD with the index, so
+ * working-tree edits (and the status column that reports them) never make it stale.
+ */
+function fingerprint(source: FileSource, kind: ReviewScope["kind"]): string {
+  if (kind === "staged") return digest(JSON.stringify({ base: source.base, index: source.index }));
   return digest(JSON.stringify({ ...source, working: workingIdentity(source.working) }));
 }
 
-function contentFingerprint(source: FileSource): string {
+/** Staging moves content between sides, so Staged and Unstaged fingerprint their own two sides. */
+function contentFingerprint(source: FileSource, kind: ReviewScope["kind"]): string {
+  const index = source.index.find((blob) => blob.stage === 0);
+  const working = workingIdentity(source.working);
   return digest(
-    JSON.stringify({
-      base: source.base,
-      head: source.head,
-      working: workingIdentity(source.working),
-    }),
+    JSON.stringify(
+      kind === "staged"
+        ? { base: source.base, index }
+        : kind === "unstaged"
+          ? { index, working }
+          : { base: source.base, head: source.head, working },
+    ),
   );
 }
 
@@ -425,7 +436,7 @@ export async function createGitReview(
           "Git review requires the checkout root. Open the repository root to review its changes.",
         );
     }
-    if (scope.kind === "uncommitted") {
+    if (isWorkingReviewScope(scope)) {
       const deadline = Date.now() + PREPARATION_MS;
       const headOid = await resolveRevision(checkoutPath, "HEAD");
       const entries = parseStatus(
@@ -434,6 +445,12 @@ export async function createGitReview(
           ["status", "--porcelain=v1", "-z", "--untracked-files=all"],
           maxGitBytes,
         ),
+      ).filter((entry) =>
+        scope.kind === "staged"
+          ? entry.hasStagedChanges
+          : scope.kind === "unstaged"
+            ? entry.hasUnstagedChanges
+            : true,
       );
       const included = entries.slice(0, MAX_FILES);
       const [indexBlobs, baseBlobs] = await Promise.all([
@@ -451,31 +468,54 @@ export async function createGitReview(
           maxGitBytes,
         ),
       ]);
+      const counts = await workingLineCounts(checkoutPath, scope.kind, headOid, maxGitBytes);
       const files: GitReviewFile[] = [];
       let remainingBytes = MAX_PREPARATION_BYTES;
       for (const entry of included) {
-        const working = await readWorkingFile(
-          checkoutPath,
-          entry.path,
-          Date.now() < deadline ? Math.min(remainingBytes, MAX_CONTENT_BYTES) : 0,
-        );
-        remainingBytes -= working.bytes?.length ?? 0;
+        // Staged never shows the working tree, so it does not spend the read budget on it.
+        const working =
+          scope.kind === "staged"
+            ? undefined
+            : await readWorkingFile(
+                checkoutPath,
+                entry.path,
+                Date.now() < deadline ? Math.min(remainingBytes, MAX_CONTENT_BYTES) : 0,
+              );
+        remainingBytes -= working?.bytes?.length ?? 0;
         const source: FileSource = {
           base: baseBlobs.get(entry.previousPath ?? entry.path)?.[0],
           index: indexBlobs.get(entry.path) ?? [],
-          working: {
-            mode: working.mode,
-            digest: working.digest,
-            ...(working.note ? { note: working.note } : {}),
-          },
+          ...(working
+            ? {
+                working: {
+                  mode: working.mode,
+                  digest: working.digest,
+                  ...(working.note ? { note: working.note } : {}),
+                },
+              }
+            : {}),
           statusRecords: entry.records,
         };
-        const { records: _records, ...fields } = entry;
+        const { records, ...fields } = entry;
+        const untracked = records.some((record) => record.startsWith("?? "));
         files.push({
           ...fields,
+          ...scopedStatus(entry, scope.kind),
+          lines: entry.conflicted
+            ? null
+            : // Git diff does not list untracked files, so their added lines are counted here.
+              // A staged deletion recreated untracked is all-added in Unstaged, and a
+              // replacement Git cannot count in Uncommitted.
+              untracked && (entry.status === "untracked" || scope.kind === "unstaged")
+              ? countTextLines(working?.bytes)
+              : untracked && scope.kind === "uncommitted"
+                ? null
+                : (counts.get(entry.path) ??
+                  // Git leaves out a file whose sides match, such as cancelling staged edits.
+                  (counts.truncated ? null : { added: 0, removed: 0 })),
           id: digest(entry.path),
-          fingerprint: fingerprint(source),
-          contentFingerprint: contentFingerprint(source),
+          fingerprint: fingerprint(source, scope.kind),
+          contentFingerprint: contentFingerprint(source, scope.kind),
           source,
         });
       }
@@ -525,7 +565,7 @@ export async function createGitReview(
         state: "available",
         checkoutPath,
         scope,
-        baseLabel: headOid ? "HEAD → working tree" : "Empty repository → working tree",
+        baseLabel: workingBaseLabel(scope.kind, headOid !== null),
         headOid,
         baseOid: headOid,
         coverage: notes.length ? partial(...notes) : COMPLETE,
@@ -613,6 +653,12 @@ export async function createGitReview(
         maxGitBytes,
       ),
     ]);
+    const counts = new Map(
+      (await numstat(checkoutPath, [baseOid, headOid], maxGitBytes)).map((file) => [
+        file.path,
+        file.lines,
+      ]),
+    );
     const files: GitReviewFile[] = [];
     for (const { code, first, path, renamed } of included) {
       const status: ReviewFileStatus =
@@ -641,9 +687,10 @@ export async function createGitReview(
         hasStagedChanges: false,
         hasUnstagedChanges: false,
         conflicted: false,
+        lines: counts.get(path) ?? null,
         source,
-        fingerprint: fingerprint(source),
-        contentFingerprint: contentFingerprint(source),
+        fingerprint: fingerprint(source, scope.kind),
+        contentFingerprint: contentFingerprint(source, scope.kind),
       });
     }
     const coverage = combineCoverage([
@@ -680,18 +727,30 @@ export async function summarizeGitTreeChanges(
   beforeTreeOid: string,
   afterTreeOid: string,
 ): Promise<TurnChangedFile[]> {
+  return numstat(repositoryPath, [beforeTreeOid, afterTreeOid]);
+}
+
+/** `git diff --numstat` for the given comparison arguments, in Git's path order. */
+async function numstat(
+  cwd: string,
+  comparison: readonly string[],
+  maxGitBytes = MAX_GIT_BYTES,
+): Promise<TurnChangedFile[]> {
   const records = (
-    await gitText(repositoryPath, [
-      "diff",
-      "--no-ext-diff",
-      "--no-textconv",
-      "--numstat",
-      "-z",
-      "--find-renames",
-      beforeTreeOid,
-      afterTreeOid,
-      "--",
-    ])
+    await gitText(
+      cwd,
+      [
+        "diff",
+        "--no-ext-diff",
+        "--no-textconv",
+        "--numstat",
+        "-z",
+        "--find-renames",
+        ...comparison,
+        "--",
+      ],
+      maxGitBytes,
+    )
   ).split("\0");
   const files: TurnChangedFile[] = [];
   for (let index = 0; index < records.length && files.length < MAX_FILES; index += 1) {
@@ -720,6 +779,81 @@ export async function summarizeGitTreeChanges(
   return files;
 }
 
+async function emptyTree(cwd: string): Promise<string> {
+  const format = (await gitText(cwd, ["rev-parse", "--show-object-format"])).trim();
+  return format === "sha256"
+    ? "6ef19b41225c5369f1c104d45d8d85efa9b057b53b14b4b9b939dd74decc5321"
+    : "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
+}
+
+interface LineCountMap {
+  readonly get: (path: string) => ReviewLineCounts | null | undefined;
+  /** The listing stopped at the file cap, so a missing path may still have changes. */
+  readonly truncated: boolean;
+}
+
+/** Tracked-file line counts for a working scope, keyed by current path. */
+async function workingLineCounts(
+  cwd: string,
+  kind: "uncommitted" | "staged" | "unstaged",
+  headOid: string | null,
+  maxGitBytes: number,
+): Promise<LineCountMap> {
+  // Before the first commit, Uncommitted compares Git's built-in empty tree with the working tree.
+  const base = headOid ?? (await emptyTree(cwd));
+  const comparison = kind === "staged" ? ["--cached"] : kind === "unstaged" ? [] : [base];
+  const files = await numstat(cwd, comparison, maxGitBytes);
+  const counts = new Map(files.map((file) => [file.path, file.lines]));
+  return { get: (path) => counts.get(path), truncated: files.length >= MAX_FILES };
+}
+
+const STATUS_CODES: Partial<Record<string, ReviewFileStatus>> = {
+  M: "modified",
+  A: "added",
+  D: "deleted",
+  R: "renamed",
+  C: "copied",
+  T: "typechanged",
+  "?": "untracked",
+};
+
+/** Staged and Unstaged report the status of their own side: Git's X column for the index, Y for the working tree. */
+function scopedStatus(
+  entry: StatusFile,
+  kind: "uncommitted" | "staged" | "unstaged",
+): { status: ReviewFileStatus; previousPath?: string } {
+  const { status, previousPath } = entry;
+  if (kind === "uncommitted" || entry.conflicted)
+    return { status, ...(previousPath ? { previousPath } : {}) };
+  const column = kind === "staged" ? 0 : 1;
+  const code = entry.records
+    .filter((record) => record.length > 3 && record[2] === " ")
+    .map((record) => record[column])
+    .find((value) => value !== undefined && value !== " " && (kind !== "staged" || value !== "?"));
+  return {
+    status: (code ? STATUS_CODES[code] : undefined) ?? status,
+    ...(previousPath ? { previousPath } : {}),
+  };
+}
+
+function countTextLines(bytes: Buffer | undefined): ReviewLineCounts | null {
+  if (!bytes || bytes.subarray(0, 8000).includes(0)) return null;
+  if (bytes.length === 0) return { added: 0, removed: 0 };
+  let added = 0;
+  for (const byte of bytes) if (byte === 0x0a) added += 1;
+  if (bytes[bytes.length - 1] !== 0x0a) added += 1;
+  return { added, removed: 0 };
+}
+
+function workingBaseLabel(kind: "uncommitted" | "staged" | "unstaged", hasHead: boolean): string {
+  const head = hasHead ? "HEAD" : "Empty repository";
+  return kind === "staged"
+    ? `${head} → index`
+    : kind === "unstaged"
+      ? "Index → working tree"
+      : `${head} → working tree`;
+}
+
 export async function checkGitReviewFileCurrent(
   snapshot: GitReviewSnapshot,
   fileId: string,
@@ -727,7 +861,8 @@ export async function checkGitReviewFileCurrent(
   const file = snapshot.files.find((entry) => entry.id === fileId);
   if (!file)
     return issue("unavailable", "missing-file", "This file does not belong to the review.");
-  if (snapshot.scope.kind !== "uncommitted") return null;
+  if (!isWorkingReviewScope(snapshot.scope)) return null;
+  const staged = snapshot.scope.kind === "staged";
   try {
     // Path-limited status only pairs a rename when both sides are in the pathspec, so include
     // the other half of any rename touching this file, or its records differ from the review's.
@@ -743,28 +878,33 @@ export async function checkGitReviewFileCurrent(
       await gitText(snapshot.checkoutPath, ["ls-files", "--stage", "-z", "--", ...paths]),
       true,
     );
-    const status = parseStatus(
-      await gitText(snapshot.checkoutPath, [
-        "status",
-        "--porcelain=v1",
-        "-z",
-        "--untracked-files=all",
-        "--",
-        ...paths,
-      ]),
-    );
-    const working = await readWorkingFile(
-      snapshot.checkoutPath,
-      file.path,
-      file.source.working?.note ? 0 : MAX_CONTENT_BYTES,
-    );
+    // Staged compares HEAD with the index only, so it skips the status and working reads.
+    const current = staged
+      ? {}
+      : {
+          statusRecords:
+            parseStatus(
+              await gitText(snapshot.checkoutPath, [
+                "status",
+                "--porcelain=v1",
+                "-z",
+                "--untracked-files=all",
+                "--",
+                ...paths,
+              ]),
+            ).find((entry) => entry.path === file.path)?.records ?? [],
+          working: await readWorkingFile(
+            snapshot.checkoutPath,
+            file.path,
+            file.source.working?.note ? 0 : MAX_CONTENT_BYTES,
+          ),
+        };
     const source: FileSource = {
       ...file.source,
       index: index.get(file.path) ?? [],
-      statusRecords: status.find((entry) => entry.path === file.path)?.records ?? [],
-      working,
+      ...current,
     };
-    return fingerprint(source) === file.fingerprint
+    return fingerprint(source, snapshot.scope.kind) === file.fingerprint
       ? null
       : issue(
           "stale",
@@ -800,23 +940,26 @@ async function readBlob(cwd: string, ref: BlobRef | undefined): Promise<WorkingF
   return { mode: ref.mode, digest: ref.oid, bytes: result.stdout };
 }
 
-async function patchSection(
-  kind: ReviewSection["kind"],
+interface Patch {
+  readonly patch: string;
+  readonly coverage: ReviewCoverage;
+}
+
+async function readPatch(
   path: string,
   beforePath: string,
   before: WorkingFile,
   after: WorkingFile,
-): Promise<ReviewSection> {
+): Promise<Patch> {
   if (before.note || after.note)
     return {
-      kind,
       patch: "",
       coverage: partial(
         ...[before.note, after.note].filter((note): note is string => Boolean(note)),
       ),
     };
   if (before.mode === "missing" && after.mode === "missing")
-    return { kind, patch: "", coverage: COMPLETE };
+    return { patch: "", coverage: COMPLETE };
   const scratch = await mkdtemp(join(tmpdir(), "pi-gui-review-"));
   try {
     const materialize = async (side: string, name: string, file: WorkingFile) => {
@@ -847,7 +990,7 @@ async function patchSection(
       after.bytes?.subarray(0, 8000).includes(0)
     )
       notes.push("Binary file contents are not rendered; the patch reports whether they differ.");
-    return { kind, patch, coverage: notes.length ? partial(...notes) : COMPLETE };
+    return { patch, coverage: notes.length ? partial(...notes) : COMPLETE };
   } finally {
     await rm(scratch, { recursive: true, force: true });
   }
@@ -863,41 +1006,50 @@ export async function readGitReviewFile(
   const stale = await checkGitReviewFileCurrent(snapshot, fileId);
   if (stale) return stale;
   try {
-    const base = await readBlob(snapshot.checkoutPath, file.source.base);
-    const working =
-      snapshot.scope.kind === "uncommitted"
-        ? file.source.working?.note
-          ? file.source.working
-          : await readWorkingFile(snapshot.checkoutPath, file.path)
-        : await readBlob(snapshot.checkoutPath, file.source.head);
-    const sections = [
-      await patchSection("combined", file.path, file.previousPath ?? file.path, base, working),
-    ];
+    const { scope, checkoutPath } = snapshot;
+    const readIndex = () =>
+      readBlob(
+        checkoutPath,
+        file.source.index.find((blob) => blob.stage === 0),
+      );
+    const readWorking = async () =>
+      file.source.working?.note ? file.source.working : readWorkingFile(checkoutPath, file.path);
+    // A conflict has no single index side. Uncommitted and Unstaged show HEAD → working tree;
+    // Staged never reads the working tree, so it shows only the summary of index stages.
+    const side = file.conflicted && isWorkingReviewScope(scope) ? "uncommitted" : scope.kind;
+    const conflictedStaged = file.conflicted && scope.kind === "staged";
+    const beforePath = side === "unstaged" ? file.path : (file.previousPath ?? file.path);
+    const { patch, coverage } = conflictedStaged
+      ? { patch: "", coverage: COMPLETE }
+      : await readPatch(
+          file.path,
+          beforePath,
+          side === "unstaged" ? await readIndex() : await readBlob(checkoutPath, file.source.base),
+          side === "staged"
+            ? await readIndex()
+            : side === "uncommitted" || side === "unstaged"
+              ? await readWorking()
+              : await readBlob(checkoutPath, file.source.head),
+        );
     let summary: string | undefined;
     if (file.conflicted) {
       summary = `Unmerged index stages: ${file.source.index.map((blob) => `${blob.stage === 1 ? "base" : blob.stage === 2 ? "ours" : "theirs"} ${blob.oid}`).join("; ")}. Resolve the conflict before staging through review.`;
-    } else if (snapshot.scope.kind === "uncommitted") {
-      const index = await readBlob(
-        snapshot.checkoutPath,
-        file.source.index.find((blob) => blob.stage === 0),
-      );
-      if (file.hasStagedChanges)
-        sections.push(
-          await patchSection("staged", file.path, file.previousPath ?? file.path, base, index),
-        );
-      if (file.hasUnstagedChanges)
-        sections.push(await patchSection("unstaged", file.path, file.path, index, working));
-      if (sections[0]?.patch === "" && file.hasStagedChanges && file.hasUnstagedChanges)
-        summary =
-          "The combined contents match HEAD; staged and unstaged changes cancel each other.";
+    } else if (
+      scope.kind === "uncommitted" &&
+      patch === "" &&
+      file.hasStagedChanges &&
+      file.hasUnstagedChanges
+    ) {
+      summary =
+        "The combined contents match HEAD; staged and unstaged changes cancel each other. Choose Staged or Unstaged to see each part.";
     }
-    const after = await checkGitReviewFileCurrent(snapshot, fileId);
-    if (after) return after;
+    const current = await checkGitReviewFileCurrent(snapshot, fileId);
+    if (current) return current;
     return {
       state: "available",
-      sections,
+      patch,
       coverage: combineCoverage([
-        ...sections.map((section) => section.coverage),
+        coverage,
         file.conflicted
           ? partial("Unmerged index stages are summarized; no staged or unstaged patch is claimed.")
           : COMPLETE,
@@ -918,11 +1070,21 @@ export async function changeGitReviewFileStage(
   fileId: string,
   action: "stage" | "unstage",
 ): Promise<ChangeReviewFileStageResult> {
-  if (snapshot.scope.kind !== "uncommitted")
+  if (!isWorkingReviewScope(snapshot.scope))
     return issue(
       "unavailable",
       "immutable-comparison",
-      "Only Uncommitted review can change the index.",
+      "Only Uncommitted, Staged and Unstaged review can change the index.",
+    );
+  // Staged and Unstaged only move the side they show: staging from Staged or unstaging from
+  // Unstaged would change content that comparison never displayed.
+  if (!reviewStageActions(snapshot.scope).includes(action))
+    return issue(
+      "unavailable",
+      "unseen-stage-change",
+      action === "stage"
+        ? "Staged review cannot stage working-tree edits it does not show."
+        : "Unstaged review cannot unstage index changes it does not show.",
     );
   const file = snapshot.files.find((entry) => entry.id === fileId);
   if (!file)

@@ -11,6 +11,9 @@ import {
   selectSidePanel,
   waitForWorkspaceByPath,
   writeProjectExtension,
+  chooseReviewScope,
+  reviewScopeButton,
+  reviewComparisonIdentity,
 } from "../helpers/electron-app";
 
 // The provider is local and deterministic; Pi still executes its actual write
@@ -80,9 +83,10 @@ async function openCapturedFile(window: Page): Promise<Locator> {
   if (!(await row.getAttribute("class"))?.includes("diff-panel__file--selected")) {
     await row.locator(".diff-panel__file-name").click();
   }
-  await expect(panel.getByTestId("review-comparison-identity")).toContainText("Captured");
+  await expect(await reviewComparisonIdentity(window)).toContainText("Captured");
+  await window.keyboard.press("Escape");
   await expect(panel.getByRole("button", { name: /^(Stage|Staged|Unstage)$/ })).toHaveCount(0);
-  return panel.getByRole("region", { name: "Combined changes", exact: true });
+  return panel.getByRole("region", { name: "Diff", exact: true });
 }
 
 test("Last turn captures actual tool edits and a response pins its own saved comparison", async ({}, testInfo) => {
@@ -127,7 +131,7 @@ test("Last turn captures actual tool edits and a response pins its own saved com
     await expectCompleted(window, "First capture complete");
     expect(await readFile(join(workspacePath, "result.txt"), "utf8")).toBe("FIRST_TURN_OUTPUT\n");
     await selectSidePanel(window, "Review");
-    await window.getByLabel("Review scope", { exact: true }).selectOption("turn");
+    await chooseReviewScope(window, "Last Turn");
     let patch = await openCapturedFile(window);
     await expect(patch).toContainText("INITIAL_CONTENT");
     await expect(patch).toContainText("FIRST_TURN_OUTPUT");
@@ -137,8 +141,8 @@ test("Last turn captures actual tool edits and a response pins its own saved com
     await window.getByTestId("composer").press("Enter");
     await expectCompleted(window, "Second capture complete");
     expect(await readFile(join(workspacePath, "result.txt"), "utf8")).toBe("SECOND_TURN_OUTPUT\n");
-    await window.getByLabel("Review scope", { exact: true }).selectOption("uncommitted");
-    await window.getByLabel("Review scope", { exact: true }).selectOption("turn");
+    await chooseReviewScope(window, "Uncommitted");
+    await chooseReviewScope(window, "Last Turn");
     patch = await openCapturedFile(window);
     await expect(patch).toContainText("FIRST_TURN_OUTPUT");
     await expect(patch).toContainText("SECOND_TURN_OUTPUT");
@@ -158,7 +162,7 @@ test("Last turn captures actual tool edits and a response pins its own saved com
     const cards = window.getByTestId("turn-changes");
     await expect(cards).toHaveCount(2);
     await cards.first().getByRole("button", { name: "Review", exact: true }).click();
-    await expect(window.getByLabel("Review scope", { exact: true })).toHaveValue("selected-turn");
+    await expect(reviewScopeButton(window)).toHaveText("Selected Turn");
     await expect(
       window.locator('.diff-panel__file--selected[data-file-path="result.txt"]'),
     ).toBeVisible();
@@ -167,7 +171,7 @@ test("Last turn captures actual tool edits and a response pins its own saved com
     await harness.close();
     harness = await launchDesktop(userDataDir, options);
     window = await harness.firstWindow();
-    await expect(window.getByLabel("Review scope", { exact: true })).toHaveValue("selected-turn");
+    await expect(reviewScopeButton(window)).toHaveText("Selected Turn");
     patch = await openCapturedFile(window);
     await expect(patch).toContainText("INITIAL_CONTENT");
     await expect(patch).toContainText("FIRST_TURN_OUTPUT");

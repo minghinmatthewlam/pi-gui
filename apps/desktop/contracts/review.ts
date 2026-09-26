@@ -1,7 +1,11 @@
 import type { SessionRef } from "@pi-gui/session-driver/types";
 
+/** The live checkout scopes: HEAD→working tree, HEAD→index, and index→working tree. */
+export type WorkingReviewScope =
+  { readonly kind: "uncommitted" } | { readonly kind: "staged" } | { readonly kind: "unstaged" };
+
 export type ReviewScope =
-  | { readonly kind: "uncommitted" }
+  | WorkingReviewScope
   | { readonly kind: "branch"; readonly baseRef?: string }
   | { readonly kind: "turn"; readonly checkpointId?: string };
 
@@ -26,6 +30,11 @@ export type ReviewFileStatus =
   | "conflicted"
   | "typechanged";
 
+export interface ReviewLineCounts {
+  readonly added: number;
+  readonly removed: number;
+}
+
 export interface ReviewFileEntry {
   readonly id: string;
   readonly path: string;
@@ -35,12 +44,8 @@ export interface ReviewFileEntry {
   readonly hasUnstagedChanges: boolean;
   readonly conflicted: boolean;
   readonly reviewed: boolean;
-}
-
-export interface ReviewSection {
-  readonly kind: "combined" | "staged" | "unstaged";
-  readonly patch: string;
-  readonly coverage: ReviewCoverage;
+  /** Changed line counts; null for binary files or when Git could not count them. */
+  readonly lines: ReviewLineCounts | null;
 }
 
 export interface AvailableReview {
@@ -64,7 +69,7 @@ export type ReviewFileResult =
       readonly state: "available";
       readonly reviewId: string;
       readonly fileId: string;
-      readonly sections: readonly ReviewSection[];
+      readonly patch: string;
       readonly summary?: string;
       readonly coverage: ReviewCoverage;
     }
@@ -84,7 +89,7 @@ export interface TurnChangedFile {
   readonly path: string;
   readonly previousPath?: string;
   /** Line counts; binary files have none. */
-  readonly lines: { readonly added: number; readonly removed: number } | null;
+  readonly lines: ReviewLineCounts | null;
 }
 
 /** What one captured agent turn changed, anchored to that turn's transcript entries. */
@@ -122,11 +127,23 @@ export type SetReviewFileReviewedResult =
 
 export type ChangeReviewFileStageResult = { readonly state: "applied" } | ReviewIssue;
 
+export function isWorkingReviewScope(scope: ReviewScope): scope is WorkingReviewScope {
+  return scope.kind === "uncommitted" || scope.kind === "staged" || scope.kind === "unstaged";
+}
+
+/** The index moves a comparison may make: only those whose content it shows. */
+export function reviewStageActions(scope: ReviewScope): readonly ("stage" | "unstage")[] {
+  if (scope.kind === "uncommitted") return ["stage", "unstage"];
+  if (scope.kind === "staged") return ["unstage"];
+  if (scope.kind === "unstaged") return ["stage"];
+  return [];
+}
+
 export function decodeReviewScope(value: unknown): ReviewScope {
   const scope = record(value, ["kind", "baseRef", "checkpointId"]);
-  if (scope.kind === "uncommitted") {
+  if (scope.kind === "uncommitted" || scope.kind === "staged" || scope.kind === "unstaged") {
     if (scope.baseRef !== undefined || scope.checkpointId !== undefined) fail("scope fields");
-    return { kind: "uncommitted" };
+    return { kind: scope.kind };
   }
   if (scope.kind === "branch") {
     if (scope.checkpointId !== undefined) fail("branch checkpoint");
