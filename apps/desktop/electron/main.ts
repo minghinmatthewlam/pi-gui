@@ -48,6 +48,7 @@ import { NotificationManager } from "./platform/notification-manager";
 import { NotificationPermissionService } from "./platform/notification-permission";
 import { checkForUpdate, initUpdateChecker, openReleasesPage } from "./platform/update-checker";
 import { ThemeManager } from "./platform/theme-manager";
+import { windowBackgroundFor } from "../contracts/theme";
 import { TerminalService } from "./platform/terminal-service";
 import type { DesktopAppState, DesktopAppViewState } from "../contracts/desktop-state";
 import {
@@ -378,7 +379,13 @@ function dispatchCloseFocusedSurface(window: BrowserWindow, event: Electron.Even
 
 function createWindow(): BrowserWindow {
   const backgroundTestMode = windowTestMode === "background";
-  const enableTransparency = store ? store.snapshot().enableTransparency : false;
+  const snapshot = store?.snapshot();
+  const enableTransparency = snapshot?.enableTransparency ?? false;
+  // Match the renderer's window colour so load and resize never flash another theme.
+  const windowBackground = windowBackgroundFor(
+    snapshot?.themePresetId ?? "default",
+    themeManager.getResolvedTheme(),
+  );
   const window = new BrowserWindow({
     width: 1480,
     height: 980,
@@ -388,7 +395,7 @@ function createWindow(): BrowserWindow {
     vibrancy: process.platform === "darwin" && enableTransparency ? "under-window" : undefined,
     titleBarStyle: "hiddenInset",
     autoHideMenuBar: process.platform !== "darwin",
-    backgroundColor: enableTransparency ? "#00000000" : "#f3f4f8",
+    backgroundColor: enableTransparency ? "#00000000" : windowBackground,
     trafficLightPosition: { x: 18, y: 18 },
     show: false,
     icon: appIcon,

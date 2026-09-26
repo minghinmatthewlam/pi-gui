@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { earlyModifierChords, getSidePanelTabCommand } from "../contracts/ipc";
 import App from "./app/App";
 import { RendererErrorBoundary } from "./app/desktop-recovery";
+import { applyLastTheme } from "./ui/active-theme";
 import "./dev-reload-hook";
 import "./styles.css";
 
@@ -29,6 +30,8 @@ window.addEventListener(
   },
   true,
 );
+
+applyLastTheme();
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>

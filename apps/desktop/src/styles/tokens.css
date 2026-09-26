@@ -5,11 +5,9 @@
  * 11/12/14/16px type ramp, squircle-ish radius ramp, alpha-mix-of-foreground
  * borders, hairline-stroke elevation, and 0.15s ease-out motion.
  *
- * Dark mode is pure variable reassignment. Borders, overlays, accent tints,
- * and status tints are expressed as color-mix() over foreground/accent/status
- * colors that already flip in :root.dark (see base.css), so they adapt to the
- * active theme without per-selector overrides. Only the handful of tokens with
- * genuinely distinct light/dark values are reassigned in the :root.dark block.
+ * Theme colours (surfaces, text, accent, status, code, find, shadows) are
+ * derived from the active theme's seed in contracts/theme.ts. The tokens here
+ * are color-mix() over those, so they follow every theme without overrides.
  * ========================================================================== */
 
 :root {
@@ -106,13 +104,9 @@
   --focus-ring-border: color-mix(in srgb, var(--accent) 45%, transparent);
 
   /* ---- Status tints ------------------------------------------------------ */
-  --success: #2ea043;
-  --success-ink: #2e6a3a;
   --success-tint-bg: color-mix(in srgb, var(--success) 14%, transparent);
   --danger-tint-bg: color-mix(in srgb, var(--error) 10%, transparent);
   --danger-tint-border: color-mix(in srgb, var(--error) 18%, transparent);
-  --warning: #d97706;
-  --warning-ink: #a45a18;
 
   /* ---- Semantic status signals — color = state, never decoration --------- */
   /* One coherent language across sidebar / terminal / diff / notifications:  */
@@ -136,52 +130,7 @@
   --elevation-menu: var(--elevation-hairline), var(--shadow-lg);
   --elevation-modal: var(--elevation-hairline), var(--shadow-xl);
 
-  /* ---- Code / diff / find / summary — distinct light/dark values --------- */
-  --code-inline-bg: #f3f3f0;
-  --code-block-bg: #f6f6f3;
-  --code-ink: #3b3b36;
-  --code-border: #e4e4df;
-
+  /* ---- Diff tints (auto-flip via status colours) ----------------------- */
   --diff-added-bg: color-mix(in srgb, var(--success) 14%, transparent);
   --diff-removed-bg: color-mix(in srgb, var(--error) 14%, transparent);
-  --diff-header-bg: rgba(56, 132, 255, 0.08);
-
-  --find-match-bg: #fde68a;
-  --find-match-ink: #7a4b06;
-  --find-active-bg: #fbbf5a;
-  --find-active-ink: #6a3608;
-
-  --summary-card-bg: linear-gradient(
-    180deg,
-    rgba(255, 247, 226, 0.92) 0%,
-    rgba(255, 252, 244, 0.98) 100%
-  );
-  --summary-card-border: rgba(210, 177, 98, 0.36);
-  --summary-eyebrow: #a45a18;
-}
-
-:root.dark {
-  --success: #40c977;
-  --success-ink: #6ee7b7;
-  --warning-ink: #f0b25a;
-
-  --code-inline-bg: rgba(255, 255, 255, 0.08);
-  --code-block-bg: rgba(0, 0, 0, 0.25);
-  --code-ink: #e4e4e7;
-  --code-border: var(--line);
-
-  --diff-header-bg: rgba(56, 132, 255, 0.1);
-
-  --find-match-bg: #854d0e;
-  --find-match-ink: #fde68a;
-  --find-active-bg: #9a3412;
-  --find-active-ink: #fed7aa;
-
-  --summary-card-bg: linear-gradient(
-    180deg,
-    rgba(71, 55, 28, 0.58) 0%,
-    rgba(46, 38, 24, 0.78) 100%
-  );
-  --summary-card-border: rgba(210, 177, 98, 0.22);
-  --summary-eyebrow: #f2cd79;
 }

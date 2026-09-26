@@ -83,7 +83,7 @@ import {
 import { TreeModal } from "../features/conversation/tree-modal";
 import { ForkModal } from "../features/conversation/fork-modal";
 import { getEffectiveModelRuntime } from "../features/settings/model-settings";
-import { applyThemePresetToRoot } from "../features/settings/theme-presets";
+import { applyTheme, useActiveTheme } from "../ui/active-theme";
 import { deriveWorkspaceContext } from "./workspace-context";
 import { useTreeForkModals } from "../features/conversation/hooks/use-tree-fork-modals";
 import { useComposerDraftSync } from "../features/conversation/hooks/use-composer-draft-sync";
@@ -99,13 +99,8 @@ export default function App() {
   const [settingsWorkspaceId, setSettingsWorkspaceId] = useState("");
   const [skillsWorkspaceId, setSkillsWorkspaceId] = useState("");
   const [extensionsWorkspaceId, setExtensionsWorkspaceId] = useState("");
-  const [resolvedTheme, setResolvedTheme] = useState<"light" | "dark">("light");
-  const [extensionViewTheme, setExtensionViewTheme] = useState<ExtensionViewTheme>({
-    mode: "light",
-    background: "#ffffff",
-    foreground: "#171717",
-    accent: "#6554a4",
-  });
+  // Unknown until main answers; until then the theme from the last launch stays.
+  const [resolvedTheme, setResolvedTheme] = useState<"light" | "dark" | null>(null);
   const [dockExpandedBySession, setDockExpandedBySession] = useState<Record<string, string>>({});
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const timelinePaneRef = useRef<HTMLDivElement | null>(null);
@@ -127,7 +122,6 @@ export default function App() {
       .getResolvedTheme()
       .then((theme) => {
         setResolvedTheme(theme);
-        document.documentElement.classList.toggle("dark", theme === "dark");
       })
       .catch((error: unknown) => {
         console.error("[renderer] getResolvedTheme failed", error);
@@ -135,24 +129,34 @@ export default function App() {
 
     const unsub = piApi.onThemeChanged((theme) => {
       setResolvedTheme(theme);
-      document.documentElement.classList.toggle("dark", theme === "dark");
     });
 
     return unsub;
   }, []);
 
   useEffect(() => {
-    const root = document.documentElement;
-    applyThemePresetToRoot(root, snapshot?.themePresetId ?? "default", resolvedTheme);
-    root.classList.toggle("enable-transparency", snapshot?.enableTransparency ?? false);
-    const style = getComputedStyle(root);
-    setExtensionViewTheme({
-      mode: resolvedTheme,
-      background: style.getPropertyValue("--main").trim(),
-      foreground: style.getPropertyValue("--text").trim(),
-      accent: style.getPropertyValue("--accent").trim(),
-    });
-  }, [resolvedTheme, snapshot?.themePresetId, snapshot?.enableTransparency]);
+    const themePresetId = snapshot?.themePresetId;
+    if (!resolvedTheme || !themePresetId) return;
+    applyTheme(themePresetId, resolvedTheme);
+  }, [resolvedTheme, snapshot?.themePresetId]);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle(
+      "enable-transparency",
+      snapshot?.enableTransparency ?? false,
+    );
+  }, [snapshot?.enableTransparency]);
+
+  const activeTheme = useActiveTheme();
+  const extensionViewTheme = useMemo<ExtensionViewTheme>(
+    () => ({
+      mode: activeTheme.variant,
+      background: activeTheme.tokens["--main"] ?? "",
+      foreground: activeTheme.tokens["--text"] ?? "",
+      accent: activeTheme.tokens["--accent"] ?? "",
+    }),
+    [activeTheme],
+  );
 
   const {
     activeWorktrees,

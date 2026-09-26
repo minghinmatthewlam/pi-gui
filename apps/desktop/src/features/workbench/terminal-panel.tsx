@@ -13,6 +13,8 @@ import type {
   TerminalSize,
 } from "../../../contracts/ipc";
 import { appendTerminalReplay } from "../../../contracts/terminal-model";
+import { getActiveTheme, useActiveTheme } from "../../ui/active-theme";
+import { terminalThemeFor } from "./terminal-theme";
 
 interface TerminalPanelProps {
   readonly workspace: WorkspaceRecord;
@@ -31,6 +33,12 @@ export function TerminalPanel({ workspace, sessionId, onHide }: TerminalPanelPro
   const lastSizeRef = useRef<TerminalSize>({ cols: 80, rows: 24 });
   const [panel, setPanel] = useState<TerminalPanelSnapshot | null>(null);
   const [error, setError] = useState<string>("");
+  const activeTheme = useActiveTheme();
+
+  useEffect(() => {
+    const terminal = terminalRef.current;
+    if (terminal) terminal.options.theme = terminalThemeFor(activeTheme);
+  }, [activeTheme]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -213,12 +221,7 @@ export function TerminalPanel({ workspace, sessionId, onHide }: TerminalPanelPro
       fontFamily: "Menlo, Monaco, Consolas, 'Liberation Mono', monospace",
       fontSize: 12,
       scrollback: 2_000,
-      theme: {
-        background: "#0f1117",
-        foreground: "#d7dae0",
-        cursor: "#f2f4f8",
-        selectionBackground: "#39557a",
-      },
+      theme: terminalThemeFor(getActiveTheme()),
     });
     const fitAddon = new FitAddon();
     const clipboardAddon = new ClipboardAddon();

@@ -596,8 +596,8 @@
   min-width: 0;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  background: #0f1117;
-  color: #d7dae0;
+  background: var(--main);
+  color: var(--text);
   overflow: hidden;
   position: relative;
 }
@@ -609,8 +609,8 @@
   justify-content: space-between;
   gap: 10px;
   padding: 5px 8px 5px 10px;
-  border-bottom: 1px solid #242936;
-  background: #171a22;
+  border-bottom: 1px solid var(--line);
+  background: var(--sidebar);
 }
 
 .terminal-panel__tabs {
@@ -632,7 +632,7 @@
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   background: transparent;
-  color: #aeb6c6;
+  color: var(--muted);
 }
 
 .terminal-panel__tab {
@@ -651,9 +651,9 @@
 }
 
 .terminal-panel__tab-item--active {
-  border-color: #343b4c;
-  background: #202532;
-  color: #f2f4f8;
+  border-color: var(--line);
+  background: var(--overlay-active);
+  color: var(--text-strong);
 }
 
 .terminal-panel__tab-title {
@@ -672,7 +672,7 @@
   border: 0;
   border-radius: var(--radius-xs);
   background: transparent;
-  color: #8791a4;
+  color: var(--muted-subtle);
 }
 
 .terminal-panel__tab-close svg {
@@ -681,8 +681,8 @@
 }
 
 .terminal-panel__tab-close:hover {
-  background: #303747;
-  color: #fff;
+  background: var(--overlay-active);
+  color: var(--text-strong);
 }
 
 .terminal-panel__status {
@@ -714,13 +714,13 @@
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   background: transparent;
-  color: #aeb6c6;
+  color: var(--muted);
 }
 
 .terminal-panel__action:hover {
-  border-color: #343b4c;
-  background: #202532;
-  color: #fff;
+  border-color: var(--line);
+  background: var(--overlay-hover);
+  color: var(--text-strong);
 }
 
 .terminal-panel__viewport {
@@ -793,8 +793,8 @@
   position: relative;
   border-radius: var(--radius-composer);
   padding: 12px;
-  border: 1px solid var(--theme-control-border, var(--line));
-  background: var(--theme-control-bg, var(--surface));
+  border: 1px solid var(--line);
+  background: var(--surface);
   width: 100%;
   box-shadow: var(--shadow-sm);
   overflow: visible;
@@ -805,8 +805,8 @@
 }
 
 .composer__surface:focus-within {
-  border-color: var(--theme-control-border, var(--focus-ring-border));
-  box-shadow: 0 0 0 2px var(--theme-focus-ring, var(--focus-ring-color));
+  border-color: var(--focus-ring-border);
+  box-shadow: 0 0 0 2px var(--focus-ring-color);
 }
 
 .composer__surface--drag-active {
@@ -999,10 +999,10 @@
   gap: 12px;
   margin: 0 0 8px;
   padding: 8px 12px;
-  border: 1px solid color-mix(in srgb, #d9a441 45%, var(--line));
-  border-left: 3px solid #d9a441;
+  border: 1px solid color-mix(in srgb, var(--warning) 45%, var(--line));
+  border-left: 3px solid var(--warning);
   border-radius: var(--radius-md);
-  background: color-mix(in srgb, #d9a441 10%, var(--surface));
+  background: color-mix(in srgb, var(--warning) 10%, var(--surface));
 }
 
 .schema-skew-notice__text {
@@ -2227,21 +2227,23 @@
   padding: 18px 16px 0;
 }
 
+/* Each tile previews the active preset's own light or dark palette; the
+   --tile-light-* / --tile-dark-* values are set inline from its seeds. */
 .theme-mode-tile__preview--light {
-  background: #f1f1ef;
-  --tile-window: #ffffff;
-  --tile-line: #dcdcd8;
+  background: var(--tile-light-bg);
+  --tile-window: var(--tile-light-window);
+  --tile-line: var(--tile-light-line);
 }
 
 .theme-mode-tile__preview--dark {
-  background: #3a3a38;
-  --tile-window: #262625;
-  --tile-line: #4d4d4a;
+  background: var(--tile-dark-bg);
+  --tile-window: var(--tile-dark-window);
+  --tile-line: var(--tile-dark-line);
 }
 
 .theme-mode-tile__preview--system {
-  background: linear-gradient(90deg, #f1f1ef 50%, #3a3a38 50%);
-  --tile-line: #9a9a96;
+  background: linear-gradient(90deg, var(--tile-light-bg) 50%, var(--tile-dark-bg) 50%);
+  --tile-line: color-mix(in srgb, var(--tile-light-line) 50%, var(--tile-dark-line));
 }
 
 .theme-mode-tile__window {
@@ -2257,7 +2259,7 @@
 }
 
 .theme-mode-tile__preview--system .theme-mode-tile__window {
-  background: linear-gradient(90deg, #ffffff 50%, #262625 50%);
+  background: linear-gradient(90deg, var(--tile-light-window) 50%, var(--tile-dark-window) 50%);
 }
 
 .theme-mode-tile__line {
@@ -2292,7 +2294,7 @@
 }
 
 .settings-warning {
-  color: var(--warning, #d97706);
+  color: var(--warning);
   font-size: 13px;
 }
 
@@ -2753,7 +2755,7 @@
   display: grid;
   place-items: center;
   padding: 24px;
-  background: rgba(24, 31, 44, 0.26);
+  background: var(--scrim);
   backdrop-filter: blur(6px);
 }
 
@@ -2863,7 +2865,7 @@
   display: grid;
   place-items: center;
   padding: 24px;
-  background: rgba(24, 31, 44, 0.3);
+  background: var(--scrim);
   backdrop-filter: blur(10px);
 }
 
