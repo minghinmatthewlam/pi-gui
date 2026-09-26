@@ -387,10 +387,13 @@ function currentWindowBackground(): string {
   );
 }
 
+// Windows created transparent keep their glass until the next launch.
+const opaqueAppWindows = new Set<BrowserWindow>();
+
 function refreshWindowBackgrounds(): void {
-  if (!store || store.snapshot().enableTransparency) return;
+  if (!store) return;
   const color = currentWindowBackground();
-  for (const window of BrowserWindow.getAllWindows()) {
+  for (const window of opaqueAppWindows) {
     if (!window.isDestroyed()) window.setBackgroundColor(color);
   }
 }
@@ -564,6 +567,11 @@ function createWindow(): BrowserWindow {
     void window.loadURL(appRendererUrl()).catch((error: unknown) => {
       console.error("[main] loadURL failed", error);
     });
+  }
+
+  if (!enableTransparency) {
+    opaqueAppWindows.add(window);
+    window.once("closed", () => opaqueAppWindows.delete(window));
   }
 
   return window;
