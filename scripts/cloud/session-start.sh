@@ -4,7 +4,8 @@
 #   1. writes ~/.pi/agent/auth.json from the PI_AUTH_JSON_B64 environment
 #      variable, without printing it, unless an auth file already exists;
 #   2. starts a virtual X display, with a window manager when installed;
-#   3. exports the verify-pi-gui real-auth defaults for later shell commands.
+#   3. sets this checkout's git author to the maintainer;
+#   4. exports the verify-pi-gui real-auth defaults for later shell commands.
 # Credentials never go in the setup script, which is cached as a snapshot.
 set -uo pipefail
 
@@ -51,6 +52,15 @@ if command -v openbox >/dev/null 2>&1 && ! pgrep -x openbox >/dev/null 2>&1; the
   else
     echo "display: no X server on $display; openbox not started" >&2
   fi
+fi
+
+# The cloud image's global git identity is Claude, and GitHub credits commit
+# authors (and squash-merge co-authors) as repo contributors. Author as the
+# maintainer in this checkout instead.
+if [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then
+  git -C "$CLAUDE_PROJECT_DIR" config user.name "Matthew Lam"
+  git -C "$CLAUDE_PROJECT_DIR" config user.email "minghinmatthew.lam@gmail.com"
+  echo "git: authoring commits as Matthew Lam"
 fi
 
 if [ -n "${CLAUDE_ENV_FILE:-}" ]; then
