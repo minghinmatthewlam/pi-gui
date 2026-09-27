@@ -56,8 +56,10 @@ fi
 
 # The cloud image's global git identity is Claude, and GitHub credits commit
 # authors (and squash-merge co-authors) as repo contributors. Author as the
-# maintainer in this checkout instead.
-if [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then
+# maintainer in this checkout instead, but only for the upstream repo so a
+# contributor's cloud session on a fork never commits under the maintainer.
+if [ -n "${CLAUDE_PROJECT_DIR:-}" ] &&
+  git -C "$CLAUDE_PROJECT_DIR" remote get-url origin 2>/dev/null | grep -q 'github.com[:/]minghinmatthewlam/pi-gui\(\.git\)\?$'; then
   git -C "$CLAUDE_PROJECT_DIR" config user.name "Matthew Lam"
   git -C "$CLAUDE_PROJECT_DIR" config user.email "minghinmatthew.lam@gmail.com"
   echo "git: authoring commits as Matthew Lam"
