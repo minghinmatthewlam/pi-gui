@@ -22,6 +22,7 @@ import { pathToFileURL } from "node:url";
 import { augmentPosixPath } from "../scripts/augment-path.cjs";
 import { DesktopAppStore } from "./application/app-store";
 import { WindowOwner } from "./windows/window-owner";
+import { PendingComposerDraftFlusher } from "./windows/pending-draft-flush";
 import { TurnCheckpointStore } from "./workbench/checkpoint-store";
 import {
   DesktopExtensionViewOwner,
@@ -266,6 +267,11 @@ function createTestExtensionContext(sessionRef: SessionRef): ExtensionContext {
 const OPEN_FOLDER_MENU_ITEM_ID = "file.open-folder";
 const CHECK_FOR_UPDATES_MENU_ITEM_ID = "app.check-for-updates";
 const QUIT_FLUSH_TIMEOUT_MS = 5_000;
+// Part of the quit budget above: renderers get this long to send their debounced drafts.
+const DRAFT_FLUSH_TIMEOUT_MS = 2_000;
+const composerDraftFlusher = new PendingComposerDraftFlusher(DRAFT_FLUSH_TIMEOUT_MS);
+// Windows whose draft was flushed and whose close is now allowed through.
+const windowsClosingAfterDraftFlush = new WeakSet<BrowserWindow>();
 
 function getTerminalService(): TerminalService {
   if (!terminalService) {
@@ -456,11 +462,20 @@ function createWindow(): BrowserWindow {
   });
 
   window.on("close", (event) => {
-    if (!surfaceCloseShortcutIds.has(window.webContents.id)) {
+    if (surfaceCloseShortcutIds.has(window.webContents.id)) {
+      event.preventDefault();
+      surfaceCloseShortcutIds.delete(window.webContents.id);
       return;
     }
+    // Quit already flushed every window before the store. Otherwise hold this close until
+    // the renderer sends its debounced draft, since closing it would discard the draft.
+    if (quittingAfterStoreFlush || windowsClosingAfterDraftFlush.delete(window)) return;
     event.preventDefault();
-    surfaceCloseShortcutIds.delete(window.webContents.id);
+    void composerDraftFlusher.flush([window]).finally(() => {
+      if (window.isDestroyed()) return;
+      windowsClosingAfterDraftFlush.add(window);
+      window.close();
+    });
   });
   window.once("ready-to-show", () => {
     if (!backgroundTestMode) {
@@ -1069,6 +1084,7 @@ app
         orchestration: store,
         scheduledTasks: store,
         settings: store,
+        composerDraftFlush: composerDraftFlusher,
       },
       capabilities: {
         ping: () =>
@@ -1204,11 +1220,14 @@ app.on("before-quit", (event) => {
 
   event.preventDefault();
   quittingAfterStoreFlush = true;
-  const flush = Promise.all([store.flushPersistence(), extensionViewOwner?.dispose()]).catch(
-    (error) => {
+  const quittingStore = store;
+  // Renderers send their debounced drafts first so the store flush below includes them.
+  const flush = composerDraftFlusher
+    .flush(windowOwner.allWindows())
+    .then(() => Promise.all([quittingStore.flushPersistence(), extensionViewOwner?.dispose()]))
+    .catch((error: unknown) => {
       console.error("pi-gui: persistence flush failed during quit:", error);
-    },
-  );
+    });
   // Never let a hung flush block quit forever — quit after a bounded wait.
   const flushDeadline = new Promise<void>((resolve) => {
     setTimeout(() => {

@@ -33,6 +33,7 @@ const mainFrameChannels = [
   "getTaskWorkbenchTemplate",
   "saveTaskWorkbenchTemplate",
   "persistComposerDraft",
+  "pendingComposerDraftFlushed",
 ];
 
 function ipcViolations(filePath, source) {

@@ -93,6 +93,16 @@ function subscribeIpc<T>(channel: string, listener: (payload: T) => void): () =>
   };
 }
 
+const pendingDraftFlushHandlers = new Set<() => Promise<void>>();
+ipcRenderer.on(desktopIpc.flushPendingComposerDraft, (_event, requestId: number) => {
+  // Always acknowledge, even with no handler, so main never waits out its bound needlessly.
+  void Promise.allSettled([...pendingDraftFlushHandlers].map((handler) => handler()))
+    .then(() => ipcRenderer.invoke(desktopIpc.pendingComposerDraftFlushed, requestId))
+    .catch((error: unknown) => {
+      console.error("[preload] pending draft flush acknowledgement failed", error);
+    });
+});
+
 const appCommands = createDesktopCommandSubscription();
 ipcRenderer.on(desktopIpc.appCommand, (_event, command: PiDesktopCommand) => {
   appCommands.deliver(command);
@@ -500,6 +510,12 @@ contextBridge.exposeInMainWorld("piApp", {
       composerDraft,
       target,
     ) as Promise<DesktopAppState>,
+  onPendingComposerDraftFlush: (handler: () => Promise<void>) => {
+    pendingDraftFlushHandlers.add(handler);
+    return () => {
+      pendingDraftFlushHandlers.delete(handler);
+    };
+  },
   submitComposer: (text: string, options?: { readonly deliverAs?: "steer" | "followUp" }) =>
     ipcRenderer.invoke(desktopIpc.submitComposer, text, options) as Promise<DesktopAppState>,
   getSessionTree: (target: WorkspaceSessionTarget) =>

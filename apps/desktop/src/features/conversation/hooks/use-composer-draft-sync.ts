@@ -195,6 +195,17 @@ export function useComposerDraftSync(params: UseComposerDraftSyncParams) {
   };
   flushComposerDraftRef.current = flushComposerDraft;
 
+  // Main asks before the window closes or the app quits, then waits (bounded) for the
+  // returned promise, so the debounced draft lands before the store's final flush.
+  useEffect(
+    () =>
+      api?.onPendingComposerDraftFlush(async () => {
+        flushComposerDraftRef.current();
+        await Promise.allSettled(inFlightComposerDraftWritesRef.current.values());
+      }),
+    [api],
+  );
+
   const flushComposerDraftAsync = useCallback(
     async (target: SessionRef): Promise<void> => {
       if (!api) throw new Error("The desktop connection is unavailable.");

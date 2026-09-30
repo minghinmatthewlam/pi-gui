@@ -169,6 +169,8 @@ export const desktopIpc = {
   steerQueuedComposerMessage: "pi-gui:steer-queued-composer-message",
   persistComposerDraft: "pi-gui:persist-composer-draft",
   updateComposerDraft: "pi-gui:update-composer-draft",
+  flushPendingComposerDraft: "pi-gui:flush-pending-composer-draft",
+  pendingComposerDraftFlushed: "pi-gui:pending-composer-draft-flushed",
   submitComposer: "pi-gui:submit-composer",
   getSessionTree: "pi-gui:get-session-tree",
   navigateSessionTree: "pi-gui:navigate-session-tree",
@@ -801,6 +803,11 @@ export interface PiDesktopApi {
   }): Promise<void>;
   /** Saves the draft typed in `target`, even if another task is selected by the time it lands. */
   updateComposerDraft(composerDraft: string, target: SessionRef): Promise<DesktopAppState>;
+  /**
+   * Runs `handler` when the window is about to close or the app to quit; it should resolve
+   * once the debounced draft has been saved. Main waits a bounded time for it.
+   */
+  onPendingComposerDraftFlush(handler: () => Promise<void>): () => void;
   submitComposer(
     text: string,
     options?: { readonly deliverAs?: "steer" | "followUp" },
