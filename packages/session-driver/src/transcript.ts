@@ -41,4 +41,19 @@ export interface SessionTranscriptToolCall {
   readonly createdAt: string;
 }
 
-export type SessionTranscriptItem = SessionTranscriptMessage | SessionTranscriptToolCall;
+/**
+ * An extension's `pi.sendMessage({ customType, content, display: true })`, drawn the way
+ * terminal pi draws it: the customType as a label over the markdown text.
+ */
+export interface SessionTranscriptCustomMessage {
+  readonly kind: "custom";
+  /** The pi session entry id, so live and reloaded rows share one identity. */
+  readonly id: string;
+  readonly createdAt: string;
+  readonly customType: string;
+  /** Markdown from the message's text parts. */
+  readonly text: string;
+}
+
+export type SessionTranscriptItem =
+  SessionTranscriptMessage | SessionTranscriptToolCall | SessionTranscriptCustomMessage;

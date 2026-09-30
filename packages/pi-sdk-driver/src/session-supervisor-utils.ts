@@ -12,6 +12,7 @@ import type {
   SessionSnapshot,
   SessionStatus,
   SessionTranscriptAttachment,
+  SessionTranscriptCustomMessage,
   SessionTranscriptItem,
   SessionUsageSnapshot,
   WorkspaceRef,
@@ -148,8 +149,13 @@ export function nowIso(): string {
   return new Date().toISOString();
 }
 
+/** A custom message its extension sent with `display: false`: model context only. */
+export function isHiddenCustomMessage(message: unknown): boolean {
+  return isRecord(message) && message.role === "custom" && message.display !== true;
+}
+
 export function extractPreview(message: unknown): string | undefined {
-  if (!isRecord(message)) {
+  if (!isRecord(message) || isHiddenCustomMessage(message)) {
     return undefined;
   }
 
@@ -269,6 +275,16 @@ export function transcriptFromMessages(
       continue;
     }
 
+    if (role === "custom") {
+      const item = customMessageTranscriptItem(
+        message,
+        typeof message.id === "string" ? message.id : `custom-${index}`,
+        createdAt,
+      );
+      if (item) transcript.push(item);
+      continue;
+    }
+
     if (
       role !== "user" &&
       role !== "assistant" &&
@@ -298,6 +314,27 @@ export function transcriptFromMessages(
   }
 
   return transcript;
+}
+
+/**
+ * Terminal pi draws a custom message only when its sender set `display: true`, as the
+ * customType over the markdown text; hidden ones only feed the model.
+ */
+export function customMessageTranscriptItem(
+  message: Record<string, unknown>,
+  id: string,
+  createdAt: string,
+): SessionTranscriptCustomMessage | undefined {
+  if (message.role !== "custom" || message.display !== true) return undefined;
+  const text = messageText(message);
+  if (!text) return undefined;
+  return {
+    kind: "custom",
+    id,
+    createdAt,
+    customType: typeof message.customType === "string" ? message.customType : "custom",
+    text,
+  };
 }
 
 /**

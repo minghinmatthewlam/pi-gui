@@ -393,6 +393,9 @@ function isSameDisplayItem(a: DisplayTimelineItem, b: DisplayTimelineItem): bool
     // A card's id is its checkpoint, and a captured turn's files never change.
     return true;
   }
+  if (a.kind === "custom" && b.kind === "custom") {
+    return a.customType === b.customType && a.text === b.text;
+  }
   return false;
 }
 
