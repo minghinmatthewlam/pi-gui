@@ -49,10 +49,27 @@ function elementOf(node: Node): Element | null {
   return node instanceof Element ? node : node.parentElement;
 }
 
+// Buttons and markers around message text: a drag that runs onto them still means the text.
+const ROW_CHROME = ".timeline-item__actions, .annotation-markers";
+
+/** Whether `range` covers any text a reader would take as content, not row chrome. */
+function coversContent(range: Range): boolean {
+  if (range.collapsed) return false;
+  const walker = document.createTreeWalker(range.commonAncestorContainer, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    if (!range.intersectsNode(node) || elementOf(node)?.closest(ROW_CHROME)) continue;
+    const text = node.nodeValue ?? "";
+    const from = node === range.startContainer ? range.startOffset : 0;
+    const to = node === range.endContainer ? range.endOffset : text.length;
+    if (text.slice(from, to).trim()) return true;
+  }
+  return false;
+}
+
 /**
  * A non-empty selection of one message's text in this timeline pane: the message where the
- * drag began. Running past its first or last line (onto its Fork button, or the gap between
- * rows) still selects just that message; text from another row makes it a different selection.
+ * drag began. Running past its first or last line (onto the gap between rows or a Fork
+ * button) still selects just that message; any other text makes it a different selection.
  */
 function readTranscriptSelection(pane: HTMLElement): TranscriptSelection | null {
   const selection = window.getSelection();
@@ -66,13 +83,13 @@ function readTranscriptSelection(pane: HTMLElement): TranscriptSelection | null 
   const clampEnd = !root.contains(range.endContainer);
   if (clampStart) {
     const before = range.cloneRange();
-    before.setEndBefore(row);
-    if (before.toString().trim()) return null;
+    before.setEnd(root, 0);
+    if (coversContent(before)) return null;
   }
   if (clampEnd) {
     const after = range.cloneRange();
-    after.setStartAfter(row);
-    if (after.toString().trim()) return null;
+    after.setStart(root, root.childNodes.length);
+    if (coversContent(after)) return null;
   }
   if (clampStart || clampEnd) {
     range = range.cloneRange();

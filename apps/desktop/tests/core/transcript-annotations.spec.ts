@@ -238,8 +238,7 @@ async function phraseBox(page: Page, phrase: string) {
 
 test("a multi-line drag that runs past the text still adds its lines", async () => {
   test.setTimeout(90_000);
-  const paragraph = (label: string) =>
-    `${label} starts here and carries on for a while so the line is long enough to read.`;
+  const paragraph = (label: string) => `${label} starts here and ends on one line.`;
   const harness = await launchWithTranscript("transcript-annotation-drags", [
     { role: "user", text: "Tell me three things." },
     {
@@ -252,12 +251,19 @@ test("a multi-line drag that runs past the text still adds its lines", async () 
   try {
     const page = await harness.firstWindow();
     await expect(page.getByTestId("transcript")).toContainText("A short last reply.");
+    const settled = () =>
+      expect(page.getByTestId("timeline-pane")).toHaveAttribute("data-layout", "settled");
     const drag = async (from: { x: number; y: number }, to: { x: number; y: number }) => {
       await page.mouse.move(from.x, from.y);
       await page.mouse.down();
       await page.mouse.move(to.x, to.y, { steps: 10 });
       await page.mouse.up();
+      // The button follows the selection a frame after release.
+      await page.evaluate(
+        () => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))),
+      );
     };
+    await settled();
 
     // Past the end of the second line, out into the margin beside the text.
     const first = await phraseBox(page, "First starts");
@@ -268,12 +274,14 @@ test("a multi-line drag that runs past the text still adds its lines", async () 
     await page.getByTestId("annotation-editor").getByRole("textbox").press("Enter");
 
     // Down past the reply's last line, onto its Fork button.
+    await settled();
     const third = await phraseBox(page, "Third starts");
     await drag({ x: second.left + 1, y: second.y }, { x: third.left + 40, y: third.y + 30 });
     await expect(page.getByTestId("add-to-chat")).toBeVisible();
     await page.keyboard.press("Control+L");
     await page.getByTestId("annotation-editor").getByRole("textbox").press("Enter");
 
+    await settled();
     await page.getByRole("button", { name: "2 annotations" }).hover();
     const items = page.getByTestId("annotation-chip-popover").locator(".annotation-chip__quote");
     await expect(items).toHaveText([
@@ -284,6 +292,9 @@ test("a multi-line drag that runs past the text still adds its lines", async () 
     // A drag on into the next message is not one message's text.
     const last = await phraseBox(page, "A short last reply");
     await drag({ x: third.left + 1, y: third.y }, { x: last.right - 1, y: last.y });
+    const selected = await page.evaluate(() => window.getSelection()?.toString() ?? "");
+    expect(selected).toContain("Third starts");
+    expect(selected).toContain("A short last reply");
     await expect(page.getByTestId("add-to-chat")).toHaveCount(0);
   } finally {
     await harness.close();
