@@ -104,3 +104,21 @@ test("Stop preserves the live identity while already-enqueued host events are de
     sourceMessageId: "native-stopped-response",
   });
 });
+
+test("an extension's custom message lands as its own row between replies, once", () => {
+  const h = fixture();
+  h.append("First reply");
+  const item = {
+    kind: "custom" as const,
+    id: "entry-1",
+    createdAt: timestamp,
+    customType: "ci-status",
+    text: "**Build** passed",
+  };
+  h.send({ type: "transcriptItemAppended", sessionRef, timestamp, item });
+  h.send({ type: "transcriptItemAppended", sessionRef, timestamp, item });
+  h.append("Second reply");
+  expect(
+    h.transcript.get(key)!.map((row) => (row.kind === "message" ? row.text : row.kind)),
+  ).toEqual(["First reply", "custom", "Second reply"]);
+});

@@ -169,6 +169,11 @@ export class JsonCatalogStore implements SessionFileCatalogStorage {
         const index = state.sessions.findIndex(
           (session) => sessionKey(session.sessionRef) === sessionKey(entry.sessionRef),
         );
+        // The driver persists a session on every agent event, mostly with nothing changed;
+        // skipping those writes keeps fsyncs from delaying the events behind them.
+        if (index >= 0 && areSessionEntriesEqual(state.sessions[index]!, entry)) {
+          return false;
+        }
         const next = cloneSessionEntry(entry);
         if (index >= 0) {
           state.sessions[index] = next;
@@ -193,7 +198,9 @@ export class JsonCatalogStore implements SessionFileCatalogStorage {
 
   async setSessionFile(sessionRef: SessionRef, sessionFile: string): Promise<void> {
     await this.mutateState((state) => {
-      state.sessionFiles[sessionKey(sessionRef)] = sessionFile;
+      const key = sessionKey(sessionRef);
+      if (state.sessionFiles[key] === sessionFile) return false;
+      state.sessionFiles[key] = sessionFile;
     });
   }
 
@@ -356,6 +363,20 @@ function areWorktreeListsEqual(
 
   const sortedRight = [...right].sort(compareWorktreeEntries);
   return left.every((entry, index) => areWorktreeEntriesEqual(entry, sortedRight[index]));
+}
+
+function areSessionEntriesEqual(left: SessionCatalogEntry, right: SessionCatalogEntry): boolean {
+  return (
+    left.sessionRef.workspaceId === right.sessionRef.workspaceId &&
+    left.sessionRef.sessionId === right.sessionRef.sessionId &&
+    left.workspaceId === right.workspaceId &&
+    left.title === right.title &&
+    left.updatedAt === right.updatedAt &&
+    left.archivedAt === right.archivedAt &&
+    left.previewSnippet === right.previewSnippet &&
+    left.sessionFilePath === right.sessionFilePath &&
+    left.status === right.status
+  );
 }
 
 function areWorktreeEntriesEqual(
