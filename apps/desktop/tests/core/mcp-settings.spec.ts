@@ -117,7 +117,31 @@ test("adds, switches and removes an MCP server from Settings, editing mcp.json i
       mcpServers: { "project-docs": { url: "http://127.0.0.1:9/mcp", enabled: false } },
     });
 
+    // Remove asks first, and says when the entry holds settings the list never shows.
+    const declined = window.waitForEvent("dialog").then(async (dialog) => {
+      const message = dialog.message();
+      await dialog.dismiss();
+      return message;
+    });
+    await row("existing").getByRole("button", { name: "Remove" }).click();
+    expect(await declined).toContain(
+      "hidden settings (environment variables, headers, sign-in config) are deleted too",
+    );
+    await expect(row("existing")).toBeVisible();
+    expect((await readJson(mcpPath)).mcpServers).toEqual({
+      existing,
+      fixture: { command: process.execPath, args: [MCP_SERVER_FIXTURE, markerDir] },
+    });
+
+    const accepted = window.waitForEvent("dialog").then(async (dialog) => {
+      const message = dialog.message();
+      await dialog.accept();
+      return message;
+    });
     await row("fixture").getByRole("button", { name: "Remove" }).click();
+    expect(await accepted).toBe(
+      'Remove MCP server "fixture"? pi in the terminal stops using it too.',
+    );
     await expect(row("fixture")).toHaveCount(0);
     expect(await readJson(mcpPath)).toEqual({
       autoEnableCodemode: true,

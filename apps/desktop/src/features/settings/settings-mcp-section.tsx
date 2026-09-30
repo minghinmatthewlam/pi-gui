@@ -99,7 +99,11 @@ export function SettingsMcpSection({ workspaceId, actions }: SettingsMcpSectionP
             disabled={pending}
             key={`${server.scope}:${server.name}`}
             server={server}
-            onRemove={() => run(() => actions.onRemoveServer(server.name))}
+            onRemove={() => {
+              if (window.confirm(removeServerQuestion(server))) {
+                run(() => actions.onRemoveServer(server.name));
+              }
+            }}
             onToggle={(enabled) =>
               run(() => actions.onSetServerEnabled(server.scope, server.name, enabled))
             }
@@ -172,6 +176,14 @@ function McpServerRow({
       </div>
     </div>
   );
+}
+
+/** Removing deletes the whole entry, including the settings the list never shows. */
+export function removeServerQuestion(server: McpServerRecord): string {
+  const question = `Remove MCP server "${server.name}"? pi in the terminal stops using it too.`;
+  return server.hasHiddenSettings
+    ? `${question} Its hidden settings (environment variables, headers, sign-in config) are deleted too.`
+    : question;
 }
 
 type ServerKind = "command" | "url";
