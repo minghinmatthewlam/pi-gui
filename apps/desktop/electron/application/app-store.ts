@@ -1703,10 +1703,13 @@ export class DesktopAppStore {
     if (builtinName) {
       return this.setBuiltinExtensionEnabled(workspaceId, builtinName, enabled);
     }
+    // pi's own add-ons (`builtin:mcp` …) are switched in pi's global settings, so every
+    // workspace's runtime and threads pick the change up.
+    const global = filePath.startsWith("builtin:");
     return this.withRuntimeUpdate(
       workspaceId,
       (ws) => this.driver.runtimeSupervisor.setExtensionEnabled(ws, filePath, enabled),
-      { reloadSessions: true },
+      { reloadSessions: true, refreshAllWorkspaces: global },
     );
   }
 
