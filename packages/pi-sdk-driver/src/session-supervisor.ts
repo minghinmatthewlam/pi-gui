@@ -90,6 +90,7 @@ import {
   displayMessagesFromSession,
   extractPreview,
   injectFileAttachmentPreamble,
+  isExtensionCardEntry,
   messageText,
   nowIso,
   previewFromSessionInfo,
@@ -99,6 +100,8 @@ import {
   titleFromSessionInfo,
   toSessionErrorInfo,
   transcriptFromMessages,
+  transcriptFromSession,
+  transcriptItemFromCardEntry,
   truncate,
   workspaceToRef,
   type RunOutcome,
@@ -567,10 +570,7 @@ export class SessionSupervisor {
         record.transcriptDiskMtimeMs = diskMtimeMs;
         return this.readTranscriptFromDisk(sessionRef);
       }
-      return transcriptFromMessages(
-        displayMessagesFromSession(record.session.sessionManager),
-        record.updatedAt,
-      );
+      return transcriptFromSession(record.session.sessionManager, record.updatedAt);
     }
     return this.readTranscriptFromDisk(sessionRef);
   }
@@ -588,10 +588,7 @@ export class SessionSupervisor {
     }
 
     const sessionManager = SessionManager.open(sessionFile);
-    return transcriptFromMessages(
-      displayMessagesFromSession(sessionManager),
-      sessionEntry?.updatedAt,
-    );
+    return transcriptFromSession(sessionManager, sessionEntry?.updatedAt);
   }
 
   private async resolveSessionFilePath(
@@ -2308,6 +2305,16 @@ export class SessionSupervisor {
         this.refreshUsage(record);
         return [sessionUpdatedEvent(record)];
       case "entry_appended":
+        if (isExtensionCardEntry(event.entry)) {
+          return [
+            {
+              type: "transcriptItemAppended" as const,
+              sessionRef: record.ref,
+              timestamp,
+              item: transcriptItemFromCardEntry(event.entry),
+            },
+          ];
+        }
         // Cache-warming refreshes land as usage entries. pi announces them
         // before rescheduling the next refresh, so read once it has.
         if (event.entry.type !== "usage") return [];

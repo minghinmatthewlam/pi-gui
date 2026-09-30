@@ -41,6 +41,7 @@ export type {
   ToolFinishedEvent,
   ToolStartedEvent,
   ToolUpdatedEvent,
+  TranscriptItemAppendedEvent,
   Unsubscribe,
   WorkspaceId,
   WorkspaceRef,
@@ -67,6 +68,12 @@ export type {
 } from "./runtime-types.js";
 
 export type {
+  ExtensionCard,
+  ExtensionCardAction,
+  ExtensionCardRow,
+  ExtensionCardTone,
+  SessionTranscriptCard,
+  SessionTranscriptCustomMessage,
   SessionTranscriptImageAttachment,
   SessionTranscriptFileAttachment,
   SessionTranscriptAttachment,

@@ -1,3 +1,4 @@
+import type { SessionTranscriptItem } from "./transcript.js";
 import type { SessionUsageSnapshot } from "./usage.js";
 
 export type WorkspaceId = string;
@@ -190,6 +191,16 @@ export interface AssistantMessagePersistedEvent extends SessionEventBase {
   readonly sourceMessageId: string;
 }
 
+/**
+ * A persisted transcript item that arrived outside the assistant stream (an extension's card).
+ * The item id matches what `getTranscript` returns for the same entry, so a reload never
+ * duplicates it.
+ */
+export interface TranscriptItemAppendedEvent extends SessionEventBase {
+  readonly type: "transcriptItemAppended";
+  readonly item: SessionTranscriptItem;
+}
+
 export interface QueuedMessageStartedEvent extends SessionEventBase {
   readonly type: "queuedMessageStarted";
   readonly message: SessionQueuedMessage;
@@ -341,6 +352,7 @@ export type SessionDriverEvent =
   | AssistantMessageEndedEvent
   | AssistantMessagePersistedEvent
   | QueuedMessageStartedEvent
+  | TranscriptItemAppendedEvent
   | ToolStartedEvent
   | ToolUpdatedEvent
   | ToolFinishedEvent
