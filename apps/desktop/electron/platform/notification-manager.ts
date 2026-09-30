@@ -10,10 +10,13 @@ import { getSelectedSession } from "../../contracts/desktop-state";
 import { isSessionActivelyViewed } from "../conversation/session-visibility";
 
 const MAX_COMPLETED_RUN_KEYS = 500;
+// An extension that throws on a frequent event repeats the same error notice; notify once per window.
+const REPEATED_NOTICE_WINDOW_MS = 30_000;
 
 export class NotificationManager {
   private readonly completedRunKeys = new Set<string>();
   private readonly activeBySession = new Map<string, Electron.Notification>();
+  private readonly lastNoticeBySession = new Map<string, { notice: string; at: number }>();
   private latestState: DesktopAppState | undefined;
   private trackedWindow: BrowserWindow | null = null;
   private stopTrackingWindow: (() => void) | undefined;
@@ -119,6 +122,9 @@ export class NotificationManager {
   }
 
   private async handleEvent(event: SessionDriverEvent): Promise<void> {
+    if (event.type === "sessionClosed") {
+      this.lastNoticeBySession.delete(sessionKey(event.sessionRef));
+    }
     if (!Notification.isSupported()) {
       return;
     }
@@ -159,12 +165,36 @@ export class NotificationManager {
     }
 
     if (event.type === "hostUiRequest" && requiresAttention(event)) {
+      if (!this.claimNoticeNotification(event)) {
+        return;
+      }
       await this.showNotification(
         event.sessionRef,
         this.titleForSession(event.sessionRef),
         hostUiBody(event),
       );
     }
+  }
+
+  /** A notice never replaces a waiting dialog's notification, and a repeated notice notifies once. */
+  private claimNoticeNotification(
+    event: Extract<SessionDriverEvent, { type: "hostUiRequest" }>,
+  ): boolean {
+    if (event.request.kind !== "notify") {
+      return true;
+    }
+    const key = sessionKey(event.sessionRef);
+    if ((this.latestState?.sessionExtensionUiBySession[key]?.pendingDialogs.length ?? 0) > 0) {
+      return false;
+    }
+    const now = Date.now();
+    const notice = `${event.request.level ?? "info"}:${event.request.message}`;
+    const last = this.lastNoticeBySession.get(key);
+    if (last?.notice === notice && now - last.at < REPEATED_NOTICE_WINDOW_MS) {
+      return false;
+    }
+    this.lastNoticeBySession.set(key, { notice, at: now });
+    return true;
   }
 
   private shouldNotify(event: SessionDriverEvent): boolean {
@@ -397,14 +427,20 @@ export class NotificationManager {
 }
 
 function requiresAttention(event: Extract<SessionDriverEvent, { type: "hostUiRequest" }>): boolean {
+  // Info notices stay in-app so chatty extensions don't spam the OS.
   return (
     event.request.kind === "confirm" ||
     event.request.kind === "input" ||
-    event.request.kind === "select"
+    event.request.kind === "select" ||
+    (event.request.kind === "notify" &&
+      (event.request.level === "warning" || event.request.level === "error"))
   );
 }
 
 function hostUiBody(event: Extract<SessionDriverEvent, { type: "hostUiRequest" }>): string {
+  if (event.request.kind === "notify") {
+    return `${event.request.level === "error" ? "Error" : "Warning"}: ${event.request.message}`;
+  }
   if (
     event.request.kind === "confirm" ||
     event.request.kind === "input" ||

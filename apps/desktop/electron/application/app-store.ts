@@ -117,6 +117,13 @@ import {
   createEmptyExtensionUiState,
   serializeExtensionUiState,
 } from "../conversation/session-state-map";
+import {
+  EXTENSION_NOTICE_TIMEOUT_MS,
+  appendExtensionNotice,
+  extensionNoticeFromRequest,
+  extensionNoticeTimerId,
+  removeExtensionNotice,
+} from "../extensions/extension-notices";
 import { appWorktreeRootMatcher } from "../platform/worktrees/app-worktree-roots";
 import { GitWorktreeManager } from "../platform/worktrees/worktree-manager";
 import { createWorkspaceOwner, type WorkspaceOwner } from "../workspace/app-store-workspace";
@@ -3042,6 +3049,15 @@ export class DesktopAppStore {
           "extension-editor-text",
         );
         break;
+      case "notify": {
+        const notice = extensionNoticeFromRequest(event.request, event.timestamp);
+        const dropped = appendExtensionNotice(uiState, notice);
+        for (const entry of dropped) {
+          this.clearExtensionDialogTimeout(event.sessionRef, extensionNoticeTimerId(entry.id));
+        }
+        this.scheduleExtensionNoticeExpiry(event.sessionRef, notice.id);
+        break;
+      }
       default:
         if (isExtensionUiDialogRequest(event.request)) {
           const dialog = event.request;
@@ -3103,6 +3119,26 @@ export class DesktopAppStore {
     );
     this.emit();
     return true;
+  }
+
+  /** Notices share the dialog timer map, so session reset and close clear both. */
+  private scheduleExtensionNoticeExpiry(sessionRef: SessionRef, noticeId: string): void {
+    const timerId = extensionNoticeTimerId(noticeId);
+    this.clearExtensionDialogTimeout(sessionRef, timerId);
+    const timerKey = this.extensionDialogTimeoutKey(sessionRef, timerId);
+    const timer = setTimeout(() => {
+      this.extensionDialogTimeoutTimers.delete(timerKey);
+      const uiState = this.sessionState.extensionUiBySession.get(sessionKey(sessionRef));
+      if (!uiState || !removeExtensionNotice(uiState, noticeId)) {
+        return;
+      }
+      this.state = this.syncDerivedSessionState(
+        { ...this.state, revision: this.state.revision + 1 },
+        sessionRef,
+      );
+      this.emit();
+    }, EXTENSION_NOTICE_TIMEOUT_MS);
+    this.extensionDialogTimeoutTimers.set(timerKey, timer);
   }
 
   private scheduleExtensionDialogTimeout(

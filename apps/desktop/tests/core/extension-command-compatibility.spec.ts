@@ -93,7 +93,7 @@ test("fails fast for unsupported handoff-like commands and learns terminal-only 
       "/handoff-gui-test requires terminal-only custom UI and is not supported in pi-gui yet.",
     );
     await expect(window.getByTestId("extension-dialog")).toHaveCount(0);
-    await expect(window.locator(".timeline")).not.toContainText(
+    await expect(window.getByTestId("extension-notices")).not.toContainText(
       "Handoff ready. Submit when ready.",
     );
     await expect
@@ -122,7 +122,7 @@ test("fails fast for unsupported handoff-like commands and learns terminal-only 
     await expect(composer).toHaveValue("/prefill-safe ");
     await composer.press("Enter");
     await expect.poll(async () => composer.inputValue()).toBe("Safe draft");
-    await expect(window.locator(".timeline")).toContainText("Safe command ran");
+    await expect(window.getByTestId("extension-notices")).toContainText("Safe command ran");
 
     await window.getByRole("button", { name: "Extensions", exact: true }).click();
     await expect(window.getByTestId("extensions-surface")).toBeVisible();
