@@ -15,21 +15,26 @@ export function useExtensionCardActions({
   openWorkspaceFileLine,
   composerDraftRef,
   setComposerDraft,
+  focusComposer,
 }: {
   readonly api: PiDesktopApi | undefined;
   readonly target: SessionRef | null;
   readonly openWorkspaceFileLine: (target: WorkspaceFileLine) => void;
   readonly composerDraftRef: RefObject<string>;
   readonly setComposerDraft: (draft: string) => void;
+  readonly focusComposer: () => void;
 }): RunExtensionAction {
   const targetRef = useRef(target);
   targetRef.current = target;
+  // App's helper changes identity every render; a ref keeps the returned callback stable.
+  const focusComposerRef = useRef(focusComposer);
+  focusComposerRef.current = focusComposer;
   return useCallback(
     (action: ExtensionAction) => {
       const clickedTarget = targetRef.current;
       if (!api || !clickedTarget) return;
       void api
-        .runExtensionAction(action)
+        .runExtensionAction({ target: clickedTarget, action })
         .then((effect) => {
           if (!effect || targetRef.current !== clickedTarget) return;
           if (effect.kind === "openFile") {
@@ -41,7 +46,7 @@ export function useExtensionCardActions({
           setComposerDraft(
             draft.trim() ? `${draft.replace(/\s+$/, "")}\n${effect.text}` : effect.text,
           );
-          document.querySelector<HTMLTextAreaElement>('[data-testid="composer"]')?.focus();
+          focusComposerRef.current();
         })
         .catch((error: unknown) => {
           console.error("[renderer] extension card action failed", error);

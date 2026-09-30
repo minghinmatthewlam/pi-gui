@@ -941,6 +941,12 @@ export class SessionSupervisor {
       throw error;
     }
 
+    // An extension reload during the awaits above can unregister the command, and pi would
+    // then send the text to the model. Refuse outside the try so the thread is left alone.
+    if (input.extensionCommandOnly && !this.isExtensionCommand(session, input.text)) {
+      throw new Error(`${input.text.trim().split(/\s/, 1)[0]} is no longer an extension command`);
+    }
+
     try {
       const images = input.attachments?.flatMap(
         (attachment: NonNullable<SessionMessageInput["attachments"]>[number]) =>
@@ -968,13 +974,6 @@ export class SessionSupervisor {
         }
         await this.queuePrompt(session, promptText, input.deliverAs!, images);
       } else if (isExtensionCommand) {
-        // An extension reload during the awaits above can unregister the command, and pi
-        // would then send the text to the model.
-        if (input.extensionCommandOnly && !this.isExtensionCommand(session, input.text)) {
-          throw new Error(
-            `${input.text.trim().split(/\s/, 1)[0]} is no longer an extension command`,
-          );
-        }
         await session.prompt(promptText, {
           ...(images && images.length > 0 ? { images } : {}),
           source: "interactive",

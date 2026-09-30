@@ -4,14 +4,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { SessionRef } from "@pi-gui/session-driver";
 import {
-  expectExtensionAction,
   runExtensionAction as runChecked,
   type AppOperationHost,
 } from "../../electron/extensions/app-operations";
+import { expectExtensionActionRequest } from "../../electron/ipc/request-validation";
 
 /** What the IPC handler does: decode the renderer's request, then run it. */
-const runExtensionAction = async (host: AppOperationHost, target: SessionRef, raw: unknown) =>
-  runChecked(host, target, expectExtensionAction(raw));
+const runExtensionAction = async (host: AppOperationHost, target: SessionRef, raw: unknown) => {
+  const request = expectExtensionActionRequest({ target, action: raw });
+  return runChecked(host, request.target, request.action);
+};
 
 const target = { workspaceId: "workspace", sessionId: "session" };
 

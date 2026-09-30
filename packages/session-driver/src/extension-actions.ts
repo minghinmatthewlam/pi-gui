@@ -28,15 +28,13 @@ const MAX_URL_LENGTH = 2_048;
 /**
  * The only place untrusted data becomes an `ExtensionAction`: extension records in the pi
  * adapter, and the renderer's request in main. Returns undefined for anything malformed or
- * unknown, so a newer action kind is skipped rather than drawn wrong. A `{ label, path }`
- * without `type` is the first card shape and still opens a file.
+ * unknown, so a newer action kind is skipped rather than drawn wrong.
  */
 export function parseExtensionAction(value: unknown): ExtensionAction | undefined {
   if (!isRecord(value)) return undefined;
   const label = boundedText(value.label, MAX_LABEL_LENGTH);
   if (!label) return undefined;
-  const type = value.type ?? (value.path !== undefined ? "openFile" : undefined);
-  switch (type) {
+  switch (value.type) {
     case "openFile": {
       const path = boundedText(value.path, MAX_URL_LENGTH);
       if (!path) return undefined;

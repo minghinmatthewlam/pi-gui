@@ -431,6 +431,7 @@ export default function App() {
     openWorkspaceFileLine: handleOpenWorkspaceFileLine,
     composerDraftRef,
     setComposerDraft,
+    focusComposer,
   });
 
   const dismissSchemaSkewNotice = useCallback((sessionKey: string) => {

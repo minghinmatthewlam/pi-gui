@@ -61,12 +61,9 @@ import {
   expectThreadGrouping,
   expectThinkingLevel,
   expectWorkspaceFileListOptions,
+  expectExtensionActionRequest,
 } from "./request-validation";
-import {
-  expectExtensionAction,
-  runExtensionAction,
-  type AppOperationHost,
-} from "../extensions/app-operations";
+import { runExtensionAction, type AppOperationHost } from "../extensions/app-operations";
 
 type StateOwner = Pick<
   DesktopAppStore,
@@ -813,26 +810,34 @@ export function registerDesktopIpc({
     return dispatch(event, () => owners.conversation.submitComposer(target, text, options));
   });
   // Card buttons carry extension-authored data, so only the app's own frame may send them.
-  handleMainFrame(desktopIpc.runExtensionAction, expectExtensionAction, async (action, request) => {
-    const { event } = request;
-    // A card button acts on the thread the window shows, which is the one whose card it is.
-    const target = windows.targetForSender(event.sender);
-    if (!target) throw new Error("Select the card's thread to use its buttons");
-    const host: AppOperationHost = {
-      workspacePath: (workspaceId) => owners.workspace.getWorkspacePath(workspaceId),
-      openExternal: capabilities.openExternal,
-      // Like a typed extension command, it may change selection, so it keeps the window's queue.
-      runExtensionCommand: async (sessionRef, command) => {
-        await run(event, () => owners.conversation.runExtensionCommand(sessionRef, command));
-      },
-    };
-    try {
-      return (await runExtensionAction(host, target, action)) ?? null;
-    } catch (error) {
-      await run(event, async () => owners.conversation.reportExtensionActionFailure(target, error));
-      return null;
-    }
-  });
+  handleMainFrame(
+    desktopIpc.runExtensionAction,
+    expectExtensionActionRequest,
+    async ({ target, action }, { event }) => {
+      // Main may have switched threads before the renderer redrew; never act on another one.
+      const selected = windows.targetForSender(event.sender);
+      if (selected?.workspaceId !== target.workspaceId || selected.sessionId !== target.sessionId) {
+        throw new Error("Return to the card's thread to use its buttons");
+      }
+      const host: AppOperationHost = {
+        workspacePath: (workspaceId) => owners.workspace.getWorkspacePath(workspaceId),
+        openExternal: capabilities.openExternal,
+        // Like a typed extension command, it may change selection, so it keeps the window's queue.
+        runExtensionCommand: async (sessionRef, command) => {
+          await run(event, () => owners.conversation.runExtensionCommand(sessionRef, command));
+        },
+      };
+      try {
+        return (await runExtensionAction(host, target, action)) ?? null;
+      } catch (error) {
+        await run(event, async () =>
+          owners.conversation.reportExtensionActionFailure(target, error),
+        );
+        return null;
+      }
+    },
+  );
+
   ipcMain.handle(desktopIpc.getSessionTree, (event, rawTarget: unknown) => {
     windows.windowForSender(event.sender);
     return owners.conversation.getSessionTree(expectSessionTarget(rawTarget));

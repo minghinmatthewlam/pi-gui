@@ -37,10 +37,11 @@ await test("a card entry becomes a card item with the entry id; unknown fields a
         "not a row",
       ],
       actions: [
-        { label: "Open search.ts:3", path: "search.ts", line: 3 },
-        { label: "Open README", path: "README.md", line: 0 },
-        { label: "No path" },
-        { label: "", path: "search.ts" },
+        { type: "openFile", label: "Open search.ts:3", path: "search.ts", line: 3 },
+        { type: "openFile", label: "Open README", path: "README.md", line: 0 },
+        { type: "openFile", label: "No path" },
+        { type: "openFile", label: "", path: "search.ts" },
+        { label: "No type", path: "search.ts" },
       ],
     }),
   );
@@ -96,7 +97,11 @@ await test("card buttons parse into the fixed action list; anything else is drop
   const many = transcriptItemFromCardEntry(
     cardEntry({
       title: "Many",
-      actions: Array.from({ length: 12 }, (_, i) => ({ label: `Open ${i}`, path: `f${i}.ts` })),
+      actions: Array.from({ length: 12 }, (_, i) => ({
+        type: "openFile",
+        label: `Open ${i}`,
+        path: `f${i}.ts`,
+      })),
     }),
   );
   assert.ok(many.kind === "card");
