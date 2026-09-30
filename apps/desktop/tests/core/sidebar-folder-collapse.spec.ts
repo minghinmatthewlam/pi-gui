@@ -83,6 +83,33 @@ test("folds a folder group from its row and keeps it folded across restart", asy
     await expect(folderRow).toHaveAttribute("aria-expanded", "false");
     await group.getByRole("button", { name: /^New thread in / }).click();
     await expect(folderRow).toHaveAttribute("aria-expanded", "true");
+
+    // A folded folder that has since lost all its threads still opens on "+".
+    await folderRow.click();
+    await expect
+      .poll(async () => (await getDesktopState(window)).collapsedWorkspaceIds)
+      .toEqual([workspaceId]);
+    const alphaThread = (await getDesktopState(window)).workspaces
+      .find((workspace) => workspace.id === workspaceId)
+      ?.sessions.find((session) => session.title === "Alpha planning");
+    expect(alphaThread).toBeDefined();
+    await window.evaluate(
+      async (target) => {
+        await (
+          window as unknown as {
+            piApp: {
+              archiveSession(t: { workspaceId: string; sessionId: string }): Promise<unknown>;
+            };
+          }
+        ).piApp.archiveSession(target);
+      },
+      { workspaceId, sessionId: alphaThread!.id },
+    );
+    await expect(folderRow).not.toHaveAttribute("aria-expanded", /.*/);
+    await group.getByRole("button", { name: /^New thread in / }).click();
+    await expect
+      .poll(async () => (await getDesktopState(window)).collapsedWorkspaceIds)
+      .toEqual([]);
   } finally {
     await secondRun.close();
   }

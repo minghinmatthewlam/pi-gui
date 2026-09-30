@@ -806,7 +806,9 @@ function WorkspaceFolderContent(
               type="button"
               onClick={() => {
                 // The new thread lands in this folder, so open it to keep the row in view.
-                if (collapsed) toggleCollapsed?.();
+                // Gate on folder grouping, not on toggleCollapsed: a folder saved as
+                // folded may be empty now, and its new thread would land hidden.
+                if (collapsed && threads) onToggleCollapsed?.();
                 onNewThread(workspace.id);
               }}
             >
