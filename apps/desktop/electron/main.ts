@@ -340,12 +340,15 @@ function openMcpSignInUrl(url: string): void {
     parsed?.protocol === "http:" &&
     ["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname.toLowerCase());
   if (!parsed || (parsed.protocol !== "https:" && !loopback)) {
-    console.error(`Refusing to open MCP sign-in URL: ${url}`);
+    // Sign-in URLs carry state and codes in their query, so logs name the origin at most.
+    console.error(
+      `Refusing to open an MCP sign-in URL${parsed ? ` on ${parsed.origin}` : " that is not http or https"}`,
+    );
     showMcpSignInUrl(url, "pi-gui opens only https links, or http links on this computer.");
     return;
   }
   shell.openExternal(parsed.toString()).catch((error: unknown) => {
-    console.error(`Failed to open MCP sign-in URL: ${parsed.toString()}`, error);
+    console.error(`Failed to open an MCP sign-in URL on ${parsed.origin}`, error);
     showMcpSignInUrl(parsed.toString(), "pi-gui could not open your browser.");
   });
 }
