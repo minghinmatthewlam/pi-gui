@@ -12,7 +12,7 @@ Users can queue another prompt while an agent works or steer the current run. Th
 
 - While a thread runs, type in its composer and press Enter to queue.
 - Use Cmd+Enter on macOS (Control+Enter elsewhere) to steer the active run. A steer is added to the transcript at once and never appears in the queue list.
-- Clicking the send button with text in the composer also queues. Each queued item has Steer, Edit and Delete buttons, except that a queued message carrying Add to Chat annotations reads "<text> · N annotations" and has no Edit. Stop run (empty composer) clears the whole queue.
+- Clicking the send button with text in the composer also queues. Each queued item has Steer, Edit and Delete buttons, except that a queued message carrying Add to Chat annotations reads "<text> · N annotations" (or "1 annotation") and has no Edit; its Delete label uses the raw message text, not that preview. Stop run (empty composer) clears the whole queue.
 
 ## Driving it with Playwright
 

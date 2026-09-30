@@ -32,14 +32,14 @@ Packaged-app launch, native dialogs/clipboard, model/account onboarding, attachm
 
 These user-facing surfaces have no feature file and no `prove.sh` checkpoint yet; a lane passing says nothing about them:
 
-- Review panel (Cmd/Ctrl+R: diff beside a file tree, scope menu, Staged/Unstaged, quiet refresh on window focus), `apps/desktop/src/features/workbench/`.
-- Side panel tabs on Control+1–9 (macOS) or Alt+1–9 elsewhere, `apps/desktop/src/features/workbench/side-panel-tab-hints.ts`.
+- Review panel (Cmd/Ctrl+R: diff beside a file tree, scope menu, Staged/Unstaged, quiet refresh on window focus), `apps/desktop/src/features/workbench/`; core `review-layout`, `review-scopes`, `review-auto-refresh` specs.
+- Side panel tabs on Control+1–9 (macOS) or Alt+1–9 elsewhere, `apps/desktop/src/features/workbench/side-panel-tab-hints.ts`; core `side-panel-tab-shortcuts.spec.ts`.
 - Context ring beside the model picker, `apps/desktop/src/features/conversation/context-meter.tsx`.
-- Changes card after a turn that edited files, `apps/desktop/src/features/conversation/turn-changes-card.tsx`.
-- Add to Chat: select transcript text, annotate, and send the notes with the next message, `apps/desktop/src/features/conversation/annotations/`.
-- Extension notify toast above the composer and extension messages in the transcript, `apps/desktop/src/features/extensions/extension-notices.tsx` and `timeline-item.tsx`.
-- Theme presets built from seed colours, Settings > Appearance.
-- Browse branches (session tree), `apps/desktop/src/features/conversation/tree-modal.tsx`.
+- Changes card after a turn that edited files, `apps/desktop/src/features/conversation/turn-changes-card.tsx`; core `turn-changes-card.spec.ts`.
+- Add to Chat: select transcript text, annotate, and send the notes with the next message, `apps/desktop/src/features/conversation/annotations/`; core `transcript-annotations.spec.ts`.
+- Extension notify toast above the composer and extension messages in the transcript, `apps/desktop/src/features/extensions/extension-notices.tsx` and `apps/desktop/src/features/conversation/timeline-item.tsx`; core `extension-notices.spec.ts`, `extension-custom-messages.spec.ts`.
+- Theme presets built from seed colours, Settings > Appearance; core `settings-appearance.spec.ts`.
+- Browse branches (session tree), `apps/desktop/src/features/conversation/tree-modal.tsx`; core `tree-command.spec.ts`.
 
 ## Latest observed proof (2026-09-30)
 
