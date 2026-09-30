@@ -333,6 +333,21 @@ function openExternalWebUrl(url: string): boolean {
   return true;
 }
 
+/** MCP sign-in pages: any https URL, or http only on this machine (a local OAuth server). */
+function openMcpSignInUrl(url: string): void {
+  const parsed = parseExternalWebUrl(url);
+  const loopback =
+    parsed?.protocol === "http:" &&
+    ["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname.toLowerCase());
+  if (!parsed || (parsed.protocol !== "https:" && !loopback)) {
+    console.error(`Refusing to open MCP sign-in URL: ${url}`);
+    return;
+  }
+  void shell.openExternal(parsed.toString()).catch((error) => {
+    console.error(`Failed to open MCP sign-in URL: ${parsed.toString()}`, error);
+  });
+}
+
 function readClipboardImageAttachment(): ClipboardImageRead {
   const image = clipboard.readImage();
   if (image.isEmpty()) {
@@ -927,6 +942,7 @@ app
         onInvalidated: ({ target, generation }) =>
           extensionViews.invalidateRuntime(target, generation),
       },
+      openUrl: openMcpSignInUrl,
       builtinExtensions: [
         {
           name: "pi-gui-thread-orchestration",
