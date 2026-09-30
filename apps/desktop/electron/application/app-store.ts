@@ -1815,17 +1815,27 @@ export class DesktopAppStore {
     );
   }
 
+  /**
+   * pi reads `defaultTools` only when it creates a thread, and a reload keeps the active tools,
+   * so this applies to new threads; open ones are left alone.
+   */
   async setCodemodeAlwaysOn(workspaceId: string, alwaysOn: boolean): Promise<DesktopAppState> {
-    return this.withMcpConfigChange(workspaceId, "global", async (ws) => {
+    await this.initialize();
+    const ws = this.workspaceRefFromState(workspaceId);
+    if (!ws) {
+      return this.withError(`Unknown workspace: ${workspaceId}`);
+    }
+    return this.withErrorHandling(async () => {
       await this.driver.runtimeSupervisor.setCodemodeAlwaysOn(ws, alwaysOn);
       await this.recordSettingsSelfWrite();
+      return this.refreshState({ clearLastError: true });
     });
   }
 
   /**
-   * pi reads mcp.json and defaultTools when a thread starts, so open threads reload to pick up a
-   * change (restarting their MCP servers): every workspace's for the global files, else only the
-   * workspace whose `.pi/mcp.json` changed.
+   * pi reads mcp.json when a thread starts, so open threads reload to pick up a change
+   * (restarting their MCP servers): every workspace's for the global file, else only the
+   * workspace whose `.pi/mcp.json` changed. Threads mid-turn reload when the turn ends.
    */
   private async withMcpConfigChange(
     workspaceId: string,
