@@ -1021,6 +1021,8 @@ export class SessionSupervisor {
             record.abortOnRunStart = false;
             record.cancellationRequested = false;
           }
+          // pi's agent_settled arrives inside prompt(), while the send still counted as busy.
+          this.runPendingReload(record);
         }
       }
 
@@ -1036,6 +1038,8 @@ export class SessionSupervisor {
       }
       if (!isQueuedMessage && !isExtensionCommand) {
         record.promptStarting = false;
+        // A prompt that failed before a run started has no turn end to run the reload.
+        this.runPendingReload(record);
       }
       record.status = isQueuedMessage ? "running" : isExtensionCommand ? "idle" : "failed";
       record.updatedAt = nowIso();

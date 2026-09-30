@@ -119,6 +119,10 @@ async function startHarness(t: test.TestContext) {
 
   let runtime!: AgentSessionRuntime;
   const commandGate = { current: gate() };
+  /** Wraps the next session.prompt() call, to hold it or fail it. */
+  const promptHook: { current: ((prompt: () => Promise<void>) => Promise<void>) | undefined } = {
+    current: undefined,
+  };
   const driver = new PiSdkDriver({
     agentDir,
     catalogFilePath: join(root, "catalogs.json"),
@@ -140,6 +144,12 @@ async function startHarness(t: test.TestContext) {
     createAgentSessionRuntimeImpl: async (runtimeOptions) => {
       runtime = await createAgentSessionRuntimeWithNpmFallback({ ...runtimeOptions, tools: [] });
       runtime.session.agent.streamFunction = streamFunction;
+      const prompt = runtime.session.prompt.bind(runtime.session);
+      runtime.session.prompt = async (...args) => {
+        const around = promptHook.current;
+        promptHook.current = undefined;
+        return around ? around(() => prompt(...args)) : prompt(...args);
+      };
       return runtime;
     },
   });
@@ -148,7 +158,7 @@ async function startHarness(t: test.TestContext) {
     { initialModel: { provider: "reload-test", modelId: "scripted" } },
   );
   t.after(() => driver.closeSession(ref));
-  return { driver, ref, state, commandGate, session: () => runtime.session };
+  return { driver, ref, state, commandGate, promptHook, session: () => runtime.session };
 }
 
 await test("a reload asked for during a turn waits for the turn to end", async (t) => {
@@ -184,4 +194,51 @@ await test("a deferred reload runs once when Stop ends the turn", async (t) => {
   await waitFor(() => state.loads === loadsAtStart + 1, "the deferred reload after Stop");
   await settle();
   assert.equal(state.loads, loadsAtStart + 1, "the reload runs once, not once per request");
+});
+
+await test("a deferred reload runs when prompt() returns after its events are delivered", async (t) => {
+  const { driver, ref, state, promptHook, session } = await startHarness(t);
+  const loadsAtStart = state.loads;
+  // pi emits agent_settled inside prompt(); holding prompt() open after the turn lets the event
+  // queue drain while the send is still starting.
+  const returnGate = gate();
+  let turnDone = false;
+  promptHook.current = async (prompt) => {
+    await prompt();
+    turnDone = true;
+    await returnGate.wait;
+  };
+
+  const sent = driver.sendUserMessage(ref, { text: "hello" });
+  await waitFor(() => state.streaming, "the turn to start streaming");
+  assert.equal(await driver.reloadSessionWhenIdle(ref), "deferred");
+  state.turnGate.open();
+  await waitFor(() => turnDone, "the turn to end inside prompt()");
+  await session().waitForIdle();
+  await settle();
+  assert.equal(state.loads, loadsAtStart, "no reload while prompt() has not returned");
+
+  returnGate.open();
+  await sent;
+  await waitFor(() => state.loads === loadsAtStart + 1, "the deferred reload after prompt()");
+});
+
+await test("a deferred reload runs when the prompt fails before a run starts", async (t) => {
+  const { driver, ref, state, promptHook } = await startHarness(t);
+  const loadsAtStart = state.loads;
+  const failGate = gate();
+  let entered = false;
+  promptHook.current = async () => {
+    entered = true;
+    await failGate.wait;
+    throw new Error("prompt failed before the run");
+  };
+
+  const sent = driver.sendUserMessage(ref, { text: "hello" });
+  await waitFor(() => entered, "prompt() to be called");
+  assert.equal(await driver.reloadSessionWhenIdle(ref), "deferred");
+
+  failGate.open();
+  await assert.rejects(sent, /prompt failed before the run/);
+  await waitFor(() => state.loads === loadsAtStart + 1, "the deferred reload after the failure");
 });
