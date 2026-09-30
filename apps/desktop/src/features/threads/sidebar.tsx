@@ -86,6 +86,7 @@ interface SidebarProps {
   readonly visibleWorkspaces: readonly WorkspaceRecord[];
   readonly threadSidebarModel: ThreadSidebarModel;
   readonly threadGrouping: ThreadGrouping;
+  readonly collapsedWorkspaceIds: readonly string[];
   readonly linkedWorktreeByWorkspaceId: ReadonlyMap<string, WorktreeRecord>;
   readonly wsMenu: WorkspaceMenuState;
   readonly threadMenu: ThreadMenuState;
@@ -138,6 +139,7 @@ export function Sidebar(props: SidebarProps) {
     visibleWorkspaces,
     threadSidebarModel,
     threadGrouping,
+    collapsedWorkspaceIds,
     linkedWorktreeByWorkspaceId,
     wsMenu,
     threadMenu,
@@ -166,11 +168,20 @@ export function Sidebar(props: SidebarProps) {
   const [archivedOpen, setArchivedOpen] = useState(false);
   const [expandedHistory, setExpandedHistory] = useState<ReadonlySet<string>>(() => new Set());
   const commandHeld = useThreadShortcutHintsVisible(api.platform);
+  const collapsedFolderIds = new Set(collapsedWorkspaceIds);
+  const setFolderCollapsed = (workspaceId: string, collapsed: boolean) => {
+    void updateSnapshot(setSnapshot, () => api.setWorkspaceCollapsed(workspaceId, collapsed)).catch(
+      (error: unknown) => {
+        console.error("[renderer] setWorkspaceCollapsed failed", error);
+      },
+    );
+  };
   const shortcutOrder = visibleThreadShortcutOrder({
     grouping: threadGrouping,
     model: threadSidebarModel,
     expandedHistory,
     archivedOpen,
+    collapsedWorkspaceIds,
   });
   threadShortcutOrderRef.current = shortcutOrder;
   const shortcutByKey = commandHeld
@@ -213,6 +224,12 @@ export function Sidebar(props: SidebarProps) {
     setExpandedHistory((current) =>
       keys.every((key) => current.has(key)) ? current : new Set([...current, ...keys]),
     );
+    // A folded folder hides the rename field; open it so the input is reachable.
+    for (const group of threadSidebarModel.workspaceGroups) {
+      if (holds(group.threads) && collapsedFolderIds.has(group.workspace.id)) {
+        setFolderCollapsed(group.workspace.id, false);
+      }
+    }
     // Reveal once per rename; later list changes should not reopen groups.
   }, [renameSessionId]);
 
@@ -517,6 +534,13 @@ export function Sidebar(props: SidebarProps) {
                       onToggleHistory={() =>
                         toggleHistoryExpanded(workspaceHistoryExpansionKey(group.workspace.id))
                       }
+                      collapsed={collapsedFolderIds.has(group.workspace.id)}
+                      onToggleCollapsed={() =>
+                        setFolderCollapsed(
+                          group.workspace.id,
+                          !collapsedFolderIds.has(group.workspace.id),
+                        )
+                      }
                       canDrag={canDrag}
                       selectedWorkspace={selectedWorkspace}
                       selectedSession={selectedSession}
@@ -545,6 +569,13 @@ export function Sidebar(props: SidebarProps) {
                       )}
                       onToggleHistory={() =>
                         toggleHistoryExpanded(workspaceHistoryExpansionKey(group.workspace.id))
+                      }
+                      collapsed={collapsedFolderIds.has(group.workspace.id)}
+                      onToggleCollapsed={() =>
+                        setFolderCollapsed(
+                          group.workspace.id,
+                          !collapsedFolderIds.has(group.workspace.id),
+                        )
                       }
                       canDrag={false}
                       selectedWorkspace={selectedWorkspace}
@@ -649,6 +680,8 @@ interface WorkspaceFolderProps {
   readonly threads?: readonly ThreadListEntry[];
   readonly historyExpanded?: boolean;
   readonly onToggleHistory?: () => void;
+  readonly collapsed?: boolean;
+  readonly onToggleCollapsed?: () => void;
   readonly canDrag: boolean;
   readonly selectedWorkspace: WorkspaceRecord | undefined;
   readonly selectedSession?: SessionRecord;
@@ -707,6 +740,8 @@ function WorkspaceFolderContent(
     threads,
     historyExpanded = false,
     onToggleHistory,
+    collapsed = false,
+    onToggleCollapsed,
     selectedWorkspace,
     selectedSession,
     linkedWorktreeByWorkspaceId,
@@ -719,7 +754,12 @@ function WorkspaceFolderContent(
     onSetSessionPinned,
     dragHandleProps,
   } = props;
-  const history = threads ? threadHistoryPreview(threads, historyExpanded) : undefined;
+  // Folder grouping lists threads under each folder, so the row folds them
+  // like Codex; without threads the row just selects the folder.
+  const toggleCollapsed = threads ? onToggleCollapsed : undefined;
+  const collapsible = toggleCollapsed !== undefined;
+  const history =
+    threads && !collapsed ? threadHistoryPreview(threads, historyExpanded) : undefined;
 
   const workspaceActive =
     workspace.id === selectedWorkspace?.id || workspace.id === selectedWorkspace?.rootWorkspaceId;
@@ -731,17 +771,28 @@ function WorkspaceFolderContent(
         <button
           className={`workspace-row__select ${dragHandleProps ? "workspace-row__select--draggable" : ""}`}
           onClick={() => {
-            wsMenu.selectWorkspace(workspace.id);
+            if (toggleCollapsed) toggleCollapsed();
+            else wsMenu.selectWorkspace(workspace.id);
           }}
           type="button"
           {...(dragHandleProps
             ? { ...dragHandleProps.attributes, ...dragHandleProps.listeners }
             : {})}
+          aria-expanded={collapsible ? !collapsed : undefined}
         >
-          <span className="workspace-row__icon" aria-hidden="true">
+          <span
+            className="workspace-row__icon"
+            aria-hidden="true"
+            data-state={collapsible ? (collapsed ? "collapsed" : "expanded") : undefined}
+          >
             <span className="workspace-row__icon-folder">
               <FolderIcon />
             </span>
+            {collapsible ? (
+              <span className="workspace-row__icon-chevron">
+                {collapsed ? <ChevronRightIcon /> : <ChevronDownIcon />}
+              </span>
+            ) : null}
           </span>
           <span className="workspace-row__name">{workspace.name}</span>
         </button>
@@ -752,7 +803,11 @@ function WorkspaceFolderContent(
               className="icon-button workspace-row__action-button"
               title="New thread"
               type="button"
-              onClick={() => onNewThread(workspace.id)}
+              onClick={() => {
+                // The new thread lands in this folder, so open it to keep the row in view.
+                if (collapsed) toggleCollapsed?.();
+                onNewThread(workspace.id);
+              }}
             >
               <PlusIcon />
             </button>

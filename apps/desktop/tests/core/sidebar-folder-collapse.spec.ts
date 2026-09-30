@@ -1,0 +1,77 @@
+import { expect, test } from "@playwright/test";
+import {
+  chooseThreadGrouping,
+  createSessionViaIpc,
+  getDesktopState,
+  launchDesktop,
+  makeUserDataDir,
+  makeWorkspace,
+  waitForWorkspaceByPath,
+} from "../helpers/electron-app";
+
+test("folds a folder group from its row and keeps it folded across restart", async () => {
+  test.setTimeout(120_000);
+  const userDataDir = await makeUserDataDir();
+  const alphaPath = await makeWorkspace("collapse-alpha");
+  const betaPath = await makeWorkspace("collapse-beta");
+  const firstRun = await launchDesktop(userDataDir, {
+    initialWorkspaces: [alphaPath, betaPath],
+    testMode: "background",
+  });
+
+  let workspaceId = "";
+  try {
+    const window = await firstRun.firstWindow();
+    const alpha = await waitForWorkspaceByPath(window, alphaPath);
+    await waitForWorkspaceByPath(window, betaPath);
+    workspaceId = alpha.id;
+    await createSessionViaIpc(window, alphaPath, "Alpha planning");
+    await createSessionViaIpc(window, betaPath, "Beta planning");
+    await chooseThreadGrouping(window, "workspace");
+
+    const group = window.locator(`.workspace-group[data-workspace-id="${workspaceId}"]`);
+    const folderRow = group.locator(".workspace-row__select");
+    await expect(group.locator(".session-row__title")).toHaveText(["Alpha planning"]);
+    await expect(folderRow).toHaveAttribute("aria-expanded", "true");
+    const selectedBefore = (await getDesktopState(window)).selectedSessionId;
+
+    // Clicking the folder row folds it without leaving the open thread.
+    await folderRow.click();
+    await expect(folderRow).toHaveAttribute("aria-expanded", "false");
+    await expect(group.locator(".session-row")).toHaveCount(0);
+    await expect(window.locator(".workspace-group .session-row__title")).toHaveText([
+      "Beta planning",
+    ]);
+    await expect
+      .poll(async () => (await getDesktopState(window)).collapsedWorkspaceIds)
+      .toEqual([workspaceId]);
+    expect((await getDesktopState(window)).selectedSessionId).toBe(selectedBefore);
+  } finally {
+    await firstRun.close();
+  }
+
+  const secondRun = await launchDesktop(userDataDir, { testMode: "background" });
+  try {
+    const window = await secondRun.firstWindow();
+    await waitForWorkspaceByPath(window, alphaPath);
+    const group = window.locator(`.workspace-group[data-workspace-id="${workspaceId}"]`);
+    const folderRow = group.locator(".workspace-row__select");
+    await expect(folderRow).toHaveAttribute("aria-expanded", "false");
+    await expect(group.locator(".session-row")).toHaveCount(0);
+
+    await folderRow.click();
+    await expect(folderRow).toHaveAttribute("aria-expanded", "true");
+    await expect(group.locator(".session-row__title")).toHaveText(["Alpha planning"]);
+    await expect
+      .poll(async () => (await getDesktopState(window)).collapsedWorkspaceIds)
+      .toEqual([]);
+
+    // Starting a thread in a folded folder opens it so the new row stays in view.
+    await folderRow.click();
+    await expect(folderRow).toHaveAttribute("aria-expanded", "false");
+    await group.getByRole("button", { name: /^New thread in / }).click();
+    await expect(folderRow).toHaveAttribute("aria-expanded", "true");
+  } finally {
+    await secondRun.close();
+  }
+});

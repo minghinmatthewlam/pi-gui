@@ -353,6 +353,37 @@ test("numbers workspace rows after pins, skipping collapsed overflow", () => {
   ]);
 });
 
+test("numbers workspace rows only for folders that are open", () => {
+  const alpha = session("a", "Alpha thread", {
+    updatedAt: isoDaysAgo(0, 12),
+    lastInteractedAt: isoDaysAgo(0, 12),
+  });
+  const beta = session("b", "Beta thread", {
+    updatedAt: isoDaysAgo(0, 8),
+    lastInteractedAt: isoDaysAgo(0, 8),
+  });
+  const model = buildThreadSidebarModel(
+    state([workspace("alpha", "Alpha", [alpha]), workspace("beta", "Beta", [beta])]),
+    nowMs,
+  );
+
+  expect(
+    visibleThreadShortcutOrder({
+      grouping: "workspace",
+      model,
+      collapsedWorkspaceIds: ["alpha"],
+    }).map((thread) => thread.session.title),
+  ).toEqual(["Beta thread"]);
+  // Time buckets have no folders to fold, so every row stays numbered.
+  expect(
+    visibleThreadShortcutOrder({
+      grouping: "time",
+      model,
+      collapsedWorkspaceIds: ["alpha"],
+    }).map((thread) => thread.session.title),
+  ).toEqual(["Alpha thread", "Beta thread"]);
+});
+
 test("numbers visible rows in order when nothing is pinned", () => {
   const model = buildThreadSidebarModel(
     state([

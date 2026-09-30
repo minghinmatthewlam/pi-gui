@@ -257,6 +257,12 @@ contextBridge.exposeInMainWorld("piApp", {
     ipcRenderer.invoke(desktopIpc.setSidebarCollapsed, collapsed) as Promise<DesktopAppState>,
   setThreadGrouping: (grouping: ThreadGrouping) =>
     ipcRenderer.invoke(desktopIpc.setThreadGrouping, grouping) as Promise<DesktopAppState>,
+  setWorkspaceCollapsed: (workspaceId: string, collapsed: boolean) =>
+    ipcRenderer.invoke(
+      desktopIpc.setWorkspaceCollapsed,
+      workspaceId,
+      collapsed,
+    ) as Promise<DesktopAppState>,
   refreshRuntime: (workspaceId?: string) =>
     ipcRenderer.invoke(desktopIpc.refreshRuntime, workspaceId) as Promise<DesktopAppState>,
   setModelSettingsScopeMode: (mode: "app-global" | "per-repo") =>
