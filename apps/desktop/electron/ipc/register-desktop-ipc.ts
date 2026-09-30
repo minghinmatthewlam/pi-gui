@@ -72,6 +72,7 @@ type StateOwner = Pick<
   | "setActiveView"
   | "setSidebarCollapsed"
   | "setThreadGrouping"
+  | "setWorkspaceCollapsed"
   | "setThemeMode"
   | "setThemePresetId"
 >;
@@ -395,6 +396,14 @@ export function registerDesktopIpc({
   );
   ipcMain.handle(desktopIpc.setThreadGrouping, (event, rawGrouping: unknown) =>
     run(event, () => owners.state.setThreadGrouping(expectThreadGrouping(rawGrouping))),
+  );
+  ipcMain.handle(
+    desktopIpc.setWorkspaceCollapsed,
+    (event, rawWorkspaceId: unknown, rawCollapsed: unknown) => {
+      const workspaceId = expectNonEmptyString(rawWorkspaceId, "workspaceId");
+      const collapsed = expectBoolean(rawCollapsed, "collapsed");
+      return run(event, () => owners.state.setWorkspaceCollapsed(workspaceId, collapsed));
+    },
   );
 
   ipcMain.handle(desktopIpc.refreshRuntime, (event, rawWorkspaceId: unknown) =>

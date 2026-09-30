@@ -1340,6 +1340,24 @@ export class DesktopAppStore {
     return this.emit();
   }
 
+  async setWorkspaceCollapsed(workspaceId: string, collapsed: boolean): Promise<DesktopAppState> {
+    await this.initialize();
+    const collapsedWorkspaceIds = new Set(this.state.collapsedWorkspaceIds);
+    if (collapsedWorkspaceIds.has(workspaceId) === collapsed) {
+      return structuredClone(this.state);
+    }
+    if (collapsed) collapsedWorkspaceIds.add(workspaceId);
+    else collapsedWorkspaceIds.delete(workspaceId);
+    this.state = {
+      ...this.state,
+      collapsedWorkspaceIds: [...collapsedWorkspaceIds],
+      lastError: undefined,
+      revision: this.state.revision + 1,
+    };
+    await this.persistUiState();
+    return this.emit();
+  }
+
   async setNotificationPreferences(
     preferences: Partial<NotificationPreferences>,
   ): Promise<DesktopAppState> {
@@ -2070,6 +2088,7 @@ export class DesktopAppStore {
       themePresetId: persisted.themePresetId ?? this.state.themePresetId,
       sidebarCollapsed: persisted.sidebarCollapsed ?? this.state.sidebarCollapsed,
       threadGrouping: persisted.threadGrouping ?? "time",
+      collapsedWorkspaceIds: persisted.collapsedWorkspaceIds ?? [],
       enableTransparency: persisted.enableTransparency ?? this.state.enableTransparency,
       orchestrationChildren: persisted.orchestrationChildren ?? [],
     };
@@ -2373,6 +2392,9 @@ export class DesktopAppStore {
         pinnedAtBySession: mapToRecord(this.sessionState.pinnedAtBySession),
         pinnedSessionOrder,
         workspaceOrder: this.state.workspaceOrder,
+        collapsedWorkspaceIds: this.state.collapsedWorkspaceIds.filter((id) =>
+          liveWorkspaceIds.has(id),
+        ),
         modelSettingsScopeMode: this.state.modelSettingsScopeMode,
         globalModelSettings,
         composerDraft: this.resolveComposerDraft(
@@ -3837,6 +3859,8 @@ export class DesktopAppStore {
       themePresetId: this.state.themePresetId,
       sidebarCollapsed: this.state.sidebarCollapsed || undefined,
       threadGrouping: this.state.threadGrouping,
+      collapsedWorkspaceIds:
+        this.state.collapsedWorkspaceIds.length > 0 ? this.state.collapsedWorkspaceIds : undefined,
       enableTransparency: this.state.enableTransparency,
       orchestrationChildren: orchestration.toPersistedOrchestrationChildren(
         this.state.orchestrationChildren,

@@ -20,6 +20,7 @@ for (const invalid of [
   { version: 17, threadGrouping: "priority" },
   { version: 19, extensionFlagsByWorkspace: { ws: { retries: 3 } } },
   { version: 19, extensionFlagsBySession: { "ws:sess": ["plan"] } },
+  { version: 19, collapsedWorkspaceIds: ["alpha", 42] },
   [],
 ]) {
   test(`preserves invalid UI state ${JSON.stringify(invalid)}`, async () => {
@@ -81,6 +82,20 @@ test("extension flag defaults and per-thread flags round-trip through ui-state",
     ws: { plan: true, "dry-run": false, env: "" },
   });
   expect(decoded.extensionFlagsBySession).toEqual({ "ws:sess": { plan: true } });
+});
+
+test("reads ui-state without folded folders and writes the collapsed ids", async () => {
+  const path = join(await mkdtemp(join(tmpdir(), "ui-state-collapsed-")), "ui-state.json");
+  await writeFile(path, JSON.stringify({ version: 15, composerDraft: "kept" }));
+  expect((await readPersistedUiState(path)).collapsedWorkspaceIds).toBeUndefined();
+  await writePersistedUiState(path, { composerDraft: "kept", collapsedWorkspaceIds: ["alpha"] });
+  const written = JSON.parse(await readFile(path, "utf8")) as {
+    version: number;
+    collapsedWorkspaceIds: readonly string[];
+  };
+  expect(written.version).toBe(19);
+  expect(written.collapsedWorkspaceIds).toEqual(["alpha"]);
+  expect((await readPersistedUiState(path)).collapsedWorkspaceIds).toEqual(["alpha"]);
 });
 
 test("backup recovery retains damaged bytes and the good backup", async () => {
