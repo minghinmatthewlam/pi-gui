@@ -170,7 +170,8 @@ let retainedTerminalWorkspacePathSignature = "";
 const terminalFocusedWebContentsIds = new Set<number>();
 const sidePanelFocusedWebContentsIds = new Set<number>();
 const surfaceCloseShortcutIds = new Set<number>();
-let quittingAfterStoreFlush = false;
+// "flushing" while quit saves drafts and the store; "done" once quit may proceed.
+let quitFlush: "idle" | "flushing" | "done" = "idle";
 
 const SUPPORTED_IMAGE_TYPES = SUPPORTED_COMPOSER_IMAGE_TYPES;
 const SUPPORTED_IMAGE_MIME_TYPES = new Set<string>(
@@ -467,9 +468,16 @@ function createWindow(): BrowserWindow {
       surfaceCloseShortcutIds.delete(window.webContents.id);
       return;
     }
-    // Quit already flushed every window before the store. Otherwise hold this close until
-    // the renderer sends its debounced draft, since closing it would discard the draft.
-    if (quittingAfterStoreFlush || windowsClosingAfterDraftFlush.delete(window)) return;
+    // Quit flushes every window's draft and then the store before it closes any window. A
+    // close during that flush would drop this window's draft, and closing the last window
+    // would re-enter quit and skip the store flush, so quit closes it once the flush ends.
+    if (quitFlush === "flushing") {
+      event.preventDefault();
+      return;
+    }
+    if (quitFlush === "done" || windowsClosingAfterDraftFlush.delete(window)) return;
+    // Otherwise hold this close until the renderer sends its debounced draft, since closing
+    // the window would discard it.
     event.preventDefault();
     void composerDraftFlusher
       .flush([window])
@@ -1219,12 +1227,14 @@ app.on("before-quit", (event) => {
   stopPruningTerminals = undefined;
   terminalService?.dispose();
   terminalService = undefined;
-  if (quittingAfterStoreFlush || !store) {
+  if (quitFlush === "done" || !store) {
     return;
   }
 
   event.preventDefault();
-  quittingAfterStoreFlush = true;
+  // A second quit request during the flush waits for the one already running.
+  if (quitFlush === "flushing") return;
+  quitFlush = "flushing";
   const quittingStore = store;
   // Renderers send their debounced drafts first so the store flush below includes them.
   const flush = composerDraftFlusher
@@ -1242,6 +1252,7 @@ app.on("before-quit", (event) => {
   });
   void Promise.race([flush, flushDeadline])
     .finally(() => {
+      quitFlush = "done";
       app.quit();
     })
     .catch((error: unknown) => {

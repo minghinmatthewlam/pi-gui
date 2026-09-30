@@ -96,6 +96,39 @@ test("keeps a draft typed just before closing the last window", async () => {
   await expectDraftAfterRelaunch(launch, "Close draft");
 });
 
+test("keeps a draft when the window is closed while quit is saving drafts", async () => {
+  test.setTimeout(90_000);
+  const launch = launcher("draft-shutdown-close-during-quit");
+  const harness = await launch();
+  const window = await harness.firstWindow();
+  await createNamedThread(window, "Close during quit");
+  await window.evaluate(() => {
+    (globalThis as { realNow?: () => number }).realNow = Date.now.bind(Date);
+  });
+  await pauseRendererTimers(window);
+  await typeUnsavedDraft(window);
+  // Keep the renderer busy for a second, so quit is still waiting for its draft when the
+  // window is closed. The busy task starts as soon as this evaluate returns.
+  await window.evaluate(() => {
+    const channel = new MessageChannel();
+    channel.port1.onmessage = () => {
+      const realNow = (globalThis as { realNow?: () => number }).realNow;
+      if (!realNow) throw new Error("real clock unavailable");
+      const until = realNow() + 1_000;
+      while (realNow() < until) {
+        // Busy on purpose.
+      }
+    };
+    channel.port2.postMessage(null);
+  });
+  const exited = processExit(harness);
+  await harness.electronApp.evaluate(({ app }) => app.quit());
+  await closeFirstWindow(harness);
+  await exited;
+
+  await expectDraftAfterRelaunch(launch, "Close during quit");
+});
+
 test("keeps a draft when the thread is archived by shortcut straight after typing", async () => {
   test.setTimeout(90_000);
   const harness = await launcher("draft-archive-shortcut")();
