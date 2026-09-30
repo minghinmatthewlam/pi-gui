@@ -119,6 +119,8 @@ async function startHarness(t: test.TestContext) {
 
   let runtime!: AgentSessionRuntime;
   const commandGate = { current: gate() };
+  /** When set, loading the extension waits on it, so a reload stays in flight. */
+  const loadGate: { current: ReturnType<typeof gate> | undefined } = { current: undefined };
   /** Wraps the next session.prompt() call, to hold it or fail it. */
   const promptHook: { current: ((prompt: () => Promise<void>) => Promise<void>) | undefined } = {
     current: undefined,
@@ -130,8 +132,9 @@ async function startHarness(t: test.TestContext) {
       {
         name: "pi-gui-load-counter",
         displayName: "Load counter",
-        factory: (pi) => {
+        factory: async (pi) => {
           state.loads += 1;
+          await loadGate.current?.wait;
           pi.registerCommand("hold", {
             description: "Waits until the test lets it finish",
             handler: async () => {
@@ -158,7 +161,15 @@ async function startHarness(t: test.TestContext) {
     { initialModel: { provider: "reload-test", modelId: "scripted" } },
   );
   t.after(() => driver.closeSession(ref));
-  return { driver, ref, state, commandGate, promptHook, session: () => runtime.session };
+  return {
+    driver,
+    ref,
+    state,
+    commandGate,
+    loadGate,
+    promptHook,
+    session: () => runtime.session,
+  };
 }
 
 await test("a reload asked for during a turn waits for the turn to end", async (t) => {
@@ -241,4 +252,23 @@ await test("a deferred reload runs when the prompt fails before a run starts", a
   failGate.open();
   await assert.rejects(sent, /prompt failed before the run/);
   await waitFor(() => state.loads === loadsAtStart + 1, "the deferred reload after the failure");
+});
+
+await test("a message sent during a reload starts its turn after the reload", async (t) => {
+  const { driver, ref, state, loadGate } = await startHarness(t);
+  const loadsAtStart = state.loads;
+  loadGate.current = gate();
+
+  const reloaded = driver.reloadSessionWhenIdle(ref);
+  await waitFor(() => state.loads === loadsAtStart + 1, "the reload to load extensions");
+  const sent = driver.sendUserMessage(ref, { text: "hello" });
+  await settle();
+  assert.equal(state.streaming, false, "the turn waits for the reload");
+
+  loadGate.current.open();
+  assert.equal(await reloaded, "reloaded");
+  await waitFor(() => state.streaming, "the turn to start after the reload");
+  assert.equal(state.loadsAtLastTurn, loadsAtStart + 1);
+  state.turnGate.open();
+  await sent;
 });
