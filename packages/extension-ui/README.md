@@ -42,7 +42,10 @@ state with `env.replicatedState`, which uses the host's Chord instance.
 
 `host.actions.openFile({ path, line?, column? })` opens a scoped file target.
 `host.actions.prepareTaskDraft({ title, prompt, files? })` prepares a task draft.
-Neither accepts a workspace, session, or window identity. The desktop binds actions
+`host.actions.openUrl(url)` opens an https link in the browser.
+`host.actions.openThread(sessionId)` opens another thread of the same folder or its
+pi-gui worktrees, by pi session id; any other thread is refused.
+None accepts a workspace or window identity. The desktop binds actions
 to the initiating connection. The host supplies theme colors and an `AbortSignal`
 that reports connection loss; the frontend should stop using old service handles
 when that signal aborts.

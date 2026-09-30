@@ -333,6 +333,14 @@ function openExternalWebUrl(url: string): boolean {
   return true;
 }
 
+async function openExternalLink(url: string): Promise<void> {
+  const parsed = parseExternalWebUrl(url);
+  if (!parsed) {
+    throw new Error(`Refusing to open unsupported URL: ${url}`);
+  }
+  await shell.openExternal(parsed.toString());
+}
+
 function readClipboardImageAttachment(): ClipboardImageRead {
   const image = clipboard.readImage();
   if (image.isEmpty()) {
@@ -905,7 +913,7 @@ app
       },
       onHostAction: (context) =>
         performExtensionViewHostAction(
-          { store, windows: windowOwner, views: extensionViews },
+          { store, windows: windowOwner, views: extensionViews, openExternal: openExternalLink },
           context,
         ),
       onDiagnostic: (target, source, message) =>
@@ -1082,13 +1090,7 @@ app
             ? `pi desktop ready:${MAIN_DEV_RELOAD_MARKER}`
             : "pi desktop ready",
         theme: themeManager,
-        openExternal: async (url) => {
-          const parsed = parseExternalWebUrl(url);
-          if (!parsed) {
-            throw new Error(`Refusing to open unsupported URL: ${url}`);
-          }
-          await shell.openExternal(parsed.toString());
-        },
+        openExternal: openExternalLink,
         pickWorkspace: (window) => pickWorkspaceViaDialog(window),
         createLoginCallbacks: (window) => createRuntimeLoginCallbacks(window),
         probeCustomProviderModels,

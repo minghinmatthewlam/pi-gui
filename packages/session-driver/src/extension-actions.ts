@@ -16,7 +16,9 @@ export type ExtensionAction =
   /** Opens an https link in the browser. */
   | { readonly type: "url"; readonly label: string; readonly url: string }
   /** Runs one of the thread's extension commands, such as "/ci rerun". Never starts a model turn. */
-  | { readonly type: "command"; readonly label: string; readonly command: string };
+  | { readonly type: "command"; readonly label: string; readonly command: string }
+  /** Opens another thread of the same folder, or one of its pi-gui worktrees, by pi session id. */
+  | { readonly type: "openThread"; readonly label: string; readonly sessionId: string };
 
 export type ExtensionActionType = ExtensionAction["type"];
 
@@ -24,6 +26,7 @@ const MAX_LABEL_LENGTH = 80;
 const MAX_TEXT_LENGTH = 10_000;
 const MAX_COMMAND_LENGTH = 1_000;
 const MAX_URL_LENGTH = 2_048;
+const SESSION_ID = /^[A-Za-z0-9._-]{1,200}$/;
 
 /**
  * The only place untrusted data becomes an `ExtensionAction`: extension records in the pi
@@ -58,9 +61,18 @@ export function parseExtensionAction(value: unknown): ExtensionAction | undefine
         ? { type: "command", label, command }
         : undefined;
     }
+    case "openThread": {
+      const sessionId = parseExtensionSessionId(value.sessionId);
+      return sessionId ? { type: "openThread", label, sessionId } : undefined;
+    }
     default:
       return undefined;
   }
+}
+
+/** A pi session id as an extension may name one, or undefined. */
+function parseExtensionSessionId(value: unknown): string | undefined {
+  return typeof value === "string" && SESSION_ID.test(value) ? value : undefined;
 }
 
 /** An https URL without credentials, normalized, or undefined. */

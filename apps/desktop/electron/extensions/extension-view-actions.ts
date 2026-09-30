@@ -6,6 +6,7 @@ import { desktopIpc } from "../../contracts/ipc";
 import type { DesktopAppStore } from "../application/app-store";
 import { resolveExistingWorkspacePath } from "../platform/files/workspace-paths";
 import type { WindowOwner } from "../windows/window-owner";
+import { runExtensionAction, type AppOperationHost } from "./app-operations";
 import type {
   DesktopExtensionViewOwner,
   DesktopExtensionConnectionContext,
@@ -16,6 +17,7 @@ export async function performExtensionViewHostAction(
     readonly store: DesktopAppStore;
     readonly windows: WindowOwner;
     readonly views: DesktopExtensionViewOwner;
+    readonly openExternal: (url: string) => Promise<void>;
   },
   context: DesktopExtensionConnectionContext & { readonly action: DesktopHostAction },
 ): Promise<void> {
@@ -34,6 +36,30 @@ export async function performExtensionViewHostAction(
     }
   };
   requireCurrentTask();
+  const action = context.action;
+  if (action.type === "openUrl" || action.type === "openThread") {
+    // Links and threads run through the same checked operations as card buttons.
+    const host: AppOperationHost = {
+      workspacePath: (workspaceId) => owners.store.getWorkspacePath(workspaceId),
+      openExternal: owners.openExternal,
+      runExtensionCommand: () => Promise.reject(new Error("Views can't run commands")),
+      workspaces: () => owners.store.getWorkspaceRecords(),
+      selectThread: async (thread) => {
+        await owners.windows.runStateAction(window, async () => {
+          requireCurrentTask();
+          return owners.store.selectSession(thread);
+        });
+      },
+    };
+    await runExtensionAction(
+      host,
+      context.target,
+      action.type === "openUrl"
+        ? { type: "url", url: action.url }
+        : { type: "openThread", sessionId: action.sessionId },
+    );
+    return;
+  }
   const workspacePath = owners.store.getWorkspacePath(context.target.workspaceId);
   if (!workspacePath) throw new Error("The task checkout is unavailable");
   const existingFile = async (requestedPath: string) => {
@@ -41,7 +67,6 @@ export async function performExtensionViewHostAction(
     if (!(await stat(filePath)).isFile()) throw new Error("The selected path is not a file");
     return filePath;
   };
-  const action = context.action;
   if (action.type === "openFile") {
     const filePath = await existingFile(action.path);
     requireCurrentTask();

@@ -149,7 +149,8 @@ request.
 The browser exports `mount(root, host)` and returns a disposer. Wait for the scoped
 service binding's `ready()` before reading state or subscribing. Observe
 `host.signal` so a closed view does not reuse stale capabilities. The host supplies
-theme colors and scoped `openFile` / `prepareTaskDraft` actions; a prepared draft
+theme colors and scoped `openFile` / `prepareTaskDraft` / `openUrl` / `openThread`
+actions; a prepared draft
 is editable and is never sent automatically. Create backend replicated state
 with `env.replicatedState` so it belongs to the host's Chord instance.
 
