@@ -186,6 +186,7 @@ const HIDDEN_FIELDS = ["env", "headers", "oauth"] as const;
 
 /** Names that usually hold a credential, in a flag (`--api-key`) or a `NAME=value` pair. */
 const SECRET_NAME = /token|key|secret|password|passwd|auth|credential|bearer/i;
+const HTTP_URL = /^https?:\/\//i;
 const MASK = "•••";
 
 /**
@@ -203,9 +204,21 @@ function redactArgs(args: readonly string[]): string[] {
       continue;
     }
     maskNext = false;
+    // Server URLs passed as arguments (`mcp-remote https://…?api_key=…`) leak like the `url` field.
+    if (HTTP_URL.test(arg)) {
+      redacted.push(redactUrl(arg));
+      continue;
+    }
     const pair = /^([^=:\s]+)(=|:\s*)/.exec(arg);
     if (pair) {
-      redacted.push(SECRET_NAME.test(pair[1]!) ? `${pair[1]}${pair[2]}${MASK}` : arg);
+      const value = arg.slice(pair[0].length);
+      redacted.push(
+        SECRET_NAME.test(pair[1]!)
+          ? `${pair[1]}${pair[2]}${MASK}`
+          : HTTP_URL.test(value)
+            ? `${pair[1]}${pair[2]}${redactUrl(value)}`
+            : arg,
+      );
       continue;
     }
     redacted.push(arg);

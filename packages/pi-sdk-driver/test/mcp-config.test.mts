@@ -249,6 +249,9 @@ await test("stdio arguments that look like credentials are masked in listings", 
     "8080",
     "LOG_LEVEL=debug",
     "https://example.com/data",
+    "https://example.com/mcp?api_key=ARG_SECRET_5",
+    "https://user:ARG_SECRET_6@example.com/mcp",
+    "SERVER_URL=https://example.com/mcp?t=ARG_SECRET_7",
   ];
   writeFileSync(globalPath, JSON.stringify({ mcpServers: { tools: { command: "npx", args } } }));
 
@@ -268,6 +271,9 @@ await test("stdio arguments that look like credentials are masked in listings", 
     "8080",
     "LOG_LEVEL=debug",
     "https://example.com/data",
+    "https://example.com/mcp?…",
+    "https://example.com/mcp",
+    "SERVER_URL=https://example.com/mcp?…",
   ]);
   assert.doesNotMatch(JSON.stringify(server), /ARG_SECRET/);
   assert.deepEqual(
