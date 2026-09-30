@@ -4,7 +4,7 @@ import type { ExtensionFlagValues, SessionSchemaInfo } from "@pi-gui/session-dri
 import type { BrowserWindow } from "electron";
 import { readFile, stat } from "node:fs/promises";
 import { homedir, hostname } from "node:os";
-import { join, resolve } from "node:path";
+import { join, resolve, sep } from "node:path";
 import {
   applyHostUiRequestToExtensionUiState,
   type GenerateThreadTitleOptions,
@@ -1786,6 +1786,7 @@ export class DesktopAppStore {
     }
     const listing = this.driver.runtimeSupervisor.listMcpServers(ws);
     return {
+      globalConfigPath: withHomeAsTilde(listing.globalConfigPath),
       servers: listing.servers.map((server) => ({ ...server })),
       errors: [...listing.errors],
       codemodeAlwaysOn: await this.driver.runtimeSupervisor.getCodemodeAlwaysOn(ws),
@@ -4743,6 +4744,12 @@ async function statMtimeMs(path: string): Promise<number | undefined> {
   } catch {
     return undefined;
   }
+}
+
+/** Shows a path under the home directory as `~/…`, the way pi's docs and terminal name it. */
+function withHomeAsTilde(path: string): string {
+  const home = homedir();
+  return path.startsWith(`${home}${sep}`) ? `~${path.slice(home.length)}` : path;
 }
 
 function resolveGlobalSettingsPath(): string {

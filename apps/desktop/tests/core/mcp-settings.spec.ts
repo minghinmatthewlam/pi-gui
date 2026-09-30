@@ -180,7 +180,9 @@ test("rejects a server Settings cannot run and leaves mcp.json alone", async () 
     const window = await harness.firstWindow();
     await openMcpSettings(window);
     const surface = window.getByTestId("settings-surface");
-    await expect(surface.getByTestId("mcp-servers-empty")).toContainText("~/.pi/agent/mcp.json");
+    // The copy names the file this app really uses, here the test's own agent directory.
+    await expect(surface.getByTestId("mcp-servers-empty")).toContainText(mcpPath);
+    await expect(surface).toContainText(`Saved to ${mcpPath}.`);
     await expect(surface.getByTestId("mcp-servers-empty")).toContainText("/mcp");
 
     await surface.getByLabel("Server name").fill("local-file");

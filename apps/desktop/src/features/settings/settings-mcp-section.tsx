@@ -74,12 +74,13 @@ export function SettingsMcpSection({ workspaceId, actions }: SettingsMcpSectionP
 
   const servers = snapshot?.servers ?? [];
   const problems = [...(error ? [error] : []), ...(snapshot?.errors ?? [])];
+  const globalConfigPath = snapshot?.globalConfigPath ?? "pi's global mcp.json";
 
   return (
     <>
       <SettingsGroup
         title="Servers"
-        description="Shared with pi in the terminal: ~/.pi/agent/mcp.json, plus this project's .pi/mcp.json."
+        description={`Shared with pi in the terminal: ${globalConfigPath}, plus this project's .pi/mcp.json.`}
       >
         {problems.map((problem) => (
           <div className="settings-row" key={problem}>
@@ -89,7 +90,7 @@ export function SettingsMcpSection({ workspaceId, actions }: SettingsMcpSectionP
         {snapshot && servers.length === 0 ? (
           <div className="settings-row" data-testid="mcp-servers-empty">
             <span className="settings-row__description">
-              No MCP servers yet. Servers come from ~/.pi/agent/mcp.json, which pi in the terminal
+              No MCP servers yet. Servers come from {globalConfigPath}, which pi in the terminal
               uses too. Connection status and sign-in show in threads: type /mcp.
             </span>
           </div>
@@ -112,6 +113,7 @@ export function SettingsMcpSection({ workspaceId, actions }: SettingsMcpSectionP
       </SettingsGroup>
 
       <AddMcpServerForm
+        configPath={globalConfigPath}
         disabled={pending}
         onAdd={(server) => apply(() => actions.onAddServer(server))}
       />
@@ -189,9 +191,11 @@ export function removeServerQuestion(server: McpServerRecord): string {
 type ServerKind = "command" | "url";
 
 function AddMcpServerForm({
+  configPath,
   disabled,
   onAdd,
 }: {
+  readonly configPath: string;
   readonly disabled: boolean;
   readonly onAdd: (server: NewMcpServerInput) => Promise<string | undefined>;
 }) {
@@ -217,7 +221,7 @@ function AddMcpServerForm({
   };
 
   return (
-    <SettingsGroup title="Add server" description="Saved to ~/.pi/agent/mcp.json.">
+    <SettingsGroup title="Add server" description={`Saved to ${configPath}.`}>
       <SettingsRow title="Name">
         <input
           aria-label="Server name"

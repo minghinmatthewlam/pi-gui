@@ -26,6 +26,8 @@ export interface McpServerSummary {
 }
 
 export interface McpServerListing {
+  /** The global `mcp.json`, where new servers go. */
+  readonly globalConfigPath: string;
   readonly servers: readonly McpServerSummary[];
   /** Files that could not be read, with why. */
   readonly errors: readonly string[];
@@ -71,7 +73,7 @@ export function listMcpServers(location: McpConfigLocation): McpServerListing {
       else errors.push(`${path}: MCP server "${name}" needs a "command" or a "url"`);
     }
   }
-  return { servers, errors };
+  return { globalConfigPath: mcpConfigPath(location, "global"), servers, errors };
 }
 
 /** Adds a server to the global `mcp.json`, creating the file when missing. */

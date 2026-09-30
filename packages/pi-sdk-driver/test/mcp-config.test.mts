@@ -94,6 +94,7 @@ await test("listing returns no secrets and marks project servers", () => {
 
   const listing = listMcpServers({ agentDir, cwd });
   assert.deepEqual(listing, {
+    globalConfigPath: globalPath,
     servers: [
       {
         name: "docs",
@@ -148,7 +149,10 @@ await test("listing returns no secrets and marks project servers", () => {
     ],
     errors: [],
   });
-  assert.doesNotMatch(JSON.stringify(listing), /s3cret|TOKEN|pass|QUERYKEY|frag|CLIENTSECRET|RAWKEY/);
+  assert.doesNotMatch(
+    JSON.stringify(listing),
+    /s3cret|TOKEN|pass|QUERYKEY|frag|CLIENTSECRET|RAWKEY/,
+  );
 
   setMcpServerEnabled({ agentDir, cwd }, "project", "project", false);
   assert.deepEqual(readJson(join(cwd, ".pi", "mcp.json")), {

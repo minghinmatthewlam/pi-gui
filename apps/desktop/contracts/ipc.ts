@@ -88,6 +88,8 @@ export interface McpServerRecord {
 }
 
 export interface McpServersSnapshot {
+  /** The global mcp.json new servers are saved to, with the home directory shown as `~`. */
+  readonly globalConfigPath: string;
   readonly servers: readonly McpServerRecord[];
   /** mcp.json files that could not be read. */
   readonly errors: readonly string[];
