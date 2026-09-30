@@ -22,6 +22,7 @@ import type {
   SessionUsageSnapshot,
   WorkspaceRef,
 } from "@pi-gui/session-driver";
+import { EXTENSION_CARD_CUSTOM_TYPE } from "@pi-gui/session-driver";
 import type { SessionQueuedMessage } from "@pi-gui/session-driver/types";
 
 const FILE_ATTACHMENT_BLOCK_START = "<pi-gui-file-attachments>";
@@ -259,9 +260,6 @@ export function injectFileAttachmentPreamble(
   const block = `${FILE_ATTACHMENT_BLOCK_START}${payload}${FILE_ATTACHMENT_BLOCK_END}`;
   return text ? `${block}\n${text}` : block;
 }
-
-/** The custom entry type an extension writes with `pi.appendEntry` to show a card in pi-gui. */
-export const EXTENSION_CARD_CUSTOM_TYPE = "pi-gui.card";
 
 /** One thing the transcript draws: a context message, or a custom entry pi itself projects to nothing. */
 type DisplaySource =

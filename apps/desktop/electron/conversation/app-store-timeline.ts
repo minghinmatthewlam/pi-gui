@@ -1,4 +1,4 @@
-import { sessionKey } from "@pi-gui/session-driver";
+import { isCardEntryItem, sessionKey } from "@pi-gui/session-driver";
 import type { SessionTranscriptItem } from "@pi-gui/session-driver";
 import type { SessionDriverEvent, SessionQueuedMessage, SessionRef } from "@pi-gui/session-driver";
 import type { TranscriptMessage } from "../../contracts/desktop-state";
@@ -296,11 +296,11 @@ export function applyTimelineEvent(
     case "transcriptItemAppended": {
       // Same id as the persisted entry, so a transcript reload replaces rather than duplicates it.
       if (transcript.some((item) => item.id === event.item.id)) return;
-      // pi saves a streaming reply only when it ends, so a card appended mid-reply comes before
-      // that reply in the session file. Place it there now so a reload never moves it.
+      // pi saves a streaming reply only when it ends, so a card (or its error row) appended
+      // mid-reply comes before that reply in the session file. Place it there now so a reload never moves it.
       const streamingId = state.activeAssistantMessageBySession.get(key);
       const streamingIndex =
-        event.item.kind === "card" && streamingId
+        isCardEntryItem(event.item) && streamingId
           ? transcript.findIndex((item) => item.id === streamingId)
           : -1;
       if (streamingIndex >= 0) {

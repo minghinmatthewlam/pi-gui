@@ -2325,6 +2325,7 @@ export class SessionSupervisor {
               sessionRef: record.ref,
               timestamp,
               item: transcriptItemFromCardEntry(event.entry),
+              ...(record.runningRunId ? { runId: record.runningRunId } : {}),
             },
           ];
         }

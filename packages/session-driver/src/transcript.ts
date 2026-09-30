@@ -55,6 +55,9 @@ export interface SessionTranscriptCustomMessage {
   readonly text: string;
 }
 
+/** The custom entry type an extension writes with `pi.appendEntry` to show a card in pi-gui. */
+export const EXTENSION_CARD_CUSTOM_TYPE = "pi-gui.card";
+
 export type ExtensionCardTone = "neutral" | "success" | "warning" | "error";
 
 export interface ExtensionCardRow {
@@ -94,3 +97,11 @@ export type SessionTranscriptItem =
   | SessionTranscriptToolCall
   | SessionTranscriptCustomMessage
   | SessionTranscriptCard;
+
+/** A card, or the row that says why a `pi-gui.card` entry could not be drawn. */
+export function isCardEntryItem(item: SessionTranscriptItem): boolean {
+  return (
+    item.kind === "card" ||
+    (item.kind === "custom" && item.customType === EXTENSION_CARD_CUSTOM_TYPE)
+  );
+}

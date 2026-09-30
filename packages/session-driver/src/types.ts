@@ -352,7 +352,6 @@ export type SessionDriverEvent =
   | AssistantMessagePersistedEvent
   | TranscriptItemAppendedEvent
   | QueuedMessageStartedEvent
-  | TranscriptItemAppendedEvent
   | ToolStartedEvent
   | ToolUpdatedEvent
   | ToolFinishedEvent
