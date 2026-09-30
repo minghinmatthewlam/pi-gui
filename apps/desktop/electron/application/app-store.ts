@@ -1444,10 +1444,14 @@ export class DesktopAppStore {
     return this.withErrorHandling(async () => {
       const snapshot = await this.driver.runtimeSupervisor.refreshRuntime(ws);
       this.runtimeByWorkspace.set(ws.workspaceId, snapshot);
-      this.clearExtensionUiForWorkspace(ws.workspaceId);
-      await this.reloadSessionsForWorkspace(ws.workspaceId);
+      const reloaded = await this.reloadOpenSessions([ws.workspaceId]);
       await this.refreshSessionCommandsForWorkspace(ws.workspaceId);
-      return this.refreshState({ clearLastError: true });
+      const state = await this.refreshState({ clearLastError: true });
+      return reloaded
+        ? state
+        : this.withError(
+            "Some open threads could not reload; they pick up the change when reopened.",
+          );
     });
   }
 
@@ -2644,7 +2648,7 @@ export class DesktopAppStore {
 
   private async reconcileWorkspaceFromDisk(workspaceId: string): Promise<void> {
     // Re-scan the pi session dir into the catalog so a CLI-created session appears.
-    // We deliberately do NOT call reloadSessionsForWorkspace here: reloadSession
+    // We deliberately do NOT call reloadOpenSessions here: reloadSession
     // resets a session's live extension UI (dropping pending dialogs, including
     // ones shared across windows). The catalog resync updates the session list,
     // and the selected session's transcript is refreshed non-destructively below.
@@ -3102,17 +3106,6 @@ export class DesktopAppStore {
   private async refreshSessionCommandsForWorkspace(workspaceId: string): Promise<void> {
     const sessionRefs = this.sessionRefsForWorkspace(workspaceId);
     await Promise.all(sessionRefs.map((sessionRef) => this.refreshSessionCommands(sessionRef)));
-  }
-
-  private async reloadSessionsForWorkspace(workspaceId: string): Promise<void> {
-    const sessionRefs = this.sessionRefsForWorkspace(workspaceId);
-    await Promise.all(sessionRefs.map((sessionRef) => this.driver.reloadSession(sessionRef)));
-  }
-
-  private clearExtensionUiForWorkspace(workspaceId: string): void {
-    for (const sessionRef of this.sessionRefsForWorkspace(workspaceId)) {
-      this.clearExtensionUiForSession(sessionRef);
-    }
   }
 
   private reportExtensionCompatibilityIssue(
