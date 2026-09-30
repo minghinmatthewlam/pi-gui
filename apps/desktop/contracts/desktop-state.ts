@@ -1,6 +1,4 @@
-import type {
-  ExtensionBadge,
-  ExtensionPanel, HostUiRequest, SessionConfig, SessionUsageSnapshot } from "@pi-gui/session-driver";
+import type { HostUiRequest, SessionConfig, SessionUsageSnapshot } from "@pi-gui/session-driver";
 import type {
   ModelSettingsSnapshot,
   RuntimeCommandRecord,
@@ -247,8 +245,6 @@ export interface SessionExtensionUiStateRecord {
   readonly instanceId: string;
   readonly statuses: readonly SessionExtensionStatusRecord[];
   readonly widgets: readonly SessionExtensionWidgetRecord[];
-  readonly panels: readonly ExtensionPanel[];
-  readonly badges: readonly ExtensionBadge[];
   readonly pendingDialogs: readonly SessionExtensionDialogRecord[];
   readonly title?: string;
   readonly editorText?: string;
@@ -290,8 +286,6 @@ export type StartThreadInput = {
   readonly provider?: string;
   readonly modelId?: string;
   readonly thinkingLevel?: string;
-  /** Prototype: extension flag values for this thread's pi session. */
-  readonly extensionFlags?: Readonly<Record<string, boolean | string>>;
 };
 
 export type ForkThreadPosition = "before" | "at" | "after";

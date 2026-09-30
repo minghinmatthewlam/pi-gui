@@ -15,7 +15,6 @@ import { ThreadSearchBar } from "./thread-search";
 import { TimelineItem } from "./timeline-item";
 import type { OpenTurnChange } from "./turn-changes-card";
 import type { WorkspaceFileLine } from "./workspace-file-line";
-import type { RunExtensionAction } from "../extensions/extension-slots";
 import { SparkIcon } from "../../ui/icons";
 
 interface ThreadSearchModel {
@@ -39,7 +38,6 @@ interface ConversationTimelineProps {
   readonly onOpenTurnChange?: OpenTurnChange;
   readonly onForkFromMessage?: (messageIndex: number, preview?: string) => void;
   readonly onOpenWorkspaceFileLine?: (target: WorkspaceFileLine) => void;
-  readonly onExtensionAction?: RunExtensionAction;
   readonly scheduledOrigins?: ReadonlyMap<string, ScheduledTaskOrigin>;
   readonly workspacePath?: string;
 }
@@ -54,7 +52,6 @@ export function ConversationTimeline({
   onOpenTurnChange,
   onForkFromMessage,
   onOpenWorkspaceFileLine,
-  onExtensionAction,
   scheduledOrigins,
   workspacePath,
 }: ConversationTimelineProps) {
@@ -141,7 +138,6 @@ export function ConversationTimeline({
                   sourceMessageIndex={renderedMessageIndexById.get(item.id)}
                   onForkFromMessage={onForkFromMessage}
                   onOpenWorkspaceFileLine={onOpenWorkspaceFileLine}
-                  onExtensionAction={onExtensionAction}
                   workspacePath={workspacePath}
                   scheduledOrigin={
                     item.kind === "message" ? scheduledOrigins?.get(item.id) : undefined
@@ -240,7 +236,6 @@ interface MeasuredTimelineItemProps {
   readonly sourceMessageIndex?: number;
   readonly onForkFromMessage?: (messageIndex: number, preview?: string) => void;
   readonly onOpenWorkspaceFileLine?: (target: WorkspaceFileLine) => void;
-  readonly onExtensionAction?: RunExtensionAction;
   readonly scheduledOrigin?: ScheduledTaskOrigin;
   readonly workspacePath?: string;
 }
@@ -258,7 +253,6 @@ function MeasuredTimelineItemBase({
   sourceMessageIndex,
   onForkFromMessage,
   onOpenWorkspaceFileLine,
-  onExtensionAction,
   scheduledOrigin,
   workspacePath,
 }: MeasuredTimelineItemProps) {
@@ -294,7 +288,6 @@ function MeasuredTimelineItemBase({
     >
       <TimelineItem
         item={item}
-        onExtensionAction={onExtensionAction}
         expandedToolCallIds={expandedToolCallIds}
         onToggleToolCall={onToggleToolCall}
         onViewFileInDiff={onViewFileInDiff}

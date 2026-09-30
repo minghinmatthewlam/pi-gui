@@ -26,13 +26,6 @@ import type {
   SessionTreeSnapshot,
 } from "@pi-gui/session-driver/types";
 import type {
-  ExtensionAction,
-  ExtensionBadge,
-  ExtensionCard,
-  ExtensionPanel,
-  ExtensionPanelRow,
-  ExtensionPanelSection,
-  ExtensionTone,
   CreateSessionOptions,
   ForkSessionOptions,
   ForkSessionResult,
@@ -680,9 +673,6 @@ export class SessionSupervisor {
               CreateAgentSessionOptions["thinkingLevel"]
             >,
           }
-        : {}),
-      ...(options?.extensionFlagValues && Object.keys(options.extensionFlagValues).length > 0
-        ? { extensionFlagValues: new Map(Object.entries(options.extensionFlagValues)) }
         : {}),
     };
 
@@ -1604,7 +1594,6 @@ export class SessionSupervisor {
     } finally {
       record.bindingExtensions = false;
     }
-    this.replaySlotEntries(record, session);
     record.sessionCommands = this.collectSessionCommands(session);
     this.refreshUsage(record);
   }
@@ -1976,39 +1965,6 @@ export class SessionSupervisor {
     await emitModelSelect.call(session, model, previousModel, "set");
   }
 
-  /** Prototype: slot entries (card, panel, badge) declared by extensions as pi custom entries. */
-  private applySlotEntry(record: ManagedSessionRecord, customType: string, data: unknown): void {
-    const requestId = crypto.randomUUID();
-    if (customType === "pi-gui.card") {
-      const card = parseExtensionCard(data);
-      if (card) this.emitHostUiRequest(record, { kind: "card", requestId, card });
-      return;
-    }
-    if (customType === "pi-gui.panel") {
-      const key = slotKey(data);
-      if (!key) return;
-      const panel = parseExtensionPanel(data);
-      this.emitHostUiRequest(record, { kind: "panel", requestId, key, ...(panel ? { panel } : {}) });
-      return;
-    }
-    if (customType === "pi-gui.badge") {
-      const key = slotKey(data);
-      if (!key) return;
-      const badge = parseExtensionBadge(data);
-      this.emitHostUiRequest(record, { kind: "badge", requestId, key, ...(badge ? { badge } : {}) });
-    }
-  }
-
-  /** Keyed slots persist in the session file; rebuild them from the active branch on (re)bind. */
-  private replaySlotEntries(record: ManagedSessionRecord, session: AgentSession): void {
-    for (const entry of session.sessionManager.getBranch()) {
-      if (entry.type !== "custom" || entry.customType === "pi-gui.card") continue;
-      if (entry.customType.startsWith("pi-gui.")) {
-        this.applySlotEntry(record, entry.customType, entry.data);
-      }
-    }
-  }
-
   private emitHostUiRequest(
     record: ManagedSessionRecord,
     request: Extract<SessionDriverEvent, { type: "hostUiRequest" }>["request"],
@@ -2070,8 +2026,6 @@ export class SessionSupervisor {
   private clearExtensionUiState(record: ManagedSessionRecord): void {
     record.extensionUiState.statuses.clear();
     record.extensionUiState.widgets.clear();
-    record.extensionUiState.panels.clear();
-    record.extensionUiState.badges.clear();
     record.extensionUiState.title = undefined;
     record.extensionUiState.editorText = undefined;
   }
@@ -2354,11 +2308,6 @@ export class SessionSupervisor {
         this.refreshUsage(record);
         return [sessionUpdatedEvent(record)];
       case "entry_appended":
-        // Tier 1 prototype: an extension appended a card declared as data.
-        if (event.entry.type === "custom" && event.entry.customType.startsWith("pi-gui.")) {
-          this.applySlotEntry(record, event.entry.customType, event.entry.data);
-          return [];
-        }
         // Cache-warming refreshes land as usage entries. pi announces them
         // before rescheduling the next refresh, so read once it has.
         if (event.entry.type !== "usage") return [];
@@ -3259,97 +3208,4 @@ function toDriverEvents(
   const id = runId ?? record.runningRunId;
   const event = id ? { ...base, runId: id } : base;
   return [event, sessionUpdatedEvent(record)];
-}
-
-function slotKey(data: unknown): string | undefined {
-  const key = data && typeof data === "object" ? (data as Record<string, unknown>).key : undefined;
-  return typeof key === "string" && key.trim() ? key : undefined;
-}
-
-function parseTone(value: unknown): ExtensionTone {
-  return value === "success" || value === "warning" || value === "error" ? value : "neutral";
-}
-
-function parseExtensionActions(value: unknown): ExtensionAction[] {
-  if (!Array.isArray(value)) return [];
-  return value.flatMap((raw): ExtensionAction[] => {
-    if (!raw || typeof raw !== "object") return [];
-    const a = raw as Record<string, unknown>;
-    if (typeof a.label !== "string" || !a.label.trim()) return [];
-    const label = a.label;
-    // Legacy card actions: { label, path, line } means open a file.
-    const type = a.type ?? (typeof a.path === "string" ? "openFile" : undefined);
-    if (type === "openFile" && typeof a.path === "string") {
-      return [{ label, type, path: a.path, ...(typeof a.line === "number" ? { line: a.line } : {}) }];
-    }
-    if (type === "composer" && typeof a.text === "string") return [{ label, type, text: a.text }];
-    if (type === "url" && typeof a.url === "string" && /^https?:\/\//.test(a.url)) {
-      return [{ label, type, url: a.url }];
-    }
-    if (type === "command" && typeof a.command === "string" && a.command.startsWith("/")) {
-      return [{ label, type, command: a.command }];
-    }
-    if (type === "panel" && typeof a.key === "string") return [{ label, type, key: a.key }];
-    return [];
-  });
-}
-
-function parseExtensionCard(data: unknown): ExtensionCard | undefined {
-  if (!data || typeof data !== "object") return undefined;
-  const raw = data as Record<string, unknown>;
-  if (typeof raw.title !== "string" || !raw.title.trim()) return undefined;
-  const rows = Array.isArray(raw.rows)
-    ? raw.rows.flatMap((row) =>
-        row && typeof row === "object" && typeof (row as any).label === "string"
-          ? [{ label: String((row as any).label), value: String((row as any).value ?? "") }]
-          : [],
-      )
-    : [];
-  const key = slotKey(raw);
-  return {
-    ...(key ? { key } : {}),
-    title: raw.title,
-    ...(typeof raw.subtitle === "string" ? { subtitle: raw.subtitle } : {}),
-    tone: parseTone(raw.tone),
-    rows,
-    actions: parseExtensionActions(raw.actions),
-  };
-}
-
-function parseExtensionPanel(data: unknown): ExtensionPanel | undefined {
-  const raw = data as Record<string, unknown>;
-  const key = slotKey(raw);
-  if (!key || raw.remove === true || typeof raw.title !== "string") return undefined;
-  const sections = Array.isArray(raw.sections)
-    ? raw.sections.flatMap((section): ExtensionPanelSection[] => {
-        if (!section || typeof section !== "object") return [];
-        const sec = section as Record<string, unknown>;
-        const rows = Array.isArray(sec.rows)
-          ? sec.rows.flatMap((row): ExtensionPanelRow[] => {
-              if (!row || typeof row !== "object") return [];
-              const r = row as Record<string, unknown>;
-              if (typeof r.label !== "string") return [];
-              return [
-                {
-                  label: r.label,
-                  ...(typeof r.value === "string" ? { value: r.value } : {}),
-                  ...(r.tone !== undefined ? { tone: parseTone(r.tone) } : {}),
-                  ...(r.actions ? { actions: parseExtensionActions(r.actions) } : {}),
-                },
-              ];
-            })
-          : [];
-        return [{ ...(typeof sec.title === "string" ? { title: sec.title } : {}), rows }];
-      })
-    : [];
-  return { key, title: raw.title, sections, actions: parseExtensionActions(raw.actions) };
-}
-
-function parseExtensionBadge(data: unknown): ExtensionBadge | undefined {
-  const raw = data as Record<string, unknown>;
-  const key = slotKey(raw);
-  if (!key || raw.remove === true || typeof raw.text !== "string" || !raw.text.trim()) {
-    return undefined;
-  }
-  return { key, text: raw.text, tone: parseTone(raw.tone) };
 }

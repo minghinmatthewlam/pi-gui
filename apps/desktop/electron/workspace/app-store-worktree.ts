@@ -144,7 +144,6 @@ export async function startThread(
         title: NEW_THREAD_PLACEHOLDER_TITLE,
         ...(initialModel ? { initialModel } : {}),
         ...(initialThinkingLevel ? { initialThinkingLevel } : {}),
-        ...(input.extensionFlags ? { extensionFlagValues: input.extensionFlags } : {}),
       });
     } catch (error) {
       if (rollbackWorktree) {

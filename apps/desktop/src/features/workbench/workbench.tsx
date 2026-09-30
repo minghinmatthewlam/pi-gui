@@ -6,7 +6,6 @@ import {
 } from "../../../contracts/ipc";
 import { toolRefId, type TaskWorkbenchTemplate, type ToolRef } from "../../../contracts/workbench";
 import type { DesktopExtensionViewInfo } from "../../../contracts/extension-views";
-import type { ExtensionPanel } from "@pi-gui/session-driver";
 import { CloseIcon, ExtensionIcon, PlusIcon, SidePanelIcon } from "../../ui/icons";
 import { BUILTIN_TOOL_ENTRIES, BUILTIN_TOOLS } from "./builtin-tools";
 import { WorkbenchResizeHandle } from "./workbench-resize-handle";
@@ -28,21 +27,17 @@ interface WorkbenchProps {
   readonly loading?: boolean;
   readonly onRetryRestore?: () => void;
   readonly extensionViews?: readonly DesktopExtensionViewInfo[];
-  /** Tier 1 panels this task's extensions declared as data. */
-  readonly extensionPanels?: readonly ExtensionPanel[];
   readonly extensionViewsLoading?: boolean;
   readonly extensionViewsError?: string;
   readonly onReloadExtensionViews?: () => void;
 }
 
 export function workbenchToolLabel(tool: ToolRef): string {
-  if (tool.kind === "extension") return tool.viewId;
-  if (tool.kind === "panel") return tool.panelKey;
-  return BUILTIN_TOOLS[tool.kind].label;
+  return tool.kind === "extension" ? tool.viewId : BUILTIN_TOOLS[tool.kind].label;
 }
 
 function ToolIcon({ tool }: { readonly tool: ToolRef }) {
-  if (tool.kind === "extension" || tool.kind === "panel") return <ExtensionIcon />;
+  if (tool.kind === "extension") return <ExtensionIcon />;
   const { Icon } = BUILTIN_TOOLS[tool.kind];
   return <Icon />;
 }
@@ -62,7 +57,6 @@ export function Workbench({
   loading = false,
   onRetryRestore,
   extensionViews = [],
-  extensionPanels = [],
   extensionViewsLoading = false,
   extensionViewsError = "",
   onReloadExtensionViews,
@@ -150,10 +144,7 @@ export function Workbench({
                 ? (extensionViews.find(
                     (entry) => entry.extensionId === tool.extensionId && entry.id === tool.viewId,
                   )?.title ?? workbenchToolLabel(tool))
-                : tool.kind === "panel"
-                  ? (extensionPanels.find((panel) => panel.key === tool.panelKey)?.title ??
-                    workbenchToolLabel(tool))
-                  : workbenchToolLabel(tool);
+                : workbenchToolLabel(tool);
             const selected = view.selection.kind === "tool" && view.selection.toolId === toolId;
             const slot = index < SIDE_PANEL_TAB_SHORTCUT_SLOT_COUNT ? index + 1 : undefined;
             const shortcut = slot ? getSidePanelTabShortcutLabel(platform, slot) : undefined;
@@ -284,27 +275,6 @@ export function Workbench({
                 ) : null}
               </button>
             ))}
-            {extensionPanels.length > 0 ? (
-              <>
-                <h3 className="workbench__extension-heading">Extension panels</h3>
-                {extensionPanels.map((panel) => (
-                  <button
-                    aria-label={panel.title}
-                    className="workbench__choice"
-                    key={toolRefId({ kind: "panel", panelKey: panel.key })}
-                    onClick={() => onOpenTool({ kind: "panel", panelKey: panel.key })}
-                    type="button"
-                  >
-                    <span className="workbench__choice-icon">
-                      <ExtensionIcon />
-                    </span>
-                    <span className="workbench__choice-copy">
-                      <strong>{panel.title}</strong>
-                    </span>
-                  </button>
-                ))}
-              </>
-            ) : null}
             <h3 className="workbench__extension-heading">Extension views</h3>
             {extensionViewsLoading ? <p role="status">Loading extension views…</p> : null}
             {extensionViewsError ? (

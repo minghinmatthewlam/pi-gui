@@ -2,7 +2,6 @@ import { sessionKey } from "@pi-gui/session-driver";
 import type { SessionTranscriptItem } from "@pi-gui/session-driver";
 import type { SessionDriverEvent, SessionQueuedMessage, SessionRef } from "@pi-gui/session-driver";
 import type { TranscriptMessage } from "../../contracts/desktop-state";
-import type { TimelineCard } from "../../contracts/timeline-types";
 import {
   formatElapsedDuration,
   makeActivityItem,
@@ -295,25 +294,6 @@ export function applyTimelineEvent(
       transcript.push(makeActivityItem("Stopped", { metadata: relativeDetail(event.timestamp) }));
       break;
     case "hostUiRequest":
-      if (event.request.kind === "card") {
-        const card = event.request.card;
-        const id = `card:${card.key ?? event.request.requestId}`;
-        const existing = transcript.findIndex((item) => item.id === id);
-        const item: TimelineCard = {
-          kind: "card",
-          id,
-          createdAt: event.timestamp,
-          title: card.title,
-          ...(card.subtitle ? { subtitle: card.subtitle } : {}),
-          tone: card.tone ?? "neutral",
-          rows: card.rows ?? [],
-          actions: card.actions ?? [],
-          metadata: relativeDetail(event.timestamp),
-        };
-        // Same key: edit in place so a card can move from running to done.
-        if (existing >= 0) transcript[existing] = item;
-        else transcript.push(item);
-      }
       if (event.request.kind === "notify") {
         transcript.push(
           makeActivityItem(event.request.message, { metadata: relativeDetail(event.timestamp) }),

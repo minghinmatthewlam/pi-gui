@@ -240,21 +240,7 @@ export function expectStartThreadInput(value: unknown): StartThreadInput {
     provider: expectOptionalNonEmptyString(record.provider, "input.provider"),
     modelId: expectOptionalNonEmptyString(record.modelId, "input.modelId"),
     thinkingLevel: expectOptionalString(record.thinkingLevel, "input.thinkingLevel"),
-    ...(record.extensionFlags !== undefined
-      ? { extensionFlags: expectExtensionFlags(record.extensionFlags) }
-      : {}),
   };
-}
-
-/** Prototype: flag values are a flat record of booleans and strings keyed by flag name. */
-function expectExtensionFlags(value: unknown): Readonly<Record<string, boolean | string>> {
-  const record = expectRecord(value, "input.extensionFlags");
-  const flags: Record<string, boolean | string> = {};
-  for (const [name, flagValue] of Object.entries(record)) {
-    if (typeof flagValue === "boolean" || typeof flagValue === "string") flags[name] = flagValue;
-    else throw new TypeError(`input.extensionFlags.${name} must be a boolean or string`);
-  }
-  return flags;
 }
 
 export function expectForkThreadInput(value: unknown): ForkThreadInput {

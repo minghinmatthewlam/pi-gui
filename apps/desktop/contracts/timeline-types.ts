@@ -1,8 +1,4 @@
-import type {
-  ExtensionAction,
-  SessionTranscriptMessage,
-  SessionTranscriptRole,
-} from "@pi-gui/session-driver";
+import type { SessionTranscriptMessage, SessionTranscriptRole } from "@pi-gui/session-driver";
 import type { TurnChangeSummary } from "./review";
 
 export type SessionRole = SessionTranscriptRole;
@@ -43,25 +39,8 @@ export interface TimelineSummary {
   readonly presentation: TimelineSummaryPresentation;
 }
 
-/** Tier 1 prototype: a card an extension declared as data. */
-export interface TimelineCard {
-  readonly kind: "card";
-  readonly id: string;
-  readonly createdAt: string;
-  readonly title: string;
-  readonly subtitle?: string;
-  readonly tone: TimelineTone;
-  readonly rows: readonly { readonly label: string; readonly value: string }[];
-  readonly actions: readonly ExtensionAction[];
-  readonly metadata?: string;
-}
-
 export type TranscriptMessage =
-  | SessionTranscriptMessage
-  | TimelineActivity
-  | TimelineToolCall
-  | TimelineSummary
-  | TimelineCard;
+  SessionTranscriptMessage | TimelineActivity | TimelineToolCall | TimelineSummary;
 
 /**
  * A derived, view-only marker inserted between turns to show how long the agent

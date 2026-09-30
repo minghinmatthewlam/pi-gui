@@ -25,7 +25,6 @@ export function estimateRowHeight(item: DisplayTimelineItem, width: number): num
     return 48 + lines * 24 + (item.attachments?.length ? 160 : 0);
   }
   if (item.kind === "tool") return 52;
-  if (item.kind === "card") return 70 + item.rows.length * 24 + (item.actions.length ? 40 : 0);
   if (item.kind === "summary") return item.presentation === "divider" ? 44 : 38;
   return 38;
 }

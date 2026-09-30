@@ -1,6 +1,5 @@
 import type { SessionTranscriptMessage } from "@pi-gui/session-driver";
 import type {
-  TimelineCard,
   DisplayTimelineItem,
   TimelineActivity,
   TimelineToolCall,
@@ -17,15 +16,12 @@ import {
   ChevronRightIcon,
   CopyIcon,
   DiffIcon,
-  ExtensionIcon,
   FileIcon,
   ForkIcon,
   SparkIcon,
   TerminalIcon,
 } from "../../ui/icons";
 import { extensionToLanguage } from "../../ui/syntax-highlight";
-import type { RunExtensionAction } from "../extensions/extension-slots";
-import type { ExtensionAction } from "@pi-gui/session-driver";
 
 export function TimelineItem({
   item,
@@ -38,7 +34,6 @@ export function TimelineItem({
   scheduledOrigin,
   workspacePath,
   onOpenWorkspaceFileLine,
-  onExtensionAction,
 }: {
   readonly item: DisplayTimelineItem;
   readonly expandedToolCallIds?: ReadonlySet<string>;
@@ -50,7 +45,6 @@ export function TimelineItem({
   readonly scheduledOrigin?: ScheduledTaskOrigin;
   readonly workspacePath?: string;
   readonly onOpenWorkspaceFileLine?: (target: WorkspaceFileLine) => void;
-  readonly onExtensionAction?: RunExtensionAction;
 }) {
   switch (item.kind) {
     case "turn-marker":
@@ -81,8 +75,6 @@ export function TimelineItem({
       );
     case "summary":
       return <TimelineSummaryItem item={item} />;
-    case "card":
-      return <TimelineCardItem item={item} onAction={onExtensionAction} />;
     default:
       return null;
   }
@@ -442,86 +434,4 @@ function TimelineSummaryItem({ item }: { readonly item: TimelineSummary }) {
       {item.metadata ? <span className="timeline-activity__meta">{item.metadata}</span> : null}
     </div>
   );
-}
-
-/** Tier 1 prototype: pi-gui draws an extension's card with its own components. */
-function TimelineCardItem({
-  item,
-  onAction,
-}: {
-  readonly item: TimelineCard;
-  readonly onAction?: RunExtensionAction;
-}) {
-  const hasBody = item.rows.length > 0 || item.actions.length > 0;
-  return (
-    <section
-      className={`turn-changes extension-card extension-card--${item.tone}`}
-      aria-label={item.title}
-      data-testid="extension-card"
-    >
-      <header className="turn-changes__header">
-        <span className="turn-changes__glyph" aria-hidden="true">
-          <ExtensionIcon />
-        </span>
-        <div className="turn-changes__summary">
-          <span className="turn-changes__title">{item.title}</span>
-          {item.subtitle ? <span className="extension-card__subtitle">{item.subtitle}</span> : null}
-        </div>
-        <span className="extension-card__tone">{cardToneLabel(item.tone)}</span>
-      </header>
-      {hasBody ? (
-        <ul className="turn-changes__files extension-card__rows">
-          {item.rows.map((row, index) => (
-            <li className="extension-card__row" key={`${row.label}:${index}`}>
-              <span className="extension-card__label">{row.label}</span>
-              <span className="extension-card__value">{row.value}</span>
-            </li>
-          ))}
-          {item.actions.map((action, index) => (
-            <li key={`${action.label}:${index}`}>
-              <button
-                type="button"
-                className="turn-changes__file extension-card__action"
-                disabled={!onAction}
-                onClick={() => onAction?.(action)}
-              >
-                <span className="extension-card__label">{action.label}</span>
-                <span className="extension-card__action-target">{actionTarget(action)}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-    </section>
-  );
-}
-
-function actionTarget(action: ExtensionAction): string {
-  switch (action.type) {
-    case "openFile":
-      return action.line ? `${action.path}:${action.line}` : action.path;
-    case "url":
-      return action.url.replace(/^https?:\/\//, "");
-    case "command":
-      return action.command;
-    case "composer":
-      return "adds to composer";
-    case "panel":
-      return "side panel";
-    default:
-      return "";
-  }
-}
-
-function cardToneLabel(tone: TimelineCard["tone"]): string | undefined {
-  switch (tone) {
-    case "success":
-      return "Passed";
-    case "warning":
-      return "Warning";
-    case "error":
-      return "Failed";
-    default:
-      return undefined;
-  }
 }

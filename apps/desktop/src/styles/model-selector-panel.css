@@ -152,28 +152,3 @@
   font-size: 11px;
   color: var(--muted);
 }
-
-/* Prototype: extension flags for the thread about to start */
-.extension-flags__dropdown {
-  min-width: 340px;
-}
-.extension-flags__item {
-  cursor: default;
-  justify-content: space-between;
-}
-.extension-flags__name {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-.extension-flags__input {
-  width: 120px;
-  padding: 3px 8px;
-  border: 1px solid var(--border-heavy);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  color: var(--text-strong);
-  font: inherit;
-  font-size: 12px;
-}

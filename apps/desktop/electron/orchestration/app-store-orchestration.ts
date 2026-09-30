@@ -2095,9 +2095,6 @@ function transcriptText(message: TranscriptMessage): string {
   if (message.kind === "tool") {
     return message.detail ? `${message.label}: ${message.detail}` : message.label;
   }
-  if (message.kind === "card") {
-    return message.subtitle ? `${message.title}: ${message.subtitle}` : message.title;
-  }
   return message.metadata ? `${message.label}: ${message.metadata}` : message.label;
 }
 

@@ -53,14 +53,6 @@ export interface RuntimeExtensionDiagnostic {
   readonly path?: string;
 }
 
-/** Prototype: a flag an extension registered with pi.registerFlag. */
-export interface RuntimeExtensionFlag {
-  readonly name: string;
-  readonly description?: string;
-  readonly type: "boolean" | "string";
-  readonly default?: boolean | string;
-}
-
 export interface RuntimeExtensionRecord {
   readonly path: string;
   readonly displayName: string;
@@ -70,7 +62,6 @@ export interface RuntimeExtensionRecord {
   readonly commands: readonly string[];
   readonly tools: readonly string[];
   readonly flags: readonly string[];
-  readonly flagDetails?: readonly RuntimeExtensionFlag[];
   readonly shortcuts: readonly string[];
   readonly diagnostics: readonly RuntimeExtensionDiagnostic[];
 }
