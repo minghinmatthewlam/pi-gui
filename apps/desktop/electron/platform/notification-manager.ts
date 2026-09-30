@@ -16,7 +16,7 @@ const REPEATED_NOTICE_WINDOW_MS = 30_000;
 export class NotificationManager {
   private readonly completedRunKeys = new Set<string>();
   private readonly activeBySession = new Map<string, Electron.Notification>();
-  private readonly lastNoticeBySession = new Map<string, { message: string; at: number }>();
+  private readonly lastNoticeBySession = new Map<string, { notice: string; at: number }>();
   private latestState: DesktopAppState | undefined;
   private trackedWindow: BrowserWindow | null = null;
   private stopTrackingWindow: (() => void) | undefined;
@@ -122,6 +122,9 @@ export class NotificationManager {
   }
 
   private async handleEvent(event: SessionDriverEvent): Promise<void> {
+    if (event.type === "sessionClosed") {
+      this.lastNoticeBySession.delete(sessionKey(event.sessionRef));
+    }
     if (!Notification.isSupported()) {
       return;
     }
@@ -185,11 +188,12 @@ export class NotificationManager {
       return false;
     }
     const now = Date.now();
+    const notice = `${event.request.level ?? "info"}:${event.request.message}`;
     const last = this.lastNoticeBySession.get(key);
-    if (last?.message === event.request.message && now - last.at < REPEATED_NOTICE_WINDOW_MS) {
+    if (last?.notice === notice && now - last.at < REPEATED_NOTICE_WINDOW_MS) {
       return false;
     }
-    this.lastNoticeBySession.set(key, { message: event.request.message, at: now });
+    this.lastNoticeBySession.set(key, { notice, at: now });
     return true;
   }
 
