@@ -186,7 +186,7 @@ test("extension cards appear live beside a streaming reply, survive relaunch onc
     await expect(card.nth(1).locator(".extension-card__tone")).toHaveText("Passed");
 
     await sendComposer(window, "/broken-card ");
-    const broken = window.getByTestId("custom-message");
+    const broken = window.getByTestId("timeline-custom-message");
     await expect(broken).toContainText("pi-gui.card");
     await expect(broken).toContainText("This card was not shown");
   } finally {
@@ -208,7 +208,7 @@ test("extension cards appear live beside a streaming reply, survive relaunch onc
     const reopenedCardBox = await card.first().boundingBox();
     expect(reopenedCardBox!.y + reopenedCardBox!.height).toBeLessThanOrEqual(reopenedReplyBox!.y);
     await expect(card.nth(1)).toContainText("Deployed to production");
-    await expect(window.getByTestId("custom-message")).toHaveCount(1);
+    await expect(window.getByTestId("timeline-custom-message")).toHaveCount(1);
 
     await waitForTimelineLayout(window);
     await card

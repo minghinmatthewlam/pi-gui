@@ -24,7 +24,7 @@ export function estimateRowHeight(item: DisplayTimelineItem, width: number): num
     case "message":
       return 48 + textLines(item.text, width) * 24 + (item.attachments?.length ? 160 : 0);
     case "custom":
-      return 64 + textLines(item.text, width) * 24;
+      return 66 + textLines(item.text, width) * 24;
     case "card": {
       const bodyRows = item.card.rows.length + item.card.actions.length;
       return 50 + (bodyRows ? 12 + bodyRows * 34 : 0);
@@ -35,10 +35,8 @@ export function estimateRowHeight(item: DisplayTimelineItem, width: number): num
       return item.presentation === "divider" ? 44 : 38;
     case "activity":
       return 38;
-    default: {
-      const unhandled: never = item;
-      return unhandled;
-    }
+    default:
+      return unhandledKind(item, 38);
   }
 }
 
@@ -49,6 +47,10 @@ function textLines(text: string, width: number): number {
     .reduce((count, line) => count + Math.max(1, Math.ceil(line.length / charactersPerLine)), 0);
 }
 
+function unhandledKind<T>(_item: never, fallback: T): T {
+  return fallback;
+}
+
 export interface RowEstimate {
   readonly item: DisplayTimelineItem;
   readonly width: number;
@@ -56,23 +58,32 @@ export interface RowEstimate {
 }
 export function sameRowContent(a: DisplayTimelineItem, b: DisplayTimelineItem): boolean {
   if (a.kind !== b.kind) return false;
-  if (a.kind === "message" && b.kind === "message")
-    return a.text === b.text && a.attachments === b.attachments;
-  if (a.kind === "tool" && b.kind === "tool")
-    return (
-      a.status === b.status &&
-      a.detail === b.detail &&
-      a.label === b.label &&
-      a.metadata === b.metadata
-    );
-  if (a.kind === "summary" && b.kind === "summary")
-    return a.label === b.label && a.presentation === b.presentation;
-  if (a.kind === "activity" && b.kind === "activity")
-    return a.label === b.label && a.detail === b.detail;
-  if (a.kind === "custom" && b.kind === "custom")
-    return a.customType === b.customType && a.text === b.text;
-  if (a.kind === "card" && b.kind === "card") return sameCard(a.card, b.card);
-  return true;
+  switch (a.kind) {
+    case "message":
+      return b.kind === a.kind && a.text === b.text && a.attachments === b.attachments;
+    case "tool":
+      return (
+        b.kind === a.kind &&
+        a.status === b.status &&
+        a.detail === b.detail &&
+        a.label === b.label &&
+        a.metadata === b.metadata
+      );
+    case "summary":
+      return b.kind === a.kind && a.label === b.label && a.presentation === b.presentation;
+    case "activity":
+      return b.kind === a.kind && a.label === b.label && a.detail === b.detail;
+    case "custom":
+      return b.kind === a.kind && a.customType === b.customType && a.text === b.text;
+    case "card":
+      return b.kind === a.kind && sameCard(a.card, b.card);
+    // A captured turn's marker and file list never change once drawn.
+    case "turn-marker":
+    case "turn-changes":
+      return true;
+    default:
+      return unhandledKind(a, false);
+  }
 }
 
 function sameCard(a: ExtensionCard, b: ExtensionCard): boolean {

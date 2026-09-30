@@ -296,17 +296,21 @@ export function applyTimelineEvent(
     case "transcriptItemAppended": {
       // Same id as the persisted entry, so a transcript reload replaces rather than duplicates it.
       if (transcript.some((item) => item.id === event.item.id)) return;
-      // pi saves a streaming reply only when it ends, so an item appended mid-reply comes before
+      // pi saves a streaming reply only when it ends, so a card appended mid-reply comes before
       // that reply in the session file. Place it there now so a reload never moves it.
       const streamingId = state.activeAssistantMessageBySession.get(key);
-      const streamingIndex = streamingId
-        ? transcript.findIndex((item) => item.id === streamingId)
-        : -1;
-      transcript.splice(
-        streamingIndex >= 0 ? streamingIndex : transcript.length,
-        0,
-        ...timelineFromDriverTranscript([event.item]),
-      );
+      const streamingIndex =
+        event.item.kind === "card" && streamingId
+          ? transcript.findIndex((item) => item.id === streamingId)
+          : -1;
+      if (streamingIndex >= 0) {
+        transcript.splice(streamingIndex, 0, event.item);
+        break;
+      }
+      // Otherwise it lands between assistant messages like a tool row: the reply above keeps
+      // its row and later text starts a new one below.
+      clearActiveAssistantMessage(state.activeAssistantMessageBySession, event.sessionRef);
+      transcript.push(event.item);
       break;
     }
     case "hostUiRequest":

@@ -83,3 +83,30 @@ test("the running turn has no marker until it finishes", () => {
 test("turns shorter than a second get no marker", () => {
   expect(ids([message("u1", "user", 0), message("a1", "assistant", 0.5)])).toEqual(["u1", "a1"]);
 });
+
+test("an extension message posted after the run neither stretches the marker nor moves it", () => {
+  const custom = (id: string, seconds: number): TranscriptMessage => ({
+    kind: "custom",
+    id,
+    customType: "ci-status",
+    text: id,
+    createdAt: at(seconds),
+  });
+  const transcript = [
+    message("u1", "user", 0),
+    message("a1", "assistant", 2),
+    custom("steered", 3),
+    message("a2", "assistant", 6),
+    custom("late-ci-report", 600),
+  ];
+  expect(ids(transcript)).toEqual([
+    "u1",
+    "a1",
+    "steered",
+    "turn-marker:u1",
+    "a2",
+    "late-ci-report",
+  ]);
+  const marker = buildDisplayTimelineItems(transcript).find((item) => item.kind === "turn-marker");
+  expect(marker?.durationMs).toBe(6_000);
+});

@@ -99,19 +99,21 @@ export function TimelineItem({
       return (
         <ExtensionCardItem card={item.card} onOpenWorkspaceFileLine={onOpenWorkspaceFileLine} />
       );
-    default: {
-      const unhandled: never = item;
-      void unhandled;
-      return null;
-    }
+    default:
+      return unhandledTimelineItem(item);
   }
 }
 
-/** An extension-authored row, labelled like terminal pi's `[customType]`. */
+function unhandledTimelineItem(item: never): null {
+  console.warn("[timeline] unhandled item kind", item);
+  return null;
+}
+
+/** An extension message, drawn like terminal pi: its customType labels the markdown. */
 function TimelineCustomMessage({ item }: { readonly item: SessionTranscriptCustomMessage }) {
   return (
-    <article className="timeline-item timeline-item--summary-card" data-testid="custom-message">
-      <div className="timeline-item__summary-eyebrow">{item.customType}</div>
+    <article className="timeline-item timeline-item--custom" data-testid="timeline-custom-message">
+      <div className="timeline-item__custom-type">{item.customType}</div>
       <MessageMarkdown text={item.text} />
     </article>
   );

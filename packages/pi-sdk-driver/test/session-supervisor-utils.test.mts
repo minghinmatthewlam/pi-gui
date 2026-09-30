@@ -4,6 +4,7 @@ import {
   determineRunOutcome,
   messageText,
   shouldPersistSnapshotForAgentEvent,
+  transcriptFromMessages,
 } from "../dist/session-supervisor-utils.js";
 
 const markdownParts = [
@@ -85,4 +86,42 @@ await test("the persist policy exempts streaming partials and keeps every discre
   ]) {
     assert.equal(shouldPersistSnapshotForAgentEvent(eventType), true, eventType);
   }
+});
+
+await test("transcriptFromMessages shows displayed custom messages the way terminal pi does", () => {
+  const custom = (id: string, display: boolean, content: unknown) => ({
+    role: "custom",
+    id,
+    customType: "ci-status",
+    content,
+    display,
+    timestamp: Date.parse("2026-09-30T00:00:00.000Z"),
+  });
+  const transcript = transcriptFromMessages([
+    custom("shown", true, [
+      { type: "text", text: "**Build** passed" },
+      { type: "image", data: "", mimeType: "image/png" },
+      { type: "text", text: "- 12 tests" },
+    ]),
+    custom("hidden", false, "only for the model"),
+    custom("empty", true, [{ type: "image", data: "", mimeType: "image/png" }]),
+    custom("plain", true, "  as a string  "),
+  ]);
+
+  assert.deepEqual(transcript, [
+    {
+      kind: "custom",
+      id: "shown",
+      createdAt: "2026-09-30T00:00:00.000Z",
+      customType: "ci-status",
+      text: "**Build** passed\n\n- 12 tests",
+    },
+    {
+      kind: "custom",
+      id: "plain",
+      createdAt: "2026-09-30T00:00:00.000Z",
+      customType: "ci-status",
+      text: "as a string",
+    },
+  ]);
 });
