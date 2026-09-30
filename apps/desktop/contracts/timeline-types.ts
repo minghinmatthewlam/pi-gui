@@ -1,4 +1,5 @@
 import type {
+  SessionTranscriptCard,
   SessionTranscriptCustomMessage,
   SessionTranscriptMessage,
   SessionTranscriptRole,
@@ -46,6 +47,7 @@ export interface TimelineSummary {
 export type TranscriptMessage =
   | SessionTranscriptMessage
   | SessionTranscriptCustomMessage
+  | SessionTranscriptCard
   | TimelineActivity
   | TimelineToolCall
   | TimelineSummary;

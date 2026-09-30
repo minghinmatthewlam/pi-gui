@@ -2086,19 +2086,26 @@ function recentTranscriptItems(
 }
 
 function transcriptText(message: TranscriptMessage): string {
-  if (message.kind === "message") {
-    return message.text;
+  switch (message.kind) {
+    case "message":
+      return message.text;
+    case "custom":
+      return `[${message.customType}] ${message.text}`;
+    case "card": {
+      const { title, subtitle } = message.card;
+      return subtitle ? `${title}: ${subtitle}` : title;
+    }
+    case "activity":
+    case "tool":
+      return message.detail ? `${message.label}: ${message.detail}` : message.label;
+    case "summary":
+      return message.metadata ? `${message.label}: ${message.metadata}` : message.label;
+    default: {
+      const unhandled: never = message;
+      void unhandled;
+      return "";
+    }
   }
-  if (message.kind === "activity") {
-    return message.detail ? `${message.label}: ${message.detail}` : message.label;
-  }
-  if (message.kind === "tool") {
-    return message.detail ? `${message.label}: ${message.detail}` : message.label;
-  }
-  if (message.kind === "custom") {
-    return `[${message.customType}] ${message.text}`;
-  }
-  return message.metadata ? `${message.label}: ${message.metadata}` : message.label;
 }
 
 function transcriptRole(message: TranscriptMessage): OrchestrationChildTranscriptMessage["role"] {

@@ -1,6 +1,6 @@
 import { JsonCatalogStore } from "@pi-gui/catalogs/node";
 import { sessionKey } from "@pi-gui/session-driver";
-import type { SessionSchemaInfo } from "@pi-gui/session-driver";
+import type { ExtensionFlagValues, SessionSchemaInfo } from "@pi-gui/session-driver";
 import type { BrowserWindow } from "electron";
 import { readFile, stat } from "node:fs/promises";
 import { homedir, hostname } from "node:os";
@@ -117,9 +117,17 @@ import {
   createEmptyExtensionUiState,
   serializeExtensionUiState,
 } from "../conversation/session-state-map";
+import {
+  EXTENSION_NOTICE_TIMEOUT_MS,
+  appendExtensionNotice,
+  extensionNoticeFromRequest,
+  extensionNoticeTimerId,
+  removeExtensionNotice,
+} from "../extensions/extension-notices";
 import { appWorktreeRootMatcher } from "../platform/worktrees/app-worktree-roots";
 import { GitWorktreeManager } from "../platform/worktrees/worktree-manager";
 import { createWorkspaceOwner, type WorkspaceOwner } from "../workspace/app-store-workspace";
+import { resolveExtensionFlags, type ResolvedExtensionFlags } from "../workspace/extension-flags";
 import {
   createConversationOwner,
   type ConversationOwner,
@@ -261,6 +269,8 @@ export class DesktopAppStore {
   private readonly scheduledTaskOwner: ScheduledTaskOwner;
   /** App-wide: built-in pi-gui extensions the user switched off in Settings. */
   private readonly disabledBuiltinExtensions = new Set<string>();
+  /** Flag values last chosen in New thread, by root workspace: the next thread's defaults. */
+  private readonly extensionFlagsByWorkspace = new Map<string, ExtensionFlagValues>();
 
   constructor(options: DesktopAppStoreOptions) {
     const catalogFilePath = join(options.userDataDir, "catalogs.json");
@@ -269,6 +279,8 @@ export class DesktopAppStore {
       catalogStorage: this.catalogStore,
       ...(options.driverOptions ?? {}),
       isBuiltinExtensionEnabled: (name) => !this.disabledBuiltinExtensions.has(name),
+      extensionFlagValuesForSession: (sessionRef) =>
+        this.sessionState.extensionFlagsBySession.get(sessionKey(sessionRef)),
       ...(options.generateThreadTitleOverride
         ? { generateThreadTitleOverride: options.generateThreadTitleOverride }
         : {}),
@@ -442,6 +454,12 @@ export class DesktopAppStore {
       clearPendingAutoTitle: (sessionRef) => this.clearPendingAutoTitle(sessionRef),
       updateSessionConfig: (sessionRef, config) => this.updateSessionConfig(sessionRef, config),
       buildCreateSessionOptions: (workspaceId) => this.buildCreateSessionOptions(workspaceId),
+      resolveExtensionFlags: (workspaceId, requested) =>
+        this.resolveExtensionFlags(workspaceId, requested),
+      extensionFlagsForSession: (sessionRef) =>
+        this.sessionState.extensionFlagsBySession.get(sessionKey(sessionRef)),
+      recordExtensionFlags: (sessionRef, applied, workspaceDefaults) =>
+        this.recordExtensionFlags(sessionRef, applied, workspaceDefaults),
       reloadTranscriptFromDriver: (sessionRef) => this.reloadTranscriptFromDriver(sessionRef),
       setPendingAutoTitle: (sessionRef, pending) => this.setPendingAutoTitle(sessionRef, pending),
       getPendingAutoTitle: (sessionRef) => this.getPendingAutoTitle(sessionRef),
@@ -2062,6 +2080,14 @@ export class DesktopAppStore {
         this.sessionState.composerDraftsBySession.set(key, draft);
       }
     }
+    this.sessionState.extensionFlagsBySession.clear();
+    for (const [key, flags] of Object.entries(persisted.extensionFlagsBySession ?? {})) {
+      this.sessionState.extensionFlagsBySession.set(key, flags);
+    }
+    this.extensionFlagsByWorkspace.clear();
+    for (const [workspaceId, flags] of Object.entries(persisted.extensionFlagsByWorkspace ?? {})) {
+      this.extensionFlagsByWorkspace.set(workspaceId, flags);
+    }
     this.extensionCommandCompatibilityByWorkspace.clear();
     for (const [workspaceId, records] of restoreCompatibilityByWorkspace(
       persisted.extensionCommandCompatibilityByWorkspace,
@@ -2212,6 +2238,9 @@ export class DesktopAppStore {
           this.extensionCommandCompatibilityByWorkspace.delete(workspaceId);
         }
       }
+      for (const workspaceId of this.extensionFlagsByWorkspace.keys()) {
+        if (!liveWorkspaceIds.has(workspaceId)) this.extensionFlagsByWorkspace.delete(workspaceId);
+      }
 
       if (selectedWorkspaceId && !this.runtimeByWorkspace.has(selectedWorkspaceId)) {
         await this.ensureRuntimeLoaded(selectedWorkspaceId, workspacesSnapshot.workspaces);
@@ -2314,6 +2343,8 @@ export class DesktopAppStore {
         extensionCommandCompatibilityByWorkspace: serializeCompatibilityByWorkspace(
           this.extensionCommandCompatibilityByWorkspace,
         ),
+        extensionFlagsByWorkspace: mapToRecord(this.extensionFlagsByWorkspace),
+        extensionFlagsBySession: mapToRecord(this.sessionState.extensionFlagsBySession),
         orchestrationChildren: this.state.orchestrationChildren,
         lastViewedAtBySession: mapToRecord(this.sessionState.lastViewedAtBySession),
         lastInteractedAtBySession: mapToRecord(this.sessionState.lastInteractedAtBySession),
@@ -2736,6 +2767,19 @@ export class DesktopAppStore {
       return;
     }
 
+    // An extension's newSession/fork switches the same pi runtime, and with it the
+    // flags it loaded with, to a new session. A session that already has flags
+    // (switchSession to an existing thread) keeps its own for its next reopen.
+    const flags = this.sessionState.extensionFlagsBySession.get(sourceKey);
+    if (flags && !this.sessionState.extensionFlagsBySession.has(targetKey)) {
+      this.sessionState.extensionFlagsBySession.set(targetKey, flags);
+      this.state = {
+        ...this.state,
+        extensionFlagsBySession: mapToRecord(this.sessionState.extensionFlagsBySession),
+      };
+      this.schedulePersistUiState();
+    }
+
     if (this.sessionState.sessionSubscriptions.has(targetKey)) {
       unsubscribe();
       this.sessionState.sessionSubscriptions.delete(sourceKey);
@@ -3042,6 +3086,15 @@ export class DesktopAppStore {
           "extension-editor-text",
         );
         break;
+      case "notify": {
+        const notice = extensionNoticeFromRequest(event.request, event.timestamp);
+        const dropped = appendExtensionNotice(uiState, notice);
+        for (const entry of dropped) {
+          this.clearExtensionDialogTimeout(event.sessionRef, extensionNoticeTimerId(entry.id));
+        }
+        this.scheduleExtensionNoticeExpiry(event.sessionRef, notice.id);
+        break;
+      }
       default:
         if (isExtensionUiDialogRequest(event.request)) {
           const dialog = event.request;
@@ -3103,6 +3156,26 @@ export class DesktopAppStore {
     );
     this.emit();
     return true;
+  }
+
+  /** Notices share the dialog timer map, so session reset and close clear both. */
+  private scheduleExtensionNoticeExpiry(sessionRef: SessionRef, noticeId: string): void {
+    const timerId = extensionNoticeTimerId(noticeId);
+    this.clearExtensionDialogTimeout(sessionRef, timerId);
+    const timerKey = this.extensionDialogTimeoutKey(sessionRef, timerId);
+    const timer = setTimeout(() => {
+      this.extensionDialogTimeoutTimers.delete(timerKey);
+      const uiState = this.sessionState.extensionUiBySession.get(sessionKey(sessionRef));
+      if (!uiState || !removeExtensionNotice(uiState, noticeId)) {
+        return;
+      }
+      this.state = this.syncDerivedSessionState(
+        { ...this.state, revision: this.state.revision + 1 },
+        sessionRef,
+      );
+      this.emit();
+    }, EXTENSION_NOTICE_TIMEOUT_MS);
+    this.extensionDialogTimeoutTimers.set(timerKey, timer);
   }
 
   private scheduleExtensionDialogTimeout(
@@ -3357,6 +3430,33 @@ export class DesktopAppStore {
         ? { initialThinkingLevel: effectiveSettings.defaultThinkingLevel }
         : {}),
     };
+  }
+
+  private async resolveExtensionFlags(
+    workspaceId: string,
+    requested: ExtensionFlagValues | undefined,
+  ): Promise<ResolvedExtensionFlags> {
+    if (requested && Object.keys(requested).length > 0) {
+      await this.ensureRuntimeLoaded(workspaceId);
+    }
+    return resolveExtensionFlags(requested, this.runtimeByWorkspace.get(workspaceId));
+  }
+
+  private recordExtensionFlags(
+    sessionRef: SessionRef,
+    applied: ExtensionFlagValues,
+    workspaceDefaults?: { readonly workspaceId: string; readonly chosen: ExtensionFlagValues },
+  ): void {
+    const key = sessionKey(sessionRef);
+    if (Object.keys(applied).length > 0)
+      this.sessionState.extensionFlagsBySession.set(key, applied);
+    else this.sessionState.extensionFlagsBySession.delete(key);
+    if (workspaceDefaults) {
+      const { workspaceId, chosen } = workspaceDefaults;
+      if (Object.keys(chosen).length > 0) this.extensionFlagsByWorkspace.set(workspaceId, chosen);
+      else this.extensionFlagsByWorkspace.delete(workspaceId);
+    }
+    this.schedulePersistUiState();
   }
 
   private serializeRuntimeState(): Record<string, RuntimeSnapshot> {
@@ -3686,6 +3786,8 @@ export class DesktopAppStore {
       extensionCommandCompatibilityByWorkspace: serializeCompatibilityByWorkspace(
         this.extensionCommandCompatibilityByWorkspace,
       ),
+      extensionFlagsByWorkspace: mapToRecord(this.extensionFlagsByWorkspace),
+      extensionFlagsBySession: mapToRecord(this.sessionState.extensionFlagsBySession),
       notificationPreferences: this.state.notificationPreferences,
       disabledBuiltinExtensions:
         this.disabledBuiltinExtensions.size > 0

@@ -4,6 +4,7 @@ export type {
   AssistantMessagePersistedEvent,
   TranscriptItemAppendedEvent,
   CreateSessionOptions,
+  ExtensionFlagValues,
   ForkPosition,
   ForkSessionOptions,
   ForkSessionResult,
@@ -51,6 +52,7 @@ export type {
   RuntimeCommandRecord,
   RuntimeCommandSource,
   RuntimeExtensionDiagnostic,
+  RuntimeExtensionFlag,
   RuntimeExtensionRecord,
   RuntimeLoginAuthInfo,
   RuntimeLoginCallbacks,
@@ -68,16 +70,22 @@ export type {
 } from "./runtime-types.js";
 
 export type {
+  ExtensionCard,
+  ExtensionCardAction,
+  ExtensionCardRow,
+  ExtensionCardTone,
+  SessionTranscriptCard,
+  SessionTranscriptCustomMessage,
   SessionTranscriptImageAttachment,
   SessionTranscriptFileAttachment,
   SessionTranscriptAttachment,
-  SessionTranscriptCustomMessage,
   SessionTranscriptItem,
   SessionTranscriptMessage,
   SessionTranscriptRole,
   SessionTranscriptToolCall,
 } from "./transcript.js";
 
+export { EXTENSION_CARD_CUSTOM_TYPE, isCardEntryItem } from "./transcript.js";
 export { sessionKey } from "./identity.js";
 export type {
   TurnCaptureOpening,

@@ -1,5 +1,5 @@
 import type { SessionUsageSnapshot } from "./usage.js";
-import type { SessionTranscriptCustomMessage } from "./transcript.js";
+import type { SessionTranscriptCard, SessionTranscriptCustomMessage } from "./transcript.js";
 
 export type WorkspaceId = string;
 export type SessionId = string;
@@ -130,7 +130,12 @@ export interface CreateSessionOptions {
   readonly title?: string;
   readonly initialModel?: SessionModelSelection;
   readonly initialThinkingLevel?: string;
+  /** Values for flags the session's extensions registered, applied when pi loads them. */
+  readonly extensionFlagValues?: ExtensionFlagValues;
 }
+
+/** Extension flag values by flag name, as `pi --name` (boolean) or `pi --name value` (string). */
+export type ExtensionFlagValues = Readonly<Record<string, boolean | string>>;
 
 export type ForkPosition = "before" | "at" | "after";
 
@@ -150,6 +155,8 @@ export interface ForkSessionOptions {
   readonly position?: ForkPosition;
   /** Optional title for the forked session. Defaults to the source session title. */
   readonly title?: string;
+  /** Flag values for the fork's pi session, normally the ones the source started with. */
+  readonly extensionFlagValues?: ExtensionFlagValues;
 }
 
 export interface ForkSessionResult {
@@ -192,12 +199,12 @@ export interface AssistantMessagePersistedEvent extends SessionEventBase {
 }
 
 /**
- * A persisted transcript item that arrives outside the assistant stream, such as an
- * extension's custom message. `item.id` is the pi entry id, matching a later reload.
+ * A persisted transcript item that arrives outside the assistant stream: an extension's custom
+ * message or card. `item.id` is the pi entry id, matching a later reload.
  */
 export interface TranscriptItemAppendedEvent extends SessionEventBase {
   readonly type: "transcriptItemAppended";
-  readonly item: SessionTranscriptCustomMessage;
+  readonly item: SessionTranscriptCustomMessage | SessionTranscriptCard;
 }
 
 export interface QueuedMessageStartedEvent extends SessionEventBase {

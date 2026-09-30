@@ -1,4 +1,4 @@
-import { sessionKey } from "@pi-gui/session-driver";
+import { isCardEntryItem, sessionKey } from "@pi-gui/session-driver";
 import type { SessionTranscriptItem } from "@pi-gui/session-driver";
 import type { SessionDriverEvent, SessionQueuedMessage, SessionRef } from "@pi-gui/session-driver";
 import type { TranscriptMessage } from "../../contracts/desktop-state";
@@ -174,13 +174,6 @@ export function applyTimelineEvent(
       transcript[index] = { ...ended, sourceMessageId: event.sourceMessageId };
       break;
     }
-    case "transcriptItemAppended":
-      // Lands between assistant messages like a tool row: the reply above keeps its row and
-      // later text starts a new one below.
-      clearActiveAssistantMessage(state.activeAssistantMessageBySession, event.sessionRef);
-      if (transcript.some((item) => item.id === event.item.id)) return;
-      transcript.push(event.item);
-      break;
     case "sessionOpened":
       state.pendingAssistantMessageBySession.delete(key);
       transcript.push(
@@ -300,10 +293,34 @@ export function applyTimelineEvent(
       clearRunState(transcript, key, event.sessionRef, state);
       transcript.push(makeActivityItem("Stopped", { metadata: relativeDetail(event.timestamp) }));
       break;
+    case "transcriptItemAppended": {
+      // Same id as the persisted entry, so a transcript reload replaces rather than duplicates it.
+      if (transcript.some((item) => item.id === event.item.id)) return;
+      // pi saves a streaming reply only when it ends, so a card (or its error row) appended
+      // mid-reply comes before that reply in the session file. Place it there now so a reload never moves it.
+      const streamingId = state.activeAssistantMessageBySession.get(key);
+      const streamingIndex =
+        isCardEntryItem(event.item) && streamingId
+          ? transcript.findIndex((item) => item.id === streamingId)
+          : -1;
+      if (streamingIndex >= 0) {
+        transcript.splice(streamingIndex, 0, event.item);
+        break;
+      }
+      // Otherwise it lands between assistant messages like a tool row: the reply above keeps
+      // its row and later text starts a new one below.
+      clearActiveAssistantMessage(state.activeAssistantMessageBySession, event.sessionRef);
+      transcript.push(event.item);
+      break;
+    }
     case "hostUiRequest":
-      if (event.request.kind === "notify") {
+      // Notices show as toasts; only errors also stay in the transcript.
+      if (event.request.kind === "notify" && event.request.level === "error") {
         transcript.push(
-          makeActivityItem(event.request.message, { metadata: relativeDetail(event.timestamp) }),
+          makeActivityItem(event.request.message, {
+            tone: "error",
+            metadata: relativeDetail(event.timestamp),
+          }),
         );
       }
       break;

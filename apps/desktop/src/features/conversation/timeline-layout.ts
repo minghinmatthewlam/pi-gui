@@ -1,3 +1,4 @@
+import type { ExtensionCard } from "@pi-gui/session-driver";
 import type { DisplayTimelineItem } from "../../../contracts/timeline-types";
 
 export interface ReadingAnchor {
@@ -24,6 +25,10 @@ export function estimateRowHeight(item: DisplayTimelineItem, width: number): num
       return 48 + textLines(item.text, width) * 24 + (item.attachments?.length ? 160 : 0);
     case "custom":
       return 66 + textLines(item.text, width) * 24;
+    case "card": {
+      const bodyRows = item.card.rows.length + item.card.actions.length;
+      return 50 + (bodyRows ? 12 + bodyRows * 34 : 0);
+    }
     case "tool":
       return 52;
     case "summary":
@@ -70,6 +75,8 @@ export function sameRowContent(a: DisplayTimelineItem, b: DisplayTimelineItem): 
       return b.kind === a.kind && a.label === b.label && a.detail === b.detail;
     case "custom":
       return b.kind === a.kind && a.customType === b.customType && a.text === b.text;
+    case "card":
+      return b.kind === a.kind && sameCard(a.card, b.card);
     // A captured turn's marker and file list never change once drawn.
     case "turn-marker":
     case "turn-changes":
@@ -77,6 +84,23 @@ export function sameRowContent(a: DisplayTimelineItem, b: DisplayTimelineItem): 
     default:
       return unhandledKind(a, false);
   }
+}
+
+function sameCard(a: ExtensionCard, b: ExtensionCard): boolean {
+  return (
+    a.title === b.title &&
+    a.subtitle === b.subtitle &&
+    a.tone === b.tone &&
+    a.rows.length === b.rows.length &&
+    a.rows.every((row, i) => row.label === b.rows[i]?.label && row.value === b.rows[i]?.value) &&
+    a.actions.length === b.actions.length &&
+    a.actions.every(
+      (action, i) =>
+        action.label === b.actions[i]?.label &&
+        action.path === b.actions[i]?.path &&
+        action.line === b.actions[i]?.line,
+    )
+  );
 }
 export function layoutRows(
   items: readonly DisplayTimelineItem[],

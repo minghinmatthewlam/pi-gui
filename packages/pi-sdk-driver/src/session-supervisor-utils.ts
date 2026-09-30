@@ -1,10 +1,14 @@
 import { basename } from "node:path";
 import {
   sessionEntryToContextMessages,
+  type CustomEntry,
   type SessionInfo,
   type SessionManager,
 } from "@earendil-works/pi-coding-agent";
 import type {
+  ExtensionCard,
+  ExtensionCardAction,
+  ExtensionCardRow,
   SessionAttachment,
   SessionConfig,
   SessionErrorInfo,
@@ -12,11 +16,13 @@ import type {
   SessionSnapshot,
   SessionStatus,
   SessionTranscriptAttachment,
+  SessionTranscriptCard,
   SessionTranscriptCustomMessage,
   SessionTranscriptItem,
   SessionUsageSnapshot,
   WorkspaceRef,
 } from "@pi-gui/session-driver";
+import { EXTENSION_CARD_CUSTOM_TYPE } from "@pi-gui/session-driver";
 import type { SessionQueuedMessage } from "@pi-gui/session-driver/types";
 
 const FILE_ATTACHMENT_BLOCK_START = "<pi-gui-file-attachments>";
@@ -255,14 +261,42 @@ export function injectFileAttachmentPreamble(
   return text ? `${block}\n${text}` : block;
 }
 
+/** One thing the transcript draws: a context message, or a custom entry pi itself projects to nothing. */
+type DisplaySource =
+  | { readonly kind: "message"; readonly message: unknown }
+  | { readonly kind: "card"; readonly entry: CustomEntry };
+
 export function transcriptFromMessages(
   messages: readonly unknown[],
   fallbackTimestamp = nowIso(),
 ): SessionTranscriptItem[] {
+  return transcriptFromSources(
+    messages.map((message) => ({ kind: "message", message })),
+    fallbackTimestamp,
+  );
+}
+
+/** The visible transcript of the session's active branch, including extension cards. */
+export function transcriptFromSession(
+  sessionManager: Pick<SessionManager, "buildContextEntries">,
+  fallbackTimestamp = nowIso(),
+): SessionTranscriptItem[] {
+  return transcriptFromSources(displaySourcesFromSession(sessionManager), fallbackTimestamp);
+}
+
+function transcriptFromSources(
+  sources: readonly DisplaySource[],
+  fallbackTimestamp: string,
+): SessionTranscriptItem[] {
   const transcript: SessionTranscriptItem[] = [];
   const toolIndexByCallId = new Map<string, number>();
 
-  for (const [index, message] of messages.entries()) {
+  for (const [index, source] of sources.entries()) {
+    if (source.kind === "card") {
+      transcript.push(transcriptItemFromCardEntry(source.entry));
+      continue;
+    }
+    const { message } = source;
     if (!isRecord(message)) {
       continue;
     }
@@ -345,15 +379,102 @@ export function customMessageTranscriptItem(
 export function displayMessagesFromSession(
   sessionManager: Pick<SessionManager, "buildContextEntries">,
 ) {
-  return sessionManager.buildContextEntries().flatMap((entry, index) => {
+  return displaySourcesFromSession(sessionManager).flatMap((source) =>
+    source.kind === "message" ? [source.message] : [],
+  );
+}
+
+/**
+ * The display messages plus extension cards in entry order. pi projects custom entries to no
+ * messages, so cards are read from the entries directly.
+ */
+function displaySourcesFromSession(
+  sessionManager: Pick<SessionManager, "buildContextEntries">,
+): DisplaySource[] {
+  return sessionManager.buildContextEntries().flatMap((entry, index): DisplaySource[] => {
+    if (isExtensionCardEntry(entry)) return [{ kind: "card", entry }];
     // A retained range can contain older compactions. Only the latest one,
     // which Pi places first, contributes a summary (matching Pi's projection).
     if (entry.type === "compaction" && index > 0) return [];
     return sessionEntryToContextMessages(entry).map((message) => ({
-      ...message,
-      id: entry.id,
+      kind: "message",
+      message: { ...message, id: entry.id },
     }));
   });
+}
+
+export function isExtensionCardEntry(entry: { readonly type: string }): entry is CustomEntry {
+  return (
+    entry.type === "custom" &&
+    (entry as Partial<CustomEntry>).customType === EXTENSION_CARD_CUSTOM_TYPE
+  );
+}
+
+/**
+ * The only place a `pi-gui.card` entry's data becomes a card. Unknown fields are ignored and
+ * malformed rows or actions are skipped. A card without a title is not dropped silently: it
+ * becomes a custom row saying what is wrong, so the extension author sees it.
+ */
+export function transcriptItemFromCardEntry(
+  entry: CustomEntry,
+): SessionTranscriptCard | SessionTranscriptCustomMessage {
+  const base = { id: entry.id, createdAt: entry.timestamp };
+  const card = parseExtensionCard(entry.data);
+  if (typeof card === "string") {
+    return {
+      ...base,
+      kind: "custom",
+      customType: EXTENSION_CARD_CUSTOM_TYPE,
+      text: `This card was not shown: ${card}.`,
+    };
+  }
+  return { ...base, kind: "card", card };
+}
+
+function parseExtensionCard(data: unknown): ExtensionCard | string {
+  if (!isRecord(data)) return "its data must be an object";
+  const title = typeof data.title === "string" ? data.title.trim() : "";
+  if (!title) return "it needs a non-empty string `title`";
+  const subtitle = typeof data.subtitle === "string" ? data.subtitle.trim() : "";
+  const tone =
+    data.tone === "success" || data.tone === "warning" || data.tone === "error"
+      ? data.tone
+      : "neutral";
+  const rows = Array.isArray(data.rows)
+    ? data.rows.flatMap((row): ExtensionCardRow[] =>
+        isRecord(row) && nonEmptyString(row.label) && isCardValue(row.value)
+          ? [{ label: row.label, value: String(row.value) }]
+          : [],
+      )
+    : [];
+  const actions = Array.isArray(data.actions)
+    ? data.actions.flatMap((action): ExtensionCardAction[] =>
+        isRecord(action) && nonEmptyString(action.label) && nonEmptyString(action.path)
+          ? [
+              {
+                label: action.label,
+                path: action.path,
+                ...(Number.isSafeInteger(action.line) && (action.line as number) > 0
+                  ? { line: action.line as number }
+                  : {}),
+              },
+            ]
+          : [],
+      )
+    : [];
+  return { title, ...(subtitle ? { subtitle } : {}), tone, rows, actions };
+}
+
+function nonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function isCardValue(value: unknown): value is string | number | boolean {
+  return (
+    typeof value === "string" ||
+    typeof value === "boolean" ||
+    (typeof value === "number" && Number.isFinite(value))
+  );
 }
 
 function messageCreatedAt(message: Record<string, unknown>, fallback: string): string {

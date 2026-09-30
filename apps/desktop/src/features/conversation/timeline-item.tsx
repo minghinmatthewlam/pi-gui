@@ -18,6 +18,7 @@ import {
 } from "./annotations/annotation-markers";
 import { parseAnnotatedPrompt } from "./annotations/annotation-prompt";
 import { SentAnnotations } from "./annotations/sent-annotations";
+import { ExtensionCardItem } from "./extension-card";
 import { ImageAttachmentThumb } from "./image-attachment-thumb";
 import { MessageMarkdown } from "./message-markdown";
 import { TurnChangesCard, type OpenTurnChange } from "./turn-changes-card";
@@ -94,6 +95,10 @@ export function TimelineItem({
       return <TimelineSummaryItem item={item} />;
     case "custom":
       return <TimelineCustomMessage item={item} />;
+    case "card":
+      return (
+        <ExtensionCardItem card={item.card} onOpenWorkspaceFileLine={onOpenWorkspaceFileLine} />
+      );
     default:
       return unhandledTimelineItem(item);
   }

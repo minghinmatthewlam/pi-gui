@@ -6,11 +6,12 @@ import {
   type RefObject,
   type SetStateAction,
 } from "react";
-import type { SessionUsageSnapshot } from "@pi-gui/session-driver";
+import type { ExtensionFlagValues, SessionUsageSnapshot } from "@pi-gui/session-driver";
 import type { RuntimeSnapshot } from "@pi-gui/session-driver/runtime-types";
 import type {
   ComposerAttachment,
   QueuedComposerMessage,
+  SessionExtensionNoticeRecord,
   SessionRecord,
 } from "../../../contracts/desktop-state";
 import type { MentionOption } from "./hooks/use-mention-menu";
@@ -31,6 +32,8 @@ import type {
 } from "../settings/model-onboarding";
 import { ContextMeter } from "./context-meter";
 import { ModelSelector } from "./model-selector";
+import { ExtensionNotices } from "../extensions/extension-notices";
+import { ExtensionFlagsBadge } from "../threads/extension-flags-selector";
 import type { ExtensionDockModel } from "../extensions/extension-session-ui";
 
 interface ComposerPanelProps {
@@ -39,6 +42,8 @@ interface ComposerPanelProps {
   readonly lastError?: string;
   readonly runtime?: RuntimeSnapshot;
   readonly usage?: SessionUsageSnapshot;
+  /** Flag values this thread's pi session started with. */
+  readonly extensionFlags?: ExtensionFlagValues;
   readonly activeSlashCommand?: ComposerSlashCommand;
   readonly activeSlashCommandMeta?: string;
   readonly composerDraft: string;
@@ -85,6 +90,7 @@ interface ComposerPanelProps {
   readonly extensionDock?: ExtensionDockModel;
   readonly extensionDockExpanded: boolean;
   readonly onToggleExtensionDock: () => void;
+  readonly extensionNotices?: readonly SessionExtensionNoticeRecord[];
   readonly annotations: TranscriptAnnotations;
 }
 
@@ -94,6 +100,7 @@ export function ComposerPanel({
   lastError,
   runtime,
   usage,
+  extensionFlags,
   activeSlashCommand,
   activeSlashCommandMeta,
   composerDraft,
@@ -138,6 +145,7 @@ export function ComposerPanel({
   extensionDock,
   extensionDockExpanded,
   onToggleExtensionDock,
+  extensionNotices,
   annotations,
 }: ComposerPanelProps) {
   const hasComposerInput =
@@ -147,6 +155,7 @@ export function ComposerPanel({
   return (
     <footer className="composer" aria-busy={preparingTaskDraft}>
       <div className="conversation conversation--composer" inert={preparingTaskDraft}>
+        <ExtensionNotices notices={extensionNotices} />
         <ComposerSurface
           lastError={lastError}
           activeSlashCommand={activeSlashCommand}
@@ -210,6 +219,7 @@ export function ComposerPanel({
                     onSetModel={onSetModel}
                     onSetThinking={onSetThinking}
                   />
+                  <ExtensionFlagsBadge values={extensionFlags} />
                   <ContextMeter usage={usage} />
                 </div>
                 <div className="composer__actions">

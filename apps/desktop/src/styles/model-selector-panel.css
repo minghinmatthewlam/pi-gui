@@ -152,3 +152,58 @@
   font-size: 11px;
   color: var(--muted);
 }
+
+/* Extension flags: set in New thread, shown read-only on a started thread */
+.extension-flags__dropdown {
+  min-width: 320px;
+  max-width: 420px;
+}
+
+.extension-flags__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+}
+
+.extension-flags__name {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.extension-flags__flag {
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.extension-flags__input {
+  flex: none;
+  width: 128px;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-muted);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  outline: none;
+}
+
+.extension-flags__input:focus {
+  border-color: var(--accent);
+}
+
+.extension-flags__badge--readonly {
+  cursor: default;
+}
+
+.model-selector__badge.extension-flags__badge--readonly:hover {
+  background: var(--surface-muted);
+  border-color: transparent;
+  color: var(--muted-strong);
+}

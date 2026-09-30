@@ -122,7 +122,9 @@ async function fixture(t: TestContext, streamFunction: StreamFunction) {
     mode: () => mode,
     settled,
     appended: () =>
-      events.flatMap((event) => (event.type === "transcriptItemAppended" ? [event.item] : [])),
+      events.flatMap((event) =>
+        event.type === "transcriptItemAppended" && event.item.kind === "custom" ? [event.item] : [],
+      ),
   };
 }
 

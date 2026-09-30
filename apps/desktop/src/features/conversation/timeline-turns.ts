@@ -69,7 +69,7 @@ export function buildDisplayTimelineItems(
       }
       // An extension can post into the thread long after the run settled; a message
       // steered into the run is already covered by the reply that follows it.
-      if (item.kind === "custom") {
+      if (item.kind === "custom" || item.kind === "card") {
         continue;
       }
       const itemMs = Date.parse(item.createdAt);
@@ -138,8 +138,8 @@ function turnChangeCardPositions(
   return positions;
 
   function startsAnotherTurn(item: TranscriptMessage | undefined, turn: TurnChangeSummary) {
-    // A later extension message is not part of the turn's work, so the card stays above it.
-    if (item?.kind === "custom") return true;
+    // A later extension message or card is not part of the turn's work, so the card stays above it.
+    if (item?.kind === "custom" || item?.kind === "card") return true;
     if (item?.kind !== "message") return false;
     const owner = turnByEntry.get(item.sourceMessageId ?? item.id);
     return item.role === "user" || (owner !== undefined && owner !== turn);

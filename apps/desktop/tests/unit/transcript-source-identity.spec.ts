@@ -122,3 +122,27 @@ test("an extension's custom message lands as its own row between replies, once",
     h.transcript.get(key)!.map((row) => (row.kind === "message" ? row.text : row.kind)),
   ).toEqual(["First reply", "custom", "Second reply"]);
 });
+
+test("a card or its error row appended mid-reply goes above the streaming reply, which keeps one row", () => {
+  const h = fixture();
+  h.append("Checking CI.");
+  const card = {
+    kind: "card" as const,
+    id: "entry-card",
+    createdAt: timestamp,
+    card: { title: "CI failed", tone: "error" as const, rows: [], actions: [] },
+  };
+  const broken = {
+    kind: "custom" as const,
+    id: "entry-broken",
+    createdAt: timestamp,
+    customType: "pi-gui.card",
+    text: "This card was not shown: it needs a non-empty string `title`.",
+  };
+  h.send({ type: "transcriptItemAppended", sessionRef, timestamp, item: card });
+  h.send({ type: "transcriptItemAppended", sessionRef, timestamp, item: broken });
+  h.append(" Done.");
+  expect(h.transcript.get(key)!.map((row) => (row.kind === "message" ? row.text : row.id))).toEqual(
+    ["entry-card", "entry-broken", "Checking CI. Done."],
+  );
+});
