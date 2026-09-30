@@ -27,3 +27,9 @@ export type {
   PiDesktopExtensionObserver,
   PiDesktopExtensionRuntime,
 } from "./desktop-extension-bridge.js";
+export type {
+  McpServerListing,
+  McpServerScope,
+  McpServerSummary,
+  NewMcpServer,
+} from "./mcp-config.js";

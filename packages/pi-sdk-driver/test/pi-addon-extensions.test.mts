@@ -98,6 +98,20 @@ await test("Settings lists pi's add-ons by their builtin: path and switches them
   );
 });
 
+await test("code mode Always on adds and removes +codemode, keeping other defaultTools", async (t) => {
+  const { agentDir, workspace } = await setup(t, { defaultTools: ["-bash"] });
+  const supervisor = new RuntimeSupervisor({ agentDir });
+  assert.equal(await supervisor.getCodemodeAlwaysOn(workspace), false);
+
+  await supervisor.setCodemodeAlwaysOn(workspace, true);
+  assert.deepEqual((await readSettings(agentDir)).defaultTools, ["-bash", "+codemode"]);
+  assert.equal(await supervisor.getCodemodeAlwaysOn(workspace), true);
+
+  await supervisor.setCodemodeAlwaysOn(workspace, false);
+  assert.deepEqual((await readSettings(agentDir)).defaultTools, ["-bash"]);
+  assert.equal(await supervisor.getCodemodeAlwaysOn(workspace), false);
+});
+
 await test(
   "a new session loads pi's add-ons and starts mcp.json servers, unless -builtin:mcp",
   { timeout: 30_000 },

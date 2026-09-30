@@ -45,7 +45,18 @@ import {
   type CustomProviderEntry,
   type CustomProviderInput,
 } from "./custom-provider-store.js";
+import { savePiGlobalSetting } from "./compat/pi-global-settings.js";
 import { savePiProjectSettings } from "./compat/pi-project-settings.js";
+import {
+  addMcpServer,
+  listMcpServers,
+  removeMcpServer,
+  setMcpServerEnabled,
+  type McpConfigLocation,
+  type McpServerListing,
+  type McpServerScope,
+  type NewMcpServer,
+} from "./mcp-config.js";
 import {
   isBuiltinExtensionPath,
   PI_ADDON_EXTENSION_NAMES,
@@ -306,6 +317,58 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
     await context.settingsManager.flush();
     await this.reloadResources(context);
     return this.buildSnapshot(context);
+  }
+
+  /** Whether pi's global `defaultTools` switches code mode on for every session. */
+  async getCodemodeAlwaysOn(workspace: WorkspaceRef): Promise<boolean> {
+    const { settingsManager } = await this.ensureContext(workspace);
+    await settingsManager.reload();
+    return (settingsManager.getGlobalSettings().defaultTools ?? []).some(isCodemodeToolEntry);
+  }
+
+  /**
+   * Adds or removes `+codemode` in pi's global `defaultTools`, keeping its other entries. Off
+   * leaves code mode to pi, which switches it on when an MCP server needs it.
+   */
+  async setCodemodeAlwaysOn(workspace: WorkspaceRef, alwaysOn: boolean): Promise<void> {
+    const { settingsManager } = await this.ensureContext(workspace);
+    await settingsManager.reload();
+    const others = (settingsManager.getGlobalSettings().defaultTools ?? []).filter(
+      (entry) => !isCodemodeToolEntry(entry),
+    );
+    const next = alwaysOn ? [...others, "+codemode"] : others;
+    savePiGlobalSetting(settingsManager, "defaultTools", next.length > 0 ? next : undefined);
+    await settingsManager.flush();
+    const [failure] = settingsManager.drainErrors();
+    if (failure) throw failure.error;
+  }
+
+  /** Servers in the global `mcp.json` and this workspace's `.pi/mcp.json`, without secrets. */
+  listMcpServers(workspace: WorkspaceRef): McpServerListing {
+    return listMcpServers(this.mcpConfigLocation(workspace));
+  }
+
+  addMcpServer(server: NewMcpServer): void {
+    addMcpServer(this.agentDir, server);
+  }
+
+  removeMcpServer(name: string): void {
+    if (!removeMcpServer(this.agentDir, name)) {
+      throw new Error(`The global mcp.json does not define MCP server "${name}"`);
+    }
+  }
+
+  setMcpServerEnabled(
+    workspace: WorkspaceRef,
+    scope: McpServerScope,
+    name: string,
+    enabled: boolean,
+  ): void {
+    setMcpServerEnabled(this.mcpConfigLocation(workspace), scope, name, enabled);
+  }
+
+  private mcpConfigLocation(workspace: WorkspaceRef): McpConfigLocation {
+    return { agentDir: this.agentDir, cwd: workspace.path };
   }
 
   async setScopedModelPatterns(
@@ -1049,6 +1112,10 @@ async function readJsonRecord(filePath: string): Promise<Record<string, unknown>
   } catch {
     return {};
   }
+}
+
+function isCodemodeToolEntry(entry: string): boolean {
+  return entry === "+codemode" || entry === "codemode";
 }
 
 /** `builtin:<name>` names one of pi's add-ons, not a file, so it is compared as is. */
