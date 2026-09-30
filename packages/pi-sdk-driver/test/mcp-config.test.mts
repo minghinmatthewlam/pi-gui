@@ -231,3 +231,48 @@ await test("server names follow pi's rule and Object keys are ordinary names", (
 function savedNames(path: string): string[] {
   return Object.keys((readJson(path) as { mcpServers: object }).mcpServers);
 }
+
+await test("stdio arguments that look like credentials are masked in listings", () => {
+  const { agentDir, cwd, globalPath } = setup();
+  const args = [
+    "-y",
+    "@example/server",
+    "--api-key",
+    "ARG_SECRET_1",
+    "--token=ARG_SECRET_2",
+    "GITHUB_TOKEN=ARG_SECRET_3",
+    "--header",
+    "Authorization: Bearer ARG_SECRET_4",
+    "--password",
+    "--verbose",
+    "--port",
+    "8080",
+    "LOG_LEVEL=debug",
+    "https://example.com/data",
+  ];
+  writeFileSync(globalPath, JSON.stringify({ mcpServers: { tools: { command: "npx", args } } }));
+
+  const [server] = listMcpServers({ agentDir, cwd }).servers;
+  assert.deepEqual(server?.args, [
+    "-y",
+    "@example/server",
+    "--api-key",
+    "•••",
+    "--token=•••",
+    "GITHUB_TOKEN=•••",
+    "--header",
+    "Authorization: •••",
+    "--password",
+    "--verbose",
+    "--port",
+    "8080",
+    "LOG_LEVEL=debug",
+    "https://example.com/data",
+  ]);
+  assert.doesNotMatch(JSON.stringify(server), /ARG_SECRET/);
+  assert.deepEqual(
+    (readJson(globalPath) as { mcpServers: { tools: { args: string[] } } }).mcpServers.tools.args,
+    args,
+    "the file keeps the real values",
+  );
+});

@@ -5,7 +5,8 @@
  * file's indentation, and refuse to overwrite a file that does not parse.
  *
  * Listings leave out `env`, `headers` and `oauth`, which can hold secrets, and say only whether a
- * server has any; URLs are listed without user info, query or fragment.
+ * server has any; URLs are listed without user info, query or fragment, and arguments that look
+ * like credentials are masked.
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -162,7 +163,7 @@ function summarizeServer(
   const hasHiddenSettings = HIDDEN_FIELDS.some((field) => hasContent(value[field]));
   if (typeof value.command === "string" && value.command) {
     const args = Array.isArray(value.args)
-      ? value.args.filter((arg): arg is string => typeof arg === "string")
+      ? redactArgs(value.args.filter((arg): arg is string => typeof arg === "string"))
       : [];
     return {
       name,
@@ -182,6 +183,36 @@ function summarizeServer(
 }
 
 const HIDDEN_FIELDS = ["env", "headers", "oauth"] as const;
+
+/** Names that usually hold a credential, in a flag (`--api-key`) or a `NAME=value` pair. */
+const SECRET_NAME = /token|key|secret|password|passwd|auth|credential|bearer/i;
+const MASK = "•••";
+
+/**
+ * Masks likely credentials in stdio arguments: the value of `NAME=value`, `--flag=value` or
+ * `Name: value` when the name looks secret, and the argument after such a flag (unless that
+ * is another `--flag`). Errs toward masking; the file itself is unchanged.
+ */
+function redactArgs(args: readonly string[]): string[] {
+  const redacted: string[] = [];
+  let maskNext = false;
+  for (const arg of args) {
+    if (maskNext && !arg.startsWith("--")) {
+      redacted.push(MASK);
+      maskNext = false;
+      continue;
+    }
+    maskNext = false;
+    const pair = /^([^=:\s]+)(=|:\s*)/.exec(arg);
+    if (pair) {
+      redacted.push(SECRET_NAME.test(pair[1]!) ? `${pair[1]}${pair[2]}${MASK}` : arg);
+      continue;
+    }
+    redacted.push(arg);
+    maskNext = arg.startsWith("-") && SECRET_NAME.test(arg);
+  }
+  return redacted;
+}
 
 function hasContent(value: unknown): boolean {
   return (
