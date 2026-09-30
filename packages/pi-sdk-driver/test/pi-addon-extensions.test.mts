@@ -112,6 +112,25 @@ await test("code mode Always on adds and removes +codemode, keeping other defaul
   assert.equal(await supervisor.getCodemodeAlwaysOn(workspace), false);
 });
 
+await test("code mode Always on reports only its own settings error", async (t) => {
+  const { agentDir, workspace } = await setup(t);
+  const settingsPath = join(agentDir, "settings.json");
+  const supervisor = new RuntimeSupervisor({ agentDir });
+  await supervisor.getCodemodeAlwaysOn(workspace);
+
+  const broken = '{ "defaultTools": [';
+  await writeFile(settingsPath, broken);
+  await assert.rejects(() => supervisor.setCodemodeAlwaysOn(workspace, true));
+  assert.equal(await readFile(settingsPath, "utf8"), broken, "a broken file is never rewritten");
+
+  // Reading the broken file again leaves an error behind. Once the file is fixed by hand, that
+  // error is stale and must not fail the next change.
+  await supervisor.getCodemodeAlwaysOn(workspace);
+  await writeFile(settingsPath, JSON.stringify({ packages: [] }));
+  await supervisor.setCodemodeAlwaysOn(workspace, true);
+  assert.deepEqual((await readSettings(agentDir)).defaultTools, ["+codemode"]);
+});
+
 await test(
   "a new session loads pi's add-ons and starts mcp.json servers, unless -builtin:mcp",
   { timeout: 30_000 },

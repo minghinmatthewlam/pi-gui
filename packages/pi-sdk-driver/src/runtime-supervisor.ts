@@ -332,15 +332,18 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
    */
   async setCodemodeAlwaysOn(workspace: WorkspaceRef, alwaysOn: boolean): Promise<void> {
     const { settingsManager } = await this.ensureContext(workspace);
+    // Errors left from earlier reads or writes are not this change's; only global-file errors
+    // from here on are (pi skips the save when settings.json does not parse).
+    settingsManager.drainErrors();
     await settingsManager.reload();
+    throwGlobalSettingsError(settingsManager.drainErrors());
     const others = (settingsManager.getGlobalSettings().defaultTools ?? []).filter(
       (entry) => !isCodemodeToolEntry(entry),
     );
     const next = alwaysOn ? [...others, "+codemode"] : others;
     savePiGlobalSetting(settingsManager, "defaultTools", next.length > 0 ? next : undefined);
     await settingsManager.flush();
-    const [failure] = settingsManager.drainErrors();
-    if (failure) throw failure.error;
+    throwGlobalSettingsError(settingsManager.drainErrors());
   }
 
   /** Servers in the global `mcp.json` and this workspace's `.pi/mcp.json`, without secrets. */
@@ -1112,6 +1115,13 @@ async function readJsonRecord(filePath: string): Promise<Record<string, unknown>
   } catch {
     return {};
   }
+}
+
+function throwGlobalSettingsError(
+  errors: readonly { readonly scope: string; readonly error: unknown }[],
+): void {
+  const failure = errors.find((entry) => entry.scope === "global");
+  if (failure) throw failure.error;
 }
 
 function isCodemodeToolEntry(entry: string): boolean {
