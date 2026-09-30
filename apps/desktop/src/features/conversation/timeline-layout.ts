@@ -1,3 +1,4 @@
+import type { ExtensionCard } from "@pi-gui/session-driver";
 import type { DisplayTimelineItem } from "../../../contracts/timeline-types";
 
 export interface ReadingAnchor {
@@ -15,18 +16,37 @@ export const TIMELINE_GAP = 16;
 export const TIMELINE_OVERSCAN = 720;
 
 export function estimateRowHeight(item: DisplayTimelineItem, width: number): number {
-  if (item.kind === "turn-marker") return 32;
-  if (item.kind === "turn-changes") return 74 + Math.min(item.turn.files.length, 6) * 36;
-  if (item.kind === "message") {
-    const charactersPerLine = Math.max(20, Math.floor((width || 700) / 8));
-    const lines = item.text
-      .split("\n")
-      .reduce((count, line) => count + Math.max(1, Math.ceil(line.length / charactersPerLine)), 0);
-    return 48 + lines * 24 + (item.attachments?.length ? 160 : 0);
+  switch (item.kind) {
+    case "turn-marker":
+      return 32;
+    case "turn-changes":
+      return 74 + Math.min(item.turn.files.length, 6) * 36;
+    case "message":
+      return 48 + textLines(item.text, width) * 24 + (item.attachments?.length ? 160 : 0);
+    case "custom":
+      return 64 + textLines(item.text, width) * 24;
+    case "card": {
+      const bodyRows = item.card.rows.length + item.card.actions.length;
+      return 50 + (bodyRows ? 12 + bodyRows * 34 : 0);
+    }
+    case "tool":
+      return 52;
+    case "summary":
+      return item.presentation === "divider" ? 44 : 38;
+    case "activity":
+      return 38;
+    default: {
+      const unhandled: never = item;
+      return unhandled;
+    }
   }
-  if (item.kind === "tool") return 52;
-  if (item.kind === "summary") return item.presentation === "divider" ? 44 : 38;
-  return 38;
+}
+
+function textLines(text: string, width: number): number {
+  const charactersPerLine = Math.max(20, Math.floor((width || 700) / 8));
+  return text
+    .split("\n")
+    .reduce((count, line) => count + Math.max(1, Math.ceil(line.length / charactersPerLine)), 0);
 }
 
 export interface RowEstimate {
@@ -49,7 +69,27 @@ export function sameRowContent(a: DisplayTimelineItem, b: DisplayTimelineItem): 
     return a.label === b.label && a.presentation === b.presentation;
   if (a.kind === "activity" && b.kind === "activity")
     return a.label === b.label && a.detail === b.detail;
+  if (a.kind === "custom" && b.kind === "custom")
+    return a.customType === b.customType && a.text === b.text;
+  if (a.kind === "card" && b.kind === "card") return sameCard(a.card, b.card);
   return true;
+}
+
+function sameCard(a: ExtensionCard, b: ExtensionCard): boolean {
+  return (
+    a.title === b.title &&
+    a.subtitle === b.subtitle &&
+    a.tone === b.tone &&
+    a.rows.length === b.rows.length &&
+    a.rows.every((row, i) => row.label === b.rows[i]?.label && row.value === b.rows[i]?.value) &&
+    a.actions.length === b.actions.length &&
+    a.actions.every(
+      (action, i) =>
+        action.label === b.actions[i]?.label &&
+        action.path === b.actions[i]?.path &&
+        action.line === b.actions[i]?.line,
+    )
+  );
 }
 export function layoutRows(
   items: readonly DisplayTimelineItem[],

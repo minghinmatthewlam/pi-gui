@@ -293,6 +293,13 @@ export function applyTimelineEvent(
       clearRunState(transcript, key, event.sessionRef, state);
       transcript.push(makeActivityItem("Stopped", { metadata: relativeDetail(event.timestamp) }));
       break;
+    case "transcriptItemAppended": {
+      // Same id as the persisted entry, so a transcript reload replaces rather than duplicates it.
+      // A streaming reply keeps its row: later deltas still append to it above the new item.
+      if (transcript.some((item) => item.id === event.item.id)) return;
+      transcript.push(...timelineFromDriverTranscript([event.item]));
+      break;
+    }
     case "hostUiRequest":
       if (event.request.kind === "notify") {
         transcript.push(

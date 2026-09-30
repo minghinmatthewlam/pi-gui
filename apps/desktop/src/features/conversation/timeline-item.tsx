@@ -1,5 +1,8 @@
 import { useMemo, useRef } from "react";
-import type { SessionTranscriptMessage } from "@pi-gui/session-driver";
+import type {
+  SessionTranscriptCustomMessage,
+  SessionTranscriptMessage,
+} from "@pi-gui/session-driver";
 import type {
   DisplayTimelineItem,
   TimelineActivity,
@@ -15,6 +18,7 @@ import {
 } from "./annotations/annotation-markers";
 import { parseAnnotatedPrompt } from "./annotations/annotation-prompt";
 import { SentAnnotations } from "./annotations/sent-annotations";
+import { ExtensionCardItem } from "./extension-card";
 import { ImageAttachmentThumb } from "./image-attachment-thumb";
 import { MessageMarkdown } from "./message-markdown";
 import { TurnChangesCard, type OpenTurnChange } from "./turn-changes-card";
@@ -89,9 +93,27 @@ export function TimelineItem({
       );
     case "summary":
       return <TimelineSummaryItem item={item} />;
-    default:
-      return null;
+    case "custom":
+      return <TimelineCustomMessage item={item} />;
+    case "card":
+      return (
+        <ExtensionCardItem card={item.card} onOpenWorkspaceFileLine={onOpenWorkspaceFileLine} />
+      );
+    default: {
+      const unhandled: never = item;
+      return unhandled;
+    }
   }
+}
+
+/** A message an extension sent with display: true, labelled like terminal pi's `[customType]`. */
+function TimelineCustomMessage({ item }: { readonly item: SessionTranscriptCustomMessage }) {
+  return (
+    <article className="timeline-item timeline-item--summary-card" data-testid="custom-message">
+      <div className="timeline-item__summary-eyebrow">{item.customType}</div>
+      <MessageMarkdown text={item.text} />
+    </article>
+  );
 }
 
 function TimelineMessage({

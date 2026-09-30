@@ -1,4 +1,9 @@
-import type { SessionTranscriptMessage, SessionTranscriptRole } from "@pi-gui/session-driver";
+import type {
+  SessionTranscriptCard,
+  SessionTranscriptCustomMessage,
+  SessionTranscriptMessage,
+  SessionTranscriptRole,
+} from "@pi-gui/session-driver";
 import type { TurnChangeSummary } from "./review";
 
 export type SessionRole = SessionTranscriptRole;
@@ -40,7 +45,12 @@ export interface TimelineSummary {
 }
 
 export type TranscriptMessage =
-  SessionTranscriptMessage | TimelineActivity | TimelineToolCall | TimelineSummary;
+  | SessionTranscriptMessage
+  | SessionTranscriptCustomMessage
+  | SessionTranscriptCard
+  | TimelineActivity
+  | TimelineToolCall
+  | TimelineSummary;
 
 /**
  * A derived, view-only marker inserted between turns to show how long the agent

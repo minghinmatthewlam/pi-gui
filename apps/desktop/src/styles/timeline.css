@@ -1005,3 +1005,54 @@
 .turn-changes__more {
   color: var(--muted);
 }
+/* Extension cards: the "Edited N files" shell, tone as a word, rows like file rows */
+.extension-card__subtitle {
+  color: var(--muted-soft);
+  font-size: 13px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.extension-card__tone {
+  flex-shrink: 0;
+  color: var(--muted-soft);
+  font-size: 12px;
+}
+
+.extension-card--error .extension-card__tone {
+  color: var(--error-ink);
+}
+
+.extension-card__row {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  padding: 7px 14px;
+  font-size: 13px;
+  color: var(--ink);
+}
+
+.extension-card__label {
+  flex-shrink: 0;
+  min-width: 72px;
+  color: var(--muted-soft);
+}
+
+.extension-card__value {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.extension-card__action .extension-card__label {
+  color: var(--ink);
+}
+
+.extension-card__action-target {
+  flex-shrink: 1;
+  color: var(--muted-path);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
