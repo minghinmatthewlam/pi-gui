@@ -5,10 +5,11 @@ commands, tools, saved session entries, and optional desktop view share that
 extension instance. A view is custom browser code, connected to the extension's
 service through Chord. It does not require a new app-specific IPC operation.
 
-| Example                            | Backend operation                                                                           | Desktop interaction                                                   | Terminal fallback                                                                  |
-| ---------------------------------- | ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| [PR Review](./pr-review/README.md) | Ask Pi to review a real GitHub PR at a captured commit and record structured local findings | Refresh PR, review, open a finding's file, prepare an unsent fix task | `/pr-review`                                                                       |
-| [Test Runs](./test-runs/README.md) | Execute fixed demonstration test suites, stream bounded output, stop or time out a process  | Choose a suite, run, inspect output, stop                             | `/tests passing`, `/tests failing`, `/tests slow`, `/tests timeout`, `/tests stop` |
+| Example                            | Backend operation                                                                                      | Desktop interaction                                                   | Terminal fallback                                                                  |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| [PR Review](./pr-review/README.md) | Ask Pi to review a real GitHub PR at a captured commit and record structured local findings            | Refresh PR, review, open a finding's file, prepare an unsent fix task | `/pr-review`                                                                       |
+| [Test Runs](./test-runs/README.md) | Execute fixed demonstration test suites, stream bounded output, stop or time out a process             | Choose a suite, run, inspect output, stop                             | `/tests passing`, `/tests failing`, `/tests slow`, `/tests timeout`, `/tests stop` |
+| [GitHub](./github/README.md)       | Read the folder's PRs and issues through `gh`; give the model a `github_read` tool for one issue or PR | Browse PRs and issues, open one on GitHub, prepare an unsent fix task | `/github`                                                                          |
 
 The test suites are actual `node:test` fixtures, including an intentional failure;
 they are not pi-gui's repository checks. PR Review needs a configured Pi model,
@@ -30,6 +31,7 @@ From the pi-gui repository root, after the normal repository dependency setup:
 pnpm --filter @pi-gui/extension-ui build
 node examples/desktop-extensions/pr-review/build.mjs
 node examples/desktop-extensions/test-runs/build.mjs
+node examples/desktop-extensions/github/build.mjs
 ```
 
 Add the absolute paths to the existing `extensions` array in the target project's
@@ -57,7 +59,7 @@ discovery and inspect diagnostics, then **Back to app**. This path also works
 before a model is configured. In a task with a configured model, `/reload` is
 another way to reload the idle runtime after changing extension configuration.
 Open the side panel, click **Add tab (+)**, and choose
-**PR Review** or **Test Runs** under **Extension views**. **Refresh views** refreshes
+**PR Review**, **Test Runs** or **GitHub** under **Extension views**. **Refresh views** refreshes
 that list. The existing Extensions screen manages Pi extensions; it is not a
 separate desktop-view installer.
 
