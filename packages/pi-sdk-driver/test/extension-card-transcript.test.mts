@@ -241,7 +241,9 @@ await test("a live card and the reopened transcript show the same card once", as
   assert.ok(keyed[0]?.kind === "card");
   assert.equal(keyed[0].card.title, "CI passed");
   assert.deepEqual(
-    appended.filter((item) => item.id === "card:ci").map((item) => item.kind === "card" && item.card.title),
+    appended
+      .filter((item) => item.id === "card:ci")
+      .map((item) => item.kind === "card" && item.card.title),
     ["CI running", "CI passed"],
     "each write reaches the app live under the same id",
   );

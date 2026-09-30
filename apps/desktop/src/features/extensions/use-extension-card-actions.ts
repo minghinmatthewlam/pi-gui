@@ -38,7 +38,9 @@ export function useExtensionCardActions({
             return;
           }
           const draft = composerDraftRef.current ?? "";
-          setComposerDraft(draft.trim() ? `${draft.replace(/\s+$/, "")}\n${effect.text}` : effect.text);
+          setComposerDraft(
+            draft.trim() ? `${draft.replace(/\s+$/, "")}\n${effect.text}` : effect.text,
+          );
           document.querySelector<HTMLTextAreaElement>('[data-testid="composer"]')?.focus();
         })
         .catch((error: unknown) => {

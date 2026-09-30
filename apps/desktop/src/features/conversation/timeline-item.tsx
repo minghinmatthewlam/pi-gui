@@ -98,9 +98,7 @@ export function TimelineItem({
     case "custom":
       return <TimelineCustomMessage item={item} />;
     case "card":
-      return (
-        <ExtensionCardItem card={item.card} onAction={onExtensionAction} />
-      );
+      return <ExtensionCardItem card={item.card} onAction={onExtensionAction} />;
     default:
       return unhandledTimelineItem(item);
   }

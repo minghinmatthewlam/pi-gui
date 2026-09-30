@@ -343,7 +343,7 @@ function MeasuredTimelineItemBase({
         sourceMessageIndex={sourceMessageIndex}
         onForkFromMessage={onForkFromMessage}
         onOpenWorkspaceFileLine={onOpenWorkspaceFileLine}
-                  onExtensionAction={onExtensionAction}
+        onExtensionAction={onExtensionAction}
         scheduledOrigin={scheduledOrigin}
         workspacePath={workspacePath}
         annotationMarkers={annotationMarkers}

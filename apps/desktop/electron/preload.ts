@@ -129,7 +129,10 @@ contextBridge.exposeInMainWorld("piApp", {
   onExtensionViewOpenFile: (listener: (event: ExtensionViewOpenFile) => void) =>
     subscribeIpc(desktopIpc.extensionViewOpenFile, listener),
   runExtensionAction: (action: ExtensionAction) =>
-    ipcRenderer.invoke(desktopIpc.runExtensionAction, action) as Promise<ExtensionActionEffect | null>,
+    ipcRenderer.invoke(
+      desktopIpc.runExtensionAction,
+      action,
+    ) as Promise<ExtensionActionEffect | null>,
   getTurnChanges: (input: TurnChangesInput) =>
     ipcRenderer.invoke(desktopIpc.getTurnChanges, input) as Promise<TurnChangesResult>,
   getReview: (input: GetReviewInput) =>

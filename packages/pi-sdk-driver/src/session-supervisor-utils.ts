@@ -454,7 +454,10 @@ function parseExtensionCard(data: unknown): ExtensionCard | string {
   if (!isRecord(data)) return "its data must be an object";
   const title = typeof data.title === "string" ? data.title.trim() : "";
   if (!title) return "it needs a non-empty string `title`";
-  if (data.key !== undefined && (typeof data.key !== "string" || !CARD_KEY_PATTERN.test(data.key))) {
+  if (
+    data.key !== undefined &&
+    (typeof data.key !== "string" || !CARD_KEY_PATTERN.test(data.key))
+  ) {
     return "its `key` must be 1 to 64 letters, digits, dots, dashes, underscores or colons";
   }
   const key = data.key as string | undefined;

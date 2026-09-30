@@ -67,9 +67,10 @@ export function buildDisplayTimelineItems(
       if (item.kind === "message" && item.role === "assistant") {
         finalReplyIndex = index;
       }
-      // An extension can post into the thread long after the run settled; a message
-      // steered into the run is already covered by the reply that follows it.
-      if (item.kind === "custom") {
+      // An extension can post into the thread long after the run settled, and a keyed card
+      // carries its latest write's time; a message steered into the run is already covered
+      // by the reply that follows it.
+      if (item.kind === "custom" || item.kind === "card") {
         continue;
       }
       const itemMs = Date.parse(item.createdAt);

@@ -1104,6 +1104,10 @@ export class DesktopAppStore {
       message: `Couldn't run that button: ${message}`,
       createdAt: new Date().toISOString(),
     });
+    this.state = this.syncDerivedSessionState(
+      { ...this.state, revision: this.state.revision + 1 },
+      sessionRef,
+    );
     return this.emit();
   }
 

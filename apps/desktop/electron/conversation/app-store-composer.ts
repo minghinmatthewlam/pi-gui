@@ -165,8 +165,9 @@ export interface ConversationOwner {
   ): Promise<DesktopAppState>;
   composerSubmitNeedsSenderView(sessionRef: SessionRef | undefined, textInput: string): boolean;
   /**
-   * Runs an extension command for a card button: like typing it, but the draft and
-   * attachments stay, and the driver refuses anything that is not an extension command.
+   * Runs an extension command for a card button. It is not a user message: nothing is added
+   * to the thread or taken from the composer, and the driver refuses anything that is not an
+   * extension command. Throws on failure so the caller shows one kind of error.
    */
   runExtensionCommand(sessionRef: SessionRef, command: string): Promise<DesktopAppState>;
   submitComposerToSession(
@@ -627,26 +628,22 @@ async function runExtensionCommand(
       sessionRef.workspaceId,
       tracked,
     );
-    if (compatibility?.status === "terminal-only") {
-      return store.withSessionError(sessionRef, compatibility.message);
-    }
+    if (compatibility?.status === "terminal-only") throw new Error(compatibility.message);
     store.beginRuntimeCommandExecution(sessionRef, tracked);
   }
+  // Not a message from the user: no bubble, no recency bump, no unarchive, and the draft,
+  // attachments and a streaming reply stay as they are. pi saves nothing for the command
+  // itself, so the live thread matches the reopened one.
   try {
-    await sendMessageToSession(store, sessionRef, text, [], {
-      keepComposer: true,
-      extensionCommandOnly: true,
-    });
-  } catch (error) {
+    if (!store.conversationState.loadedTranscriptKeys.has(sessionKey(sessionRef))) {
+      await store.ensureSessionReady(sessionRef);
+    }
+    await store.driver.sendUserMessage(sessionRef, { text, extensionCommandOnly: true });
+  } finally {
     if (tracked) store.finishRuntimeCommandExecution(sessionRef);
-    return store.withSessionError(sessionRef, error);
   }
-  const outcome = tracked ? store.finishRuntimeCommandExecution(sessionRef) : undefined;
   await store.refreshSessionCommandsFor(sessionRef);
-  return store.refreshState({
-    clearLastError: !outcome?.blockedMessage,
-    markSelectedSessionViewed: false,
-  });
+  return store.refreshState({ markSelectedSessionViewed: false });
 }
 
 async function setSessionModel(
@@ -765,9 +762,6 @@ async function sendMessageToSession(
   attachments: readonly ComposerAttachment[],
   options: {
     readonly rollbackOptimisticMessageOnError?: boolean;
-    /** Leave the composer draft and attachments alone (a card button, not the composer, sent this). */
-    readonly keepComposer?: boolean;
-    readonly extensionCommandOnly?: boolean;
   } = {},
 ): Promise<void> {
   const key = sessionKey(sessionRef);
@@ -788,16 +782,13 @@ async function sendMessageToSession(
   store.publishSelectedTranscriptFor(sessionRef);
   clearActiveAssistantMessage(store.conversationState.activeAssistantMessageBySession, sessionRef);
   store.conversationState.sessionErrorsBySession.delete(key);
-  if (!options.keepComposer) {
-    store.conversationState.composerDraftsBySession.delete(key);
-    store.conversationState.composerAttachmentsBySession.delete(key);
-    await store.persistComposerAttachments(key, []);
-  }
+  store.conversationState.composerDraftsBySession.delete(key);
+  store.conversationState.composerAttachmentsBySession.delete(key);
+  await store.persistComposerAttachments(key, []);
   try {
     await store.driver.sendUserMessage(sessionRef, {
       text,
       attachments: toSessionAttachments(attachments),
-      ...(options.extensionCommandOnly ? { extensionCommandOnly: true } : {}),
     });
   } catch (error) {
     if (rollbackOptimisticMessageOnError) {

@@ -925,7 +925,8 @@ export class SessionSupervisor {
     record.status = isQueuedMessage || isExtensionCommand ? record.status : "running";
     record.updatedAt = nowIso();
     record.config = deriveSessionConfig(session.sessionManager);
-    record.preview = truncate(input.text);
+    // A card button's command is not something the user said, so it leaves the preview.
+    if (!input.extensionCommandOnly) record.preview = truncate(input.text);
     if (isQueuedMessage) {
       record.queuedMessages = [
         ...record.queuedMessages,
@@ -967,6 +968,13 @@ export class SessionSupervisor {
         }
         await this.queuePrompt(session, promptText, input.deliverAs!, images);
       } else if (isExtensionCommand) {
+        // An extension reload during the awaits above can unregister the command, and pi
+        // would then send the text to the model.
+        if (input.extensionCommandOnly && !this.isExtensionCommand(session, input.text)) {
+          throw new Error(
+            `${input.text.trim().split(/\s/, 1)[0]} is no longer an extension command`,
+          );
+        }
         await session.prompt(promptText, {
           ...(images && images.length > 0 ? { images } : {}),
           source: "interactive",

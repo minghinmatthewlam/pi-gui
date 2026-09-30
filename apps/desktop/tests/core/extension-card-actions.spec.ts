@@ -146,21 +146,28 @@ test("card buttons run through main: a keyed card updates in place, and non-exte
     await expect(composer).toBeFocused();
 
     // Neither refused command reaches the model, and the draft is untouched.
+    const notices = window.getByTestId("extension-notice");
     await card.getByRole("button", { name: /Switch model/ }).click();
-    await expect(window.getByText(/\/model is not an extension command/)).toBeVisible();
+    await expect(notices.filter({ hasText: "/model is not an extension command" })).toBeVisible();
     await card.getByRole("button", { name: /Not a command/ }).click();
-    await expect(window.getByText(/\/not-registered is not an extension command/)).toBeVisible();
+    await expect(
+      notices.filter({ hasText: "/not-registered is not an extension command" }),
+    ).toBeVisible();
     await expect(window.locator(".timeline-item--assistant")).toHaveCount(0);
     await expect(window.getByText("MODEL RAN")).toHaveCount(0);
     await expect(composer).toHaveValue("My own draft\nFix the failing search test.");
 
-    // The extension command runs, rewrites the card under its key, and the draft stays.
+    // The extension command runs and rewrites the card under its key. It is not a message:
+    // no bubble joins the thread and the draft stays.
+    const userRows = window.locator(".timeline-item--user");
+    const userRowsBefore = await userRows.count();
     await card.getByRole("button", { name: /Rerun CI/ }).click();
     await expect(card).toHaveCount(1);
     await expect(card).toContainText("CI passed on main");
     await expect(card.locator(".extension-card__tone")).toHaveText("Passed");
     await expect(composer).toHaveValue("My own draft\nFix the failing search test.");
     await expect(window.locator(".timeline-item--assistant")).toHaveCount(0);
+    await expect(userRows).toHaveCount(userRowsBefore);
   } finally {
     await firstRun.close();
   }

@@ -56,7 +56,11 @@ test("each button action runs its one operation", async () => {
     }),
   ).toBeUndefined();
   expect(
-    await runExtensionAction(host, target, { type: "command", label: "Rerun", command: "/ci rerun" }),
+    await runExtensionAction(host, target, {
+      type: "command",
+      label: "Rerun",
+      command: "/ci rerun",
+    }),
   ).toBeUndefined();
   expect(opened).toEqual(["https://ci.example.com/runs/1"]);
   expect(commands).toEqual(["/ci rerun"]);
@@ -82,11 +86,15 @@ test("main refuses what an extension or the renderer should not be able to ask f
     ).rejects.toThrow();
   }
   await expect(
-    runExtensionAction(host, { workspaceId: "gone", sessionId: "s" }, {
-      type: "openFile",
-      label: "Open",
-      path: "src/a.ts",
-    }),
+    runExtensionAction(
+      host,
+      { workspaceId: "gone", sessionId: "s" },
+      {
+        type: "openFile",
+        label: "Open",
+        path: "src/a.ts",
+      },
+    ),
   ).rejects.toThrow(/unavailable/);
   expect(opened).toEqual([]);
   expect(commands).toEqual([]);
