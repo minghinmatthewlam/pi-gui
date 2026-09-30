@@ -108,3 +108,20 @@ test("a turn's card stays above an extension message posted after it", () => {
   ).map((row) => row.id);
   expect(rows).toEqual(["u1", "a1", "turn-changes:first", "ci-report"]);
 });
+
+test("an extension card after a turn keeps the turn's changes above it", () => {
+  const rows = buildDisplayTimelineItems(
+    [
+      message("u1", "user"),
+      message("a1", "assistant"),
+      {
+        kind: "card",
+        id: "ci-card",
+        createdAt: "2026-09-24T00:00:00Z",
+        card: { title: "CI passed", tone: "success", rows: [], actions: [] },
+      },
+    ],
+    { turnChanges: [turn("first", ["u1", "a1"])] },
+  ).map((row) => row.id);
+  expect(rows).toEqual(["u1", "a1", "turn-changes:first", "ci-card"]);
+});
