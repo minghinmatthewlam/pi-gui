@@ -97,9 +97,9 @@ pnpm add \
   "$extension_tarballs/pi-gui-extension-ui-0.0.0.tgz" \
   "$extension_tarballs/pi-gui-example-pr-review-0.0.0.tgz" \
   "$extension_tarballs/pi-gui-example-test-runs-0.0.0.tgz" \
-  @earendil-works/chord@0.87.0 \
-  @earendil-works/pi-ai@0.87.0 \
-  @earendil-works/pi-coding-agent@0.87.0
+  @earendil-works/chord@0.99.1 \
+  @earendil-works/pi-ai@0.99.1 \
+  @earendil-works/pi-coding-agent@0.99.1
 ```
 
 Then add the installed **package directories** to the existing Pi `extensions`
@@ -182,7 +182,7 @@ GitHub metadata is a fixture executable and the model has an unauthenticated
 fixture provider: it makes no GitHub or provider requests. It proves the real
 admission failure path, not review quality.
 
-Pi 0.87's public `sendUserMessage` returns `void`. A successful service response
+Pi's public `sendUserMessage` returns `void`. A successful service response
 therefore means **Requested**, not that model execution began. Only the matching
 `before_agent_start` makes this review **Running**. Authentication or other
 preflight failures appear in Pi's extension runtime diagnostics and can leave
