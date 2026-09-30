@@ -1,5 +1,8 @@
 import { useMemo, useRef } from "react";
-import type { SessionTranscriptMessage } from "@pi-gui/session-driver";
+import type {
+  SessionTranscriptCustomMessage,
+  SessionTranscriptMessage,
+} from "@pi-gui/session-driver";
 import type {
   DisplayTimelineItem,
   TimelineActivity,
@@ -89,9 +92,26 @@ export function TimelineItem({
       );
     case "summary":
       return <TimelineSummaryItem item={item} />;
+    case "custom":
+      return <TimelineCustomMessage item={item} />;
     default:
-      return null;
+      return unhandledTimelineItem(item);
   }
+}
+
+function unhandledTimelineItem(item: never): null {
+  console.warn("[timeline] unhandled item kind", item);
+  return null;
+}
+
+/** An extension message, drawn like terminal pi: its customType labels the markdown. */
+function TimelineCustomMessage({ item }: { readonly item: SessionTranscriptCustomMessage }) {
+  return (
+    <article className="timeline-item timeline-item--custom" data-testid="timeline-custom-message">
+      <div className="timeline-item__custom-type">{item.customType}</div>
+      <MessageMarkdown text={item.text} />
+    </article>
+  );
 }
 
 function TimelineMessage({

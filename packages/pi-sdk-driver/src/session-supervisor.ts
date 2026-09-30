@@ -41,6 +41,7 @@ import type {
   SessionUsageSnapshot,
   SessionSchemaInfo,
   SessionStatus,
+  SessionTranscriptCustomMessage,
   SessionTranscriptItem,
   SessionTranscriptMessage,
   Unsubscribe,
@@ -99,6 +100,7 @@ import {
   titleFromSessionInfo,
   toSessionErrorInfo,
   transcriptFromMessages,
+  customMessageTranscriptItem,
   truncate,
   workspaceToRef,
   type RunOutcome,
@@ -214,6 +216,8 @@ interface ManagedSessionRecord {
   leasePath: string | undefined;
   /** mtime (epoch ms) of the JSONL last reconciled into the served transcript. */
   transcriptDiskMtimeMs: number | undefined;
+  /** Custom message entries already sent as live transcript items. */
+  appendedCustomEntryIds: Set<string>;
 }
 
 interface RegisteredCommandAdapter {
@@ -1364,6 +1368,7 @@ export class SessionSupervisor {
       usage: undefined,
       leasePath: undefined,
       transcriptDiskMtimeMs: undefined,
+      appendedCustomEntryIds: new Set(),
     };
     return record;
   }
@@ -1571,6 +1576,8 @@ export class SessionSupervisor {
     try {
       await session.bindExtensions({
         uiContext: this.createExtensionUiContext(record),
+        // Tells extensions a host UI is attached (terminal pi says "tui"; the default is "print").
+        mode: "rpc",
         abortHandler: () => {
           if (session.isStreaming) record.cancellationRequested = true;
           void session.abort().catch((error: unknown) => {
@@ -2239,6 +2246,9 @@ export class SessionSupervisor {
           }
         }
         this.updatePreviewFromMessage(record, event.message);
+        if (event.type === "message_end" && event.message.role === "custom") {
+          this.appendCustomMessageItem(record, event.message);
+        }
         if (event.type === "message_end" && event.message.role === "assistant") {
           return toDriverEvents(
             { type: "assistantMessageEnded", sessionRef: record.ref, timestamp },
@@ -2308,6 +2318,15 @@ export class SessionSupervisor {
         this.refreshUsage(record);
         return [sessionUpdatedEvent(record)];
       case "entry_appended":
+        // Custom messages an extension returns from a turn or settle boundary.
+        if (event.entry.type === "custom_message") {
+          const item = customMessageTranscriptItem(
+            { ...event.entry, role: "custom" },
+            event.entry.id,
+            timestamp,
+          );
+          return item ? this.customMessageItemEvents(record, item) : [];
+        }
         // Cache-warming refreshes land as usage entries. pi announces them
         // before rescheduling the next refresh, so read once it has.
         if (event.entry.type !== "usage") return [];
@@ -2387,6 +2406,64 @@ export class SessionSupervisor {
     } catch (error) {
       console.warn("[pi-sdk-driver] reading session usage failed", error);
     }
+  }
+
+  /**
+   * Pi persists an idle custom message before its message_end, so its entry is the leaf;
+   * a queued or turn-starting one is persisted just after, once this emit returns.
+   */
+  private appendCustomMessageItem(
+    record: ManagedSessionRecord,
+    message: Extract<AgentSessionEvent, { type: "message_end" }>["message"],
+  ): void {
+    const createdAt = nowIso();
+    const draft = customMessageTranscriptItem(message as Record<string, unknown>, "", createdAt);
+    if (!draft) return;
+    const append = (entryId: string) => {
+      this.queueDriverEvents(
+        record,
+        this.customMessageItemEvents(record, { ...draft, id: entryId }),
+        {
+          persistSnapshot: false,
+        },
+      );
+    };
+    const find = (depth: number) => {
+      const sessionManager = record.session?.sessionManager;
+      return sessionManager
+        ? findCustomMessageEntryId(sessionManager, message, record.appendedCustomEntryIds, depth)
+        : undefined;
+    };
+    const leafId = find(1);
+    if (leafId) {
+      append(leafId);
+      return;
+    }
+    queueMicrotask(() => {
+      if (record.closed) return;
+      const entryId = find(20);
+      if (entryId) append(entryId);
+      else
+        console.warn(
+          `[pi-sdk-driver] custom message entry not found for ${sessionKey(record.ref)}`,
+        );
+    });
+  }
+
+  private customMessageItemEvents(
+    record: ManagedSessionRecord,
+    item: SessionTranscriptCustomMessage,
+  ): SessionDriverEvent[] {
+    record.appendedCustomEntryIds.add(item.id);
+    return [
+      {
+        type: "transcriptItemAppended",
+        sessionRef: record.ref,
+        timestamp: item.createdAt,
+        item,
+        ...(record.runningRunId ? { runId: record.runningRunId } : {}),
+      },
+    ];
   }
 
   private updatePreviewFromMessage(record: ManagedSessionRecord, message: unknown): void {
@@ -3188,6 +3265,33 @@ function reconcileQueuedMessagesForStartedUserMessage(
     return started;
   }
 
+  return undefined;
+}
+
+/**
+ * Pi stores the message's own content, so identity ties the entry to the event; the entry is
+ * written after the message was created, which rules out an older entry with equal text.
+ */
+function findCustomMessageEntryId(
+  sessionManager: SessionManager,
+  message: Extract<AgentSessionEvent, { type: "message_end" }>["message"],
+  claimed: ReadonlySet<string>,
+  depth: number,
+): string | undefined {
+  if (message.role !== "custom") return undefined;
+  const branch = sessionManager.getBranch();
+  for (let index = branch.length - 1; index >= Math.max(0, branch.length - depth); index -= 1) {
+    const entry = branch[index];
+    if (
+      entry?.type === "custom_message" &&
+      entry.content === message.content &&
+      entry.customType === message.customType &&
+      Date.parse(entry.timestamp) >= message.timestamp &&
+      !claimed.has(entry.id)
+    ) {
+      return entry.id;
+    }
+  }
   return undefined;
 }
 

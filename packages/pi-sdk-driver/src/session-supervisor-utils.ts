@@ -12,6 +12,7 @@ import type {
   SessionSnapshot,
   SessionStatus,
   SessionTranscriptAttachment,
+  SessionTranscriptCustomMessage,
   SessionTranscriptItem,
   SessionUsageSnapshot,
   WorkspaceRef,
@@ -269,6 +270,16 @@ export function transcriptFromMessages(
       continue;
     }
 
+    if (role === "custom") {
+      const item = customMessageTranscriptItem(
+        message,
+        typeof message.id === "string" ? message.id : `custom-${index}`,
+        createdAt,
+      );
+      if (item) transcript.push(item);
+      continue;
+    }
+
     if (
       role !== "user" &&
       role !== "assistant" &&
@@ -298,6 +309,27 @@ export function transcriptFromMessages(
   }
 
   return transcript;
+}
+
+/**
+ * Terminal pi draws a custom message only when its sender set `display: true`, as the
+ * customType over the markdown text; hidden ones only feed the model.
+ */
+export function customMessageTranscriptItem(
+  message: Record<string, unknown>,
+  id: string,
+  createdAt: string,
+): SessionTranscriptCustomMessage | undefined {
+  if (message.role !== "custom" || message.display !== true) return undefined;
+  const text = messageText(message);
+  if (!text) return undefined;
+  return {
+    kind: "custom",
+    id,
+    createdAt,
+    customType: typeof message.customType === "string" ? message.customType : "custom",
+    text,
+  };
 }
 
 /**
