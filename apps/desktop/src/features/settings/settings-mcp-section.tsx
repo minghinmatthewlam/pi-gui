@@ -26,10 +26,17 @@ interface SettingsMcpSectionProps {
 }
 
 export function SettingsMcpSection({ workspaceId, actions }: SettingsMcpSectionProps) {
-  const [snapshot, setSnapshot] = useState<McpServersSnapshot | undefined>();
+  // Tagged with its workspace: after a switch, the old list (whose buttons would act on the new
+  // workspace) is gone at once, until the new one loads.
+  const [loaded, setLoaded] = useState<
+    { readonly workspaceId: string; readonly snapshot: McpServersSnapshot } | undefined
+  >();
+  const snapshot = loaded?.workspaceId === workspaceId ? loaded.snapshot : undefined;
   const [error, setError] = useState<string | undefined>();
   const [pending, setPending] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+
+  useEffect(() => setError(undefined), [workspaceId]);
 
   useEffect(() => {
     const api = window.piApp;
@@ -38,7 +45,7 @@ export function SettingsMcpSection({ workspaceId, actions }: SettingsMcpSectionP
     api
       .listMcpServers(workspaceId)
       .then((next) => {
-        if (!cancelled) setSnapshot(next);
+        if (!cancelled) setLoaded({ workspaceId, snapshot: next });
       })
       .catch((loadError: unknown) => {
         if (!cancelled) setError(errorText(loadError));
