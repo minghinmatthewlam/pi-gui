@@ -3,6 +3,7 @@ import type { PiSdkDriver } from "@pi-gui/pi-sdk-driver";
 import type { JsonCatalogStore } from "@pi-gui/catalogs/node";
 import type {
   CreateSessionOptions,
+  ExtensionFlagValues,
   SessionConfig,
   SessionRef,
   SessionSnapshot,
@@ -25,6 +26,7 @@ import type { GitWorktreeManager } from "../platform/worktrees/worktree-manager"
 import { NEW_THREAD_PLACEHOLDER_TITLE } from "../conversation/thread-title-constants";
 import type { PendingAutoTitle } from "../conversation/session-state-map";
 import * as worktree from "./app-store-worktree";
+import type { ResolvedExtensionFlags } from "./extension-flags";
 
 export interface WorkspaceStateView {
   readonly selectedWorkspaceId?: string;
@@ -76,6 +78,18 @@ export interface WorkspaceOwnerHost {
   clearPendingAutoTitle(sessionRef: SessionRef): void;
   updateSessionConfig(sessionRef: SessionRef, config: SessionConfig | undefined): void;
   buildCreateSessionOptions(workspaceId: string): Promise<CreateSessionOptions | undefined>;
+  /** Check a new thread's flag choices against the flags this workspace's extensions registered. */
+  resolveExtensionFlags(
+    workspaceId: string,
+    requested: ExtensionFlagValues | undefined,
+  ): Promise<ResolvedExtensionFlags>;
+  extensionFlagsForSession(sessionRef: SessionRef): ExtensionFlagValues | undefined;
+  /** Record what a thread's pi session started with and, when chosen in New thread, the workspace's next defaults. */
+  recordExtensionFlags(
+    sessionRef: SessionRef,
+    applied: ExtensionFlagValues,
+    workspaceDefaults?: { readonly workspaceId: string; readonly chosen: ExtensionFlagValues },
+  ): void;
   reloadTranscriptFromDriver(sessionRef: SessionRef): Promise<void>;
   setPendingAutoTitle(sessionRef: SessionRef, pending: PendingAutoTitle): void;
   getPendingAutoTitle(sessionRef: SessionRef): PendingAutoTitle | undefined;

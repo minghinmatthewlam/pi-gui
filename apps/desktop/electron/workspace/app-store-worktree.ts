@@ -131,6 +131,10 @@ export async function startThread(
     let session: Awaited<ReturnType<typeof store.driver.createSession>>;
     let initialModel: { provider: string; modelId: string } | undefined;
     let initialThinkingLevel: string | undefined;
+    const extensionFlags = await store.resolveExtensionFlags(
+      input.rootWorkspaceId,
+      input.extensionFlags,
+    );
     try {
       const createOptions =
         (await store.buildCreateSessionOptions(targetWorkspace.workspaceId)) ?? {};
@@ -144,6 +148,7 @@ export async function startThread(
         title: NEW_THREAD_PLACEHOLDER_TITLE,
         ...(initialModel ? { initialModel } : {}),
         ...(initialThinkingLevel ? { initialThinkingLevel } : {}),
+        extensionFlagValues: extensionFlags.applied,
       });
     } catch (error) {
       if (rollbackWorktree) {
@@ -152,6 +157,10 @@ export async function startThread(
       throw error;
     }
     store.seedSession(session);
+    store.recordExtensionFlags(session.ref, extensionFlags.applied, {
+      workspaceId: input.rootWorkspaceId,
+      chosen: extensionFlags.chosen,
+    });
     const autoTitleAbortController = new AbortController();
     const pendingAutoTitle = {
       requestToken: randomUUID(),
@@ -255,10 +264,13 @@ export async function forkThread(
 
     let session: Awaited<ReturnType<typeof store.driver.forkSession>>["snapshot"];
     let selectedText: Awaited<ReturnType<typeof store.driver.forkSession>>["selectedText"];
+    // A fork keeps the flags its source thread started with, as terminal pi keeps them for the process.
+    const extensionFlagValues = store.extensionFlagsForSession(sourceRef) ?? {};
     try {
       ({ snapshot: session, selectedText } = await store.driver.forkSession(sourceRef, {
         targetWorkspace,
         ...forkOptions,
+        extensionFlagValues,
       }));
     } catch (error) {
       if (rollbackWorktree) {
@@ -267,6 +279,7 @@ export async function forkThread(
       throw error;
     }
     store.updateSessionConfig(session.ref, session.config);
+    store.recordExtensionFlags(session.ref, extensionFlagValues);
 
     // Set selection eagerly so subscription replay events read the new session ID.
     store.setActiveSession(session.ref);

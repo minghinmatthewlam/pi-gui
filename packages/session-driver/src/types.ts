@@ -129,7 +129,12 @@ export interface CreateSessionOptions {
   readonly title?: string;
   readonly initialModel?: SessionModelSelection;
   readonly initialThinkingLevel?: string;
+  /** Values for flags the session's extensions registered, applied when pi loads them. */
+  readonly extensionFlagValues?: ExtensionFlagValues;
 }
+
+/** Extension flag values by flag name, as `pi --name` (boolean) or `pi --name value` (string). */
+export type ExtensionFlagValues = Readonly<Record<string, boolean | string>>;
 
 export type ForkPosition = "before" | "at" | "after";
 
@@ -149,6 +154,8 @@ export interface ForkSessionOptions {
   readonly position?: ForkPosition;
   /** Optional title for the forked session. Defaults to the source session title. */
   readonly title?: string;
+  /** Flag values for the fork's pi session, normally the ones the source started with. */
+  readonly extensionFlagValues?: ExtensionFlagValues;
 }
 
 export interface ForkSessionResult {

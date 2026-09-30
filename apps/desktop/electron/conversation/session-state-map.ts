@@ -1,5 +1,9 @@
 import { randomUUID } from "node:crypto";
-import type { SessionConfig, SessionUsageSnapshot } from "@pi-gui/session-driver";
+import type {
+  ExtensionFlagValues,
+  SessionConfig,
+  SessionUsageSnapshot,
+} from "@pi-gui/session-driver";
 import {
   createEmptyExtensionUiState as createBaseExtensionUiState,
   type ExtensionUiState,
@@ -46,6 +50,8 @@ export class SessionStateMap {
   readonly lastViewedAtBySession = new Map<string, string>();
   readonly lastInteractedAtBySession = new Map<string, string>();
   readonly pinnedAtBySession = new Map<string, string>();
+  /** Flag values each thread's pi session started with; re-applied when it reopens. */
+  readonly extensionFlagsBySession = new Map<string, ExtensionFlagValues>();
   pinnedSessionOrder: string[] = [];
   readonly sessionErrorsBySession = new Map<string, string>();
   readonly sessionSubscriptions = new Map<string, () => void>();
@@ -92,6 +98,7 @@ export class SessionStateMap {
       this.lastViewedAtBySession,
       this.lastInteractedAtBySession,
       this.pinnedAtBySession,
+      this.extensionFlagsBySession,
       this.sessionErrorsBySession,
       this.sessionSubscriptions,
       this.activeAssistantMessageBySession,
@@ -126,6 +133,7 @@ export class SessionStateMap {
       this.lastViewedAtBySession,
       this.lastInteractedAtBySession,
       this.pinnedAtBySession,
+      this.extensionFlagsBySession,
     ]) {
       for (const key of map.keys()) {
         if (!activeKeys.has(key)) {
@@ -159,6 +167,7 @@ export class SessionStateMap {
     this.lastViewedAtBySession.delete(key);
     this.lastInteractedAtBySession.delete(key);
     this.pinnedAtBySession.delete(key);
+    this.extensionFlagsBySession.delete(key);
     this.pinnedSessionOrder = this.pinnedSessionOrder.filter((entry) => entry !== key);
     this.sessionErrorsBySession.delete(key);
     this.sessionCommandsBySession.delete(key);
