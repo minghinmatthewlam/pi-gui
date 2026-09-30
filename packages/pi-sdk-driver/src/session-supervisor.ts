@@ -238,6 +238,10 @@ interface ManagedSessionRecord {
   appendedCustomEntryIds: Set<string>;
   /** A reload asked for while a turn or compaction ran; it runs once the session is idle. */
   reloadPending: boolean;
+  /** The reload running now, and any queued behind it; reloads of one session never overlap. */
+  reloadInFlight: Promise<void> | undefined;
+  /** Extension commands (such as `/mcp login`) still running; a reload would end them. */
+  extensionCommandsRunning: number;
 }
 
 type NotifyHostUiRequest = Extract<
@@ -1201,7 +1205,7 @@ export class SessionSupervisor {
       record.reloadPending = true;
       return "deferred";
     }
-    await this.reloadSession(sessionRef);
+    await this.runReload(record);
     return "reloaded";
   }
 
@@ -1211,7 +1215,7 @@ export class SessionSupervisor {
     record.eventQueue
       .then(async () => {
         if (!record.reloadPending || record.closed || isRecordBusy(record)) return;
-        await this.reloadSession(record.ref);
+        await this.runReload(record);
       })
       .catch((error: unknown) => {
         console.warn(
@@ -1223,12 +1227,29 @@ export class SessionSupervisor {
 
   async reloadSession(sessionRef: SessionRef): Promise<void> {
     const record = await this.ensureRecord(sessionRef);
-    const session = this.requireSession(record);
+    this.requireSession(record);
+    await this.runReload(record);
+  }
 
+  /**
+   * Every reload of a session goes through here, so they run one at a time. The pending flag is
+   * cleared before anything awaits, so a deferred reload asked for twice runs once.
+   */
+  private runReload(record: ManagedSessionRecord): Promise<void> {
     record.reloadPending = false;
-    this.resetExtensionUi(record);
-    await session.reload();
-    await this.syncRecordAfterSessionMutation(record, { emitUpdate: true });
+    const previous = record.reloadInFlight ?? Promise.resolve();
+    const reload = previous
+      .catch(() => undefined)
+      .then(async () => {
+        this.resetExtensionUi(record);
+        await this.requireSession(record).reload();
+        await this.syncRecordAfterSessionMutation(record, { emitUpdate: true });
+      })
+      .finally(() => {
+        if (record.reloadInFlight === reload) record.reloadInFlight = undefined;
+      });
+    record.reloadInFlight = reload;
+    return reload;
   }
 
   async getSessionTree(sessionRef: SessionRef): Promise<SessionTreeSnapshot> {
@@ -1449,6 +1470,8 @@ export class SessionSupervisor {
       transcriptDiskMtimeMs: undefined,
       appendedCustomEntryIds: new Set(),
       reloadPending: false,
+      reloadInFlight: undefined,
+      extensionCommandsRunning: 0,
     };
     return record;
   }
@@ -1775,11 +1798,7 @@ export class SessionSupervisor {
         await this.syncRecordAfterSessionMutation(record, { emitUpdate: true });
         return { cancelled };
       },
-      reload: async () => {
-        this.resetExtensionUi(record);
-        await this.requireSession(record).reload();
-        await this.syncRecordAfterSessionMutation(record, { emitUpdate: true });
-      },
+      reload: () => this.runReload(record),
     };
   }
 

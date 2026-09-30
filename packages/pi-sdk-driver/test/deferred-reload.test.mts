@@ -18,7 +18,47 @@ async function waitFor(check: () => boolean, what: string): Promise<void> {
   }
 }
 
-await test("a reload asked for during a turn waits for the turn to end", async (t) => {
+/** Lets a little time pass, to show that something did not happen. */
+function settle(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 100));
+}
+
+function gate(): { readonly wait: Promise<void>; readonly open: () => void } {
+  let open!: () => void;
+  const wait = new Promise<void>((resolve) => {
+    open = resolve;
+  });
+  return { wait, open };
+}
+
+function assistantMessage(
+  model: Parameters<StreamFunction>[0],
+  stopReason: "stop" | "aborted",
+): AssistantMessage {
+  return {
+    role: "assistant",
+    content: stopReason === "stop" ? [{ type: "text", text: "DONE" }] : [],
+    api: model.api,
+    provider: model.provider,
+    model: model.id,
+    usage: {
+      input: 1,
+      output: 1,
+      cacheRead: 0,
+      cacheWrite: 0,
+      totalTokens: 2,
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+    },
+    stopReason,
+    timestamp: Date.now(),
+  };
+}
+
+/**
+ * A driver with one session on a scripted model that answers only when the test opens the
+ * current turn's gate, and a builtin extension that counts how often it is loaded.
+ */
+async function startHarness(t: test.TestContext) {
   const root = await mkdtemp(join(tmpdir(), "pi-gui-deferred-reload-"));
   const agentDir = join(root, "agent");
   const cwd = join(root, "workspace");
@@ -52,41 +92,33 @@ await test("a reload asked for during a turn waits for the turn to end", async (
     }),
   );
 
-  // The model answers only when the test says so, so the turn is running meanwhile.
-  let finishTurn!: () => void;
-  const turnFinished = new Promise<void>((resolve) => {
-    finishTurn = resolve;
-  });
-  let streaming = false;
-  const streamFunction: StreamFunction = (model) => {
+  const state = {
+    loads: 0,
+    turnGate: gate(),
+    streaming: false,
+    /** Extension loads counted when the model was last called. */
+    loadsAtLastTurn: -1,
+  };
+  const streamFunction: StreamFunction = (model, _context, options) => {
     const stream = createAssistantMessageEventStream();
-    const message: AssistantMessage = {
-      role: "assistant",
-      content: [{ type: "text", text: "DONE" }],
-      api: model.api,
-      provider: model.provider,
-      model: model.id,
-      usage: {
-        input: 1,
-        output: 1,
-        cacheRead: 0,
-        cacheWrite: 0,
-        totalTokens: 2,
-        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-      },
-      stopReason: "stop",
-      timestamp: Date.now(),
+    state.streaming = true;
+    state.loadsAtLastTurn = state.loads;
+    stream.push({ type: "start", partial: { ...assistantMessage(model, "stop"), content: [] } });
+    const finish = (message: AssistantMessage) => {
+      state.streaming = false;
+      if (message.stopReason === "aborted") {
+        stream.push({ type: "error", reason: "aborted", error: message });
+      } else {
+        stream.push({ type: "done", reason: "stop", message });
+      }
     };
-    streaming = true;
-    stream.push({ type: "start", partial: { ...message, content: [] } });
-    turnFinished
-      .then(() => stream.push({ type: "done", reason: "stop", message }))
-      .catch(() => undefined);
+    options?.signal?.addEventListener("abort", () => finish(assistantMessage(model, "aborted")));
+    state.turnGate.wait.then(() => finish(assistantMessage(model, "stop"))).catch(() => undefined);
     return stream;
   };
 
-  let loads = 0;
   let runtime!: AgentSessionRuntime;
+  const commandGate = { current: gate() };
   const driver = new PiSdkDriver({
     agentDir,
     catalogFilePath: join(root, "catalogs.json"),
@@ -94,8 +126,14 @@ await test("a reload asked for during a turn waits for the turn to end", async (
       {
         name: "pi-gui-load-counter",
         displayName: "Load counter",
-        factory: () => {
-          loads += 1;
+        factory: (pi) => {
+          state.loads += 1;
+          pi.registerCommand("hold", {
+            description: "Waits until the test lets it finish",
+            handler: async () => {
+              await commandGate.current.wait;
+            },
+          });
         },
       },
     ],
@@ -110,18 +148,40 @@ await test("a reload asked for during a turn waits for the turn to end", async (
     { initialModel: { provider: "reload-test", modelId: "scripted" } },
   );
   t.after(() => driver.closeSession(ref));
-  const loadsAtStart = loads;
+  return { driver, ref, state, commandGate, session: () => runtime.session };
+}
+
+await test("a reload asked for during a turn waits for the turn to end", async (t) => {
+  const { driver, ref, state, session } = await startHarness(t);
+  const loadsAtStart = state.loads;
 
   const sent = driver.sendUserMessage(ref, { text: "hello" });
-  await waitFor(() => streaming, "the turn to start streaming");
+  await waitFor(() => state.streaming, "the turn to start streaming");
   assert.equal(await driver.reloadSessionWhenIdle(ref), "deferred");
-  assert.equal(loads, loadsAtStart, "a running turn keeps its extensions");
+  assert.equal(state.loads, loadsAtStart, "a running turn keeps its extensions");
 
-  finishTurn();
+  state.turnGate.open();
   await sent;
-  await runtime.session.waitForIdle();
-  await waitFor(() => loads === loadsAtStart + 1, "the deferred reload after the turn");
+  await session().waitForIdle();
+  await waitFor(() => state.loads === loadsAtStart + 1, "the deferred reload after the turn");
 
   assert.equal(await driver.reloadSessionWhenIdle(ref), "reloaded");
-  assert.equal(loads, loadsAtStart + 2, "an idle session reloads right away");
+  assert.equal(state.loads, loadsAtStart + 2, "an idle session reloads right away");
+});
+
+await test("a deferred reload runs once when Stop ends the turn", async (t) => {
+  const { driver, ref, state, session } = await startHarness(t);
+  const loadsAtStart = state.loads;
+
+  const sent = driver.sendUserMessage(ref, { text: "hello" });
+  await waitFor(() => state.streaming, "the turn to start streaming");
+  assert.equal(await driver.reloadSessionWhenIdle(ref), "deferred");
+
+  // Stop and pi's own end of the turn both ask for the pending reload.
+  await driver.cancelCurrentRun(ref);
+  await sent.catch(() => undefined);
+  await session().waitForIdle();
+  await waitFor(() => state.loads === loadsAtStart + 1, "the deferred reload after Stop");
+  await settle();
+  assert.equal(state.loads, loadsAtStart + 1, "the reload runs once, not once per request");
 });
