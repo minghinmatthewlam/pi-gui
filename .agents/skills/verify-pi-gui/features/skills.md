@@ -25,9 +25,9 @@ Preconditions: isolated workspace containing the Demo Skill/Plan Loop fixtures c
 - **Alias:** fill `composer` with `/plan`, `/plan-loop`, and `/skill:plan-loop` separately; `slash-menu` must contain Plan Loop and its full command.
 - **Proof:** capture the selected skill, Try action, resulting composer value, and each alias menu. Settings-toggle coverage is mapped separately.
 
-Extensions (the Extensions tab, the sidebar Extensions button, the extension dock, dialogs and view panel) have no feature file and no `prove.sh` lane; only `apps/desktop/tests/core/extension*.spec.ts` covers them.
+Extensions (the Extensions tab and its pi-gui tools switches, the sidebar Extensions button, the extension dock, dialogs, view panel, notify toast and transcript messages) have no feature file and no `prove.sh` lane; only `apps/desktop/tests/core/extension*.spec.ts` covers them.
 
 ## Gotchas
 
 - Inserting a command does not prove executing the skill through a provider.
-- The skill preference can intentionally hide slash commands. Check it before interpreting a missing menu as a discovery failure.
+- Settings > General > "Enable skill slash commands" can intentionally hide skill slash commands. Check it before interpreting a missing menu as a discovery failure.

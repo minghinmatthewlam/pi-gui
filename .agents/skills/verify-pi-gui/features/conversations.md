@@ -14,7 +14,7 @@ The primary product flow is to send a prompt, watch an assistant response grow, 
 
 - Sidebar New thread (or Cmd+N / Control+N) → enter a prompt → Start thread.
 - Existing thread → composer → Send message (the primary proof uses the button).
-- During a run, an empty composer shows Stop run.
+- During a run, an empty composer shows Stop run. Stop also works while the run is still starting. There is no running hint line under the composer; elapsed time shows in the thread header.
 - Click a tool header to expand/collapse its output.
 - Enter is a separate send entry point; queued Enter and steering shortcuts are mapped in `follow-ups.md`.
 

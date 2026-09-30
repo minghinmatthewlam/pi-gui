@@ -28,3 +28,6 @@ Preconditions: isolated workspace with fixture threads Thread one and Thread two
 
 - The action starts invisible until hover; do not force-click it to bypass the behavior under test.
 - Seeded thread creation is not part of archive proof. Archiving is not deletion.
+- Archiving a pinned thread also unpins it.
+- Sending a message to an archived thread restores it.
+- For a pi-gui worktree thread the archived context reads `<folder> / <worktree>`, so the Restore label ends `in <folder> / <worktree>`.

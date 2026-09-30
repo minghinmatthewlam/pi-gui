@@ -30,9 +30,24 @@ Record exact feature/entry point, command, result and evidence directory. `compl
 
 Packaged-app launch, native dialogs/clipboard, model/account onboarding, attachments, file/diff/terminal interaction, and broader extension behavior require separate mapped journeys as those features are changed. Do not claim full-app coverage from this initial map.
 
-## Latest observed proof (2026-09-24)
+These user-facing surfaces have no feature file and no `prove.sh` checkpoint yet; a lane passing says nothing about them:
 
-Maintenance pass on main `b417b30` in a Linux cloud session (Xvfb), `openai-codex/gpt-5.6-luna`. Conversation `run-mQubER` passed all ten checkpoints, maintenance `run-yrUVKY` passed all seven, and `run-XTCNXP` passed again after the steer-before-follow-up order check was hardened, and smoke `run-0gAibp` passed. No assertion failures; all owned Electron PIDs closed. Eight core specs passed 21/21 via `test:e2e:runner`: `scheduled-tasks`, `scheduled-task-runtime-tools`, `thread-menu`, `composer-controls`, `archive`, `skills-settings`, `worktrees` and `navigation`. The other core specs the map cites (thread switcher, command palette, sidebar toggle, recency, ordering, stop-running-prompt, and the per-page settings specs) were not run in this pass. Known product gap: the running composer hint always reads "Cmd+Enter to steer", also on Linux and Windows where the key is Control+Enter.
+- Review panel (Cmd/Ctrl+R: diff beside a file tree, scope menu, Staged/Unstaged, quiet refresh on window focus), `apps/desktop/src/features/workbench/`.
+- Side panel tabs on Control+1–9 (macOS) or Alt+1–9 elsewhere, `apps/desktop/src/features/workbench/side-panel-tab-hints.ts`.
+- Context ring beside the model picker, `apps/desktop/src/features/conversation/context-meter.tsx`.
+- Changes card after a turn that edited files, `apps/desktop/src/features/conversation/turn-changes-card.tsx`.
+- Add to Chat: select transcript text, annotate, and send the notes with the next message, `apps/desktop/src/features/conversation/annotations/`.
+- Extension notify toast above the composer and extension messages in the transcript, `apps/desktop/src/features/extensions/extension-notices.tsx` and `timeline-item.tsx`.
+- Theme presets built from seed colours, Settings > Appearance.
+- Browse branches (session tree), `apps/desktop/src/features/conversation/tree-modal.tsx`.
+
+## Latest observed proof (2026-09-30)
+
+Weekly maintenance pass on main `f4a3479` in a Linux cloud session (Xvfb), `openai-codex/gpt-5.6-luna`. Conversation `run-NC9jpz` passed all ten checkpoints, maintenance `run-FwHJa7` passed all seven, and smoke `run-wKB2qr` passed. No assertion failures; all owned Electron PIDs closed. Ten core specs passed 34/34 via `test:e2e:runner`: `scheduled-tasks`, `scheduled-task-runtime-tools`, `archive`, `thread-menu`, `skills-settings`, `worktrees`, `navigation`, `composer-controls`, `sidebar-layout` and `extensions`, plus 17/17 in unit `app-store-scheduled-tasks.spec.ts`. The source pass found doc drift only; recipe selectors still match.
+
+## Earlier observed proof (2026-09-24)
+
+Maintenance pass on main `b417b30` in a Linux cloud session (Xvfb), `openai-codex/gpt-5.6-luna`. Conversation `run-mQubER` passed all ten checkpoints, maintenance `run-yrUVKY` passed all seven, and `run-XTCNXP` passed again after the steer-before-follow-up order check was hardened, and smoke `run-0gAibp` passed. No assertion failures; all owned Electron PIDs closed. Eight core specs passed 21/21 via `test:e2e:runner`: `scheduled-tasks`, `scheduled-task-runtime-tools`, `thread-menu`, `composer-controls`, `archive`, `skills-settings`, `worktrees` and `navigation`. The other core specs the map cites (thread switcher, command palette, sidebar toggle, recency, ordering, stop-running-prompt, and the per-page settings specs) were not run in this pass. The steer-hint gap noted then was fixed in #181, and #206 later removed the running hint line under the composer entirely.
 
 ## Earlier observed proof (2026-09-22)
 
