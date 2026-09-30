@@ -9,6 +9,7 @@ import type {
   ComposerAttachment,
   QueuedComposerMessage,
   SessionExtensionDialogRecord,
+  SessionExtensionNoticeRecord,
   SessionExtensionUiStateRecord,
   TranscriptMessage,
 } from "../../contracts/desktop-state";
@@ -17,6 +18,7 @@ import type { RunMetrics } from "./app-store-timeline";
 export interface MutableSessionExtensionUiState extends ExtensionUiState {
   readonly instanceId: string;
   pendingDialogs: SessionExtensionDialogRecord[];
+  notices: SessionExtensionNoticeRecord[];
 }
 
 export interface PendingAutoTitle {
@@ -176,6 +178,7 @@ export function createEmptyExtensionUiState(): MutableSessionExtensionUiState {
     ...createBaseExtensionUiState(),
     instanceId: randomUUID(),
     pendingDialogs: [],
+    notices: [],
   };
 }
 
@@ -187,6 +190,7 @@ export function serializeExtensionUiState(
     statuses: [...state.statuses.entries()].map(([key, text]) => ({ key, text })),
     widgets: [...state.widgets.values()],
     pendingDialogs: [...state.pendingDialogs],
+    notices: [...state.notices],
     ...(state.title ? { title: state.title } : {}),
     ...(state.editorText ? { editorText: state.editorText } : {}),
   };

@@ -148,7 +148,7 @@ test("renders extension dialogs in the Electron surface and routes responses bac
     await expect(dialog.getByTestId("extension-dialog-cancel")).toBeFocused();
     await dialog.getByTestId("extension-dialog-confirm").click();
     await expect(dialog).toHaveCount(0);
-    await expect(window.locator(".timeline")).toContainText("Confirm accepted");
+    await expect(window.getByTestId("extension-notices")).toContainText("Confirm accepted");
 
     await composer.fill("/dialog-confirm-timeout ");
     await expect(composer).toHaveValue("/dialog-confirm-timeout ");
@@ -156,7 +156,7 @@ test("renders extension dialogs in the Electron surface and routes responses bac
     await expect(window.getByRole("dialog", { name: "Timeout confirm?" })).toBeVisible();
     await expect(dialog).toContainText("This should close itself.");
     await expect(dialog).toHaveCount(0, { timeout: 8_000 });
-    await expect(window.locator(".timeline")).toContainText("Timeout rejected");
+    await expect(window.getByTestId("extension-notices")).toContainText("Timeout rejected");
 
     await composer.fill("/dialog-select ");
     await composer.press("Enter");
@@ -172,7 +172,7 @@ test("renders extension dialogs in the Electron surface and routes responses bac
     await expect(dialog.getByRole("button", { name: "Beta", exact: true })).toBeFocused();
     await dialog.getByRole("button", { name: "Beta", exact: true }).press("Enter");
     await expect(dialog).toHaveCount(0);
-    await expect(window.locator(".timeline")).toContainText("Selected Beta");
+    await expect(window.getByTestId("extension-notices")).toContainText("Selected Beta");
 
     await composer.fill("/dialog-input ");
     await composer.press("Enter");
@@ -180,7 +180,7 @@ test("renders extension dialogs in the Electron surface and routes responses bac
     await dialog.getByPlaceholder("type here").fill("typed value");
     await dialog.getByRole("button", { name: "Submit", exact: true }).click();
     await expect(dialog).toHaveCount(0);
-    await expect(window.locator(".timeline")).toContainText("Input typed value");
+    await expect(window.getByTestId("extension-notices")).toContainText("Input typed value");
 
     await composer.fill("/dialog-editor ");
     await composer.press("Enter");
@@ -195,7 +195,7 @@ test("renders extension dialogs in the Electron surface and routes responses bac
     await expect(editor).toHaveValue("Line 1\nLine 2");
     await dialog.getByRole("button", { name: "Submit", exact: true }).click();
     await expect(dialog).toHaveCount(0);
-    await expect(window.locator(".timeline")).toContainText("Editor lines 2");
+    await expect(window.getByTestId("extension-notices")).toContainText("Editor lines 2");
   } finally {
     await harness.close();
   }
@@ -224,7 +224,7 @@ test("loads a dialog-prompting third-party package without blocking session star
     const composer = window.getByTestId("composer");
     await composer.fill("/package-extension-smoke ");
     await composer.press("Enter");
-    await expect(window.locator(".timeline")).toContainText("Package command ready");
+    await expect(window.getByTestId("extension-notices")).toContainText("Package command ready");
   } finally {
     await harness.close();
   }

@@ -566,12 +566,12 @@ test("manages extensions and prefers runtime commands over colliding host action
     await composer.fill("/settings ");
     await composer.press("Enter");
     await expect(window.getByTestId("settings-surface")).toHaveCount(0);
-    await expect(window.locator(".timeline")).toContainText("Runtime settings command");
+    await expect(window.getByTestId("extension-notices")).toContainText("Runtime settings command");
 
     await composer.fill("/prefill-demo ");
     await composer.press("Enter");
     await expect(composer).toHaveValue("Prefilled from extension");
-    await expect(window.locator(".timeline")).toContainText("Composer prefilled");
+    await expect(window.getByTestId("extension-notices")).toContainText("Composer prefilled");
   } finally {
     await harness.close();
   }
@@ -601,7 +601,7 @@ test("degrades terminal-only custom extension ui without sending stray messages"
     await composer.press("Enter");
 
     await expect(window.getByTestId("extension-dialog")).toHaveCount(0);
-    await expect(window.locator(".timeline")).toContainText("Read mode ignored");
+    await expect(window.getByTestId("extension-notices")).toContainText("Read mode ignored");
     await expect(window.locator(".timeline")).not.toContainText("should-not-send");
     await expect(composer).toHaveValue("");
   } finally {
