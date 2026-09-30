@@ -18,16 +18,20 @@
   margin-inline: auto;
 }
 
+/* Rows stay in normal flow (placed by margin and height) so text selection finds the
+ * nearest line when a drag leaves the text; absolutely placed rows sent it to the top. */
 .timeline--virtualized {
-  display: block;
+  display: flow-root;
   position: relative;
 }
 
 .timeline__virtual-row {
-  left: 0;
-  position: absolute;
-  top: 0;
-  width: 100%;
+  isolation: isolate;
+  position: relative;
+}
+
+.timeline__virtual-row-content {
+  display: flow-root;
 }
 
 .timeline-pane {

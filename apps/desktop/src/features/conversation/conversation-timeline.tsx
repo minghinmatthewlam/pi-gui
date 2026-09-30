@@ -17,7 +17,7 @@ import type { TranscriptAnnotations } from "./annotations/use-transcript-annotat
 import { ThreadSearchBar } from "./thread-search";
 import type { RunExtensionAction } from "./extension-card";
 import { TimelineItem } from "./timeline-item";
-import { sameRowContent } from "./timeline-layout";
+import { sameRowContent, type TimelineRow } from "./timeline-layout";
 import type { OpenTurnChange } from "./turn-changes-card";
 import type { WorkspaceFileLine } from "./workspace-file-line";
 import { SparkIcon } from "../../ui/icons";
@@ -154,11 +154,12 @@ export function ConversationTimeline({
               data-testid="transcript"
               style={{ height: viewport.totalHeight }}
             >
-              {viewport.visibleRows.map(({ item, top }) => (
+              {viewport.visibleRows.map(({ item, top, height }, index, rows) => (
                 <MeasuredTimelineItem
                   key={item.id}
                   item={item}
-                  top={top}
+                  offset={top - rowBottom(rows[index - 1])}
+                  height={height}
                   className="timeline__virtual-row"
                   onHeightChange={viewport.measureRow}
                   generation={viewport.layoutGeneration}
@@ -267,7 +268,9 @@ function TranscriptEmptyState() {
 interface MeasuredTimelineItemProps {
   readonly item: DisplayTimelineItem;
   readonly className?: string;
-  readonly top?: number;
+  /** Space above the row: its layout top less the previous row's bottom. */
+  readonly offset: number;
+  readonly height: number;
   readonly onHeightChange: (id: string, height: number, generation: number) => void;
   readonly generation: number;
   readonly expandedToolCallIds: ReadonlySet<string>;
@@ -287,7 +290,8 @@ interface MeasuredTimelineItemProps {
 function MeasuredTimelineItemBase({
   item,
   className,
-  top,
+  offset,
+  height,
   onHeightChange,
   generation,
   expandedToolCallIds,
@@ -326,29 +330,32 @@ function MeasuredTimelineItemBase({
     };
   }, [item, onHeightChange, generation]);
 
+  // The row keeps its laid-out height in normal flow (see timeline.css); the content inside
+  // is what gets measured, and may outgrow the row until its new height is laid out.
   return (
     <div
       className={className}
-      ref={rowRef}
       data-message-id={item.id}
       data-source-message-id={item.kind === "message" ? item.sourceMessageId : undefined}
-      style={top == null ? undefined : { transform: `translateY(${top}px)` }}
+      style={{ marginTop: offset, height }}
     >
-      <TimelineItem
-        item={item}
-        expandedToolCallIds={expandedToolCallIds}
-        onToggleToolCall={onToggleToolCall}
-        onViewFileInDiff={onViewFileInDiff}
-        onOpenTurnChange={onOpenTurnChange}
-        sourceMessageIndex={sourceMessageIndex}
-        onForkFromMessage={onForkFromMessage}
-        onOpenWorkspaceFileLine={onOpenWorkspaceFileLine}
-        onExtensionAction={onExtensionAction}
-        scheduledOrigin={scheduledOrigin}
-        workspacePath={workspacePath}
-        annotationMarkers={annotationMarkers}
-        onOpenAnnotation={onOpenAnnotation}
-      />
+      <div className="timeline__virtual-row-content" ref={rowRef}>
+        <TimelineItem
+          item={item}
+          expandedToolCallIds={expandedToolCallIds}
+          onToggleToolCall={onToggleToolCall}
+          onViewFileInDiff={onViewFileInDiff}
+          onOpenTurnChange={onOpenTurnChange}
+          sourceMessageIndex={sourceMessageIndex}
+          onForkFromMessage={onForkFromMessage}
+          onOpenWorkspaceFileLine={onOpenWorkspaceFileLine}
+          onExtensionAction={onExtensionAction}
+          scheduledOrigin={scheduledOrigin}
+          workspacePath={workspacePath}
+          annotationMarkers={annotationMarkers}
+          onOpenAnnotation={onOpenAnnotation}
+        />
+      </div>
     </div>
   );
 }
@@ -407,6 +414,10 @@ function isSameDisplayItem(a: DisplayTimelineItem, b: DisplayTimelineItem): bool
   return false;
 }
 
+function rowBottom(row: TimelineRow | undefined): number {
+  return row ? row.top + row.height : 0;
+}
+
 function areMeasuredTimelineItemPropsEqual(
   prev: MeasuredTimelineItemProps,
   next: MeasuredTimelineItemProps,
@@ -414,7 +425,8 @@ function areMeasuredTimelineItemPropsEqual(
   return (
     isSameDisplayItem(prev.item, next.item) &&
     prev.className === next.className &&
-    prev.top === next.top &&
+    prev.offset === next.offset &&
+    prev.height === next.height &&
     prev.generation === next.generation &&
     prev.onHeightChange === next.onHeightChange &&
     prev.expandedToolCallIds === next.expandedToolCallIds &&

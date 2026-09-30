@@ -49,26 +49,54 @@ function elementOf(node: Node): Element | null {
   return node instanceof Element ? node : node.parentElement;
 }
 
-/** A non-empty selection that starts in one message's text in this timeline pane. */
+// Buttons and markers around message text: a drag that runs onto them still means the text.
+const ROW_CHROME = ".timeline-item__actions, .annotation-markers";
+
+/** Whether `range` covers any text a reader would take as content, not row chrome. */
+function coversContent(range: Range): boolean {
+  if (range.collapsed) return false;
+  const walker = document.createTreeWalker(range.commonAncestorContainer, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    if (!range.intersectsNode(node) || elementOf(node)?.closest(ROW_CHROME)) continue;
+    const text = node.nodeValue ?? "";
+    const from = node === range.startContainer ? range.startOffset : 0;
+    const to = node === range.endContainer ? range.endOffset : text.length;
+    if (text.slice(from, to).trim()) return true;
+  }
+  return false;
+}
+
+/**
+ * A non-empty selection of one message's text in this timeline pane: the message where the
+ * drag began. Running past its first or last line (onto the gap between rows or a Fork
+ * button) still selects just that message; any other text makes it a different selection.
+ */
 function readTranscriptSelection(pane: HTMLElement): TranscriptSelection | null {
   const selection = window.getSelection();
-  if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return null;
-  let range = selection.getRangeAt(0);
-  const root = elementOf(range.startContainer)?.closest(`[${ANNOTATION_ROOT_ATTRIBUTE}]`);
+  if (!selection?.anchorNode || selection.rangeCount === 0 || selection.isCollapsed) return null;
+  const root = elementOf(selection.anchorNode)?.closest(`[${ANNOTATION_ROOT_ATTRIBUTE}]`);
   const row = root?.closest<HTMLElement>("[data-message-id]");
   const messageId = row?.dataset.messageId;
-  if (!root || !messageId || !pane.contains(root)) return null;
-  // A triple-click on a message's last paragraph ends just past its text, selecting nothing
-  // more; keep the part inside. A drag on into another row is not one selection.
-  const clamped = !root.contains(range.endContainer);
-  if (clamped) {
-    const beyond = range.cloneRange();
-    beyond.setStart(root, root.childNodes.length);
-    if (beyond.toString().trim()) return null;
-    range = range.cloneRange();
-    range.setEnd(root, root.childNodes.length);
+  if (!root || !row || !messageId || !pane.contains(root)) return null;
+  let range = selection.getRangeAt(0);
+  const clampStart = !root.contains(range.startContainer);
+  const clampEnd = !root.contains(range.endContainer);
+  if (clampStart) {
+    const before = range.cloneRange();
+    before.setEnd(root, 0);
+    if (coversContent(before)) return null;
   }
-  const quote = (clamped ? range.toString() : selection.toString()).trim();
+  if (clampEnd) {
+    const after = range.cloneRange();
+    after.setStart(root, root.childNodes.length);
+    if (coversContent(after)) return null;
+  }
+  if (clampStart || clampEnd) {
+    range = range.cloneRange();
+    if (clampStart) range.setStart(root, 0);
+    if (clampEnd) range.setEnd(root, root.childNodes.length);
+  }
+  const quote = (clampStart || clampEnd ? range.toString() : selection.toString()).trim();
   if (!quote) return null;
   const { start, end } = rangeToOffsets(root, range);
   const sourceMessageId = row.dataset.sourceMessageId;
