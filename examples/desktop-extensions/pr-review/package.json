@@ -15,9 +15,9 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "peerDependencies": {
-    "@earendil-works/chord": "^0.87.0",
-    "@earendil-works/pi-ai": "^0.87.0",
-    "@earendil-works/pi-coding-agent": "^0.87.0",
+    "@earendil-works/chord": "^0.99.1",
+    "@earendil-works/pi-ai": "^0.99.1",
+    "@earendil-works/pi-coding-agent": "^0.99.1",
     "@pi-gui/extension-ui": "*"
   }
 }

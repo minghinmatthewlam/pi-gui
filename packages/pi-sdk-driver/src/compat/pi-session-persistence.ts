@@ -1,5 +1,5 @@
 /**
- * Compatibility boundary for Pi 0.87.0 session persistence.
+ * Compatibility boundary for Pi 0.99 session persistence.
  *
  * Pi defers its first session-file write. The desktop needs an early write after
  * metadata changes, but Pi does not currently expose that operation publicly.

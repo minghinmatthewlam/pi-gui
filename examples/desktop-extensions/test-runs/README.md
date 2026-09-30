@@ -2,7 +2,7 @@
 
 This is a normal file-based Pi extension with an optional custom browser view.
 The command, agent tool and desktop buttons share one backend run owner. It uses
-the released Pi 0.87 `createLocalBashOperations` API for live process output,
+Pi's `createLocalBashOperations` API for live process output,
 timeout and cancellation. The optional desktop declaration uses Pi-gui's local
 private `@pi-gui/extension-ui` package. This helper is implemented in this repository;
 it is not published to npm or provided by upstream Pi.

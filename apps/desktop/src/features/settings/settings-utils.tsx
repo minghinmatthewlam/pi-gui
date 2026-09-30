@@ -105,7 +105,7 @@ export function ProviderRow({
   readonly onLogoutProvider: (providerId: string) => void;
   readonly onConfigureApiKey: (provider: RuntimeSnapshot["providers"][number]) => void;
 }) {
-  const action = resolveProviderAction(
+  const actions = resolveProviderActions(
     provider,
     onLoginProvider,
     onLogoutProvider,
@@ -117,16 +117,19 @@ export function ProviderRow({
         <div className="settings-row__title">{provider.name}</div>
         <div className="settings-row__description">{describeProviderStatus(provider)}</div>
       </div>
-      {action ? (
-        <div className="settings-row__control">
-          <button
-            className="button button--secondary"
-            disabled={action.disabled}
-            type="button"
-            onClick={action.onClick}
-          >
-            {action.label}
-          </button>
+      {actions.length > 0 ? (
+        <div className="settings-row__actions">
+          {actions.map((action) => (
+            <button
+              key={action.label}
+              className="button button--secondary"
+              disabled={action.disabled}
+              type="button"
+              onClick={action.onClick}
+            >
+              {action.label}
+            </button>
+          ))}
         </div>
       ) : null}
     </div>
@@ -145,7 +148,7 @@ function describeProviderStatus(provider: RuntimeSnapshot["providers"][number]):
       return provider.hasAuth ? "Configured externally · connected" : "Configure externally";
     default:
       if (provider.oauthSupported) {
-        return "OAuth";
+        return provider.apiKeySetupSupported ? "OAuth or API key" : "OAuth";
       }
       if (provider.apiKeySetupSupported) {
         return "API key";
@@ -154,51 +157,40 @@ function describeProviderStatus(provider: RuntimeSnapshot["providers"][number]):
   }
 }
 
-function resolveProviderAction(
+interface ProviderAction {
+  readonly disabled: boolean;
+  readonly label: string;
+  readonly onClick?: () => void;
+}
+
+/** A provider with both sign-in and API keys (OpenAI, OpenRouter, xAI) offers both until connected. */
+function resolveProviderActions(
   provider: RuntimeSnapshot["providers"][number],
   onLoginProvider: (providerId: string) => void,
   onLogoutProvider: (providerId: string) => void,
   onConfigureApiKey: (provider: RuntimeSnapshot["providers"][number]) => void,
-):
-  | {
-      readonly disabled: boolean;
-      readonly label: string;
-      readonly onClick?: () => void;
-    }
-  | undefined {
+): readonly ProviderAction[] {
   if (provider.authSource === "oauth") {
-    return {
-      disabled: false,
-      label: "Logout",
-      onClick: () => onLogoutProvider(provider.id),
-    };
+    return [{ disabled: false, label: "Logout", onClick: () => onLogoutProvider(provider.id) }];
   }
 
+  const actions: ProviderAction[] = [];
   if (provider.oauthSupported && provider.authSource === "none") {
-    return {
-      disabled: false,
-      label: "Login",
-      onClick: () => onLoginProvider(provider.id),
-    };
+    actions.push({ disabled: false, label: "Login", onClick: () => onLoginProvider(provider.id) });
   }
-
   if (
     provider.apiKeySetupSupported &&
     (provider.authSource === "none" || provider.authSource === "auth_file")
   ) {
-    return {
+    actions.push({
       disabled: false,
       label: provider.authSource === "auth_file" ? "Manage" : "Set API key",
       onClick: () => onConfigureApiKey(provider),
-    };
+    });
+  }
+  if (actions.length > 0 || provider.authSource === "env" || provider.authSource === "external") {
+    return actions;
   }
 
-  if (provider.authSource === "env" || provider.authSource === "external") {
-    return undefined;
-  }
-
-  return {
-    disabled: true,
-    label: "Configure externally",
-  };
+  return [{ disabled: true, label: "Configure externally" }];
 }
