@@ -256,6 +256,14 @@ test("IPC request validation accepts one MCP server shape and a known scope", ()
   expect(() => expectNewMcpServerInput({ name: "docs", command: "npx", args: [1] })).toThrow(
     "server.args must be an array of strings",
   );
+  for (const name of ["my docs", "docs.v2", "docs/api", "dócs"]) {
+    expect(() => expectNewMcpServerInput({ name, command: "npx" })).toThrow(
+      'server.name may only use letters, digits, "_" and "-"',
+    );
+  }
+  expect(expectNewMcpServerInput({ name: "Docs_v2-beta", command: "npx" }).name).toBe(
+    "Docs_v2-beta",
+  );
   expect(expectMcpServerScope("project")).toBe("project");
   expect(() => expectMcpServerScope("extension")).toThrow("scope must be global or project");
 });

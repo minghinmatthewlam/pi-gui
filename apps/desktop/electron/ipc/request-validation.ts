@@ -360,10 +360,16 @@ export function expectMcpServerScope(value: unknown): McpServerScope {
   return value;
 }
 
+/** pi's rule for MCP server names (`validateMcpServerConfig` in pi's `core/mcp-servers.js`). */
+const MCP_SERVER_NAME = /^[A-Za-z0-9_-]+$/;
+
 /** Main re-validates in the driver (URL scheme, empty command); this checks the IPC shape. */
 export function expectNewMcpServerInput(value: unknown): NewMcpServerInput {
   const record = expectRecord(value, "server");
   const name = expectNonEmptyString(record.name, "server.name");
+  if (!MCP_SERVER_NAME.test(name)) {
+    throw new TypeError('server.name may only use letters, digits, "_" and "-"');
+  }
   if (record.url !== undefined) {
     if (record.command !== undefined || record.args !== undefined) {
       throw new TypeError("server needs either a url or a command, not both");

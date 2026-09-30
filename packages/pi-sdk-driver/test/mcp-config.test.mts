@@ -158,3 +158,42 @@ await test("new servers are validated and never replace an existing one", () => 
     mcpServers: { remote: { url: "https://example.com/mcp" } },
   });
 });
+
+await test("server names follow pi's rule and Object keys are ordinary names", () => {
+  const { agentDir, cwd, globalPath } = setup();
+  for (const name of ["my docs", "docs.v2", "docs/api", "dócs"]) {
+    assert.throws(
+      () => addMcpServer(agentDir, { name, command: "node" }),
+      /Invalid MCP server name/,
+    );
+  }
+  assert.equal(existsSync(globalPath), false, "nothing is written for rejected names");
+
+  assert.equal(removeMcpServer(agentDir, "toString"), false);
+  for (const name of ["toString", "constructor", "__proto__"]) {
+    addMcpServer(agentDir, { name, command: "node" });
+  }
+  assert.deepEqual(savedNames(globalPath), ["toString", "constructor", "__proto__"]);
+  assert.deepEqual(
+    listMcpServers({ agentDir, cwd }).servers.map((server) => server.name),
+    ["toString", "constructor", "__proto__"],
+  );
+  assert.throws(
+    () => addMcpServer(agentDir, { name: "__proto__", command: "node" }),
+    /already exists/,
+  );
+
+  setMcpServerEnabled({ agentDir, cwd }, "global", "__proto__", false);
+  assert.equal(removeMcpServer(agentDir, "__proto__"), true);
+  assert.equal(removeMcpServer(agentDir, "constructor"), true);
+  assert.equal(removeMcpServer(agentDir, "hasOwnProperty"), false);
+  assert.throws(
+    () => setMcpServerEnabled({ agentDir, cwd }, "global", "valueOf", false),
+    /does not define/,
+  );
+  assert.deepEqual(savedNames(globalPath), ["toString"]);
+});
+
+function savedNames(path: string): string[] {
+  return Object.keys((readJson(path) as { mcpServers: object }).mcpServers);
+}

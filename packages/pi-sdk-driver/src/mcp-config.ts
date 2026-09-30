@@ -37,6 +37,13 @@ export interface McpConfigLocation {
   readonly cwd: string;
 }
 
+/** pi's rule for server names (`validateMcpServerConfig` in pi's `core/mcp-servers.js`). */
+const MCP_SERVER_NAME = /^[A-Za-z0-9_-]+$/;
+
+export function isValidMcpServerName(name: string): boolean {
+  return MCP_SERVER_NAME.test(name);
+}
+
 export function mcpConfigPath(location: McpConfigLocation, scope: McpServerScope): string {
   return scope === "global"
     ? join(location.agentDir, "mcp.json")
@@ -67,15 +74,23 @@ export function listMcpServers(location: McpConfigLocation): McpServerListing {
 /** Adds a server to the global `mcp.json`, creating the file when missing. */
 export function addMcpServer(agentDir: string, server: NewMcpServer): void {
   const name = server.name.trim();
-  if (!name) throw new Error("MCP server name must not be empty");
+  if (!isValidMcpServerName(name)) {
+    throw new Error(`Invalid MCP server name "${name}" (use letters, digits, "_" and "-")`);
+  }
   const config = newServerConfig(server);
   const path = join(agentDir, "mcp.json");
   editMcpServers(path, (servers, parsed) => {
     const target = servers ?? {};
-    if (target[name] !== undefined) {
+    if (Object.hasOwn(target, name)) {
       throw new Error(`An MCP server named "${name}" already exists`);
     }
-    target[name] = config;
+    // Defined, not assigned, so a name like "__proto__" is saved as a key.
+    Object.defineProperty(target, name, {
+      value: config,
+      enumerable: true,
+      writable: true,
+      configurable: true,
+    });
     parsed.mcpServers = target;
     return true;
   });
@@ -87,7 +102,7 @@ export function removeMcpServer(agentDir: string, name: string): boolean {
   if (!existsSync(path)) return false;
   let removed = false;
   editMcpServers(path, (servers) => {
-    if (!servers || servers[name] === undefined) return false;
+    if (!servers || !Object.hasOwn(servers, name)) return false;
     delete servers[name];
     removed = true;
     return true;
@@ -104,7 +119,7 @@ export function setMcpServerEnabled(
 ): void {
   const path = mcpConfigPath(location, scope);
   editMcpServers(path, (servers) => {
-    const server = servers?.[name];
+    const server = servers && Object.hasOwn(servers, name) ? servers[name] : undefined;
     if (!isRecord(server)) throw new Error(`${path} does not define MCP server "${name}"`);
     if (enabled) delete server.enabled;
     else server.enabled = false;
