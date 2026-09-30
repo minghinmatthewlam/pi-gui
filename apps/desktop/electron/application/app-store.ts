@@ -3074,6 +3074,11 @@ export class DesktopAppStore {
       this.sessionState.extensionUiBySession.delete(key);
       return;
     }
+    if (event.request.kind === "dismiss") {
+      this.clearExtensionDialogTimeout(event.sessionRef, event.request.requestId);
+      this.removePendingExtensionDialog(event.sessionRef, event.request.requestId);
+      return;
+    }
 
     const uiState = this.getOrCreateExtensionUiState(event.sessionRef);
     applyHostUiRequestToExtensionUiState(uiState, event.request);

@@ -11,6 +11,9 @@ import {
 } from "../helpers/electron-app";
 
 const extensionSource = String.raw`
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+
 export default function dialogExtension(pi) {
   pi.registerCommand("dialog-confirm", {
     description: "Open a confirmation dialog",
@@ -44,6 +47,23 @@ export default function dialogExtension(pi) {
     handler: async (_args, ctx) => {
       const value = await ctx.ui.input("Enter a value", "type here");
       ctx.ui.notify(value ? "Input " + value : "Input cancelled", "info");
+    },
+  });
+
+  pi.registerCommand("dialog-input-aborted", {
+    description: "Open an input dialog that the extension closes itself",
+    handler: async (_args, ctx) => {
+      // Like MCP sign-in: the extension aborts its own dialog once something outside arrives,
+      // here a file the test writes.
+      const controller = new AbortController();
+      const poll = setInterval(() => {
+        if (existsSync(join(ctx.cwd, "abort-dialog"))) controller.abort();
+      }, 50);
+      const value = await ctx.ui.input("Paste the redirect URL", "http://localhost", {
+        signal: controller.signal,
+      });
+      clearInterval(poll);
+      ctx.ui.notify(value ? "Input " + value : "Aborted input closed", "info");
     },
   });
 
@@ -181,6 +201,13 @@ test("renders extension dialogs in the Electron surface and routes responses bac
     await dialog.getByRole("button", { name: "Submit", exact: true }).click();
     await expect(dialog).toHaveCount(0);
     await expect(window.getByTestId("extension-notices")).toContainText("Input typed value");
+
+    await composer.fill("/dialog-input-aborted ");
+    await composer.press("Enter");
+    await expect(dialog).toContainText("Paste the redirect URL");
+    await writeFile(join(workspacePath, "abort-dialog"), "", "utf8");
+    await expect(dialog).toHaveCount(0);
+    await expect(window.getByTestId("extension-notices")).toContainText("Aborted input closed");
 
     await composer.fill("/dialog-editor ");
     await composer.press("Enter");

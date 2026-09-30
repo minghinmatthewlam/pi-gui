@@ -334,6 +334,11 @@ export type HostUiRequest =
   | {
       readonly kind: "reset";
       readonly requestId: string;
+    }
+  | {
+      /** pi closed the dialog with this `requestId` itself, such as a sign-in that finished. */
+      readonly kind: "dismiss";
+      readonly requestId: string;
     };
 
 export interface HostUiRequestEvent extends SessionEventBase {

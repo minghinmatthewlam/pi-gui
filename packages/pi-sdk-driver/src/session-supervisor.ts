@@ -1777,6 +1777,9 @@ export class SessionSupervisor {
         const onAbort = () => {
           cleanup();
           resolve(defaultValue);
+          // pi closed the dialog itself (MCP sign-in aborts its "paste the URL" input once the
+          // browser callback arrives), so the host has to take it down too.
+          this.emitHostUiRequest(record, { kind: "dismiss", requestId });
         };
 
         opts?.signal?.addEventListener("abort", onAbort, { once: true });
