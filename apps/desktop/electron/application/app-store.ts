@@ -1763,11 +1763,9 @@ export class DesktopAppStore {
     const reloads = await Promise.allSettled(
       workspaceIds
         .flatMap((workspaceId) => this.sessionRefsForWorkspace(workspaceId))
-        .map(async (sessionRef) => {
-          if ((await this.driver.reloadSessionWhenIdle(sessionRef)) === "reloaded") {
-            this.clearExtensionUiForSession(sessionRef);
-          }
-        }),
+        // The driver resets the thread's extension UI as it reloads (a "reset" host UI
+        // request, before the extensions start again), whether now or after the turn.
+        .map((sessionRef) => this.driver.reloadSessionWhenIdle(sessionRef)),
     );
     const failed = reloads.filter((result) => result.status === "rejected");
     for (const result of failed) {
