@@ -1,0 +1,345 @@
+{
+  "repo": "minghinmatthewlam/pi-gui",
+  "capturedAt": "2026-09-30T20:50:00Z",
+  "viewer": "minghinmatthewlam",
+  "pullRequests": [
+    {
+      "number": 223,
+      "title": "Add Claude PR reviews (subscription token)",
+      "state": "open",
+      "draft": false,
+      "author": "minghinmatthewlam",
+      "branch": "add-claude-pr-review",
+      "createdAt": "2026-09-30T20:32:06Z",
+      "updatedAt": "2026-09-30T20:33:27Z",
+      "checks": {
+        "state": "failing",
+        "failed": ["CI required", "desktop-package-linux", "typecheck"],
+        "passed": 9,
+        "total": 12
+      },
+      "review": "none",
+      "comments": 0,
+      "url": "https://github.com/minghinmatthewlam/pi-gui/pull/223"
+    },
+    {
+      "number": 222,
+      "title": "Load pi's MCP servers, code mode and tool search, with an MCP servers page in Settings",
+      "state": "open",
+      "draft": false,
+      "author": "minghinmatthewlam",
+      "branch": "claude/project-thread-4c1zz3",
+      "createdAt": "2026-09-30T18:09:58Z",
+      "updatedAt": "2026-09-30T18:53:01Z",
+      "checks": {
+        "state": "passing",
+        "failed": [],
+        "passed": 11,
+        "total": 11
+      },
+      "review": "none",
+      "comments": 0,
+      "url": "https://github.com/minghinmatthewlam/pi-gui/pull/222"
+    },
+    {
+      "number": 218,
+      "title": "Keep a just-typed draft when the app quits, a window closes, or the thread is archived",
+      "state": "open",
+      "draft": false,
+      "author": "minghinmatthewlam",
+      "branch": "claude/project-thread-vt796x",
+      "createdAt": "2026-09-30T15:34:12Z",
+      "updatedAt": "2026-09-30T15:53:51Z",
+      "checks": {
+        "state": "passing",
+        "failed": [],
+        "passed": 11,
+        "total": 11
+      },
+      "review": "none",
+      "comments": 0,
+      "url": "https://github.com/minghinmatthewlam/pi-gui/pull/218"
+    },
+    {
+      "number": 109,
+      "title": "Add a universal macOS GitHub Release binary",
+      "state": "open",
+      "draft": false,
+      "author": "zabrador",
+      "branch": "zabrador/add-support-for-intel-macs",
+      "createdAt": "2026-09-17T06:42:44Z",
+      "updatedAt": "2026-09-29T06:27:04Z",
+      "checks": {
+        "state": "none",
+        "failed": [],
+        "passed": 0,
+        "total": 0
+      },
+      "review": "none",
+      "comments": 0,
+      "url": "https://github.com/minghinmatthewlam/pi-gui/pull/109"
+    },
+    {
+      "number": 220,
+      "title": "Let extension cards update in place and run buttons through the app",
+      "state": "merged",
+      "draft": false,
+      "author": "minghinmatthewlam",
+      "branch": "",
+      "createdAt": "2026-09-30T20:38:32Z",
+      "updatedAt": "2026-09-30T20:38:32Z",
+      "checks": {
+        "state": "passing",
+        "failed": [],
+        "passed": 11,
+        "total": 11
+      },
+      "review": "none",
+      "comments": 0,
+      "url": "https://github.com/minghinmatthewlam/pi-gui/pull/220"
+    },
+    {
+      "number": 219,
+      "title": "Let sidebar folder groups collapse, and remember them",
+      "state": "merged",
+      "draft": false,
+      "author": "minghinmatthewlam",
+      "branch": "",
+      "createdAt": "2026-09-30T17:21:08Z",
+      "updatedAt": "2026-09-30T17:21:08Z",
+      "checks": {
+        "state": "passing",
+        "failed": [],
+        "passed": 11,
+        "total": 11
+      },
+      "review": "none",
+      "comments": 0,
+      "url": "https://github.com/minghinmatthewlam/pi-gui/pull/219"
+    },
+    {
+      "number": 221,
+      "title": "Keep multi-line transcript selections on one message so Add to Chat appears",
+      "state": "merged",
+      "draft": false,
+      "author": "minghinmatthewlam",
+      "branch": "",
+      "createdAt": "2026-09-30T16:57:48Z",
+      "updatedAt": "2026-09-30T16:57:48Z",
+      "checks": {
+        "state": "passing",
+        "failed": [],
+        "passed": 11,
+        "total": 11
+      },
+      "review": "none",
+      "comments": 0,
+      "url": "https://github.com/minghinmatthewlam/pi-gui/pull/221"
+    },
+    {
+      "number": 208,
+      "title": "Update pi to 0.99.1",
+      "state": "merged",
+      "draft": false,
+      "author": "minghinmatthewlam",
+      "branch": "",
+      "createdAt": "2026-09-30T16:41:34Z",
+      "updatedAt": "2026-09-30T16:41:34Z",
+      "checks": {
+        "state": "passing",
+        "failed": [],
+        "passed": 11,
+        "total": 11
+      },
+      "review": "none",
+      "comments": 0,
+      "url": "https://github.com/minghinmatthewlam/pi-gui/pull/208"
+    },
+    {
+      "number": 211,
+      "title": "Show extension cards in the transcript",
+      "state": "merged",
+      "draft": false,
+      "author": "minghinmatthewlam",
+      "branch": "",
+      "createdAt": "2026-09-30T16:05:22Z",
+      "updatedAt": "2026-09-30T16:05:22Z",
+      "checks": {
+        "state": "passing",
+        "failed": [],
+        "passed": 11,
+        "total": 11
+      },
+      "review": "none",
+      "comments": 0,
+      "url": "https://github.com/minghinmatthewlam/pi-gui/pull/211"
+    },
+    {
+      "number": 213,
+      "title": "Set extension flags per thread when starting it",
+      "state": "merged",
+      "draft": false,
+      "author": "minghinmatthewlam",
+      "branch": "",
+      "createdAt": "2026-09-30T15:43:43Z",
+      "updatedAt": "2026-09-30T15:43:43Z",
+      "checks": {
+        "state": "passing",
+        "failed": [],
+        "passed": 11,
+        "total": 11
+      },
+      "review": "none",
+      "comments": 0,
+      "url": "https://github.com/minghinmatthewlam/pi-gui/pull/213"
+    },
+    {
+      "number": 212,
+      "title": "Show extension notify as a toast above the composer",
+      "state": "merged",
+      "draft": false,
+      "author": "minghinmatthewlam",
+      "branch": "",
+      "createdAt": "2026-09-30T15:01:16Z",
+      "updatedAt": "2026-09-30T15:01:16Z",
+      "checks": {
+        "state": "passing",
+        "failed": [],
+        "passed": 11,
+        "total": 11
+      },
+      "review": "none",
+      "comments": 0,
+      "url": "https://github.com/minghinmatthewlam/pi-gui/pull/212"
+    },
+    {
+      "number": 210,
+      "title": "Let sidebar folder groups collapse, and remember them",
+      "state": "closed",
+      "draft": false,
+      "author": "Leos0508",
+      "branch": "sidebar-folder-collapse",
+      "createdAt": "2026-09-29T23:38:15Z",
+      "updatedAt": "2026-09-30T16:28:06Z",
+      "checks": {
+        "state": "none",
+        "failed": [],
+        "passed": 0,
+        "total": 0
+      },
+      "review": "none",
+      "comments": 0,
+      "url": "https://github.com/minghinmatthewlam/pi-gui/pull/210"
+    }
+  ],
+  "issues": [
+    {
+      "number": 216,
+      "title": "Model name change randomly",
+      "state": "open",
+      "author": "mkandeel0",
+      "labels": [],
+      "comments": 1,
+      "createdAt": "2026-09-30T13:40:10Z",
+      "updatedAt": "2026-09-30T20:32:21Z",
+      "body": "After sending a couple of prompts (2-3) the model name changes from `github-copilot:claude-opus-5.5` to `github-copilot:claude-opus-5-5`\n\nSo I have to reselect/change the model again",
+      "url": "https://github.com/minghinmatthewlam/pi-gui/issues/216"
+    },
+    {
+      "number": 200,
+      "title": "Load login-shell environment when launched from Spotlight/Dock",
+      "state": "open",
+      "author": "csaroff",
+      "labels": [],
+      "comments": 1,
+      "createdAt": "2026-09-26T00:26:42Z",
+      "updatedAt": "2026-09-27T08:38:02Z",
+      "body": "I define some providers in `~/.pi/agent/models.json` with `\"apiKey\": \"$MY_API_KEY\"`, where the variable is exported in my zsh config. The pi CLI can use them, but when I open pi-gui from Spotlight or the Dock, all of those models show up under Settings \u2192 Models \u2192 Not connected, with no explanation. Launching the pi-gui binary from a terminal fixes it.\n\npi-gui already works around this for PATH (augmentPosixPath in main.ts). Could it load the login shell's environment at startup instead, the way VS Code does? Failing that, it would help if Settings showed which variable is missing.",
+      "url": "https://github.com/minghinmatthewlam/pi-gui/issues/200"
+    },
+    {
+      "number": 186,
+      "title": "Feature Request: Support ephemeral \"--no-session\" threads",
+      "state": "closed",
+      "author": "edahlseng",
+      "labels": [],
+      "comments": 0,
+      "createdAt": "2026-09-24T23:21:47Z",
+      "updatedAt": "2026-09-30T20:27:51Z",
+      "body": "Add an option in pi-gui to start an ephemeral thread backed by pi's --no-session mode (or an in-memory/scratch session that is not persisted to disk).",
+      "url": "https://github.com/minghinmatthewlam/pi-gui/issues/186"
+    },
+    {
+      "number": 185,
+      "title": "Support treating different git worktrees of a repository as distinct workspaces",
+      "state": "closed",
+      "author": "edahlseng",
+      "labels": [],
+      "comments": 0,
+      "createdAt": "2026-09-24T23:05:39Z",
+      "updatedAt": "2026-09-25T20:16:44Z",
+      "body": "Many developers use git worktree workflows to manage multiple active branches simultaneously.",
+      "url": "https://github.com/minghinmatthewlam/pi-gui/issues/185"
+    },
+    {
+      "number": 187,
+      "title": "Left sidebar improvements: new thread \"+\" button on workspace headers & resizable sidebar width",
+      "state": "closed",
+      "author": "edahlseng",
+      "labels": [],
+      "comments": 1,
+      "createdAt": "2026-09-24T23:27:08Z",
+      "updatedAt": "2026-09-25T17:59:16Z",
+      "body": "A + icon on workspace headers to quickly create a new thread in that workspace, and resizable sidebar width.",
+      "url": "https://github.com/minghinmatthewlam/pi-gui/issues/187"
+    },
+    {
+      "number": 107,
+      "title": "Add context meter",
+      "state": "closed",
+      "author": "shiraz-shah",
+      "labels": [],
+      "comments": 2,
+      "createdAt": "2026-09-03T18:21:07Z",
+      "updatedAt": "2026-09-25T01:27:26Z",
+      "body": "There is currently no straightforward way in the GUI to see how much context has been used.",
+      "url": "https://github.com/minghinmatthewlam/pi-gui/issues/107"
+    },
+    {
+      "number": 55,
+      "title": "Keep live session leases valid until the holder shuts down",
+      "state": "closed",
+      "author": "minghinmatthewlam",
+      "labels": ["bug", "priority: P0"],
+      "comments": 1,
+      "createdAt": "2026-07-28T00:48:35Z",
+      "updatedAt": "2026-09-25T02:41:39Z",
+      "body": "Session leases currently have two correctness gaps.",
+      "url": "https://github.com/minghinmatthewlam/pi-gui/issues/55"
+    },
+    {
+      "number": 106,
+      "title": "The \"Add custom endpoint\" page cannot scroll.",
+      "state": "closed",
+      "author": "joeylee-hisun",
+      "labels": [],
+      "comments": 1,
+      "createdAt": "2026-09-03T02:09:47Z",
+      "updatedAt": "2026-09-20T03:53:35Z",
+      "body": "After clicking Detect models I got a very long list of models and couldn't scroll the page.",
+      "url": "https://github.com/minghinmatthewlam/pi-gui/issues/106"
+    },
+    {
+      "number": 48,
+      "title": "Chat timeline has unwanted horizontal scroll",
+      "state": "closed",
+      "author": "Saman-S4i",
+      "labels": ["priority: P2"],
+      "comments": 3,
+      "createdAt": "2026-07-19T09:48:19Z",
+      "updatedAt": "2026-09-20T03:53:33Z",
+      "body": "The chat/timeline page shows an unwanted horizontal scrollbar.",
+      "url": "https://github.com/minghinmatthewlam/pi-gui/issues/48"
+    }
+  ]
+}
