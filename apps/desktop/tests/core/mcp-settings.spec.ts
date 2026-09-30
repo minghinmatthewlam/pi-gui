@@ -192,6 +192,16 @@ test("rejects a server Settings cannot run and leaves mcp.json alone", async () 
     await expect(surface).toContainText("MCP server URL must be a valid http:// or https:// URL");
     await expect(surface.getByLabel("Server name")).toHaveValue("local-file");
     expect(existsSync(mcpPath)).toBe(false);
+
+    // pi in the terminal adds a server while the app is in the background; focus shows it.
+    await writeFile(mcpPath, JSON.stringify({ mcpServers: { terminal: { command: "added" } } }));
+    await harness.electronApp.evaluate(({ BrowserWindow }) => {
+      for (const win of BrowserWindow.getAllWindows()) win.emit("focus");
+    });
+    await expect(
+      surface.locator('[data-testid="mcp-server-row"][data-server-name="terminal"]'),
+    ).toContainText("added");
+    await expect(surface.getByTestId("mcp-servers-empty")).toHaveCount(0);
   } finally {
     await harness.close();
   }
