@@ -2245,7 +2245,9 @@ export class SessionSupervisor {
             ];
           }
         }
-        this.updatePreviewFromMessage(record, event.message);
+        if (event.message.role !== "custom" || event.message.display) {
+          this.updatePreviewFromMessage(record, event.message);
+        }
         if (event.type === "message_end" && event.message.role === "custom") {
           this.appendCustomMessageItem(record, event.message);
         }
@@ -2323,7 +2325,7 @@ export class SessionSupervisor {
           const item = customMessageTranscriptItem(
             { ...event.entry, role: "custom" },
             event.entry.id,
-            timestamp,
+            event.entry.timestamp,
           );
           return item ? this.customMessageItemEvents(record, item) : [];
         }
@@ -2434,6 +2436,8 @@ export class SessionSupervisor {
         ? findCustomMessageEntryId(sessionManager, message, record.appendedCustomEntryIds, depth)
         : undefined;
     };
+    // Checking the leaf first matters: two idle sends with equal text are both persisted
+    // before a microtask runs, and a later scan would hand them each other's ids.
     const leafId = find(1);
     if (leafId) {
       append(leafId);
@@ -3286,7 +3290,8 @@ function findCustomMessageEntryId(
       entry?.type === "custom_message" &&
       entry.content === message.content &&
       entry.customType === message.customType &&
-      Date.parse(entry.timestamp) >= message.timestamp &&
+      entry.display === message.display &&
+      (typeof message.timestamp !== "number" || Date.parse(entry.timestamp) >= message.timestamp) &&
       !claimed.has(entry.id)
     ) {
       return entry.id;

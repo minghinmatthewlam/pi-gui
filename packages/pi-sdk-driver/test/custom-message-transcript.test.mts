@@ -160,6 +160,11 @@ await test("custom messages sent during a run keep their persisted entry ids", a
         { customType: "later", content: [{ type: "text", text: "after the turn" }], display: true },
         { triggerTurn: false },
       );
+      // A hidden twin with equal text, flushed at turn_end before the steer is persisted.
+      pi.sendMessage(
+        { customType: "steer", content: "steered note", display: false },
+        { triggerTurn: false },
+      );
     }
     return reply(model, `reply ${calls}`);
   });
@@ -191,8 +196,12 @@ await test("custom messages sent during a run keep their persisted entry ids", a
     ],
   );
   assert.deepEqual(
-    new Set(h.appended().map((item) => item.id)),
-    new Set(reloaded.map((item) => item.id)),
+    h
+      .appended()
+      .map((item) => item.id)
+      .sort(),
+    reloaded.map((item) => item.id).sort(),
+    "each live row carries its own entry id, once",
   );
   const run = h.events.find((event) => event.type === "transcriptItemAppended");
   assert.ok(run?.runId, "live rows carry the run they arrived in");
