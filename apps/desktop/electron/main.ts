@@ -341,11 +341,34 @@ function openMcpSignInUrl(url: string): void {
     ["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname.toLowerCase());
   if (!parsed || (parsed.protocol !== "https:" && !loopback)) {
     console.error(`Refusing to open MCP sign-in URL: ${url}`);
+    showMcpSignInUrl(url, "pi-gui opens only https links, or http links on this computer.");
     return;
   }
-  void shell.openExternal(parsed.toString()).catch((error) => {
+  shell.openExternal(parsed.toString()).catch((error: unknown) => {
     console.error(`Failed to open MCP sign-in URL: ${parsed.toString()}`, error);
+    showMcpSignInUrl(parsed.toString(), "pi-gui could not open your browser.");
   });
+}
+
+/** When the browser cannot be opened, the link is shown so the person can copy it. */
+function showMcpSignInUrl(url: string, reason: string): void {
+  const window = mainWindow && canPublishToWindow(mainWindow) ? mainWindow : undefined;
+  const options: MessageBoxOptions = {
+    type: "warning",
+    title: "pi-gui",
+    message: "Open this MCP sign-in link yourself",
+    detail: `${reason} Check the link before you open it:\n\n${url}`,
+    buttons: ["Copy link", "Close"],
+    defaultId: 0,
+    cancelId: 1,
+  };
+  (window ? dialog.showMessageBox(window, options) : dialog.showMessageBox(options))
+    .then(({ response }) => {
+      if (response === 0) clipboard.writeText(url);
+    })
+    .catch((error: unknown) => {
+      console.error("Failed to show the MCP sign-in link", error);
+    });
 }
 
 function readClipboardImageAttachment(): ClipboardImageRead {
