@@ -34,7 +34,7 @@ Findings reference existing files and line numbers at the PR head. A deleted-fil
 - `desktop.ts` is independently bundled browser code. `mount(root, host)` returns a disposer, observes the host abort signal, consumes theme values, and uses only `openFile` and `prepareTaskDraft` host actions.
 - Versioned `pi-gui.pr-review.v1` entries are the durable owner. Chord is the live projection. Branch restoration reads `getBranch()`. A request or run with no settlement restores as **Interrupted**, never as a live or successful operation.
 
-Pi 0.87's `sendUserMessage` API returns `void`; an accepted service call means **Requested**, not provider admission. The matching `before_agent_start` confirms a running review. A preflight rejection appears through Pi's extension runtime diagnostics; this example does not automatically retry a request with an unknown outcome. Reload after resolving a preflight error restores it as interrupted. The final outcome comes from `agent_before_settle`, with status persisted only at `agent_settled`, after retries and continuations finish.
+Pi's `sendUserMessage` API returns `void`; an accepted service call means **Requested**, not provider admission. The matching `before_agent_start` confirms a running review. A preflight rejection appears through Pi's extension runtime diagnostics; this example does not automatically retry a request with an unknown outcome. Reload after resolving a preflight error restores it as interrupted. The final outcome comes from `agent_before_settle`, with status persisted only at `agent_settled`, after retries and continuations finish.
 
 ## Verification boundaries
 

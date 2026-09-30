@@ -95,6 +95,7 @@ import {
   isExtensionCardEntry,
   messageText,
   nowIso,
+  persistedToolOutput,
   previewFromSessionInfo,
   shouldPersistSnapshotForAgentEvent,
   shouldTailFromDisk,
@@ -2277,6 +2278,11 @@ export class SessionSupervisor {
     event: AgentSessionEvent,
   ): SessionDriverEvent[] {
     const timestamp = nowIso();
+    // Calls a tool makes through ctx.executeTool() carry parentToolCallId. Pi saves them only on
+    // the parent's result, so the timeline shows the parent call alone, live and after reload.
+    if ("parentToolCallId" in event && event.parentToolCallId) {
+      return [];
+    }
 
     switch (event.type) {
       case "agent_start":
@@ -2375,7 +2381,9 @@ export class SessionSupervisor {
             timestamp,
             callId: event.toolCallId,
             success: !event.isError,
-            output: event.result,
+            // Match the saved tool result. Pi 0.99 results can also carry structuredContent
+            // (up to 1 MiB of bash output) that Pi never saves.
+            output: persistedToolOutput(event.result),
           },
           record,
         );

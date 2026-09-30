@@ -534,6 +534,18 @@ function appendToolCalls(
   }
 }
 
+/** The part of a tool result Pi saves in the session: its content and details. */
+export function persistedToolOutput(result: unknown): Record<string, unknown> {
+  if (typeof result !== "object" || result === null) {
+    return {};
+  }
+  const { content, details } = result as Record<string, unknown>;
+  return {
+    ...(content !== undefined ? { content } : {}),
+    ...(details !== undefined ? { details } : {}),
+  };
+}
+
 function applyToolResult(
   transcript: SessionTranscriptItem[],
   toolIndexByCallId: Map<string, number>,
@@ -546,10 +558,7 @@ function applyToolResult(
   }
 
   const status = message.isError === true ? ("error" as const) : ("success" as const);
-  const output = {
-    ...(message.content !== undefined ? { content: message.content } : {}),
-    ...(message.details !== undefined ? { details: message.details } : {}),
-  };
+  const output = persistedToolOutput(message);
   const index = toolIndexByCallId.get(callId);
   const existing = index !== undefined ? transcript[index] : undefined;
   if (index !== undefined && existing?.kind === "tool") {
