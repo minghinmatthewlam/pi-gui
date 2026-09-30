@@ -131,6 +131,22 @@
   text-transform: uppercase;
 }
 
+/* An extension's custom message: its customType over the markdown, like terminal pi's
+ * [customType] label, kept quiet so it reads as a note beside the agent's reply. */
+.timeline-item--custom {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.timeline-item__custom-type {
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
 .timeline-item--user {
   display: flex;
   align-items: center;
