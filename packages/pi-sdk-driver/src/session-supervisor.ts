@@ -101,6 +101,7 @@ import {
   toSessionErrorInfo,
   transcriptFromMessages,
   customMessageTranscriptItem,
+  isHiddenCustomMessage,
   truncate,
   workspaceToRef,
   type RunOutcome,
@@ -2150,7 +2151,9 @@ export class SessionSupervisor {
       : undefined;
     record.config = deriveSessionConfig(session.sessionManager);
     const displayMessages = displayMessagesFromSession(session.sessionManager);
-    record.preview = extractPreview(displayMessages.at(-1));
+    record.preview = extractPreview(
+      displayMessages.filter((message) => !isHiddenCustomMessage(message)).at(-1),
+    );
     record.sessionCommands = this.collectSessionCommands(session);
     // Tree navigation and reloads change which branch pi counts.
     this.refreshUsage(record);
@@ -2245,9 +2248,7 @@ export class SessionSupervisor {
             ];
           }
         }
-        if (event.message.role !== "custom" || event.message.display) {
-          this.updatePreviewFromMessage(record, event.message);
-        }
+        this.updatePreviewFromMessage(record, event.message);
         if (event.type === "message_end" && event.message.role === "custom") {
           this.appendCustomMessageItem(record, event.message);
         }

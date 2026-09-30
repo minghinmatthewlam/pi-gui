@@ -149,8 +149,13 @@ export function nowIso(): string {
   return new Date().toISOString();
 }
 
+/** A custom message its extension sent with `display: false`: model context only. */
+export function isHiddenCustomMessage(message: unknown): boolean {
+  return isRecord(message) && message.role === "custom" && message.display !== true;
+}
+
 export function extractPreview(message: unknown): string | undefined {
-  if (!isRecord(message)) {
+  if (!isRecord(message) || isHiddenCustomMessage(message)) {
     return undefined;
   }
 

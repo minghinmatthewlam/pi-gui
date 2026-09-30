@@ -147,6 +147,26 @@ await test("extensions see rpc mode and idle custom messages reach the live tran
   assert.notEqual(reloaded[0]!.id, reloaded[1]!.id);
 });
 
+await test("a hidden custom message never becomes the thread preview", async (t) => {
+  const h = await fixture(t, (model) => reply(model, "unused"));
+  h.pi().registerCommand("note", {
+    description: "Show a note, then send a hidden one",
+    handler: async () => {
+      h.pi().sendMessage({ customType: "note", content: "Shown note", display: true });
+      h.pi().sendMessage({ customType: "note", content: "model only", display: false });
+    },
+  });
+
+  await h.driver.sendUserMessage(h.ref, { text: "/note" });
+  await new Promise((resolve) => setTimeout(resolve, 50));
+
+  const previews = h.events.flatMap((event) =>
+    event.type === "sessionUpdated" && event.snapshot.preview ? [event.snapshot.preview] : [],
+  );
+  assert.ok(previews.includes("Shown note"));
+  assert.ok(!previews.includes("model only"), previews.join(" | "));
+});
+
 await test("custom messages sent during a run keep their persisted entry ids", async (t) => {
   let calls = 0;
   let pi!: ExtensionAPI;
