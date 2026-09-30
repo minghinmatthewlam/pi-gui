@@ -41,7 +41,7 @@ export interface SessionTranscriptToolCall {
   readonly createdAt: string;
 }
 
-/** A message an extension sent with `pi.sendMessage({ customType, content, display: true })`. */
+/** An extension-authored row: a `customType` eyebrow over markdown, like terminal pi's `[customType]`. */
 export interface SessionTranscriptCustomMessage {
   readonly kind: "custom";
   readonly id: string;

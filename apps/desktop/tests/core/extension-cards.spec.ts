@@ -117,7 +117,7 @@ async function sendComposer(window: Page, text: string): Promise<void> {
   await expect(composer).toHaveValue("");
 }
 
-test("extension cards appear live under a streaming reply, survive relaunch once, and open files", async () => {
+test("extension cards appear live beside a streaming reply, survive relaunch once, and open files", async () => {
   test.setTimeout(120_000);
   const userDataDir = await makeUserDataDir();
   const agentDir = join(userDataDir, "agent");
@@ -169,9 +169,11 @@ test("extension cards appear live under a streaming reply, survive relaunch once
     await expect(card).toContainText("CI failed on main");
     await expect(card.locator(".extension-card__tone")).toHaveText("Failed");
     await expect(window.getByTestId("send")).toHaveAttribute("aria-label", "Stop run");
+    // Where the session file has it: pi saves the reply after the card, when the reply ends.
+    await waitForTimelineLayout(window);
     const replyBox = await window.locator(".timeline-item--assistant").boundingBox();
     const cardBox = await card.boundingBox();
-    expect(cardBox!.y).toBeGreaterThan(replyBox!.y + replyBox!.height - 1);
+    expect(cardBox!.y + cardBox!.height).toBeLessThanOrEqual(replyBox!.y);
 
     await confirmation.getByTestId("extension-dialog-confirm").click();
     await expect(assistant).toHaveText(["Checking CI. The search test fails on a blank query."]);
@@ -201,6 +203,10 @@ test("extension cards appear live under a streaming reply, survive relaunch once
     ]);
     await expect(card).toHaveCount(2);
     await expect(card.first()).toContainText("CI failed on main");
+    await waitForTimelineLayout(window);
+    const reopenedReplyBox = await window.locator(".timeline-item--assistant").boundingBox();
+    const reopenedCardBox = await card.first().boundingBox();
+    expect(reopenedCardBox!.y + reopenedCardBox!.height).toBeLessThanOrEqual(reopenedReplyBox!.y);
     await expect(card.nth(1)).toContainText("Deployed to production");
     await expect(window.getByTestId("custom-message")).toHaveCount(1);
 

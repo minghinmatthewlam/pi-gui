@@ -2100,13 +2100,12 @@ function transcriptText(message: TranscriptMessage): string {
       return message.detail ? `${message.label}: ${message.detail}` : message.label;
     case "summary":
       return message.metadata ? `${message.label}: ${message.metadata}` : message.label;
-    default:
-      return assertNever(message);
+    default: {
+      const unhandled: never = message;
+      void unhandled;
+      return "";
+    }
   }
-}
-
-function assertNever(value: never): never {
-  throw new Error(`Unhandled transcript item: ${JSON.stringify(value)}`);
 }
 
 function transcriptRole(message: TranscriptMessage): OrchestrationChildTranscriptMessage["role"] {

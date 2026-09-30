@@ -32,12 +32,15 @@ await test("a card entry becomes a card item with the entry id; unknown fields a
         { label: "Job", value: "unit-tests" },
         { label: "Failed", value: 2 },
         { label: "Bad row" },
+        { label: " ", value: "blank label" },
+        { label: "Not finite", value: Number.NaN },
         "not a row",
       ],
       actions: [
         { label: "Open search.ts:3", path: "search.ts", line: 3 },
         { label: "Open README", path: "README.md", line: 0 },
         { label: "No path" },
+        { label: "", path: "search.ts" },
       ],
     }),
   );

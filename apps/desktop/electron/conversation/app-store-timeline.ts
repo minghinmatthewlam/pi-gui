@@ -295,9 +295,18 @@ export function applyTimelineEvent(
       break;
     case "transcriptItemAppended": {
       // Same id as the persisted entry, so a transcript reload replaces rather than duplicates it.
-      // A streaming reply keeps its row: later deltas still append to it above the new item.
       if (transcript.some((item) => item.id === event.item.id)) return;
-      transcript.push(...timelineFromDriverTranscript([event.item]));
+      // pi saves a streaming reply only when it ends, so an item appended mid-reply comes before
+      // that reply in the session file. Place it there now so a reload never moves it.
+      const streamingId = state.activeAssistantMessageBySession.get(key);
+      const streamingIndex = streamingId
+        ? transcript.findIndex((item) => item.id === streamingId)
+        : -1;
+      transcript.splice(
+        streamingIndex >= 0 ? streamingIndex : transcript.length,
+        0,
+        ...timelineFromDriverTranscript([event.item]),
+      );
       break;
     }
     case "hostUiRequest":

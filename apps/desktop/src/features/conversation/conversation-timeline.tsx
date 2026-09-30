@@ -16,6 +16,7 @@ import { useAnnotationSelection } from "./annotations/annotation-selection";
 import type { TranscriptAnnotations } from "./annotations/use-transcript-annotations";
 import { ThreadSearchBar } from "./thread-search";
 import { TimelineItem } from "./timeline-item";
+import { sameRowContent } from "./timeline-layout";
 import type { OpenTurnChange } from "./turn-changes-card";
 import type { WorkspaceFileLine } from "./workspace-file-line";
 import { SparkIcon } from "../../ui/icons";
@@ -392,6 +393,9 @@ function isSameDisplayItem(a: DisplayTimelineItem, b: DisplayTimelineItem): bool
   if (a.kind === "turn-changes" && b.kind === "turn-changes") {
     // A card's id is its checkpoint, and a captured turn's files never change.
     return true;
+  }
+  if ((a.kind === "card" || a.kind === "custom") && a.kind === b.kind) {
+    return sameRowContent(a, b);
   }
   return false;
 }

@@ -345,26 +345,22 @@ function transcriptFromSources(
 export function displayMessagesFromSession(
   sessionManager: Pick<SessionManager, "buildContextEntries">,
 ) {
-  return sessionManager.buildContextEntries().flatMap((entry, index) => {
-    // A retained range can contain older compactions. Only the latest one,
-    // which Pi places first, contributes a summary (matching Pi's projection).
-    if (entry.type === "compaction" && index > 0) return [];
-    return sessionEntryToContextMessages(entry).map((message) => ({
-      ...message,
-      id: entry.id,
-    }));
-  });
+  return displaySourcesFromSession(sessionManager).flatMap((source) =>
+    source.kind === "message" ? [source.message] : [],
+  );
 }
 
 /**
- * {@link displayMessagesFromSession} plus extension cards in entry order. pi projects custom
- * entries to no messages, so cards are read from the entries directly.
+ * The display messages plus extension cards in entry order. pi projects custom entries to no
+ * messages, so cards are read from the entries directly.
  */
 function displaySourcesFromSession(
   sessionManager: Pick<SessionManager, "buildContextEntries">,
 ): DisplaySource[] {
   return sessionManager.buildContextEntries().flatMap((entry, index): DisplaySource[] => {
     if (isExtensionCardEntry(entry)) return [{ kind: "card", entry }];
+    // A retained range can contain older compactions. Only the latest one,
+    // which Pi places first, contributes a summary (matching Pi's projection).
     if (entry.type === "compaction" && index > 0) return [];
     return sessionEntryToContextMessages(entry).map((message) => ({
       kind: "message",
@@ -412,25 +408,20 @@ function parseExtensionCard(data: unknown): ExtensionCard | string {
       : "neutral";
   const rows = Array.isArray(data.rows)
     ? data.rows.flatMap((row): ExtensionCardRow[] =>
-        isRecord(row) && typeof row.label === "string" && isCardValue(row.value)
+        isRecord(row) && nonEmptyString(row.label) && isCardValue(row.value)
           ? [{ label: row.label, value: String(row.value) }]
           : [],
       )
     : [];
   const actions = Array.isArray(data.actions)
     ? data.actions.flatMap((action): ExtensionCardAction[] =>
-        isRecord(action) &&
-        typeof action.label === "string" &&
-        typeof action.path === "string" &&
-        action.path.trim()
+        isRecord(action) && nonEmptyString(action.label) && nonEmptyString(action.path)
           ? [
               {
                 label: action.label,
                 path: action.path,
-                ...(typeof action.line === "number" &&
-                Number.isInteger(action.line) &&
-                action.line > 0
-                  ? { line: action.line }
+                ...(Number.isSafeInteger(action.line) && (action.line as number) > 0
+                  ? { line: action.line as number }
                   : {}),
               },
             ]
@@ -440,8 +431,16 @@ function parseExtensionCard(data: unknown): ExtensionCard | string {
   return { title, ...(subtitle ? { subtitle } : {}), tone, rows, actions };
 }
 
+function nonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
 function isCardValue(value: unknown): value is string | number | boolean {
-  return typeof value === "string" || typeof value === "number" || typeof value === "boolean";
+  return (
+    typeof value === "string" ||
+    typeof value === "boolean" ||
+    (typeof value === "number" && Number.isFinite(value))
+  );
 }
 
 function messageCreatedAt(message: Record<string, unknown>, fallback: string): string {

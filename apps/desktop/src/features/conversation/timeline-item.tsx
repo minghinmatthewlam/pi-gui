@@ -101,12 +101,13 @@ export function TimelineItem({
       );
     default: {
       const unhandled: never = item;
-      return unhandled;
+      void unhandled;
+      return null;
     }
   }
 }
 
-/** A message an extension sent with display: true, labelled like terminal pi's `[customType]`. */
+/** An extension-authored row, labelled like terminal pi's `[customType]`. */
 function TimelineCustomMessage({ item }: { readonly item: SessionTranscriptCustomMessage }) {
   return (
     <article className="timeline-item timeline-item--summary-card" data-testid="custom-message">
