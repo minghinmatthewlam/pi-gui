@@ -2,6 +2,7 @@ import { sessionKey } from "@pi-gui/session-driver";
 import type { SessionTranscriptItem } from "@pi-gui/session-driver";
 import type { SessionDriverEvent, SessionQueuedMessage, SessionRef } from "@pi-gui/session-driver";
 import type { TranscriptMessage } from "../../contracts/desktop-state";
+import type { TimelineCard } from "../../contracts/timeline-types";
 import {
   formatElapsedDuration,
   makeActivityItem,
@@ -296,9 +297,11 @@ export function applyTimelineEvent(
     case "hostUiRequest":
       if (event.request.kind === "card") {
         const card = event.request.card;
-        transcript.push({
+        const id = `card:${card.key ?? event.request.requestId}`;
+        const existing = transcript.findIndex((item) => item.id === id);
+        const item: TimelineCard = {
           kind: "card",
-          id: `card:${event.request.requestId}`,
+          id,
           createdAt: event.timestamp,
           title: card.title,
           ...(card.subtitle ? { subtitle: card.subtitle } : {}),
@@ -306,7 +309,10 @@ export function applyTimelineEvent(
           rows: card.rows ?? [],
           actions: card.actions ?? [],
           metadata: relativeDetail(event.timestamp),
-        });
+        };
+        // Same key: edit in place so a card can move from running to done.
+        if (existing >= 0) transcript[existing] = item;
+        else transcript.push(item);
       }
       if (event.request.kind === "notify") {
         transcript.push(

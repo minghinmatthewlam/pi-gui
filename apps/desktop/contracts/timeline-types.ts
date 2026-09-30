@@ -1,4 +1,8 @@
-import type { SessionTranscriptMessage, SessionTranscriptRole } from "@pi-gui/session-driver";
+import type {
+  ExtensionAction,
+  SessionTranscriptMessage,
+  SessionTranscriptRole,
+} from "@pi-gui/session-driver";
 import type { TurnChangeSummary } from "./review";
 
 export type SessionRole = SessionTranscriptRole;
@@ -48,7 +52,7 @@ export interface TimelineCard {
   readonly subtitle?: string;
   readonly tone: TimelineTone;
   readonly rows: readonly { readonly label: string; readonly value: string }[];
-  readonly actions: readonly { readonly label: string; readonly path: string; readonly line?: number }[];
+  readonly actions: readonly ExtensionAction[];
   readonly metadata?: string;
 }
 

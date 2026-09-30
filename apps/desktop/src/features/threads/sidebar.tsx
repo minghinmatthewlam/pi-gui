@@ -52,6 +52,7 @@ import {
   ClockIcon,
   WorktreeIcon,
 } from "../../ui/icons";
+import { ExtensionBadgeChip } from "../extensions/extension-slots";
 import {
   getDesktopShortcutLabel,
   THREAD_SHORTCUT_SLOT_COUNT,
@@ -1573,6 +1574,7 @@ const ThreadSessionRow = forwardRef<HTMLDivElement, ThreadSessionRowProps>(
                 <WorktreeIcon />
               </span>
             ) : null}
+            {thread.badge ? <ExtensionBadgeChip badge={thread.badge} compact /> : null}
             {shortcutBadge ? (
               <span className="session-row__shortcut" aria-hidden="true">
                 {shortcutBadge.label}

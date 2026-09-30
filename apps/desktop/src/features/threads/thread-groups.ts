@@ -1,3 +1,4 @@
+import type { ExtensionBadge } from "@pi-gui/session-driver";
 import type {
   DesktopAppState,
   SessionRecord,
@@ -26,6 +27,8 @@ export interface ThreadListEntry {
   readonly session: SessionRecord;
   readonly environment: ThreadEnvironmentMeta;
   readonly contextLabel: string;
+  /** The first badge an extension declared for this thread, if any. */
+  readonly badge?: ExtensionBadge;
 }
 
 export interface WorkspaceThreadGroup {
@@ -65,7 +68,11 @@ export function buildThreadSidebarModel(
   state: DesktopAppState,
   nowMs: number = Date.now(),
 ): ThreadSidebarModel {
-  const entries = collectThreadEntries(state);
+  const entries = collectThreadEntries(state).map((entry) => {
+    const badge = state.sessionExtensionUiBySession[`${entry.workspaceId}:${entry.session.id}`]
+      ?.badges?.[0];
+    return badge ? { ...entry, badge } : entry;
+  });
   const pinnedThreads = entries
     .filter((entry) => !entry.session.archivedAt && Boolean(entry.session.pinnedAt))
     .sort((left, right) => comparePinnedThreads(left, right, state.pinnedSessionOrder));

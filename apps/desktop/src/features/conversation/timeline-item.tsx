@@ -24,6 +24,8 @@ import {
   TerminalIcon,
 } from "../../ui/icons";
 import { extensionToLanguage } from "../../ui/syntax-highlight";
+import type { RunExtensionAction } from "../extensions/extension-slots";
+import type { ExtensionAction } from "@pi-gui/session-driver";
 
 export function TimelineItem({
   item,
@@ -36,6 +38,7 @@ export function TimelineItem({
   scheduledOrigin,
   workspacePath,
   onOpenWorkspaceFileLine,
+  onExtensionAction,
 }: {
   readonly item: DisplayTimelineItem;
   readonly expandedToolCallIds?: ReadonlySet<string>;
@@ -47,6 +50,7 @@ export function TimelineItem({
   readonly scheduledOrigin?: ScheduledTaskOrigin;
   readonly workspacePath?: string;
   readonly onOpenWorkspaceFileLine?: (target: WorkspaceFileLine) => void;
+  readonly onExtensionAction?: RunExtensionAction;
 }) {
   switch (item.kind) {
     case "turn-marker":
@@ -78,7 +82,7 @@ export function TimelineItem({
     case "summary":
       return <TimelineSummaryItem item={item} />;
     case "card":
-      return <TimelineCardItem item={item} onOpenWorkspaceFileLine={onOpenWorkspaceFileLine} />;
+      return <TimelineCardItem item={item} onAction={onExtensionAction} />;
     default:
       return null;
   }
@@ -443,10 +447,10 @@ function TimelineSummaryItem({ item }: { readonly item: TimelineSummary }) {
 /** Tier 1 prototype: pi-gui draws an extension's card with its own components. */
 function TimelineCardItem({
   item,
-  onOpenWorkspaceFileLine,
+  onAction,
 }: {
   readonly item: TimelineCard;
-  readonly onOpenWorkspaceFileLine?: (target: WorkspaceFileLine) => void;
+  readonly onAction?: RunExtensionAction;
 }) {
   const hasBody = item.rows.length > 0 || item.actions.length > 0;
   return (
@@ -478,19 +482,11 @@ function TimelineCardItem({
               <button
                 type="button"
                 className="turn-changes__file extension-card__action"
-                disabled={!onOpenWorkspaceFileLine}
-                onClick={() =>
-                  onOpenWorkspaceFileLine?.({
-                    path: action.path,
-                    line: action.line ?? 1,
-                    endLine: action.line ?? 1,
-                  })
-                }
+                disabled={!onAction}
+                onClick={() => onAction?.(action)}
               >
                 <span className="extension-card__label">{action.label}</span>
-                <span className="extension-card__action-target">
-                  {action.line ? `${action.path}:${action.line}` : action.path}
-                </span>
+                <span className="extension-card__action-target">{actionTarget(action)}</span>
               </button>
             </li>
           ))}
@@ -498,6 +494,23 @@ function TimelineCardItem({
       ) : null}
     </section>
   );
+}
+
+function actionTarget(action: ExtensionAction): string {
+  switch (action.type) {
+    case "openFile":
+      return action.line ? `${action.path}:${action.line}` : action.path;
+    case "url":
+      return action.url.replace(/^https?:\/\//, "");
+    case "command":
+      return action.command;
+    case "composer":
+      return "adds to composer";
+    case "panel":
+      return "side panel";
+    default:
+      return "";
+  }
 }
 
 function cardToneLabel(tone: TimelineCard["tone"]): string | undefined {

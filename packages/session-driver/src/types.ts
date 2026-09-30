@@ -258,18 +258,53 @@ export type HostUiResponse =
 
 /**
  * Tier 1 prototype: a card an extension declares as data and pi-gui draws with its own
- * components. Written by `pi.appendEntry("pi-gui.card", card)`.
+* components. Written by `pi.appendEntry("pi-gui.card", card)`.
  */
+export type ExtensionTone = "neutral" | "success" | "warning" | "error";
+
+/** What a slot button may ask the host to do. Every kind is one fixed host behaviour. */
+export type ExtensionAction =
+  | { readonly label: string; readonly type: "openFile"; readonly path: string; readonly line?: number }
+  | { readonly label: string; readonly type: "composer"; readonly text: string }
+  | { readonly label: string; readonly type: "url"; readonly url: string }
+  | { readonly label: string; readonly type: "command"; readonly command: string }
+  | { readonly label: string; readonly type: "panel"; readonly key: string };
+
 export interface ExtensionCard {
+  /** Same key on a later card replaces this one in place. */
+  readonly key?: string;
   readonly title: string;
   readonly subtitle?: string;
-  readonly tone?: "neutral" | "success" | "warning" | "error";
+  readonly tone?: ExtensionTone;
   readonly rows?: readonly { readonly label: string; readonly value: string }[];
-  readonly actions?: readonly {
-    readonly label: string;
-    readonly path: string;
-    readonly line?: number;
-  }[];
+  readonly actions?: readonly ExtensionAction[];
+}
+
+export interface ExtensionPanelRow {
+  readonly label: string;
+  readonly value?: string;
+  readonly tone?: ExtensionTone;
+  readonly actions?: readonly ExtensionAction[];
+}
+
+export interface ExtensionPanelSection {
+  readonly title?: string;
+  readonly rows: readonly ExtensionPanelRow[];
+}
+
+/** A side-panel tab declared as data. Written by `pi.appendEntry("pi-gui.panel", panel)`; latest per key wins. */
+export interface ExtensionPanel {
+  readonly key: string;
+  readonly title: string;
+  readonly sections: readonly ExtensionPanelSection[];
+  readonly actions?: readonly ExtensionAction[];
+}
+
+/** A short label on the thread header and sidebar row. Written by `pi.appendEntry("pi-gui.badge", badge)`. */
+export interface ExtensionBadge {
+  readonly key: string;
+  readonly text: string;
+  readonly tone?: ExtensionTone;
 }
 
 export type HostUiRequest =
@@ -277,6 +312,20 @@ export type HostUiRequest =
       readonly kind: "card";
       readonly requestId: string;
       readonly card: ExtensionCard;
+    }
+  | {
+      readonly kind: "panel";
+      readonly requestId: string;
+      readonly key: string;
+      /** Absent removes the panel. */
+      readonly panel?: ExtensionPanel;
+    }
+  | {
+      readonly kind: "badge";
+      readonly requestId: string;
+      readonly key: string;
+      /** Absent removes the badge. */
+      readonly badge?: ExtensionBadge;
     }
   | {
       readonly kind: "confirm";

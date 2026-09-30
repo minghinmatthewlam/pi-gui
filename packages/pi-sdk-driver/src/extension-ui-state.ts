@@ -1,4 +1,4 @@
-import type { HostUiRequest } from "@pi-gui/session-driver";
+import type { ExtensionBadge, ExtensionPanel, HostUiRequest } from "@pi-gui/session-driver";
 
 export interface ExtensionUiWidgetState {
   readonly key: string;
@@ -9,6 +9,8 @@ export interface ExtensionUiWidgetState {
 export interface ExtensionUiState {
   readonly statuses: Map<string, string>;
   readonly widgets: Map<string, ExtensionUiWidgetState>;
+  readonly panels: Map<string, ExtensionPanel>;
+  readonly badges: Map<string, ExtensionBadge>;
   title: string | undefined;
   editorText: string | undefined;
 }
@@ -22,6 +24,8 @@ export function createEmptyExtensionUiState(): ExtensionUiState {
   return {
     statuses: new Map(),
     widgets: new Map(),
+    panels: new Map(),
+    badges: new Map(),
     title: undefined,
     editorText: undefined,
   };
@@ -49,6 +53,14 @@ export function applyHostUiRequestToExtensionUiState(
       } else {
         state.widgets.delete(request.key);
       }
+      break;
+    case "panel":
+      if (request.panel) state.panels.set(request.key, request.panel);
+      else state.panels.delete(request.key);
+      break;
+    case "badge":
+      if (request.badge) state.badges.set(request.key, request.badge);
+      else state.badges.delete(request.key);
       break;
     case "title":
       state.title = request.title;

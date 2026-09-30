@@ -186,6 +186,8 @@ export function serializeExtensionUiState(
     instanceId: state.instanceId,
     statuses: [...state.statuses.entries()].map(([key, text]) => ({ key, text })),
     widgets: [...state.widgets.values()],
+    panels: [...state.panels.values()],
+    badges: [...state.badges.values()],
     pendingDialogs: [...state.pendingDialogs],
     ...(state.title ? { title: state.title } : {}),
     ...(state.editorText ? { editorText: state.editorText } : {}),

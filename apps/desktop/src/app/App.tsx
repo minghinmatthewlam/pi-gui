@@ -32,6 +32,11 @@ import {
 } from "../features/extensions/extension-view-panel";
 import { useExtensionViews } from "../features/extensions/use-extension-views";
 import { useExtensionHostActions } from "../features/extensions/use-extension-host-actions";
+import {
+  ExtensionBadgeChip,
+  ExtensionDataPanel,
+  useExtensionSlotActions,
+} from "../features/extensions/extension-slots";
 import { useSidePanelTabHintsVisible } from "../features/workbench/side-panel-tab-hints";
 import { Workbench } from "../features/workbench/workbench";
 import { renderBuiltinToolPanel } from "../features/workbench/builtin-tools";
@@ -423,6 +428,21 @@ export default function App() {
     },
     [api],
   );
+  const openExtensionPanel = useCallback(
+    (panelKey: string) => workbenchRef.current.openTool({ kind: "panel", panelKey }),
+    [],
+  );
+  const runExtensionAction = useExtensionSlotActions({
+    api,
+    target: workbenchTarget,
+    openWorkspaceFileLine: handleOpenWorkspaceFileLine,
+    setComposerDraft,
+    openPanel: openExtensionPanel,
+  });
+  const activeExtensionPanel =
+    activeTool?.kind === "panel"
+      ? selectedExtensionUi?.panels.find((panel) => panel.key === activeTool.panelKey)
+      : undefined;
 
   const dismissSchemaSkewNotice = useCallback((sessionKey: string) => {
     setDismissedSchemaSkewSessionKeys((current) => {
@@ -998,6 +1018,9 @@ export default function App() {
                   ? runningLabel
                   : formatRelativeTime(selectedSession.updatedAt)}
               </div>
+              {selectedExtensionUi?.badges[0] ? (
+                <ExtensionBadgeChip badge={selectedExtensionUi.badges[0]} />
+              ) : null}
               <div
                 className="chat-header__menu-wrap"
                 ref={threadMenu.openMenu?.surface === "header" ? threadMenu.menuWrapRef : undefined}
@@ -1154,6 +1177,7 @@ export default function App() {
                     onViewFileInDiff={handleViewFileInDiff}
                     onOpenTurnChange={turnChanges.openTurnChange}
                     onOpenWorkspaceFileLine={handleOpenWorkspaceFileLine}
+                    onExtensionAction={runExtensionAction}
                     workspacePath={selectedWorkspace.path}
                     onForkFromMessage={
                       selectedSession.status === "running" ? undefined : openForkModal
@@ -1301,6 +1325,7 @@ export default function App() {
             onResize={workbenchWidth.setWidth}
             onTogglePanel={commands.toggleSidePanel}
             extensionViews={extensionViews.views}
+            extensionPanels={selectedExtensionUi?.panels ?? []}
             extensionViewsLoading={extensionViews.loading}
             extensionViewsError={extensionViews.error}
             onReloadExtensionViews={extensionViews.reload}
@@ -1323,6 +1348,14 @@ export default function App() {
                   extensionHostActions.handlePrepareTaskDraftPendingChange
                 }
               />
+            ) : activeTool?.kind === "panel" ? (
+              activeExtensionPanel ? (
+                <ExtensionDataPanel panel={activeExtensionPanel} onAction={runExtensionAction} />
+              ) : (
+                <p className="workbench__unavailable" role="status">
+                  This extension panel is not available in this thread.
+                </p>
+              )
             ) : activeTool && activeTool.kind !== "extension" ? (
               renderBuiltinToolPanel(activeTool.kind, {
                 changes: () => (

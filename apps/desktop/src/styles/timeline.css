@@ -1057,3 +1057,148 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ---- Extension slots (prototype): panel tab, badge chip, action buttons ------------- */
+.extension-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.extension-actions__button {
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--ink);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.extension-actions__button:hover:not(:disabled) {
+  background: var(--surface-muted);
+}
+
+.extension-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  overflow-y: auto;
+  color: var(--ink);
+}
+
+.extension-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.extension-panel__title {
+  font-size: var(--text-base);
+  font-weight: var(--font-medium);
+}
+
+.extension-panel__section-title {
+  margin: 0;
+  padding: 12px 14px 4px;
+  color: var(--muted-soft);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.extension-panel__rows {
+  margin: 0;
+  padding: 4px 0;
+  list-style: none;
+}
+
+.extension-panel__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 14px;
+  font-size: 13px;
+}
+
+.extension-panel__row:hover {
+  background: var(--overlay-hover);
+}
+
+.extension-panel__label {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.extension-panel__value {
+  color: var(--muted-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.extension-panel__tone {
+  flex-shrink: 0;
+  color: var(--muted-soft);
+  font-size: 12px;
+}
+
+.extension-panel__row--error .extension-panel__tone {
+  color: var(--error-ink);
+}
+
+.extension-panel__row--success .extension-panel__tone {
+  color: var(--success);
+}
+
+.extension-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  color: var(--muted-strong);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.extension-badge__icon {
+  display: inline-flex;
+  width: 12px;
+  height: 12px;
+  color: var(--muted-soft);
+}
+
+.extension-badge__icon svg {
+  width: 12px;
+  height: 12px;
+}
+
+.extension-badge--error {
+  color: var(--error-ink);
+}
+
+.extension-badge--success {
+  color: var(--success);
+}
+
+.extension-badge--compact {
+  height: 18px;
+  padding: 0 6px;
+  font-size: 11px;
+  max-width: 90px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: inline-block;
+  line-height: 16px;
+}

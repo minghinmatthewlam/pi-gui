@@ -16,7 +16,9 @@ export function isBuiltinToolKind(value: unknown): value is BuiltinToolKind {
 
 export type ToolRef =
   | { readonly kind: BuiltinToolKind }
-  | { readonly kind: "extension"; readonly extensionId: string; readonly viewId: string };
+  | { readonly kind: "extension"; readonly extensionId: string; readonly viewId: string }
+  /** A side-panel tab an extension declared as data (`pi-gui.panel`), keyed per task. */
+  | { readonly kind: "panel"; readonly panelKey: string };
 
 export type ToolSelection =
   { readonly kind: "chooser" } | { readonly kind: "tool"; readonly toolId: string };
@@ -51,9 +53,9 @@ export interface SaveTaskWorkbenchTemplateInput {
 }
 
 export function toolRefId(tool: ToolRef): string {
-  return tool.kind === "extension"
-    ? JSON.stringify(["extension", tool.extensionId, tool.viewId])
-    : tool.kind;
+  if (tool.kind === "extension") return JSON.stringify(["extension", tool.extensionId, tool.viewId]);
+  if (tool.kind === "panel") return JSON.stringify(["panel", tool.panelKey]);
+  return tool.kind;
 }
 
 /** Shared by the disk reader and IPC boundary so neither can accept a wider schema. */
@@ -63,7 +65,10 @@ export function decodeTaskWorkbenchTemplate(value: unknown): TaskWorkbenchTempla
   if (!Array.isArray(root.tools) || root.tools.length > MAX_WORKBENCH_TOOLS) fail("tools");
   const retired = new Set<string>();
   const tools: ToolRef[] = root.tools.flatMap((value: unknown): ToolRef[] => {
-    const tool = record(value, ["kind", "extensionId", "viewId"]);
+    const tool = record(value, ["kind", "extensionId", "viewId", "panelKey"]);
+    if (tool.kind === "panel") {
+      return [{ kind: "panel", panelKey: text(tool.panelKey, 256) }];
+    }
     if (tool.kind === "extension") {
       return [
         {
@@ -73,7 +78,9 @@ export function decodeTaskWorkbenchTemplate(value: unknown): TaskWorkbenchTempla
         },
       ];
     }
-    if (tool.extensionId !== undefined || tool.viewId !== undefined) fail("builtin tool fields");
+    if (tool.extensionId !== undefined || tool.viewId !== undefined || tool.panelKey !== undefined) {
+      fail("builtin tool fields");
+    }
     if (RETIRED_TOOL_KINDS.includes(tool.kind)) {
       retired.add(tool.kind as string);
       return [];
