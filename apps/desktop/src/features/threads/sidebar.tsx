@@ -756,8 +756,8 @@ function WorkspaceFolderContent(
     dragHandleProps,
   } = props;
   // Folder grouping lists threads under each folder, so the row folds them
-  // like Codex; without threads the row just selects the folder.
-  const toggleCollapsed = threads ? onToggleCollapsed : undefined;
+  // like Codex; with no threads to fold, the row just selects the folder.
+  const toggleCollapsed = threads?.length ? onToggleCollapsed : undefined;
   const collapsible = toggleCollapsed !== undefined;
   const history =
     threads && !collapsed ? threadHistoryPreview(threads, historyExpanded) : undefined;

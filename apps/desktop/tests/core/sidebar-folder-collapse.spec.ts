@@ -14,8 +14,9 @@ test("folds a folder group from its row and keeps it folded across restart", asy
   const userDataDir = await makeUserDataDir();
   const alphaPath = await makeWorkspace("collapse-alpha");
   const betaPath = await makeWorkspace("collapse-beta");
+  const emptyPath = await makeWorkspace("collapse-empty");
   const firstRun = await launchDesktop(userDataDir, {
-    initialWorkspaces: [alphaPath, betaPath],
+    initialWorkspaces: [alphaPath, betaPath, emptyPath],
     testMode: "background",
   });
 
@@ -46,6 +47,17 @@ test("folds a folder group from its row and keeps it folded across restart", asy
       .poll(async () => (await getDesktopState(window)).collapsedWorkspaceIds)
       .toEqual([workspaceId]);
     expect((await getDesktopState(window)).selectedSessionId).toBe(selectedBefore);
+
+    // A folder with no threads has nothing to fold, so its row still selects it.
+    const empty = await waitForWorkspaceByPath(window, emptyPath);
+    const emptyRow = window.locator(
+      `.workspace-group[data-workspace-id="${empty.id}"] .workspace-row__select`,
+    );
+    await expect(emptyRow).not.toHaveAttribute("aria-expanded", /.*/);
+    await emptyRow.click();
+    await expect
+      .poll(async () => (await getDesktopState(window)).selectedWorkspaceId)
+      .toBe(empty.id);
   } finally {
     await firstRun.close();
   }
