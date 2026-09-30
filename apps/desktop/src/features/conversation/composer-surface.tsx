@@ -75,6 +75,8 @@ interface ComposerSurfaceProps {
   readonly extensionDockExpanded?: boolean;
   readonly onToggleExtensionDock?: () => void;
   readonly footer: ReactNode;
+  /** Transcript annotations waiting to go with the next message. */
+  readonly annotationChip?: ReactNode;
 }
 
 export function ComposerSurface({
@@ -119,6 +121,7 @@ export function ComposerSurface({
   extensionDockExpanded = false,
   onToggleExtensionDock,
   footer,
+  annotationChip,
 }: ComposerSurfaceProps) {
   const [isDragActive, setIsDragActive] = useState(false);
   const dragDepthRef = useRef(0);
@@ -207,6 +210,7 @@ export function ComposerSurface({
         onRemoveMessage={onRemoveQueuedMessage}
         onSteerMessage={onSteerQueuedMessage}
       />
+      {annotationChip}
       {attachments.length > 0 ? (
         <div className="composer__attachments">
           {attachments.map((attachment) => (

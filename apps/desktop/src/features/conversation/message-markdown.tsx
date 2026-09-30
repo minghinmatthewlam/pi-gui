@@ -57,8 +57,11 @@ export const MessageMarkdown = memo(function MessageMarkdown({
   text,
   workspacePath,
   onOpenWorkspaceFileLine,
+  annotationRoot = false,
 }: {
   readonly text: string;
+  /** Marks this text as what transcript annotations anchor to. */
+  readonly annotationRoot?: boolean;
   readonly workspacePath?: string;
   readonly onOpenWorkspaceFileLine?: (target: WorkspaceFileLine) => void;
 }) {
@@ -77,7 +80,7 @@ export const MessageMarkdown = memo(function MessageMarkdown({
     [onOpenWorkspaceFileLine, workspacePath],
   );
   return (
-    <div className="message__content">
+    <div className="message__content" data-annotation-root={annotationRoot ? "" : undefined}>
       <ReactMarkdown components={components} remarkPlugins={remarkPlugins}>
         {text}
       </ReactMarkdown>

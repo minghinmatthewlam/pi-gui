@@ -2095,6 +2095,9 @@ function transcriptText(message: TranscriptMessage): string {
   if (message.kind === "tool") {
     return message.detail ? `${message.label}: ${message.detail}` : message.label;
   }
+  if (message.kind === "custom") {
+    return `[${message.customType}] ${message.text}`;
+  }
   return message.metadata ? `${message.label}: ${message.metadata}` : message.label;
 }
 
