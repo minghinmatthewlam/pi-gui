@@ -124,6 +124,11 @@ export interface SessionMessageInput {
   readonly text: string;
   readonly attachments?: readonly SessionAttachment[];
   readonly deliverAs?: SessionMessageDeliveryMode;
+  /**
+   * Refuse the message unless it runs a command an extension registered. Set for commands
+   * that come from an extension's button, so a button can never start a model turn.
+   */
+  readonly extensionCommandOnly?: boolean;
 }
 
 export interface CreateSessionOptions {

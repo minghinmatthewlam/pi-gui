@@ -904,6 +904,9 @@ export class SessionSupervisor {
     const record = await this.ensureRecord(sessionRef);
     const session = this.requireSession(record);
     const isExtensionCommand = this.isExtensionCommand(session, input.text);
+    if (input.extensionCommandOnly && !isExtensionCommand) {
+      throw new Error(`${input.text.trim().split(/\s/, 1)[0]} is not an extension command`);
+    }
     if (session.isStreaming && !isExtensionCommand && !input.deliverAs) {
       throw new Error(
         "Session is already streaming. Specify deliverAs ('steer' or 'followUp') to queue the message.",

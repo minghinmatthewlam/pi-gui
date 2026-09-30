@@ -7,6 +7,8 @@ import type {
   ExtensionViewCatalogChange,
 } from "./extension-views";
 import type { RuntimeSettingsSnapshot } from "@pi-gui/session-driver/runtime-types";
+import type { ExtensionAction } from "@pi-gui/session-driver";
+import type { ExtensionActionEffect } from "./extension-actions";
 import type {
   NavigateSessionTreeOptions,
   NavigateSessionTreeResult,
@@ -78,6 +80,7 @@ export const desktopIpc = {
   openExtensionView: "pi-gui:open-extension-view",
   sendExtensionViewMessage: "pi-gui:send-extension-view-message",
   closeExtensionView: "pi-gui:close-extension-view",
+  runExtensionAction: "pi-gui:run-extension-action",
   extensionViewMessage: "pi-gui:extension-view-message",
   extensionViewCatalogChanged: "pi-gui:extension-view-catalog-changed",
   stateRequest: "pi-gui:state-request",
@@ -821,6 +824,8 @@ export interface PiDesktopApi {
   getFileDiff(workspaceId: string, filePath: string): Promise<string>;
   stageFile(workspaceId: string, filePath: string, stagingSourcePath?: string): Promise<void>;
   onExtensionViewOpenFile(listener: (event: ExtensionViewOpenFile) => void): () => void;
+  /** Runs a card button's action for the window's selected thread; see `app-operations.ts`. */
+  runExtensionAction(action: ExtensionAction): Promise<ExtensionActionEffect | null>;
   listExtensionViews(target: SessionRef): Promise<readonly DesktopExtensionViewInfo[]>;
   openExtensionView(input: OpenExtensionViewInput): Promise<ExtensionViewConnection>;
   sendExtensionViewMessage(input: ExtensionViewMessage): Promise<void>;

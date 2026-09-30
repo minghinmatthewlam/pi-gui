@@ -31,6 +31,7 @@ import {
   type ExtensionViewTheme,
 } from "../features/extensions/extension-view-panel";
 import { useExtensionViews } from "../features/extensions/use-extension-views";
+import { useExtensionCardActions } from "../features/extensions/use-extension-card-actions";
 import { useExtensionHostActions } from "../features/extensions/use-extension-host-actions";
 import { useSidePanelTabHintsVisible } from "../features/workbench/side-panel-tab-hints";
 import { Workbench } from "../features/workbench/workbench";
@@ -424,6 +425,13 @@ export default function App() {
     },
     [api],
   );
+  const runExtensionCardAction = useExtensionCardActions({
+    api,
+    target: workbenchTarget,
+    openWorkspaceFileLine: handleOpenWorkspaceFileLine,
+    composerDraftRef,
+    setComposerDraft,
+  });
 
   const dismissSchemaSkewNotice = useCallback((sessionKey: string) => {
     setDismissedSchemaSkewSessionKeys((current) => {
@@ -1155,6 +1163,7 @@ export default function App() {
                     onViewFileInDiff={handleViewFileInDiff}
                     onOpenTurnChange={turnChanges.openTurnChange}
                     onOpenWorkspaceFileLine={handleOpenWorkspaceFileLine}
+                    onExtensionAction={runExtensionCardAction}
                     workspacePath={selectedWorkspace.path}
                     onForkFromMessage={
                       selectedSession.status === "running" ? undefined : openForkModal

@@ -69,7 +69,6 @@ export type {
 
 export type {
   ExtensionCard,
-  ExtensionCardAction,
   ExtensionCardRow,
   ExtensionCardTone,
   SessionTranscriptCard,
@@ -84,6 +83,8 @@ export type {
 } from "./transcript.js";
 
 export { EXTENSION_CARD_CUSTOM_TYPE, isCardEntryItem } from "./transcript.js";
+export type { ExtensionAction, ExtensionActionType } from "./extension-actions.js";
+export { parseExtensionAction, parseExtensionUrl } from "./extension-actions.js";
 export { sessionKey } from "./identity.js";
 export type {
   TurnCaptureOpening,

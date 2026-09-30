@@ -87,21 +87,10 @@ export function sameRowContent(a: DisplayTimelineItem, b: DisplayTimelineItem): 
 }
 
 function sameCard(a: ExtensionCard, b: ExtensionCard): boolean {
-  return (
-    a.title === b.title &&
-    a.subtitle === b.subtitle &&
-    a.tone === b.tone &&
-    a.rows.length === b.rows.length &&
-    a.rows.every((row, i) => row.label === b.rows[i]?.label && row.value === b.rows[i]?.value) &&
-    a.actions.length === b.actions.length &&
-    a.actions.every(
-      (action, i) =>
-        action.label === b.actions[i]?.label &&
-        action.path === b.actions[i]?.path &&
-        action.line === b.actions[i]?.line,
-    )
-  );
+  // Cards are small plain data parsed in one fixed field order, so this compares every field.
+  return a === b || JSON.stringify(a) === JSON.stringify(b);
 }
+
 export function layoutRows(
   items: readonly DisplayTimelineItem[],
   heights: ReadonlyMap<string, number>,

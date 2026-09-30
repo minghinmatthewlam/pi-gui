@@ -164,6 +164,11 @@ export interface ConversationOwner {
     options?: { readonly deliverAs?: "steer" | "followUp" },
   ): Promise<DesktopAppState>;
   composerSubmitNeedsSenderView(sessionRef: SessionRef | undefined, textInput: string): boolean;
+  /**
+   * Runs an extension command for a card button: like typing it, but the draft and
+   * attachments stay, and the driver refuses anything that is not an extension command.
+   */
+  runExtensionCommand(sessionRef: SessionRef, command: string): Promise<DesktopAppState>;
   submitComposerToSession(
     sessionRef: SessionRef,
     textInput: string,
@@ -201,6 +206,7 @@ export function createConversationOwner(store: ConversationOwnerHost): Conversat
     steerQueuedComposerMessage: (sessionRef, messageId) =>
       steerQueuedComposerMessage(store, sessionRef, messageId),
     submitComposer: (sessionRef, text, options) => submitComposer(store, sessionRef, text, options),
+    runExtensionCommand: (sessionRef, command) => runExtensionCommand(store, sessionRef, command),
     composerSubmitNeedsSenderView: (sessionRef, text) =>
       sessionRef
         ? composerSubmitNeedsSenderView(
@@ -601,6 +607,48 @@ async function submitComposerToSession(
   }
 }
 
+async function runExtensionCommand(
+  store: ComposerStore,
+  sessionRef: SessionRef,
+  commandText: string,
+): Promise<DesktopAppState> {
+  await store.initialize();
+  const text = commandText.trim();
+  const command = resolveRuntimeSlashCommand(
+    text,
+    store.runtimeForWorkspace(sessionRef.workspaceId),
+    store.conversationState.sessionCommandsBySession.get(sessionKey(sessionRef)) ?? [],
+  );
+  // The driver is the check that matters (`extensionCommandOnly`); this only keeps the
+  // terminal-only bookkeeping the same as a typed command.
+  const tracked = command?.source === "extension" ? command : undefined;
+  if (tracked) {
+    const compatibility = store.getLearnedRuntimeCommandCompatibility(
+      sessionRef.workspaceId,
+      tracked,
+    );
+    if (compatibility?.status === "terminal-only") {
+      return store.withSessionError(sessionRef, compatibility.message);
+    }
+    store.beginRuntimeCommandExecution(sessionRef, tracked);
+  }
+  try {
+    await sendMessageToSession(store, sessionRef, text, [], {
+      keepComposer: true,
+      extensionCommandOnly: true,
+    });
+  } catch (error) {
+    if (tracked) store.finishRuntimeCommandExecution(sessionRef);
+    return store.withSessionError(sessionRef, error);
+  }
+  const outcome = tracked ? store.finishRuntimeCommandExecution(sessionRef) : undefined;
+  await store.refreshSessionCommandsFor(sessionRef);
+  return store.refreshState({
+    clearLastError: !outcome?.blockedMessage,
+    markSelectedSessionViewed: false,
+  });
+}
+
 async function setSessionModel(
   store: ComposerStore,
   target: WorkspaceSessionTarget,
@@ -717,6 +765,9 @@ async function sendMessageToSession(
   attachments: readonly ComposerAttachment[],
   options: {
     readonly rollbackOptimisticMessageOnError?: boolean;
+    /** Leave the composer draft and attachments alone (a card button, not the composer, sent this). */
+    readonly keepComposer?: boolean;
+    readonly extensionCommandOnly?: boolean;
   } = {},
 ): Promise<void> {
   const key = sessionKey(sessionRef);
@@ -737,13 +788,16 @@ async function sendMessageToSession(
   store.publishSelectedTranscriptFor(sessionRef);
   clearActiveAssistantMessage(store.conversationState.activeAssistantMessageBySession, sessionRef);
   store.conversationState.sessionErrorsBySession.delete(key);
-  store.conversationState.composerDraftsBySession.delete(key);
-  store.conversationState.composerAttachmentsBySession.delete(key);
-  await store.persistComposerAttachments(key, []);
+  if (!options.keepComposer) {
+    store.conversationState.composerDraftsBySession.delete(key);
+    store.conversationState.composerAttachmentsBySession.delete(key);
+    await store.persistComposerAttachments(key, []);
+  }
   try {
     await store.driver.sendUserMessage(sessionRef, {
       text,
       attachments: toSessionAttachments(attachments),
+      ...(options.extensionCommandOnly ? { extensionCommandOnly: true } : {}),
     });
   } catch (error) {
     if (rollbackOptimisticMessageOnError) {

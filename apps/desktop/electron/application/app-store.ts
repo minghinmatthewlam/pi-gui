@@ -2,6 +2,7 @@ import { JsonCatalogStore } from "@pi-gui/catalogs/node";
 import { sessionKey } from "@pi-gui/session-driver";
 import type { SessionSchemaInfo } from "@pi-gui/session-driver";
 import type { BrowserWindow } from "electron";
+import { randomUUID } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import { homedir, hostname } from "node:os";
 import { join, resolve } from "node:path";
@@ -55,6 +56,7 @@ import {
   type SendChildThreadFollowUpInput,
   type SetChildSupervisionLoopInput,
   type SelectedTranscriptRecord,
+  type SessionExtensionNoticeRecord,
   type StartThreadInput,
   type StartupDiagnostic,
   type ThemeMode,
@@ -1087,6 +1089,22 @@ export class DesktopAppStore {
 
   composerSubmitNeedsSenderView(sessionRef: SessionRef | undefined, textInput: string): boolean {
     return this.conversationOwner.composerSubmitNeedsSenderView(sessionRef, textInput);
+  }
+
+  async runExtensionCommand(sessionRef: SessionRef, command: string): Promise<DesktopAppState> {
+    return this.conversationOwner.runExtensionCommand(sessionRef, command);
+  }
+
+  /** Shows why a card button did nothing, as the same toast an extension's notify uses. */
+  reportExtensionActionFailure(sessionRef: SessionRef, error: unknown): DesktopAppState {
+    const message = error instanceof Error ? error.message : String(error);
+    this.addExtensionNotice(sessionRef, {
+      id: `action-failure:${randomUUID()}`,
+      level: "error",
+      message: `Couldn't run that button: ${message}`,
+      createdAt: new Date().toISOString(),
+    });
+    return this.emit();
   }
 
   async editQueuedComposerMessage(
@@ -3049,15 +3067,12 @@ export class DesktopAppStore {
           "extension-editor-text",
         );
         break;
-      case "notify": {
-        const notice = extensionNoticeFromRequest(event.request, event.timestamp);
-        const dropped = appendExtensionNotice(uiState, notice);
-        for (const entry of dropped) {
-          this.clearExtensionDialogTimeout(event.sessionRef, extensionNoticeTimerId(entry.id));
-        }
-        this.scheduleExtensionNoticeExpiry(event.sessionRef, notice.id);
+      case "notify":
+        this.addExtensionNotice(
+          event.sessionRef,
+          extensionNoticeFromRequest(event.request, event.timestamp),
+        );
         break;
-      }
       default:
         if (isExtensionUiDialogRequest(event.request)) {
           const dialog = event.request;
@@ -3122,6 +3137,14 @@ export class DesktopAppStore {
   }
 
   /** Notices share the dialog timer map, so session reset and close clear both. */
+  private addExtensionNotice(sessionRef: SessionRef, notice: SessionExtensionNoticeRecord): void {
+    const dropped = appendExtensionNotice(this.getOrCreateExtensionUiState(sessionRef), notice);
+    for (const entry of dropped) {
+      this.clearExtensionDialogTimeout(sessionRef, extensionNoticeTimerId(entry.id));
+    }
+    this.scheduleExtensionNoticeExpiry(sessionRef, notice.id);
+  }
+
   private scheduleExtensionNoticeExpiry(sessionRef: SessionRef, noticeId: string): void {
     const timerId = extensionNoticeTimerId(noticeId);
     this.clearExtensionDialogTimeout(sessionRef, timerId);
