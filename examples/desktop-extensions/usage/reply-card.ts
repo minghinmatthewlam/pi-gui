@@ -27,19 +27,28 @@ export function replyCard(facts: ReplyFacts): ReplyCard {
   let cacheWrite = 0;
   let cost = 0;
   let toolCalls = 0;
-  for (const reply of replies) {
-    input += count(reply.usage?.input);
-    output += count(reply.usage?.output);
-    cacheRead += count(reply.usage?.cacheRead);
-    cacheWrite += count(reply.usage?.cacheWrite);
-    cost += count(reply.usage?.cost?.total);
-    toolCalls += reply.content.filter(
-      (block) => isRecord(block) && block.type === "toolCall",
-    ).length;
+  // Tools that call a model themselves carry that usage on their result, as the panel counts it.
+  const add = (usage: Usage | undefined, paid: boolean) => {
+    input += count(usage?.input);
+    output += count(usage?.output);
+    cacheRead += count(usage?.cacheRead);
+    cacheWrite += count(usage?.cacheWrite);
+    if (paid) cost += count(usage?.cost?.total);
+  };
+  for (const message of facts.messages) {
+    if (isAssistant(message)) {
+      add(message.usage, !facts.isSubscription(message.provider, message.model));
+      toolCalls += message.content.filter(
+        (block) => isRecord(block) && block.type === "toolCall",
+      ).length;
+    } else if (isRecord(message) && message.role === "toolResult" && isRecord(message.usage)) {
+      add(message.usage as Usage, true);
+    }
   }
   const last = replies.at(-1);
   const subscription =
     replies.length > 0 &&
+    cost === 0 &&
     replies.every((reply) => facts.isSubscription(reply.provider, reply.model));
   const prompt = input + cacheRead + cacheWrite;
   const rows = [
@@ -58,7 +67,11 @@ export function replyCard(facts: ReplyFacts): ReplyCard {
       label: "Context",
       value: `${formatPercent(context.tokens / context.contextWindow)} · ${formatTokens(context.tokens)} of ${formatTokens(context.contextWindow)}`,
     });
-  const stopped = last?.stopReason === "aborted";
+  // A run that ends on a tool result instead of a reply was stopped while a tool ran.
+  const endedOnTool =
+    isRecord(facts.messages.at(-1)) &&
+    (facts.messages.at(-1) as Record<string, unknown>).role === "toolResult";
+  const stopped = last?.stopReason === "aborted" || endedOnTool;
   const failed = last?.stopReason === "error";
   const model = last ? (facts.modelName(last.provider, last.model) ?? last.model) : undefined;
   const subtitle = [stopped ? "Stopped" : failed ? "Failed" : "", model]
@@ -86,18 +99,20 @@ export function formatReplyCost(value: number): string {
   return `$${value.toFixed(value < 1 ? 3 : 2)}`;
 }
 
+interface Usage {
+  input?: unknown;
+  output?: unknown;
+  cacheRead?: unknown;
+  cacheWrite?: unknown;
+  cost?: { total?: unknown };
+}
+
 interface AssistantReply {
   provider: string;
   model: string;
   stopReason?: unknown;
   content: unknown[];
-  usage?: {
-    input?: unknown;
-    output?: unknown;
-    cacheRead?: unknown;
-    cacheWrite?: unknown;
-    cost?: { total?: unknown };
-  };
+  usage?: Usage;
 }
 
 function isAssistant(message: unknown): message is AssistantReply {

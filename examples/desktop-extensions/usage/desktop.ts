@@ -513,6 +513,7 @@ export async function mount(root: HTMLElement, host: DesktopViewContext): Promis
     const button = h("button", { class: "more open", type: "button" }, "Open thread");
     button.onclick = () => {
       actionError = "";
+      render();
       host.actions.openThread(id).catch((reason: unknown) => {
         actionError = reason instanceof Error ? reason.message : String(reason);
         render();

@@ -68,3 +68,28 @@ await test("subscriptions, stopped replies and unknown context read plainly", ()
   assert.equal(formatReplyCost(0.0004), "<$0.001");
   assert.equal(formatReplyCost(1.5), "$1.50");
 });
+
+await test("nested model calls count, subscription replies cost nothing, and a stop mid-tool shows", () => {
+  const card = replyCard({
+    ...facts,
+    isSubscription: (_provider, model) => model === "plan-1",
+    elapsedMs: 3_000,
+    context: null,
+    messages: [
+      reply({ input: 100, output: 10, cost: { total: 0.5 } }, [{ type: "toolCall" }], {
+        model: "plan-1",
+      }),
+      {
+        role: "toolResult",
+        content: [],
+        usage: { input: 1_000, output: 200, cost: { total: 0.02 } },
+      },
+    ],
+  });
+  const value = (label: string) => card.rows.find((row) => row.label === label)?.value;
+  assert.equal(value("Tokens"), "1.1k in · 210 out · 0% cached");
+  // The subscription reply's reported cost is left out; the nested call's cost is kept.
+  assert.equal(value("Cost"), "$0.020");
+  assert.equal(card.subtitle, "Stopped · Fast 1");
+  assert.equal(card.tone, "warning");
+});

@@ -642,6 +642,7 @@ async function mount(root, host) {
     const button = h("button", { class: "more open", type: "button" }, "Open thread");
     button.onclick = () => {
       actionError = "";
+      render();
       host.actions.openThread(id).catch((reason) => {
         actionError = reason instanceof Error ? reason.message : String(reason);
         render();
