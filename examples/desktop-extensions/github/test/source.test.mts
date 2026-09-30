@@ -215,7 +215,7 @@ await test("the model's github_read gets one issue or PR as bounded, quoted text
   const calls = (await readFile(responses.log, "utf8"))
     .trim()
     .split("\n")
-    .map((line) => JSON.parse(line));
+    .map((line) => JSON.parse(line) as string[]);
   assert.deepEqual(calls[1].slice(0, 3), ["issue", "view", "9"]);
   assert.deepEqual(calls[3].slice(0, 3), ["pr", "view", "7"]);
 
