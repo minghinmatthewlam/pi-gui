@@ -1751,13 +1751,20 @@ export class DesktopAppStore {
     });
   }
 
-  /** Reloads open threads so they re-read their config; one failing does not stop the others. */
+  /**
+   * Reloads open threads so they re-read their config; one failing does not stop the others. A
+   * thread in the middle of a turn or compaction reloads when that ends, so its tools and MCP
+   * connections are not torn down under it.
+   */
   private async reloadOpenSessions(workspaceIds: readonly string[]): Promise<boolean> {
     const reloads = await Promise.allSettled(
-      workspaceIds.map((workspaceId) => {
-        this.clearExtensionUiForWorkspace(workspaceId);
-        return this.reloadSessionsForWorkspace(workspaceId);
-      }),
+      workspaceIds
+        .flatMap((workspaceId) => this.sessionRefsForWorkspace(workspaceId))
+        .map(async (sessionRef) => {
+          if ((await this.driver.reloadSessionWhenIdle(sessionRef)) === "reloaded") {
+            this.clearExtensionUiForSession(sessionRef);
+          }
+        }),
     );
     const failed = reloads.filter((result) => result.status === "rejected");
     for (const result of failed) {
@@ -1866,16 +1873,24 @@ export class DesktopAppStore {
       } else {
         this.runtimeByWorkspace.set(workspaceId, snapshot);
       }
-      if (options?.reloadSessions) {
-        this.clearExtensionUiForWorkspace(workspaceId);
-        await this.reloadSessionsForWorkspace(workspaceId);
-      }
+      const reloaded = options?.reloadSessions
+        ? await this.reloadOpenSessions(
+            options.refreshAllWorkspaces
+              ? this.state.workspaces.map((workspace) => workspace.id)
+              : [workspaceId],
+          )
+        : true;
       if (options?.refreshAllWorkspaces) {
         await this.refreshSessionCommandsForAllWorkspaces();
       } else {
         await this.refreshSessionCommandsForWorkspace(workspaceId);
       }
-      return this.refreshState({ clearLastError: true });
+      const state = await this.refreshState({ clearLastError: true });
+      return reloaded
+        ? state
+        : this.withError(
+            "Some open threads could not reload; they pick up the change when reopened.",
+          );
     });
   }
 
