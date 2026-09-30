@@ -3,7 +3,11 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { SessionRef } from "@pi-gui/session-driver";
-import type { SessionRecord, WorkspaceRecord } from "../../contracts/desktop-state";
+import type {
+  DesktopAppState,
+  SessionRecord,
+  WorkspaceRecord,
+} from "../../contracts/desktop-state";
 import {
   runExtensionAction as runChecked,
   type AppOperationHost,
@@ -36,8 +40,9 @@ async function fixture() {
       commands.push(command);
     },
     workspaces: () => folders,
-    selectThread: async (thread) => {
-      selected.push(thread);
+    selectThread: async (resolve) => {
+      selected.push(resolve());
+      return { lastError: undefined } as DesktopAppState;
     },
   };
   return { host, opened, commands, selected };

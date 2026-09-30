@@ -44,12 +44,11 @@ export async function performExtensionViewHostAction(
       openExternal: owners.openExternal,
       runExtensionCommand: () => Promise.reject(new Error("Views can't run commands")),
       workspaces: () => owners.store.getWorkspaceRecords(),
-      selectThread: async (thread) => {
-        await owners.windows.runStateAction(window, async () => {
+      selectThread: (resolve) =>
+        owners.windows.runStateAction(window, async () => {
           requireCurrentTask();
-          return owners.store.selectSession(thread);
-        });
-      },
+          return owners.store.selectSession(resolve());
+        }),
     };
     await runExtensionAction(
       host,

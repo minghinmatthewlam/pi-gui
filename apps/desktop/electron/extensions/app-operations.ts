@@ -1,7 +1,7 @@
 import { stat } from "node:fs/promises";
 import path from "node:path";
 import { parseExtensionUrl, type ExtensionAction, type SessionRef } from "@pi-gui/session-driver";
-import type { WorkspaceRecord } from "../../contracts/desktop-state";
+import type { DesktopAppState, WorkspaceRecord } from "../../contracts/desktop-state";
 import type { ExtensionActionEffect } from "../../contracts/extension-actions";
 import { resolveExistingWorkspacePath } from "../platform/files/workspace-paths";
 
@@ -17,15 +17,13 @@ export interface AppOperationHost {
   /** Runs an extension command in the thread; the driver refuses anything else. */
   readonly runExtensionCommand: (target: SessionRef, command: string) => Promise<void>;
   readonly workspaces: () => readonly WorkspaceRecord[];
-  readonly selectThread: (thread: SessionRef) => Promise<void>;
+  /** Selects the thread `resolve` names once the window's queue reaches it. */
+  readonly selectThread: (resolve: () => SessionRef) => Promise<DesktopAppState>;
 }
 
 /** An action as the app runs it; the label only matters for drawing a button. */
-export type AppOperation = ExtensionAction extends infer Action
-  ? Action extends ExtensionAction
-    ? Omit<Action, "label">
-    : never
-  : never;
+export type AppOperation = DistributiveOmit<ExtensionAction, "label">;
+type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 
 /** Runs the one operation for a checked action, on behalf of the target thread. */
 export async function runExtensionAction(
@@ -59,9 +57,15 @@ export async function runExtensionAction(
       await host.runExtensionCommand(target, action.command);
       return undefined;
     case "openThread": {
-      const thread = threadInFolder(host.workspaces(), target, action.sessionId);
-      if (!thread) throw new Error("That thread isn't open in this folder");
-      await host.selectThread(thread);
+      const resolve = () => {
+        const thread = threadInFolder(host.workspaces(), target, action.sessionId);
+        if (!thread) throw new Error("That thread isn't open in this folder");
+        return thread;
+      };
+      // Refuse at once, and again in the queue in case the thread was archived meanwhile.
+      resolve();
+      const state = await host.selectThread(resolve);
+      if (state.lastError) throw new Error(state.lastError);
       return undefined;
     }
     default:

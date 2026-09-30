@@ -89,6 +89,7 @@ export function parseDesktopHostAction(value: unknown): DesktopHostAction {
   if (value.type === "openUrl") {
     assertKeys(value, ["type", "url"], []);
     // Main opens https links only; this checks the shape before anything leaves the frame.
+    // The limits match session-driver's `parseExtensionAction`, which main applies again.
     if (typeof value.url !== "string" || !value.url || value.url.length > 2048) {
       throw new TypeError("Invalid link");
     }
