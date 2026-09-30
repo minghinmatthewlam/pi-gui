@@ -144,9 +144,11 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
     const context = await this.ensureContext(workspace);
     const provider = context.modelRuntime.getProvider(providerId);
     const authType: LoginAuthType = provider?.auth.oauth ? "oauth" : "api_key";
-    // Sign in with ChatGPT identifies the installation; share the id Pi's CLI stores.
+    // Sign in with ChatGPT identifies the installation; share the id Pi's CLI stores. A fresh
+    // manager, because the npm-lookup fallback manager never writes settings to disk.
     await context.modelRuntime.login(providerId, authType, toAuthInteraction(callbacks), {
-      getDeviceId: () => context.settingsManager.getOrCreateDeviceId(),
+      getDeviceId: () =>
+        SettingsManager.create(workspace.path, this.agentDir).getOrCreateDeviceId(),
     });
     await this.reloadResources(context);
     await this.autoEnableModelsForAuthenticatedProviders(context, [providerId]);
