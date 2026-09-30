@@ -90,3 +90,21 @@ test("tree summaries report per-file line counts, renames and binary files", asy
     { path: "tab\tname.txt", lines: { added: 1, removed: 0 } },
   ]);
 });
+
+test("a turn's card stays above an extension message posted after it", () => {
+  const rows = buildDisplayTimelineItems(
+    [
+      message("u1", "user"),
+      message("a1", "assistant"),
+      {
+        kind: "custom",
+        id: "ci-report",
+        customType: "ci-status",
+        text: "passed",
+        createdAt: "2026-09-24T00:00:00Z",
+      },
+    ],
+    { turnChanges: [turn("first", ["u1", "a1"])] },
+  ).map((row) => row.id);
+  expect(rows).toEqual(["u1", "a1", "turn-changes:first", "ci-report"]);
+});

@@ -1,4 +1,8 @@
-import type { SessionTranscriptMessage } from "@pi-gui/session-driver";
+import { useMemo, useRef } from "react";
+import type {
+  SessionTranscriptCustomMessage,
+  SessionTranscriptMessage,
+} from "@pi-gui/session-driver";
 import type {
   DisplayTimelineItem,
   TimelineActivity,
@@ -7,6 +11,13 @@ import type {
   TimelineTurnMarker,
 } from "../../../contracts/timeline-types";
 import type { ScheduledTaskOrigin } from "../../../contracts/scheduled-tasks";
+import {
+  AnnotationMarkers,
+  type AnnotationMarker,
+  type OpenAnnotation,
+} from "./annotations/annotation-markers";
+import { parseAnnotatedPrompt } from "./annotations/annotation-prompt";
+import { SentAnnotations } from "./annotations/sent-annotations";
 import { ImageAttachmentThumb } from "./image-attachment-thumb";
 import { MessageMarkdown } from "./message-markdown";
 import { TurnChangesCard, type OpenTurnChange } from "./turn-changes-card";
@@ -34,6 +45,8 @@ export function TimelineItem({
   scheduledOrigin,
   workspacePath,
   onOpenWorkspaceFileLine,
+  annotationMarkers,
+  onOpenAnnotation,
 }: {
   readonly item: DisplayTimelineItem;
   readonly expandedToolCallIds?: ReadonlySet<string>;
@@ -45,6 +58,8 @@ export function TimelineItem({
   readonly scheduledOrigin?: ScheduledTaskOrigin;
   readonly workspacePath?: string;
   readonly onOpenWorkspaceFileLine?: (target: WorkspaceFileLine) => void;
+  readonly annotationMarkers?: readonly AnnotationMarker[];
+  readonly onOpenAnnotation?: OpenAnnotation;
 }) {
   switch (item.kind) {
     case "turn-marker":
@@ -60,6 +75,8 @@ export function TimelineItem({
           onOpenWorkspaceFileLine={onOpenWorkspaceFileLine}
           scheduledOrigin={scheduledOrigin}
           workspacePath={workspacePath}
+          annotationMarkers={annotationMarkers}
+          onOpenAnnotation={onOpenAnnotation}
         />
       );
     case "activity":
@@ -75,9 +92,26 @@ export function TimelineItem({
       );
     case "summary":
       return <TimelineSummaryItem item={item} />;
+    case "custom":
+      return <TimelineCustomMessage item={item} />;
     default:
-      return null;
+      return unhandledTimelineItem(item);
   }
+}
+
+function unhandledTimelineItem(item: never): null {
+  console.warn("[timeline] unhandled item kind", item);
+  return null;
+}
+
+/** An extension message, drawn like terminal pi: its customType labels the markdown. */
+function TimelineCustomMessage({ item }: { readonly item: SessionTranscriptCustomMessage }) {
+  return (
+    <article className="timeline-item timeline-item--custom" data-testid="timeline-custom-message">
+      <div className="timeline-item__custom-type">{item.customType}</div>
+      <MessageMarkdown text={item.text} />
+    </article>
+  );
 }
 
 function TimelineMessage({
@@ -87,6 +121,8 @@ function TimelineMessage({
   scheduledOrigin,
   workspacePath,
   onOpenWorkspaceFileLine,
+  annotationMarkers,
+  onOpenAnnotation,
 }: {
   readonly item: SessionTranscriptMessage;
   readonly sourceMessageIndex?: number;
@@ -94,10 +130,28 @@ function TimelineMessage({
   readonly scheduledOrigin?: ScheduledTaskOrigin;
   readonly workspacePath?: string;
   readonly onOpenWorkspaceFileLine?: (target: WorkspaceFileLine) => void;
+  readonly annotationMarkers?: readonly AnnotationMarker[];
+  readonly onOpenAnnotation?: OpenAnnotation;
 }) {
+  const articleRef = useRef<HTMLElement | null>(null);
+  const annotated = useMemo(
+    () => (item.role === "user" ? parseAnnotatedPrompt(item.text) : null),
+    [item.role, item.text],
+  );
+  const markers =
+    annotationMarkers?.length && onOpenAnnotation ? (
+      <AnnotationMarkers
+        articleRef={articleRef}
+        markers={annotationMarkers}
+        messageId={item.id}
+        onOpen={onOpenAnnotation}
+      />
+    ) : null;
+
   if (item.role === "user") {
+    const body = annotated ? annotated.body : item.text;
     return (
-      <article className="timeline-item timeline-item--user">
+      <article className="timeline-item timeline-item--user" ref={articleRef}>
         <div className="timeline-item__user-stack">
           {scheduledOrigin ? (
             <div className="timeline-item__scheduled-origin" data-testid="sent-by-scheduled-task">
@@ -130,9 +184,11 @@ function TimelineMessage({
                 )}
               </div>
             ) : null}
-            <MessageMarkdown text={item.text} />
+            {annotated ? <SentAnnotations annotations={annotated.annotations} /> : null}
+            {annotated && !body.trim() ? null : <MessageMarkdown annotationRoot text={body} />}
           </div>
         </div>
+        {markers}
       </article>
     );
   }
@@ -152,8 +208,9 @@ function TimelineMessage({
   // shifts by the row's height when a run starts or ends.
   const forkable = sourceMessageIndex !== undefined;
   return (
-    <article className="timeline-item timeline-item--assistant">
+    <article className="timeline-item timeline-item--assistant" ref={articleRef}>
       <MessageMarkdown
+        annotationRoot
         onOpenWorkspaceFileLine={onOpenWorkspaceFileLine}
         text={item.text}
         workspacePath={workspacePath}
@@ -178,6 +235,7 @@ function TimelineMessage({
           </button>
         </div>
       ) : null}
+      {markers}
     </article>
   );
 }

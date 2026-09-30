@@ -174,6 +174,13 @@ export function applyTimelineEvent(
       transcript[index] = { ...ended, sourceMessageId: event.sourceMessageId };
       break;
     }
+    case "transcriptItemAppended":
+      // Lands between assistant messages like a tool row: the reply above keeps its row and
+      // later text starts a new one below.
+      clearActiveAssistantMessage(state.activeAssistantMessageBySession, event.sessionRef);
+      if (transcript.some((item) => item.id === event.item.id)) return;
+      transcript.push(event.item);
+      break;
     case "sessionOpened":
       state.pendingAssistantMessageBySession.delete(key);
       transcript.push(
