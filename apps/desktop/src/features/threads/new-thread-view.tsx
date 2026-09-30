@@ -7,6 +7,7 @@ import {
   type RefObject,
 } from "react";
 import type { RuntimeSnapshot } from "@pi-gui/session-driver/runtime-types";
+import type { ExtensionFlagValues } from "@pi-gui/session-driver";
 import type {
   ComposerAttachment,
   NewThreadEnvironment,
@@ -28,6 +29,7 @@ import type {
   ModelOnboardingSettingsSection,
 } from "../settings/model-onboarding";
 import { ModelSelector } from "../conversation/model-selector";
+import { ExtensionFlagsSelector } from "./extension-flags-selector";
 
 interface NewThreadViewProps {
   readonly workspaces: readonly WorkspaceRecord[];
@@ -59,6 +61,8 @@ interface NewThreadViewProps {
   readonly onSelectWorkspace: (workspaceId: string) => void;
   readonly onSetModel: (provider: string, modelId: string) => void;
   readonly onSetThinking: (level: string) => void;
+  readonly extensionFlags: ExtensionFlagValues;
+  readonly onSetExtensionFlag: (name: string, value: boolean | string) => void;
   readonly onOpenModelSettings: (section: ModelOnboardingSettingsSection) => void;
   readonly onComposerKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
   readonly onComposerPaste: (event: ClipboardEvent<HTMLDivElement>) => void;
@@ -105,6 +109,8 @@ export function NewThreadView({
   onSelectWorkspace,
   onSetModel,
   onSetThinking,
+  extensionFlags,
+  onSetExtensionFlag,
   onOpenModelSettings,
   onComposerKeyDown,
   onComposerPaste,
@@ -232,6 +238,8 @@ export function NewThreadView({
                   onSelectEnvironment={onSelectEnvironment}
                   onSetModel={onSetModel}
                   onSetThinking={onSetThinking}
+                  extensionFlags={extensionFlags}
+                  onSetExtensionFlag={onSetExtensionFlag}
                   onAddAttachments={onAddAttachments}
                   onSubmit={onSubmit}
                 />
@@ -256,6 +264,8 @@ interface NewThreadComposerFooterProps {
   readonly onSelectEnvironment: (environment: NewThreadEnvironment) => void;
   readonly onSetModel: (provider: string, modelId: string) => void;
   readonly onSetThinking: (level: string) => void;
+  readonly extensionFlags: ExtensionFlagValues;
+  readonly onSetExtensionFlag: (name: string, value: boolean | string) => void;
   readonly onAddAttachments: (files: File[]) => void;
   readonly onSubmit: () => void;
 }
@@ -272,6 +282,8 @@ function NewThreadComposerFooter({
   onSelectEnvironment,
   onSetModel,
   onSetThinking,
+  extensionFlags,
+  onSetExtensionFlag,
   onAddAttachments,
   onSubmit,
 }: NewThreadComposerFooterProps) {
@@ -309,6 +321,11 @@ function NewThreadComposerFooter({
               emptyModelTitle={modelOnboarding.emptyModelTitle}
               onSetModel={onSetModel}
               onSetThinking={onSetThinking}
+            />
+            <ExtensionFlagsSelector
+              runtime={runtime}
+              values={extensionFlags}
+              onSetFlag={onSetExtensionFlag}
             />
           </div>
 

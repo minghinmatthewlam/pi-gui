@@ -27,6 +27,7 @@ import type {
 } from "@pi-gui/session-driver/types";
 import type {
   CreateSessionOptions,
+  ExtensionFlagValues,
   ForkSessionOptions,
   ForkSessionResult,
   HostUiRequest,
@@ -166,6 +167,13 @@ export interface PiSdkDriverOptions {
   readonly builtinExtensions?: readonly BuiltinExtension[];
   /** Read each time a session loads or reloads its extensions; defaults to enabled. */
   readonly isBuiltinExtensionEnabled?: BuiltinExtensionEnabled;
+  /**
+   * Flag values a session started with, re-applied whenever its closed pi session
+   * reopens, since pi reads flags only when it loads extensions.
+   */
+  readonly extensionFlagValuesForSession?: (
+    sessionRef: SessionRef,
+  ) => ExtensionFlagValues | undefined;
   readonly desktopExtensions?: PiDesktopExtensionObserver;
   readonly onTurnCaptureBoundary?: import("@pi-gui/session-driver").TurnCaptureObserver;
   readonly turnCaptureTimeoutMs?: number;
@@ -212,6 +220,8 @@ interface ManagedSessionRecord {
     }
   >;
   extensionUiState: ExtensionUiState;
+  /** Load diagnostics reported before anyone subscribed; the first subscriber receives them. */
+  undeliveredLoadNotices: NotifyHostUiRequest[];
   bindingExtensions: boolean;
   sessionCommands: RuntimeCommandRecord[];
   /** Context, cache and usage read from pi at the last turn boundary. */
@@ -223,6 +233,11 @@ interface ManagedSessionRecord {
   /** Custom message entries already sent as live transcript items. */
   appendedCustomEntryIds: Set<string>;
 }
+
+type NotifyHostUiRequest = Extract<
+  Extract<SessionDriverEvent, { type: "hostUiRequest" }>["request"],
+  { kind: "notify" }
+>;
 
 interface RegisteredCommandAdapter {
   readonly name: string;
@@ -257,6 +272,7 @@ export class SessionSupervisor {
   private readonly agentDir: string | undefined;
   private readonly builtinExtensions: readonly InlineExtension[];
   private readonly desktopExtensions: PiDesktopExtensionObserver | undefined;
+  private readonly extensionFlagValuesForSession: PiSdkDriverOptions["extensionFlagValuesForSession"];
   private readonly onTurnCaptureBoundary: PiSdkDriverOptions["onTurnCaptureBoundary"];
   private readonly turnCaptureTimeoutMs: number | undefined;
   private readonly records = new Map<string, ManagedSessionRecord>();
@@ -283,6 +299,7 @@ export class SessionSupervisor {
       options.isBuiltinExtensionEnabled ?? (() => true),
     );
     this.desktopExtensions = options.desktopExtensions;
+    this.extensionFlagValuesForSession = options.extensionFlagValuesForSession;
     this.onTurnCaptureBoundary = options.onTurnCaptureBoundary;
     this.turnCaptureTimeoutMs = options.turnCaptureTimeoutMs;
     this.agentDir = options.agentDir;
@@ -299,10 +316,14 @@ export class SessionSupervisor {
   private baseCreateOptions(
     workspace: WorkspaceRef,
     sessionManager: SessionManager,
+    extensionFlagValues: ExtensionFlagValues | undefined,
   ): PiCreateAgentSessionOptions {
     const createOptions: PiCreateAgentSessionOptions = {
       cwd: workspace.path,
       sessionManager,
+      ...(extensionFlagValues && Object.keys(extensionFlagValues).length > 0
+        ? { extensionFlagValues: new Map(Object.entries(extensionFlagValues)) }
+        : {}),
       resourceLoaderOptions: {
         extensionFactories: [
           ...this.builtinExtensions,
@@ -662,7 +683,11 @@ export class SessionSupervisor {
 
     const initialModel = options?.initialModel;
     const createOptions: PiCreateAgentSessionOptions = {
-      ...this.baseCreateOptions(workspace, SessionManager.create(workspace.path)),
+      ...this.baseCreateOptions(
+        workspace,
+        SessionManager.create(workspace.path),
+        options?.extensionFlagValues,
+      ),
       ...(initialModel
         ? {
             resolveInitialModel: (modelRuntime: ModelRuntime) =>
@@ -697,6 +722,7 @@ export class SessionSupervisor {
 
     this.records.set(sessionKey(record.ref), record);
     await this.bindSessionRuntimeOrDispose(record);
+    this.reportLoadDiagnostics(record, runtime);
     await this.persistSnapshot(record);
     const snapshot = buildSnapshot(record);
     await this.emit(record, {
@@ -797,7 +823,7 @@ export class SessionSupervisor {
     const forkProvider = forkConfig?.provider;
     const forkModelId = forkConfig?.modelId;
     const createOptions: PiCreateAgentSessionOptions = {
-      ...this.baseCreateOptions(targetWorkspace, branchedManager),
+      ...this.baseCreateOptions(targetWorkspace, branchedManager, options.extensionFlagValues),
       ...(forkProvider && forkModelId
         ? {
             // A model the source session used may not exist in the target
@@ -830,6 +856,7 @@ export class SessionSupervisor {
 
     this.records.set(sessionKey(record.ref), record);
     await this.bindSessionRuntimeOrDispose(record);
+    this.reportLoadDiagnostics(record, runtime);
     await this.persistSnapshot(record);
     const snapshot = buildSnapshot(record);
     await this.emit(record, {
@@ -1205,6 +1232,11 @@ export class SessionSupervisor {
     record.listeners.add(listener);
     void Promise.resolve(listener(sessionUpdatedEvent(record))).catch(() => {});
     this.replayExtensionUiState(record, listener);
+    for (const request of record.undeliveredLoadNotices.splice(0)) {
+      void Promise.resolve(
+        listener({ type: "hostUiRequest", sessionRef: record.ref, timestamp: nowIso(), request }),
+      ).catch(() => {});
+    }
 
     return () => {
       for (const currentRecord of this.records.values()) {
@@ -1298,7 +1330,11 @@ export class SessionSupervisor {
     let runtime: AgentSessionRuntime;
     try {
       runtime = await this.createAgentSessionRuntimeImpl(
-        this.baseCreateOptions(workspace, SessionManager.open(sessionFile)),
+        this.baseCreateOptions(
+          workspace,
+          SessionManager.open(sessionFile),
+          this.extensionFlagValuesForSession?.(sessionRef),
+        ),
       );
     } catch (error) {
       await this.releaseLeasePath(leasePath);
@@ -1323,6 +1359,7 @@ export class SessionSupervisor {
     this.records.set(key, record);
     this.syncLeaseHeartbeat();
     await this.bindSessionRuntimeOrDispose(record);
+    this.reportLoadDiagnostics(record, runtime);
     return record;
   }
 
@@ -1361,6 +1398,7 @@ export class SessionSupervisor {
       unsubscribeAgent: undefined,
       pendingHostUiRequests: new Map(),
       extensionUiState: createEmptyExtensionUiState(),
+      undeliveredLoadNotices: [],
       bindingExtensions: false,
       sessionCommands: [],
       usage: undefined,
@@ -1987,6 +2025,24 @@ export class SessionSupervisor {
       ],
       { persistSnapshot: false },
     );
+  }
+
+  /**
+   * pi returns what went wrong while loading a session (an unknown or valueless
+   * extension flag, a provider an extension failed to register) instead of
+   * throwing; terminal pi prints these at startup, so show them as extension errors.
+   */
+  private reportLoadDiagnostics(record: ManagedSessionRecord, runtime: AgentSessionRuntime): void {
+    for (const diagnostic of runtime.diagnostics) {
+      const request: NotifyHostUiRequest = {
+        kind: "notify",
+        requestId: crypto.randomUUID(),
+        level: diagnostic.type,
+        message: diagnostic.message,
+      };
+      if (record.listeners.size > 0) this.emitHostUiRequest(record, request);
+      else record.undeliveredLoadNotices.push(request);
+    }
   }
 
   private emitExtensionError(

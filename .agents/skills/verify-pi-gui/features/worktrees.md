@@ -15,7 +15,7 @@ Users create a separate Git workspace or choose a worktree environment for a new
 - Remove worktree (with a confirmation) is in that menu only when a pi-gui worktree shows as its own row, which happens only when its root folder is not open. The app refuses to remove any other checkout.
 - The Fork modal offers Same worktree or New worktree; New worktree can be disabled.
 - The old Worktrees side panel has been removed; it is not an entry point.
-- Click New thread in the sidebar and choose Local or Worktree.
+- Click New thread in the sidebar, or the folder row's "+" (`New thread in <folder>`), and choose Local or Worktree. Under Time grouping the folder row and its "+" hide once the folder has threads.
 
 ## Driving it with Playwright
 

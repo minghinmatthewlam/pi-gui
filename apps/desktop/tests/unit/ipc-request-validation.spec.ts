@@ -10,6 +10,7 @@ import {
   expectOptionalDeliverOptions,
   expectSessionTarget,
   expectSetChildSupervisionLoopInput,
+  expectStartThreadInput,
   expectStringArray,
   expectTerminalSize,
   expectThemeMode,
@@ -202,4 +203,29 @@ test("IPC request validation rejects malformed scheduled tasks", () => {
       target,
     }),
   ).toThrow(/timeZone/);
+});
+
+test("IPC request validation passes new-thread extension flags through as booleans and strings", () => {
+  const base = { rootWorkspaceId: "workspace-a", environment: "local" };
+
+  expect(expectStartThreadInput(base).extensionFlags).toBeUndefined();
+  expect(
+    expectStartThreadInput({
+      ...base,
+      extensionFlags: { plan: true, "dry-run": false, env: "staging", preset: "" },
+    }).extensionFlags,
+  ).toEqual({ plan: true, "dry-run": false, env: "staging", preset: "" });
+
+  expect(() => expectStartThreadInput({ ...base, extensionFlags: ["plan"] })).toThrow(
+    "input.extensionFlags must be an object",
+  );
+  expect(() => expectStartThreadInput({ ...base, extensionFlags: { retries: 3 } })).toThrow(
+    "input.extensionFlags.retries must be a boolean or string",
+  );
+  expect(() => expectStartThreadInput({ ...base, extensionFlags: { plan: null } })).toThrow(
+    "input.extensionFlags.plan must be a boolean or string",
+  );
+  expect(() => expectStartThreadInput({ ...base, extensionFlags: { " ": true } })).toThrow(
+    "flag names must be non-empty",
+  );
 });

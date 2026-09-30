@@ -10,6 +10,7 @@ import {
   type KeyboardEvent,
   type SetStateAction,
 } from "react";
+import type { ExtensionFlagValues } from "@pi-gui/session-driver";
 import {
   type AppView,
   type ComposerAttachment,
@@ -68,6 +69,8 @@ export function useNewThreadController(params: UseNewThreadControllerParams) {
   const [provider, setProvider] = useState<string | undefined>();
   const [modelId, setModelId] = useState<string | undefined>();
   const [thinkingLevel, setThinkingLevel] = useState<string | undefined>();
+  // Flag edits on this surface, laid over the workspace's remembered defaults.
+  const [extensionFlagEdits, setExtensionFlagEdits] = useState<ExtensionFlagValues>({});
   const [composerError, setComposerError] = useState<string | undefined>();
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const previousActiveViewRef = useRef<AppView | null>(null);
@@ -88,6 +91,16 @@ export function useNewThreadController(params: UseNewThreadControllerParams) {
   const resolvedModelId =
     modelId ?? (defaultEnabled ? runtime?.settings.defaultModelId : undefined);
   const resolvedThinkingLevel = thinkingLevel ?? runtime?.settings.defaultThinkingLevel;
+  const workspaceFlagDefaults = workspace
+    ? snapshot?.extensionFlagsByWorkspace[workspace.id]
+    : undefined;
+  const extensionFlags = useMemo(
+    () => ({ ...workspaceFlagDefaults, ...extensionFlagEdits }),
+    [workspaceFlagDefaults, extensionFlagEdits],
+  );
+  const setExtensionFlag = useCallback((name: string, value: boolean | string) => {
+    setExtensionFlagEdits((current) => ({ ...current, [name]: value }));
+  }, []);
   const modelOnboarding = deriveModelOnboardingState(runtime, {
     provider: resolvedProvider,
     modelId: resolvedModelId,
@@ -167,6 +180,7 @@ export function useNewThreadController(params: UseNewThreadControllerParams) {
       setProvider(undefined);
       setModelId(undefined);
       setThinkingLevel(undefined);
+      setExtensionFlagEdits({});
       setComposerError(undefined);
     },
     [rootWorkspace?.id, rootWorkspaceOptions, snapshot, visibleWorkspaces],
@@ -197,6 +211,7 @@ export function useNewThreadController(params: UseNewThreadControllerParams) {
     setProvider(undefined);
     setModelId(undefined);
     setThinkingLevel(undefined);
+    setExtensionFlagEdits({});
     setComposerError(undefined);
   }, []);
 
@@ -297,6 +312,7 @@ export function useNewThreadController(params: UseNewThreadControllerParams) {
       provider: resolvedProvider,
       modelId: resolvedModelId,
       thinkingLevel: resolvedThinkingLevel,
+      ...(Object.keys(extensionFlags).length > 0 ? { extensionFlags } : {}),
     };
     startingGenerationRef.current = generation;
     void updateSnapshot(setSnapshot, () => api.startThread(input))
@@ -309,6 +325,7 @@ export function useNewThreadController(params: UseNewThreadControllerParams) {
         setProvider(undefined);
         setModelId(undefined);
         setThinkingLevel(undefined);
+        setExtensionFlagEdits({});
         setEnvironment("local");
       })
       .catch((error: unknown) => {
@@ -323,6 +340,7 @@ export function useNewThreadController(params: UseNewThreadControllerParams) {
     api,
     attachments,
     environment,
+    extensionFlags,
     modelOnboarding.requiresModelSelection,
     prompt,
     resolvedModelId,
@@ -464,6 +482,8 @@ export function useNewThreadController(params: UseNewThreadControllerParams) {
       resolvedProvider,
       resolvedModelId,
       resolvedThinkingLevel,
+      extensionFlags,
+      setExtensionFlag,
       modelOnboarding,
       slashMenu,
       mentionMenu,
@@ -496,6 +516,8 @@ export function useNewThreadController(params: UseNewThreadControllerParams) {
       resolvedProvider,
       resolvedModelId,
       resolvedThinkingLevel,
+      extensionFlags,
+      setExtensionFlag,
       modelOnboarding,
       slashMenu,
       mentionMenu,
