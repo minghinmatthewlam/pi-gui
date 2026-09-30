@@ -46,6 +46,12 @@ import {
   type CustomProviderInput,
 } from "./custom-provider-store.js";
 import { savePiProjectSettings } from "./compat/pi-project-settings.js";
+import {
+  isBuiltinExtensionPath,
+  PI_ADDON_EXTENSION_NAMES,
+  piAddonDisplay,
+  piAddonExtensions,
+} from "./pi-addon-extensions.js";
 
 export {
   BUILT_IN_PROVIDER_IDS,
@@ -403,7 +409,7 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
     const context = await this.ensureContext(workspace);
     const resolvedPaths = await this.resolveRuntimePaths(context);
     const resource = resolvedPaths.extensions.find(
-      (entry) => resolve(entry.path) === resolve(filePath),
+      (entry) => extensionPathKey(entry.path) === extensionPathKey(filePath),
     );
     if (!resource) {
       throw new Error(`Unknown extension: ${filePath}`);
@@ -420,9 +426,28 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
     return findBuiltinExtension(this.builtinExtensions, path)?.name;
   }
 
-  /** Every built-in loads ungated here so Settings can list a switched-off one with its tools. */
+  /**
+   * Every pi-gui built-in loads ungated here so Settings can list a switched-off one with its
+   * tools. pi's add-ons keep their `builtin` flag so pi's `extensions` setting still gates them.
+   */
   private inventoryExtensionFactories(): InlineExtension[] {
-    return this.builtinExtensions.map(({ name, factory }) => ({ name, factory }));
+    return [
+      ...piAddonExtensions(),
+      ...this.builtinExtensions.map(({ name, factory }) => ({ name, factory })),
+    ];
+  }
+
+  /** Resolves pi's add-ons as `builtin:<name>` resources, like `pi config` does. */
+  private createPackageManager(
+    cwd: string,
+    settingsManager: SettingsManager,
+  ): DefaultPackageManager {
+    return new DefaultPackageManager({
+      cwd,
+      agentDir: this.agentDir,
+      settingsManager,
+      builtinExtensions: [...PI_ADDON_EXTENSION_NAMES],
+    });
   }
 
   private async ensureContext(workspace: WorkspaceRef): Promise<RuntimeContext> {
@@ -432,11 +457,7 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
     }
 
     let settingsManager = SettingsManager.create(workspace.path, this.agentDir);
-    let packageManager = new DefaultPackageManager({
-      cwd: workspace.path,
-      agentDir: this.agentDir,
-      settingsManager,
-    });
+    let packageManager = this.createPackageManager(workspace.path, settingsManager);
     let resourceLoader = new DefaultResourceLoader({
       cwd: workspace.path,
       agentDir: this.agentDir,
@@ -462,11 +483,7 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
       );
 
       settingsManager = fallbackSettingsManager;
-      packageManager = new DefaultPackageManager({
-        cwd: workspace.path,
-        agentDir: this.agentDir,
-        settingsManager,
-      });
+      packageManager = this.createPackageManager(workspace.path, settingsManager);
       resourceLoader = new DefaultResourceLoader({
         cwd: workspace.path,
         agentDir: this.agentDir,
@@ -655,11 +672,10 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
         }`,
       );
 
-      const fallbackPackageManager = new DefaultPackageManager({
-        cwd: context.workspace.path,
-        agentDir: this.agentDir,
-        settingsManager: fallbackSettingsManager,
-      });
+      const fallbackPackageManager = this.createPackageManager(
+        context.workspace.path,
+        fallbackSettingsManager,
+      );
       return fallbackPackageManager.resolve();
     }
   }
@@ -823,29 +839,29 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
     const packageMetadataCache = new Map<string, Promise<PackageMetadata>>();
     const loadedByPath = new Map(
       loadedResult.extensions.map(
-        (extension) => [resolve(extension.resolvedPath || extension.path), extension] as const,
+        (extension) =>
+          [extensionPathKey(extension.resolvedPath || extension.path), extension] as const,
       ),
     );
     const diagnosticsByPath = new Map<string, RuntimeExtensionDiagnostic[]>();
 
     for (const error of loadedResult.errors) {
-      const diagnostics = diagnosticsByPath.get(resolve(error.path)) ?? [];
+      const diagnostics = diagnosticsByPath.get(extensionPathKey(error.path)) ?? [];
       diagnostics.push({
         type: "error",
         message: error.error,
         path: error.path,
       });
-      diagnosticsByPath.set(resolve(error.path), diagnostics);
+      diagnosticsByPath.set(extensionPathKey(error.path), diagnostics);
     }
 
     const records = await Promise.all(
       resolvedExtensions.map<Promise<RuntimeExtensionRecord>>(async (resource) => {
-        const path = resolve(resource.path);
+        const path = extensionPathKey(resource.path);
         const loaded = loadedByPath.get(path);
-        const packageMetadata = await inferExtensionPackageMetadata(
-          resource.metadata,
-          packageMetadataCache,
-        );
+        const packageMetadata =
+          piAddonDisplay(path) ??
+          (await inferExtensionPackageMetadata(resource.metadata, packageMetadataCache));
         return {
           path,
           displayName: packageMetadata?.displayName ?? inferExtensionEntryName(path),
@@ -871,12 +887,12 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
         };
       }),
     );
-    const resolvedRecordPaths = new Set(records.map((record) => resolve(record.path)));
+    const resolvedRecordPaths = new Set(records.map((record) => extensionPathKey(record.path)));
     const inlineRecords = loadedResult.extensions
       .filter(
         (extension) =>
           extension.path.startsWith("<inline:") &&
-          !resolvedRecordPaths.has(resolve(extension.path)),
+          !resolvedRecordPaths.has(extensionPathKey(extension.path)),
       )
       .map((extension) => this.buildInlineExtensionRecord(extension));
     records.push(...inlineRecords);
@@ -1011,6 +1027,10 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
     scope: ResourceScope,
     origin: PathMetadata["origin"],
   ): string {
+    // pi's add-ons are named by their `builtin:<name>` path, as pi's own `pi config` writes them.
+    if (metadata.source === "builtin") {
+      return filePath;
+    }
     if (origin === "package") {
       const baseDir = metadata.baseDir ?? dirname(filePath);
       return relative(baseDir, filePath);
@@ -1029,6 +1049,11 @@ async function readJsonRecord(filePath: string): Promise<Record<string, unknown>
   } catch {
     return {};
   }
+}
+
+/** `builtin:<name>` names one of pi's add-ons, not a file, so it is compared as is. */
+function extensionPathKey(path: string): string {
+  return isBuiltinExtensionPath(path) ? path : resolve(path);
 }
 
 function replaceResourcePattern(
