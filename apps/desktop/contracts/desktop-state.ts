@@ -246,11 +246,20 @@ export type SessionExtensionDialogRecord = Extract<
   { readonly kind: "confirm" | "select" | "input" | "editor" }
 >;
 
+export interface SessionExtensionNoticeRecord {
+  readonly id: string;
+  readonly level: "info" | "warning" | "error";
+  readonly message: string;
+  readonly createdAt: string;
+}
+
 export interface SessionExtensionUiStateRecord {
   readonly instanceId: string;
   readonly statuses: readonly SessionExtensionStatusRecord[];
   readonly widgets: readonly SessionExtensionWidgetRecord[];
   readonly pendingDialogs: readonly SessionExtensionDialogRecord[];
+  /** `ctx.ui.notify` toasts, newest last. Main caps and expires them; the renderer only draws them. */
+  readonly notices: readonly SessionExtensionNoticeRecord[];
   readonly title?: string;
   readonly editorText?: string;
 }
