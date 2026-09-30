@@ -2755,20 +2755,22 @@ export class DesktopAppStore {
       return;
     }
 
-    // An extension's newSession/fork/switchSession keeps the same pi runtime, and
-    // with it the flags it loaded with, so the replacement session has them too.
-    const flags = this.sessionState.extensionFlagsBySession.get(sourceKey);
-    if (flags) this.sessionState.extensionFlagsBySession.set(targetKey, flags);
-    else this.sessionState.extensionFlagsBySession.delete(targetKey);
-    this.state = {
-      ...this.state,
-      extensionFlagsBySession: mapToRecord(this.sessionState.extensionFlagsBySession),
-    };
-    this.schedulePersistUiState();
-
     const unsubscribe = this.sessionState.sessionSubscriptions.get(sourceKey);
     if (!unsubscribe) {
       return;
+    }
+
+    // An extension's newSession/fork switches the same pi runtime, and with it the
+    // flags it loaded with, to a new session. A session that already has flags
+    // (switchSession to an existing thread) keeps its own for its next reopen.
+    const flags = this.sessionState.extensionFlagsBySession.get(sourceKey);
+    if (flags && !this.sessionState.extensionFlagsBySession.has(targetKey)) {
+      this.sessionState.extensionFlagsBySession.set(targetKey, flags);
+      this.state = {
+        ...this.state,
+        extensionFlagsBySession: mapToRecord(this.sessionState.extensionFlagsBySession),
+      };
+      this.schedulePersistUiState();
     }
 
     if (this.sessionState.sessionSubscriptions.has(targetKey)) {

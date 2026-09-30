@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import {
+  getDesktopState,
   launchDesktop,
   makeUserDataDir,
   makeWorkspace,
@@ -21,6 +22,12 @@ export default function flagsExtension(pi) {
         .map((name) => name + "=" + String(pi.getFlag(name)))
         .join(" ");
       ctx.ui.setStatus("flags", report);
+    },
+  });
+  pi.registerCommand("spawn-child", {
+    description: "Continue in a new session on the same pi runtime",
+    handler: async (_args, ctx) => {
+      await ctx.newSession();
     },
   });
 }
@@ -112,5 +119,39 @@ test("new threads start with the chosen extension flags, remembered per workspac
     );
   } finally {
     await secondRun.close();
+  }
+});
+
+test("a session an extension starts in place keeps the thread's flags", async () => {
+  test.setTimeout(90_000);
+  const userDataDir = await makeUserDataDir();
+  const workspacePath = await makeWorkspace("extension-flags-new-session");
+  await writeProjectExtension(workspacePath, "flags-extension.ts", flagsExtension);
+
+  const harness = await launchDesktop(userDataDir, {
+    initialWorkspaces: [workspacePath],
+    testMode: "background",
+  });
+  try {
+    const window = await harness.firstWindow();
+    await openNewThread(window);
+    await window.getByTestId("extension-flags-badge").click();
+    await window.getByTestId("extension-flags-dropdown").getByLabel("--plan").check();
+    await startReportThread(window);
+    await expect(window.getByTestId("extension-flags-session-badge")).toHaveText("Flags · 1");
+    const parentSessionId = (await getDesktopState(window)).selectedSessionId;
+
+    await window.getByTestId("composer").fill("/spawn-child ");
+    await window.getByTestId("composer").press("Enter");
+    await expect
+      .poll(async () => (await getDesktopState(window)).selectedSessionId)
+      .not.toBe(parentSessionId);
+    await expect(window.getByTestId("extension-flags-session-badge")).toHaveText("Flags · 1");
+    await reportInThread(window);
+    await expect(window.getByTestId("extension-dock-summary")).toHaveText(
+      "plan=true dry-run=false env=undefined",
+    );
+  } finally {
+    await harness.close();
   }
 });
