@@ -45,16 +45,27 @@ export async function performExtensionViewHostAction(
       runExtensionCommand: () => Promise.reject(new Error("Views can't run commands")),
       workspaces: () => owners.store.getWorkspaceRecords(),
       // Selecting the thread closes this view, so the view's call settles once the thread is
-      // found and queued; a later failure shows in the app like any selection failure.
+      // found. The switch starts after that result has gone out: `setImmediate` runs only once
+      // the awaits that send it have unwound.
       selectThread: async (resolve) => {
-        void owners.windows
-          .runStateAction(window, async () => {
-            requireCurrentTask();
-            return owners.store.selectSession(resolve());
-          })
-          .catch((error: unknown) => {
-            console.error("[extension-view] open thread failed", error);
-          });
+        setImmediate(() => {
+          void owners.windows
+            .runStateAction(window, async () => {
+              try {
+                requireCurrentTask();
+              } catch {
+                // The user already left the view's task; there is nothing to switch from.
+                return owners.store.getState();
+              }
+              try {
+                return await owners.store.selectSession(resolve());
+              } catch (error) {
+                // The thread went away meanwhile: say so in the app, since the view is told ok.
+                return owners.store.withError(error);
+              }
+            })
+            .catch((error: unknown) => console.error("[extension-view] open thread failed", error));
+        });
       },
     };
     await runExtensionAction(
