@@ -225,7 +225,8 @@ export function Sidebar(props: SidebarProps) {
       keys.every((key) => current.has(key)) ? current : new Set([...current, ...keys]),
     );
     // A folded folder hides the rename field; open it so the input is reachable.
-    for (const group of threadSidebarModel.workspaceGroups) {
+    // Time grouping shows no folder threads, so leave the folded set alone there.
+    for (const group of threadGrouping === "workspace" ? threadSidebarModel.workspaceGroups : []) {
       if (holds(group.threads) && collapsedFolderIds.has(group.workspace.id)) {
         setFolderCollapsed(group.workspace.id, false);
       }

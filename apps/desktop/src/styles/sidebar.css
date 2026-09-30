@@ -358,17 +358,17 @@
 }
 
 /* Folder grouping, as in Codex: an open folder shows its chevron; a folded
-   folder shows the folder icon and reveals the chevron on hover. */
+   folder shows the folder icon and reveals the chevron on hover or focus. */
 .workspace-row__icon-chevron,
 .workspace-row__icon[data-state="expanded"] .workspace-row__icon-folder,
-.workspace-row__select:hover
+.workspace-row__select:is(:hover, :focus-visible)
   .workspace-row__icon[data-state="collapsed"]
   .workspace-row__icon-folder {
   display: none;
 }
 
 .workspace-row__icon[data-state="expanded"] .workspace-row__icon-chevron,
-.workspace-row__select:hover
+.workspace-row__select:is(:hover, :focus-visible)
   .workspace-row__icon[data-state="collapsed"]
   .workspace-row__icon-chevron {
   display: grid;
