@@ -291,3 +291,39 @@ await test("a reload waits for a running extension command", async (t) => {
   await sent;
   await waitFor(() => state.loads === loadsAtStart + 1, "the deferred reload after the command");
 });
+
+await test("a message sent before a pending reload has started runs after that reload", async (t) => {
+  const { driver, ref, state, session } = await startHarness(t);
+  const loadsAtStart = state.loads;
+  // Holding the listener on the turn's completion keeps the event queue, and with it the
+  // queued pending reload, from running: the gap between a turn's end and its reload.
+  const listenerGate = gate();
+  let completionHeld = false;
+  const unsubscribe = driver.subscribe(ref, async (event) => {
+    if (event.type !== "runCompleted" || completionHeld) return;
+    completionHeld = true;
+    await listenerGate.wait;
+  });
+  t.after(unsubscribe);
+
+  const first = driver.sendUserMessage(ref, { text: "first" });
+  await waitFor(() => state.streaming, "the first turn to start");
+  assert.equal(await driver.reloadSessionWhenIdle(ref), "deferred");
+  state.turnGate.open();
+  await first;
+  await session().waitForIdle();
+  await waitFor(() => completionHeld, "the event queue to be held");
+  assert.equal(state.loads, loadsAtStart, "the pending reload has not started");
+
+  state.turnGate = gate();
+  const second = driver.sendUserMessage(ref, { text: "second" });
+  await waitFor(() => state.streaming, "the second turn to start");
+  assert.equal(state.loadsAtLastTurn, loadsAtStart + 1, "the second turn has the new tools");
+
+  listenerGate.open();
+  state.turnGate.open();
+  await second;
+  await session().waitForIdle();
+  await settle();
+  assert.equal(state.loads, loadsAtStart + 1, "the queued pending reload does not run again");
+});

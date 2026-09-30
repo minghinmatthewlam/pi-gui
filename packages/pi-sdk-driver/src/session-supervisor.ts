@@ -942,11 +942,7 @@ export class SessionSupervisor {
 
   async sendUserMessage(sessionRef: SessionRef, input: SessionMessageInput): Promise<void> {
     const record = await this.ensureRecord(sessionRef);
-    // A reload swaps the session's extensions and tools; the message goes to the reloaded ones.
-    // Loop: a reload queued while this one ran must finish too before the prompt starts.
-    while (record.reloadInFlight) {
-      await record.reloadInFlight.catch(() => undefined);
-    }
+    await this.settleReloadsBeforeSend(record);
     const session = this.requireSession(record);
     const isExtensionCommand = this.isExtensionCommand(session, input.text);
     if (session.isStreaming && !isExtensionCommand && !input.deliverAs) {
@@ -1066,6 +1062,29 @@ export class SessionSupervisor {
       });
       await this.emit(record, sessionUpdatedEvent(record));
       throw error;
+    }
+  }
+
+  /**
+   * A reload swaps the session's extensions and tools, so a message goes to the reloaded ones.
+   * It waits for reloads in flight (looping, as one can queue behind another) and, when a turn
+   * just ended with a reload pending that has not started yet (its run waits for the event
+   * queue), starts that reload now rather than letting a new turn slip in with the old tools.
+   */
+  private async settleReloadsBeforeSend(record: ManagedSessionRecord): Promise<void> {
+    for (;;) {
+      if (record.reloadInFlight) {
+        await record.reloadInFlight.catch(() => undefined);
+      } else if (record.reloadPending && !record.closed && !isRecordBusy(record)) {
+        await this.runReload(record).catch((error: unknown) => {
+          console.warn(
+            `[pi-sdk-driver] pending reload failed for ${sessionKey(record.ref)}:`,
+            error,
+          );
+        });
+      } else {
+        return;
+      }
     }
   }
 
