@@ -954,6 +954,7 @@ export default function App() {
           threadSidebarModel={threadSidebarModel ?? buildThreadSidebarModel(snapshot)}
           threadShortcutOrderRef={threadShortcutOrderRef}
           threadGrouping={snapshot.threadGrouping}
+          collapsedWorkspaceIds={snapshot.collapsedWorkspaceIds}
           linkedWorktreeByWorkspaceId={linkedWorktreeByWorkspaceId}
           wsMenu={wsMenu}
           threadMenu={threadMenu}
