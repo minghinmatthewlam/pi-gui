@@ -222,4 +222,8 @@ await test("the model's github_read gets one issue or PR as bounded, quoted text
   // gh's own message reaches the model so it can try the other kind.
   await assert.rejects(readItem(options, "issue", 7), /gh: no issue found/);
   await assert.rejects(readItem(options, "issue", 0), /positive number/);
+  await assert.rejects(
+    readItem({ ...options, gh: join(tmpdir(), "no-such-gh") }, "issue", 9),
+    /The GitHub CLI \(gh\) isn't installed/,
+  );
 });

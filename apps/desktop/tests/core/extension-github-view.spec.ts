@@ -72,6 +72,10 @@ async function openGitHubView(window: Page): Promise<FrameLocator> {
 }
 
 test("the GitHub example reads gh only when opened, opens links and drafts a fix", async () => {
+  test.skip(
+    process.platform === "win32",
+    "The fake gh is a POSIX executable; Windows has a separate native verification lane.",
+  );
   test.setTimeout(120_000);
   const gh = await fakeGhPath();
   const userDataDir = await makeUserDataDir();
@@ -123,6 +127,10 @@ test("the GitHub example reads gh only when opened, opens links and drafts a fix
 });
 
 test("without gh the GitHub example says how to get it", async () => {
+  test.skip(
+    process.platform === "win32",
+    "The fake gh is a POSIX executable; Windows has a separate native verification lane.",
+  );
   test.setTimeout(90_000);
   const userDataDir = await makeUserDataDir();
   const harness = await launchDesktop(userDataDir, {

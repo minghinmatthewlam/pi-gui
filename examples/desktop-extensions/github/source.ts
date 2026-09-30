@@ -136,11 +136,16 @@ export async function readItem(
   if (!Number.isSafeInteger(number) || number < 1) throw new Error("Give a positive number.");
   // gh's own message says what went wrong (not found, wrong kind, not signed in); pass it on.
   const gh = (args: string[]) =>
-    run(args, options, (stderr) => `gh: ${stderr.trim().slice(0, 400)}`);
+    run(args, options, (stderr) => `gh: ${stderr.trim().slice(0, 400)}`).catch((error: unknown) => {
+      if (error instanceof Error && error.message === GH_MISSING)
+        throw new Error("The GitHub CLI (gh) isn't installed on this computer.");
+      throw error;
+    });
   const repo = string(
     record(JSON.parse(await gh(["repo", "view", "--json", "nameWithOwner"]))).nameWithOwner,
     200,
   );
+  if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) throw new Error("GitHub returned an invalid repository.");
   const item = record(
     JSON.parse(
       await gh([
@@ -153,13 +158,16 @@ export async function readItem(
     ),
   );
   const labels = Array.isArray(item.labels)
-    ? item.labels.filter(isRecord).map((label) => optionalString(label.name, 80))
+    ? item.labels
+        .filter(isRecord)
+        .map((label) => optionalString(label.name, 80))
+        .filter(Boolean)
     : [];
   const lines = [
     `${kind === "pr" ? "Pull request" : "Issue"} #${positive(item.number)} in ${repo}: ${string(item.title, 300)}`,
     `State: ${optionalString(item.state, 20).toLowerCase()}${item.isDraft === true ? " (draft)" : ""} · Author: @${login(item.author)} · ${githubUrl(item.url)}`,
   ];
-  if (labels.length) lines.push(`Labels: ${labels.filter(Boolean).join(", ")}`);
+  if (labels.length) lines.push(`Labels: ${labels.join(", ")}`);
   if (kind === "pr") {
     const checks = summarizeChecks(item.statusCheckRollup);
     lines.push(

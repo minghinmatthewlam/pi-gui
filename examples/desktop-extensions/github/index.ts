@@ -29,7 +29,7 @@ export default function githubExtension(pi: ExtensionAPI): void {
     const signal = lifetime.signal;
     if (!directory) return Promise.reject(new Error("The thread is still loading."));
     publish({ ...snapshot, refreshing: true });
-    inFlight = loadRepository({ cwd: directory, signal, env: process.env })
+    const current = loadRepository({ cwd: directory, signal, env: process.env })
       .then((loaded) => {
         if (signal.aborted) return;
         publish({
@@ -53,9 +53,11 @@ export default function githubExtension(pi: ExtensionAPI): void {
         });
       })
       .finally(() => {
-        inFlight = null;
+        // A new session may have started another read meanwhile; leave that one in place.
+        if (inFlight === current) inFlight = null;
       });
-    return inFlight;
+    inFlight = current;
+    return current;
   };
 
   pi.on("session_start", (_event, ctx) => {
@@ -64,6 +66,8 @@ export default function githubExtension(pi: ExtensionAPI): void {
     inFlight = null;
     cwd = ctx.cwd;
     publish(initialState());
+    // A view left open across a new or resumed session asks for the new folder's data.
+    if (listeners.size > 0) void refresh().catch(() => {});
   });
   pi.on("session_shutdown", () => {
     lifetime.abort();
