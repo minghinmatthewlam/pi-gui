@@ -83,13 +83,15 @@ export interface McpServerRecord {
   readonly args?: readonly string[];
   readonly url?: string;
   readonly enabled: boolean;
+  /** Environment variables, headers or sign-in config are set; their values never leave main. */
+  readonly hasHiddenSettings: boolean;
 }
 
 export interface McpServersSnapshot {
   readonly servers: readonly McpServerRecord[];
   /** mcp.json files that could not be read. */
   readonly errors: readonly string[];
-  /** Whether pi's global `defaultTools` switches code mode on in every thread. */
+  /** Whether pi's global `defaultTools` switches code mode on in new threads. */
   readonly codemodeAlwaysOn: boolean;
 }
 

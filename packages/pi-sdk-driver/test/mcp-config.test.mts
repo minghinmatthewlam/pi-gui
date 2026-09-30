@@ -80,6 +80,9 @@ await test("listing returns no secrets and marks project servers", () => {
           enabled: false,
         },
         files: { command: "npx", args: ["-y", "server"], env: { SECRET: "s3cret" } },
+        keyed: { url: "https://example.com/mcp?api_key=QUERYKEY#frag", env: {} },
+        signin: { url: "https://example.com/oauth", oauth: { clientSecret: "CLIENTSECRET" } },
+        broken: { url: "not a url?key=RAWKEY" },
       },
     }),
   );
@@ -98,6 +101,7 @@ await test("listing returns no secrets and marks project servers", () => {
         transport: "http",
         url: "https://example.com/mcp",
         enabled: false,
+        hasHiddenSettings: true,
       },
       {
         name: "files",
@@ -106,6 +110,31 @@ await test("listing returns no secrets and marks project servers", () => {
         command: "npx",
         args: ["-y", "server"],
         enabled: true,
+        hasHiddenSettings: true,
+      },
+      {
+        name: "keyed",
+        scope: "global",
+        transport: "http",
+        url: "https://example.com/mcp?…",
+        enabled: true,
+        hasHiddenSettings: false,
+      },
+      {
+        name: "signin",
+        scope: "global",
+        transport: "http",
+        url: "https://example.com/oauth",
+        enabled: true,
+        hasHiddenSettings: true,
+      },
+      {
+        name: "broken",
+        scope: "global",
+        transport: "http",
+        url: "(invalid URL)",
+        enabled: true,
+        hasHiddenSettings: false,
       },
       {
         name: "project",
@@ -114,11 +143,12 @@ await test("listing returns no secrets and marks project servers", () => {
         command: "./run",
         args: [],
         enabled: true,
+        hasHiddenSettings: false,
       },
     ],
     errors: [],
   });
-  assert.doesNotMatch(JSON.stringify(listing), /s3cret|TOKEN|pass/);
+  assert.doesNotMatch(JSON.stringify(listing), /s3cret|TOKEN|pass|QUERYKEY|frag|CLIENTSECRET|RAWKEY/);
 
   setMcpServerEnabled({ agentDir, cwd }, "project", "project", false);
   assert.deepEqual(readJson(join(cwd, ".pi", "mcp.json")), {

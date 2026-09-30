@@ -4,7 +4,8 @@
  * pi's (`dist/extensions/mcp/config.js`): change one server key, keep every other field and the
  * file's indentation, and refuse to overwrite a file that does not parse.
  *
- * Listings leave out `env`, `headers` and `oauth`, which can hold secrets.
+ * Listings leave out `env`, `headers` and `oauth`, which can hold secrets, and say only whether a
+ * server has any; URLs are listed without user info, query or fragment.
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -20,6 +21,8 @@ export interface McpServerSummary {
   readonly args?: readonly string[];
   readonly url?: string;
   readonly enabled: boolean;
+  /** The entry has environment variables, headers or sign-in config, which are never listed. */
+  readonly hasHiddenSettings: boolean;
 }
 
 export interface McpServerListing {
@@ -154,29 +157,56 @@ function summarizeServer(
 ): McpServerSummary | undefined {
   if (!isRecord(value)) return undefined;
   const enabled = value.enabled !== false;
+  const hasHiddenSettings = HIDDEN_FIELDS.some((field) => hasContent(value[field]));
   if (typeof value.command === "string" && value.command) {
     const args = Array.isArray(value.args)
       ? value.args.filter((arg): arg is string => typeof arg === "string")
       : [];
-    return { name, scope, transport: "stdio", command: value.command, args, enabled };
+    return {
+      name,
+      scope,
+      transport: "stdio",
+      command: value.command,
+      args,
+      enabled,
+      hasHiddenSettings,
+    };
   }
   if (typeof value.url === "string" && value.url) {
-    return { name, scope, transport: "http", url: withoutUserInfo(value.url), enabled };
+    const url = redactUrl(value.url);
+    return { name, scope, transport: "http", url, enabled, hasHiddenSettings };
   }
   return undefined;
 }
 
-/** Credentials in a URL's user info are as secret as a header. */
-function withoutUserInfo(url: string): string {
+const HIDDEN_FIELDS = ["env", "headers", "oauth"] as const;
+
+function hasContent(value: unknown): boolean {
+  return (
+    value !== undefined && value !== null && !(isRecord(value) && Object.keys(value).length === 0)
+  );
+}
+
+/**
+ * User info, query and fragment can carry credentials (`?api_key=…`), so they are dropped;
+ * a trailing `?…` says something was left out.
+ */
+function redactUrl(url: string): string {
+  let parsed: URL;
   try {
-    const parsed = new URL(url);
-    if (!parsed.username && !parsed.password) return url;
-    parsed.username = "";
-    parsed.password = "";
-    return parsed.toString();
+    parsed = new URL(url);
   } catch {
-    return url;
+    // Nothing tells the secret parts apart; pi refuses this entry anyway.
+    return "(invalid URL)";
   }
+  const hasUserInfo = parsed.username !== "" || parsed.password !== "";
+  const hasQuery = parsed.search !== "" || parsed.hash !== "";
+  if (!hasUserInfo && !hasQuery) return url;
+  parsed.username = "";
+  parsed.password = "";
+  parsed.search = "";
+  parsed.hash = "";
+  return hasQuery ? `${parsed.toString()}?…` : parsed.toString();
 }
 
 function readMcpServers(path: string): Record<string, unknown> | undefined {
