@@ -706,3 +706,52 @@ test("switches pi-gui tools off app-wide and keeps them off after a restart", as
     await harness.close();
   }
 });
+
+test("lists pi's add-ons as Built into pi and switches them in pi's extensions setting", async () => {
+  test.setTimeout(60_000);
+  const userDataDir = await makeUserDataDir();
+  const workspacePath = await makeWorkspace("pi-addons-workspace");
+  const agentDir = join(userDataDir, "agent");
+  await seedAgentDir(agentDir);
+
+  const harness = await launchDesktop(userDataDir, {
+    agentDir,
+    initialWorkspaces: [workspacePath],
+    testMode: "background",
+  });
+  try {
+    const window = await harness.firstWindow();
+    await window.getByRole("button", { name: "Extensions", exact: true }).click();
+    const list = window.getByTestId("extensions-list");
+    const addons = list.locator("section", {
+      has: window.getByRole("heading", { name: /Built into pi/ }),
+    });
+    const piGuiTools = list.locator("section", {
+      has: window.getByRole("heading", { name: /pi-gui tools/ }),
+    });
+    for (const name of ["MCP servers", "Code mode", "Tool search"]) {
+      await expect(addons.getByRole("switch", { name: `Enable ${name}` })).toBeChecked();
+      await expect(piGuiTools.getByRole("switch", { name: `Enable ${name}` })).toHaveCount(0);
+    }
+
+    const mcpSwitch = addons.getByRole("switch", { name: "Enable MCP servers" });
+    await mcpSwitch.click();
+    await expect(mcpSwitch).not.toBeChecked();
+    await expect(mcpSwitch).toBeEnabled();
+    expect((await readSettings(agentDir)).extensions).toEqual(["-builtin:mcp"]);
+
+    await mcpSwitch.click();
+    await expect(mcpSwitch).toBeChecked();
+    await expect(mcpSwitch).toBeEnabled();
+    expect((await readSettings(agentDir)).extensions).toEqual(["+builtin:mcp"]);
+  } finally {
+    await harness.close();
+  }
+});
+
+async function readSettings(agentDir: string): Promise<Record<string, unknown>> {
+  return JSON.parse(await readFile(join(agentDir, "settings.json"), "utf8")) as Record<
+    string,
+    unknown
+  >;
+}
