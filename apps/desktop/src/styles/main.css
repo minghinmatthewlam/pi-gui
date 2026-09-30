@@ -2748,6 +2748,55 @@
   word-break: break-word;
 }
 
+/* Floats over the transcript so a toast never moves the composer. */
+.extension-notices {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.extension-notice {
+  max-width: min(560px, 100%);
+  padding: 8px 14px;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  color: var(--muted-strong);
+  font-size: 13px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  pointer-events: auto;
+  animation: extension-notice-enter var(--motion-base) var(--ease-out);
+}
+
+.extension-notice__level {
+  margin-right: 5px;
+  color: var(--text-strong);
+  font-weight: 600;
+}
+
+@keyframes extension-notice-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .extension-notice {
+    animation: none;
+  }
+}
+
 .extension-dialog-backdrop {
   position: fixed;
   inset: 0;

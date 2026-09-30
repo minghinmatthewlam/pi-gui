@@ -1234,6 +1234,7 @@ export default function App() {
                 extensionDock={selectedExtensionDock}
                 extensionDockExpanded={isSelectedExtensionDockExpanded}
                 onToggleExtensionDock={handleToggleExtensionDock}
+                extensionNotices={selectedExtensionUi?.notices}
                 annotations={transcriptAnnotations}
               />
               {activeExtensionDialog ? (

@@ -397,14 +397,20 @@ export class NotificationManager {
 }
 
 function requiresAttention(event: Extract<SessionDriverEvent, { type: "hostUiRequest" }>): boolean {
+  // Info notices stay in-app so chatty extensions don't spam the OS.
   return (
     event.request.kind === "confirm" ||
     event.request.kind === "input" ||
-    event.request.kind === "select"
+    event.request.kind === "select" ||
+    (event.request.kind === "notify" &&
+      (event.request.level === "warning" || event.request.level === "error"))
   );
 }
 
 function hostUiBody(event: Extract<SessionDriverEvent, { type: "hostUiRequest" }>): string {
+  if (event.request.kind === "notify") {
+    return `${event.request.level === "error" ? "Error" : "Warning"}: ${event.request.message}`;
+  }
   if (
     event.request.kind === "confirm" ||
     event.request.kind === "input" ||

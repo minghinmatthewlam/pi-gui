@@ -294,9 +294,13 @@ export function applyTimelineEvent(
       transcript.push(makeActivityItem("Stopped", { metadata: relativeDetail(event.timestamp) }));
       break;
     case "hostUiRequest":
-      if (event.request.kind === "notify") {
+      // Notices show as toasts; only errors also stay in the transcript.
+      if (event.request.kind === "notify" && event.request.level === "error") {
         transcript.push(
-          makeActivityItem(event.request.message, { metadata: relativeDetail(event.timestamp) }),
+          makeActivityItem(event.request.message, {
+            tone: "error",
+            metadata: relativeDetail(event.timestamp),
+          }),
         );
       }
       break;

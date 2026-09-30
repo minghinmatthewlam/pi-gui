@@ -11,6 +11,7 @@ import type { RuntimeSnapshot } from "@pi-gui/session-driver/runtime-types";
 import type {
   ComposerAttachment,
   QueuedComposerMessage,
+  SessionExtensionNoticeRecord,
   SessionRecord,
 } from "../../../contracts/desktop-state";
 import type { MentionOption } from "./hooks/use-mention-menu";
@@ -31,6 +32,7 @@ import type {
 } from "../settings/model-onboarding";
 import { ContextMeter } from "./context-meter";
 import { ModelSelector } from "./model-selector";
+import { ExtensionNotices } from "../extensions/extension-notices";
 import type { ExtensionDockModel } from "../extensions/extension-session-ui";
 
 interface ComposerPanelProps {
@@ -85,6 +87,7 @@ interface ComposerPanelProps {
   readonly extensionDock?: ExtensionDockModel;
   readonly extensionDockExpanded: boolean;
   readonly onToggleExtensionDock: () => void;
+  readonly extensionNotices?: readonly SessionExtensionNoticeRecord[];
   readonly annotations: TranscriptAnnotations;
 }
 
@@ -138,6 +141,7 @@ export function ComposerPanel({
   extensionDock,
   extensionDockExpanded,
   onToggleExtensionDock,
+  extensionNotices,
   annotations,
 }: ComposerPanelProps) {
   const hasComposerInput =
@@ -147,6 +151,7 @@ export function ComposerPanel({
   return (
     <footer className="composer" aria-busy={preparingTaskDraft}>
       <div className="conversation conversation--composer" inert={preparingTaskDraft}>
+        <ExtensionNotices notices={extensionNotices} />
         <ComposerSurface
           lastError={lastError}
           activeSlashCommand={activeSlashCommand}
