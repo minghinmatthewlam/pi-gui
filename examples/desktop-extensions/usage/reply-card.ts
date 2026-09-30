@@ -67,11 +67,8 @@ export function replyCard(facts: ReplyFacts): ReplyCard {
       label: "Context",
       value: `${formatPercent(context.tokens / context.contextWindow)} · ${formatTokens(context.tokens)} of ${formatTokens(context.contextWindow)}`,
     });
-  // A run that ends on a tool result instead of a reply was stopped while a tool ran.
-  const endedOnTool =
-    isRecord(facts.messages.at(-1)) &&
-    (facts.messages.at(-1) as Record<string, unknown>).role === "toolResult";
-  const stopped = last?.stopReason === "aborted" || endedOnTool;
+  // A stop during a tool still ends on an aborted reply, so the last reply says it all.
+  const stopped = last?.stopReason === "aborted";
   const failed = last?.stopReason === "error";
   const model = last ? (facts.modelName(last.provider, last.model) ?? last.model) : undefined;
   const subtitle = [stopped ? "Stopped" : failed ? "Failed" : "", model]
