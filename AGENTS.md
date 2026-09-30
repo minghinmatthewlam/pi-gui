@@ -8,7 +8,6 @@ These rules apply for the full session.
 - For non-trivial work, plan verification before editing: name the affected user flow, observable result, failure cases, and existing commands that prove them. Start with the checked-in [desktop verification skill](.agents/skills/verify-pi-gui/SKILL.md) for desktop flows and [baseline checks](docs/ci-baseline.md) for repository checks.
 - Do not create or switch to new branches to start work unless the user explicitly asks; respect the current branch or worktree as intentional.
 - Commit in small focused checkpoints; don’t batch unrelated changes.
-- Commits are authored as the maintainer (cloud sessions get this from `scripts/cloud/session-start.sh`). Don’t add `Co-authored-by` trailers for AI agents: GitHub’s contributors graph credits every co-author. A `Claude-Session:` link is fine.
 - Before closing non-trivial implementation work, review the diff for unnecessary abstractions, duplicate paths, unsafe escapes, and obsolete code; simplify within scope and rerun affected checks.
 
 ## Product

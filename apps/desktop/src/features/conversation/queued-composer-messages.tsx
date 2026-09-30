@@ -1,6 +1,15 @@
 import type { ComposerAttachment, QueuedComposerMessage } from "../../../contracts/desktop-state";
 import { FileIcon } from "../../ui/icons";
 import { ImageAttachmentThumb } from "./image-attachment-thumb";
+import { parseAnnotatedPrompt } from "./annotations/annotation-prompt";
+
+function queuedPreview(text: string): string {
+  const annotated = parseAnnotatedPrompt(text);
+  if (!annotated) return text;
+  const count = annotated.annotations.length;
+  const label = `${count} annotation${count === 1 ? "" : "s"}`;
+  return annotated.body.trim() ? `${annotated.body.trim()} · ${label}` : label;
+}
 
 interface QueuedComposerMessagesProps {
   readonly messages: readonly QueuedComposerMessage[];
@@ -41,7 +50,7 @@ export function QueuedComposerMessages({
         >
           <div className="queued-composer-message__header">
             {message.text ? (
-              <div className="queued-composer-message__text">{message.text}</div>
+              <div className="queued-composer-message__text">{queuedPreview(message.text)}</div>
             ) : null}
             <div className="queued-composer-message__actions">
               {message.mode !== "steer" ? (
@@ -49,9 +58,12 @@ export function QueuedComposerMessages({
                   Steer
                 </button>
               ) : null}
-              <button type="button" onClick={() => onEditMessage(message.id)}>
-                Edit
-              </button>
+              {/* Its annotations cannot be reattached to the transcript, so it is not editable. */}
+              {parseAnnotatedPrompt(message.text) ? null : (
+                <button type="button" onClick={() => onEditMessage(message.id)}>
+                  Edit
+                </button>
+              )}
               <button
                 aria-label={`Delete queued message ${message.text || message.id}`}
                 type="button"

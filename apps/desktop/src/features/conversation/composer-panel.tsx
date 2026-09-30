@@ -22,6 +22,8 @@ import type {
   ComposerSlashOptionEmptyState,
 } from "./composer-commands";
 import { ComposerSurface } from "./composer-surface";
+import { AnnotationChip } from "./annotations/annotation-chip";
+import type { TranscriptAnnotations } from "./annotations/use-transcript-annotations";
 import { ModelOnboardingNoticeBanner } from "../settings/model-onboarding-notice";
 import type {
   ModelOnboardingState,
@@ -83,6 +85,7 @@ interface ComposerPanelProps {
   readonly extensionDock?: ExtensionDockModel;
   readonly extensionDockExpanded: boolean;
   readonly onToggleExtensionDock: () => void;
+  readonly annotations: TranscriptAnnotations;
 }
 
 export function ComposerPanel({
@@ -135,8 +138,10 @@ export function ComposerPanel({
   extensionDock,
   extensionDockExpanded,
   onToggleExtensionDock,
+  annotations,
 }: ComposerPanelProps) {
-  const hasComposerInput = composerDraft.trim().length > 0 || attachments.length > 0;
+  const hasComposerInput =
+    composerDraft.trim().length > 0 || attachments.length > 0 || annotations.list.length > 0;
   const primaryActionIsStop = selectedSession.status === "running" && !hasComposerInput;
 
   return (
@@ -187,6 +192,9 @@ export function ComposerPanel({
           extensionDock={extensionDock}
           extensionDockExpanded={extensionDockExpanded}
           onToggleExtensionDock={onToggleExtensionDock}
+          annotationChip={
+            <AnnotationChip annotations={annotations.list} onRemove={annotations.remove} />
+          }
           footer={
             <div className="composer__footer">
               <div className="composer__footer-row">
@@ -220,8 +228,7 @@ export function ComposerPanel({
                     type="button"
                     disabled={
                       !primaryActionIsStop &&
-                      ((!composerDraft.trim() && attachments.length === 0) ||
-                        modelOnboarding.requiresModelSelection)
+                      (!hasComposerInput || modelOnboarding.requiresModelSelection)
                     }
                     onClick={onSubmit}
                   >

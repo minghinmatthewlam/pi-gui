@@ -41,4 +41,67 @@ export interface SessionTranscriptToolCall {
   readonly createdAt: string;
 }
 
-export type SessionTranscriptItem = SessionTranscriptMessage | SessionTranscriptToolCall;
+/**
+ * An extension's `pi.sendMessage({ customType, content, display: true })`, drawn the way
+ * terminal pi draws it: the customType as a label over the markdown text.
+ */
+export interface SessionTranscriptCustomMessage {
+  readonly kind: "custom";
+  /** The pi session entry id, so live and reloaded rows share one identity. */
+  readonly id: string;
+  readonly createdAt: string;
+  readonly customType: string;
+  /** Markdown from the message's text parts. */
+  readonly text: string;
+}
+
+/** The custom entry type an extension writes with `pi.appendEntry` to show a card in pi-gui. */
+export const EXTENSION_CARD_CUSTOM_TYPE = "pi-gui.card";
+
+export type ExtensionCardTone = "neutral" | "success" | "warning" | "error";
+
+export interface ExtensionCardRow {
+  readonly label: string;
+  readonly value: string;
+}
+
+/** Opens `path` (relative to the thread's workspace) at `line` in the side panel. */
+export interface ExtensionCardAction {
+  readonly label: string;
+  readonly path: string;
+  readonly line?: number;
+}
+
+/**
+ * A card an extension declares as data with `pi.appendEntry("pi-gui.card", card)`.
+ * pi-gui draws it with its own component; there are no styling knobs.
+ */
+export interface ExtensionCard {
+  readonly title: string;
+  readonly subtitle?: string;
+  readonly tone: ExtensionCardTone;
+  readonly rows: readonly ExtensionCardRow[];
+  readonly actions: readonly ExtensionCardAction[];
+}
+
+export interface SessionTranscriptCard {
+  readonly kind: "card";
+  /** The pi entry id, so the live row and the reopened row are the same item. */
+  readonly id: string;
+  readonly createdAt: string;
+  readonly card: ExtensionCard;
+}
+
+export type SessionTranscriptItem =
+  | SessionTranscriptMessage
+  | SessionTranscriptToolCall
+  | SessionTranscriptCustomMessage
+  | SessionTranscriptCard;
+
+/** A card, or the row that says why a `pi-gui.card` entry could not be drawn. */
+export function isCardEntryItem(item: SessionTranscriptItem): boolean {
+  return (
+    item.kind === "card" ||
+    (item.kind === "custom" && item.customType === EXTENSION_CARD_CUSTOM_TYPE)
+  );
+}

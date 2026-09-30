@@ -131,6 +131,22 @@
   text-transform: uppercase;
 }
 
+/* An extension's custom message: its customType over the markdown, like terminal pi's
+ * [customType] label, kept quiet so it reads as a note beside the agent's reply. */
+.timeline-item--custom {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.timeline-item__custom-type {
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
 .timeline-item--user {
   display: flex;
   align-items: center;
@@ -1004,4 +1020,55 @@
 .turn-changes__binary,
 .turn-changes__more {
   color: var(--muted);
+}
+/* Extension cards: the "Edited N files" shell, tone as a word, rows like file rows */
+.extension-card__subtitle {
+  color: var(--muted-soft);
+  font-size: 13px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.extension-card__tone {
+  flex-shrink: 0;
+  color: var(--muted-soft);
+  font-size: 12px;
+}
+
+.extension-card--error .extension-card__tone {
+  color: var(--error-ink);
+}
+
+.extension-card__row {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  padding: 7px 14px;
+  font-size: 13px;
+  color: var(--ink);
+}
+
+.extension-card__label {
+  flex-shrink: 0;
+  min-width: 72px;
+  color: var(--muted-soft);
+}
+
+.extension-card__value {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.extension-card__action .extension-card__label {
+  color: var(--ink);
+}
+
+.extension-card__action-target {
+  flex-shrink: 1;
+  color: var(--muted-path);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

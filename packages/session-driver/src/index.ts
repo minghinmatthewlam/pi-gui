@@ -2,6 +2,7 @@ export type {
   AssistantDeltaEvent,
   AssistantMessageEndedEvent,
   AssistantMessagePersistedEvent,
+  TranscriptItemAppendedEvent,
   CreateSessionOptions,
   ForkPosition,
   ForkSessionOptions,
@@ -67,6 +68,12 @@ export type {
 } from "./runtime-types.js";
 
 export type {
+  ExtensionCard,
+  ExtensionCardAction,
+  ExtensionCardRow,
+  ExtensionCardTone,
+  SessionTranscriptCard,
+  SessionTranscriptCustomMessage,
   SessionTranscriptImageAttachment,
   SessionTranscriptFileAttachment,
   SessionTranscriptAttachment,
@@ -76,6 +83,7 @@ export type {
   SessionTranscriptToolCall,
 } from "./transcript.js";
 
+export { EXTENSION_CARD_CUSTOM_TYPE, isCardEntryItem } from "./transcript.js";
 export { sessionKey } from "./identity.js";
 export type {
   TurnCaptureOpening,

@@ -88,6 +88,7 @@ import { deriveWorkspaceContext } from "./workspace-context";
 import { useTreeForkModals } from "../features/conversation/hooks/use-tree-fork-modals";
 import { useComposerDraftSync } from "../features/conversation/hooks/use-composer-draft-sync";
 import { useSessionComposer } from "../features/conversation/hooks/use-session-composer";
+import { useTranscriptAnnotations } from "../features/conversation/annotations/use-transcript-annotations";
 
 export default function App() {
   const desktop = useDesktopAppState();
@@ -547,6 +548,7 @@ export default function App() {
     flushComposerDraft,
   });
 
+  const transcriptAnnotations = useTranscriptAnnotations(selectedSessionKey);
   const {
     composerAttachments,
     submitComposerDraft,
@@ -578,6 +580,7 @@ export default function App() {
     newThreadComposerRef: newThread.composerRef,
     appendNewThreadAttachment: newThread.appendAttachment,
     onNewThreadComposerError: newThread.setComposerError,
+    annotations: transcriptAnnotations,
   });
 
   useEffect(() => {
@@ -1157,6 +1160,8 @@ export default function App() {
                       selectedSession.status === "running" ? undefined : openForkModal
                     }
                     scheduledOrigins={scheduledOrigins}
+                    annotations={transcriptAnnotations}
+                    platform={api?.platform ?? "linux"}
                   />
                 </div>
               </section>
@@ -1229,6 +1234,7 @@ export default function App() {
                 extensionDock={selectedExtensionDock}
                 extensionDockExpanded={isSelectedExtensionDockExpanded}
                 onToggleExtensionDock={handleToggleExtensionDock}
+                annotations={transcriptAnnotations}
               />
               {activeExtensionDialog ? (
                 <ExtensionDialog
