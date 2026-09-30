@@ -1006,69 +1006,54 @@
   color: var(--muted);
 }
 
-/* Tier 1 prototype: extension cards declared as data */
-.timeline-card {
-  --card-accent: var(--muted-soft);
-}
-.timeline-card--success {
-  --card-accent: var(--success-ink, #2f9e63);
-}
-.timeline-card--warning {
-  --card-accent: var(--warning-ink, #c98a1b);
-}
-.timeline-card--error {
-  --card-accent: var(--error-ink);
-}
-.timeline-card__header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+/* Extension cards: the "Edited N files" shell, tone as a word, rows like file rows */
+.extension-card__subtitle {
+  color: var(--muted-soft);
   font-size: 13px;
-  font-weight: 600;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.timeline-card__dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--card-accent);
-  flex: none;
-}
-.timeline-card__meta {
-  margin-left: auto;
+
+.extension-card__tone {
+  flex-shrink: 0;
   color: var(--muted-soft);
   font-size: 12px;
-  font-weight: 400;
 }
-.timeline-card__subtitle {
-  margin: 6px 0 0;
-  color: var(--muted-soft);
-  font-size: 13px;
+
+.extension-card--error .extension-card__tone {
+  color: var(--error-ink);
 }
-.timeline-card__rows {
-  display: grid;
-  grid-template-columns: max-content 1fr;
-  gap: 4px 16px;
-  margin: 10px 0 0;
-  font-size: 13px;
-}
-.timeline-card__row {
-  display: contents;
-}
-.timeline-card__rows dt {
-  color: var(--muted-soft);
-}
-.timeline-card__rows dd {
-  margin: 0;
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 12px;
-}
-.timeline-card__actions {
+
+.extension-card__row {
   display: flex;
-  gap: 8px;
-  margin-top: 12px;
+  align-items: baseline;
+  gap: 16px;
+  padding: 7px 14px;
+  font-size: 13px;
+  color: var(--ink);
 }
-.timeline-card__action {
-  padding: 4px 10px;
-  border: 1px solid var(--summary-card-border);
-  border-radius: 8px;
+
+.extension-card__label {
+  flex-shrink: 0;
+  min-width: 72px;
+  color: var(--muted-soft);
+}
+
+.extension-card__value {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.extension-card__action .extension-card__label {
+  color: var(--ink);
+}
+
+.extension-card__action-target {
+  flex-shrink: 1;
+  color: var(--muted-path);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

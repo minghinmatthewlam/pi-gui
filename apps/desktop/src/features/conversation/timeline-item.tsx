@@ -17,6 +17,7 @@ import {
   ChevronRightIcon,
   CopyIcon,
   DiffIcon,
+  ExtensionIcon,
   FileIcon,
   ForkIcon,
   SparkIcon,
@@ -447,48 +448,67 @@ function TimelineCardItem({
   readonly item: TimelineCard;
   readonly onOpenWorkspaceFileLine?: (target: WorkspaceFileLine) => void;
 }) {
+  const hasBody = item.rows.length > 0 || item.actions.length > 0;
   return (
-    <article
-      className={`timeline-item timeline-item--summary-card timeline-card timeline-card--${item.tone}`}
+    <section
+      className={`turn-changes extension-card extension-card--${item.tone}`}
+      aria-label={item.title}
       data-testid="extension-card"
     >
-      <div className="timeline-card__header">
-        <span className="timeline-card__dot" aria-hidden="true" />
-        <span className="timeline-card__title">{item.title}</span>
-        {item.metadata ? <span className="timeline-card__meta">{item.metadata}</span> : null}
-      </div>
-      {item.subtitle ? <p className="timeline-card__subtitle">{item.subtitle}</p> : null}
-      {item.rows.length > 0 ? (
-        <dl className="timeline-card__rows">
-          {item.rows.map((row, index) => (
-            <div className="timeline-card__row" key={`${row.label}:${index}`}>
-              <dt>{row.label}</dt>
-              <dd>{row.value}</dd>
-            </div>
-          ))}
-        </dl>
-      ) : null}
-      {item.actions.length > 0 ? (
-        <div className="timeline-card__actions">
-          {item.actions.map((action, index) => (
-            <button
-              type="button"
-              className="timeline-item__action timeline-card__action"
-              key={`${action.label}:${index}`}
-              disabled={!onOpenWorkspaceFileLine}
-              onClick={() =>
-                onOpenWorkspaceFileLine?.({
-                  path: action.path,
-                  line: action.line ?? 1,
-                  endLine: action.line ?? 1,
-                })
-              }
-            >
-              {action.label}
-            </button>
-          ))}
+      <header className="turn-changes__header">
+        <span className="turn-changes__glyph" aria-hidden="true">
+          <ExtensionIcon />
+        </span>
+        <div className="turn-changes__summary">
+          <span className="turn-changes__title">{item.title}</span>
+          {item.subtitle ? <span className="extension-card__subtitle">{item.subtitle}</span> : null}
         </div>
+        <span className="extension-card__tone">{cardToneLabel(item.tone)}</span>
+      </header>
+      {hasBody ? (
+        <ul className="turn-changes__files extension-card__rows">
+          {item.rows.map((row, index) => (
+            <li className="extension-card__row" key={`${row.label}:${index}`}>
+              <span className="extension-card__label">{row.label}</span>
+              <span className="extension-card__value">{row.value}</span>
+            </li>
+          ))}
+          {item.actions.map((action, index) => (
+            <li key={`${action.label}:${index}`}>
+              <button
+                type="button"
+                className="turn-changes__file extension-card__action"
+                disabled={!onOpenWorkspaceFileLine}
+                onClick={() =>
+                  onOpenWorkspaceFileLine?.({
+                    path: action.path,
+                    line: action.line ?? 1,
+                    endLine: action.line ?? 1,
+                  })
+                }
+              >
+                <span className="extension-card__label">{action.label}</span>
+                <span className="extension-card__action-target">
+                  {action.line ? `${action.path}:${action.line}` : action.path}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
       ) : null}
-    </article>
+    </section>
   );
+}
+
+function cardToneLabel(tone: TimelineCard["tone"]): string | undefined {
+  switch (tone) {
+    case "success":
+      return "Passed";
+    case "warning":
+      return "Warning";
+    case "error":
+      return "Failed";
+    default:
+      return undefined;
+  }
 }
