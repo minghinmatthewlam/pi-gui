@@ -13,6 +13,7 @@ export default function flagsExtension(pi) {
   pi.registerFlag("plan", { type: "boolean", default: false, description: "Plan without editing files" });
   pi.registerFlag("dry-run", { type: "boolean", default: false, description: "Print commands only" });
   pi.registerFlag("env", { type: "string", description: "Target environment" });
+  pi.registerFlag("color", { type: "boolean", default: true, description: "Colored output" });
   pi.registerCommand("flags-report", {
     description: "Show the flags this thread started with",
     handler: async (_args, ctx) => {
@@ -57,6 +58,9 @@ test("new threads start with the chosen extension flags, remembered per workspac
     await badge.click();
     const dropdown = window.getByTestId("extension-flags-dropdown");
     await expect(dropdown).toContainText("flags-extension");
+    // pi can only switch a boolean on, so a flag that defaults to on is shown on and locked.
+    await expect(dropdown.getByLabel("--color")).toBeChecked();
+    await expect(dropdown.getByLabel("--color")).toBeDisabled();
     await dropdown.getByLabel("--plan").check();
     await dropdown.getByLabel("--dry-run").check();
     await dropdown.getByLabel("--dry-run").uncheck();

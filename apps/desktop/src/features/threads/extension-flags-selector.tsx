@@ -94,9 +94,11 @@ export function ExtensionFlagsSelector({
                         ) : null}
                       </span>
                       {flag.type === "boolean" ? (
+                        // pi can only switch a boolean flag on, so one that defaults to on stays on.
                         <SettingsSwitch
                           label={`--${flag.name}`}
-                          checked={value === true}
+                          checked={value === true || flag.default === true}
+                          disabled={flag.default === true}
                           onChange={(checked) => onSetFlag(flag.name, checked)}
                         />
                       ) : (

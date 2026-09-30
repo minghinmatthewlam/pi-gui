@@ -105,6 +105,12 @@ export async function startThread(
   }
 
   return store.withErrorHandling(async () => {
+    // Checked against the folder the user chose the flags in; a new worktree has the
+    // same committed extensions.
+    const extensionFlags = await store.resolveExtensionFlags(
+      input.rootWorkspaceId,
+      input.extensionFlags,
+    );
     let targetWorkspace = rootWorkspace;
     let rollbackWorktree: (() => Promise<void>) | undefined;
     if (input.environment === "worktree") {
@@ -131,10 +137,6 @@ export async function startThread(
     let session: Awaited<ReturnType<typeof store.driver.createSession>>;
     let initialModel: { provider: string; modelId: string } | undefined;
     let initialThinkingLevel: string | undefined;
-    const extensionFlags = await store.resolveExtensionFlags(
-      input.rootWorkspaceId,
-      input.extensionFlags,
-    );
     try {
       const createOptions =
         (await store.buildCreateSessionOptions(targetWorkspace.workspaceId)) ?? {};
