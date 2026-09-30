@@ -1025,6 +1025,9 @@ export class SessionSupervisor {
         await this.syncRecordAfterSessionMutation(record, { emitUpdate: true });
       }
     } catch (error) {
+      // A card button's command failing says nothing about the thread, which may be mid-run:
+      // leave its state alone and let the app report the failure.
+      if (input.extensionCommandOnly) throw error;
       if (isQueuedMessage) {
         record.queuedMessages = record.queuedMessages.slice(0, -1);
       }

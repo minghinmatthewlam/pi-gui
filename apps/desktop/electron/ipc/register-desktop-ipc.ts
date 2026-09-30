@@ -815,16 +815,26 @@ export function registerDesktopIpc({
     expectExtensionActionRequest,
     async ({ target, action }, { event }) => {
       // Main may have switched threads before the renderer redrew; never act on another one.
-      const selected = windows.targetForSender(event.sender);
-      if (selected?.workspaceId !== target.workspaceId || selected.sessionId !== target.sessionId) {
-        throw new Error("Return to the card's thread to use its buttons");
-      }
+      const requireCardThread = () => {
+        const selected = windows.targetForSender(event.sender);
+        if (
+          selected?.workspaceId !== target.workspaceId ||
+          selected.sessionId !== target.sessionId
+        ) {
+          throw new Error("Return to the card's thread to use its buttons");
+        }
+      };
+      requireCardThread();
       const host: AppOperationHost = {
         workspacePath: (workspaceId) => owners.workspace.getWorkspacePath(workspaceId),
         openExternal: capabilities.openExternal,
-        // Like a typed extension command, it may change selection, so it keeps the window's queue.
+        // Like a typed extension command, it may change selection, so it keeps the window's queue,
+        // and checks the thread again once its turn in that queue comes.
         runExtensionCommand: async (sessionRef, command) => {
-          await run(event, () => owners.conversation.runExtensionCommand(sessionRef, command));
+          await run(event, async () => {
+            requireCardThread();
+            return owners.conversation.runExtensionCommand(sessionRef, command);
+          });
         },
       };
       try {
