@@ -29,7 +29,7 @@ export function resolveExtensionFlags(
     if (typeof value !== typeByName.get(name)) continue;
     chosen.push([name, value]);
     if (value === true) applied.push([name, true]);
-    else if (typeof value === "string" && value.trim()) applied.push([name, value.trim()]);
+    else if (typeof value === "string" && value.trim()) applied.push([name, value]);
   }
   return { chosen: Object.fromEntries(chosen), applied: Object.fromEntries(applied) };
 }

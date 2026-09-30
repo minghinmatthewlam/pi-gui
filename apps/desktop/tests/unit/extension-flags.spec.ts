@@ -41,7 +41,7 @@ test("pi receives only switched-on booleans and value flags with text", () => {
     { plan: true, "dry-run": false, env: " staging ", preset: "  " },
     runtime,
   );
-  expect(resolved.applied).toEqual({ plan: true, env: "staging" });
+  expect(resolved.applied).toEqual({ plan: true, env: " staging " });
 });
 
 test("switched-off and empty choices are still remembered as the workspace defaults", () => {

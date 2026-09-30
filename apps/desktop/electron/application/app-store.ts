@@ -2758,12 +2758,13 @@ export class DesktopAppStore {
     // An extension's newSession/fork/switchSession keeps the same pi runtime, and
     // with it the flags it loaded with, so the replacement session has them too.
     const flags = this.sessionState.extensionFlagsBySession.get(sourceKey);
-    if (flags) {
-      this.sessionState.extensionFlagsBySession.set(targetKey, flags);
-      this.schedulePersistUiState();
-    } else {
-      this.sessionState.extensionFlagsBySession.delete(targetKey);
-    }
+    if (flags) this.sessionState.extensionFlagsBySession.set(targetKey, flags);
+    else this.sessionState.extensionFlagsBySession.delete(targetKey);
+    this.state = {
+      ...this.state,
+      extensionFlagsBySession: mapToRecord(this.sessionState.extensionFlagsBySession),
+    };
+    this.schedulePersistUiState();
 
     const unsubscribe = this.sessionState.sessionSubscriptions.get(sourceKey);
     if (!unsubscribe) {

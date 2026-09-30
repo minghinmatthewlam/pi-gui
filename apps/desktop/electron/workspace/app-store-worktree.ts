@@ -159,10 +159,14 @@ export async function startThread(
       throw error;
     }
     store.seedSession(session);
-    store.recordExtensionFlags(session.ref, extensionFlags.applied, {
-      workspaceId: input.rootWorkspaceId,
-      chosen: extensionFlags.chosen,
-    });
+    // Only a start that chose flags (New thread) replaces the workspace's defaults.
+    store.recordExtensionFlags(
+      session.ref,
+      extensionFlags.applied,
+      input.extensionFlags === undefined
+        ? undefined
+        : { workspaceId: input.rootWorkspaceId, chosen: extensionFlags.chosen },
+    );
     const autoTitleAbortController = new AbortController();
     const pendingAutoTitle = {
       requestToken: randomUUID(),
