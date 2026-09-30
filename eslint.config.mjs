@@ -108,7 +108,7 @@ export default [
   ...["catalogs", "pi-sdk-driver", "session-driver", "extension-ui"].map((name) =>
     typedProject([`packages/${name}/**/*.{ts,tsx,mts,cts}`], `packages/${name}/tsconfig.lint.json`),
   ),
-  ...["pr-review", "test-runs", "github"].map((name) =>
+  ...["pr-review", "test-runs", "github", "usage"].map((name) =>
     typedProject(
       [`examples/desktop-extensions/${name}/**/*.{ts,tsx,mts,cts}`],
       `examples/desktop-extensions/${name}/tsconfig.lint.json`,
