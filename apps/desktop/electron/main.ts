@@ -471,11 +471,16 @@ function createWindow(): BrowserWindow {
     // the renderer sends its debounced draft, since closing it would discard the draft.
     if (quittingAfterStoreFlush || windowsClosingAfterDraftFlush.delete(window)) return;
     event.preventDefault();
-    void composerDraftFlusher.flush([window]).finally(() => {
-      if (window.isDestroyed()) return;
-      windowsClosingAfterDraftFlush.add(window);
-      window.close();
-    });
+    void composerDraftFlusher
+      .flush([window])
+      .finally(() => {
+        if (window.isDestroyed()) return;
+        windowsClosingAfterDraftFlush.add(window);
+        window.close();
+      })
+      .catch((error: unknown) => {
+        console.error("[main] Closing the window after its draft flush failed", error);
+      });
   });
   window.once("ready-to-show", () => {
     if (!backgroundTestMode) {
