@@ -10,10 +10,13 @@ import { getSelectedSession } from "../../contracts/desktop-state";
 import { isSessionActivelyViewed } from "../conversation/session-visibility";
 
 const MAX_COMPLETED_RUN_KEYS = 500;
+// An extension that throws on a frequent event repeats the same error notice; notify once per window.
+const REPEATED_NOTICE_WINDOW_MS = 30_000;
 
 export class NotificationManager {
   private readonly completedRunKeys = new Set<string>();
   private readonly activeBySession = new Map<string, Electron.Notification>();
+  private readonly lastNoticeBySession = new Map<string, { message: string; at: number }>();
   private latestState: DesktopAppState | undefined;
   private trackedWindow: BrowserWindow | null = null;
   private stopTrackingWindow: (() => void) | undefined;
@@ -159,12 +162,35 @@ export class NotificationManager {
     }
 
     if (event.type === "hostUiRequest" && requiresAttention(event)) {
+      if (!this.claimNoticeNotification(event)) {
+        return;
+      }
       await this.showNotification(
         event.sessionRef,
         this.titleForSession(event.sessionRef),
         hostUiBody(event),
       );
     }
+  }
+
+  /** A notice never replaces a waiting dialog's notification, and a repeated notice notifies once. */
+  private claimNoticeNotification(
+    event: Extract<SessionDriverEvent, { type: "hostUiRequest" }>,
+  ): boolean {
+    if (event.request.kind !== "notify") {
+      return true;
+    }
+    const key = sessionKey(event.sessionRef);
+    if ((this.latestState?.sessionExtensionUiBySession[key]?.pendingDialogs.length ?? 0) > 0) {
+      return false;
+    }
+    const now = Date.now();
+    const last = this.lastNoticeBySession.get(key);
+    if (last?.message === event.request.message && now - last.at < REPEATED_NOTICE_WINDOW_MS) {
+      return false;
+    }
+    this.lastNoticeBySession.set(key, { message: event.request.message, at: now });
+    return true;
   }
 
   private shouldNotify(event: SessionDriverEvent): boolean {

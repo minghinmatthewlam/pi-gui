@@ -2774,7 +2774,6 @@
   line-height: 1.4;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
-  pointer-events: auto;
   animation: extension-notice-enter var(--motion-base) var(--ease-out);
 }
 

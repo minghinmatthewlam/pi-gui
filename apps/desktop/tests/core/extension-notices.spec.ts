@@ -54,16 +54,17 @@ test("extension notify shows toasts above the composer that expire, and only err
       "Warning:Cache is stale",
       "Error:Deploy failed",
     ]);
+
+    // Main owns the lifetime: a renderer reload redraws live notices, then they expire.
+    // Reload straight away so the redraw check runs well inside the 6 s lifetime.
+    await reloadDesktopRenderer(window);
+    await expect(notices).toHaveCount(3);
     await expect(notices.nth(2).locator(".extension-notice__level")).toHaveText("Error:");
 
     const timeline = window.locator(".timeline");
     await expect(timeline).toContainText("Deploy failed");
     await expect(timeline).not.toContainText("Build started");
     await expect(timeline).not.toContainText("Cache is stale");
-
-    // Main owns the lifetime: a renderer reload redraws live notices, then they expire.
-    await reloadDesktopRenderer(window);
-    await expect(notices.first()).toBeVisible();
     await expect(notices).toHaveCount(0, { timeout: NOTICE_EXPIRY_TIMEOUT_MS });
 
     await reloadDesktopRenderer(window);
