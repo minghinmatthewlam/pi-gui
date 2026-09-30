@@ -1,6 +1,6 @@
 name: Claude Code Review
 
-# Reviews each PR once when it is opened or marked ready, using the official
+# Reviews each same-repo PR once when it is opened or marked ready, using the official
 # code-review plugin and the repo's AGENTS.md/CLAUDE.md guidance.
 # Auth: CLAUDE_CODE_OAUTH_TOKEN (Claude subscription, from `claude setup-token`).
 # Ask for a fresh review later with an `@claude` comment (see claude.yml).
@@ -15,7 +15,8 @@ concurrency:
 
 jobs:
   review:
-    if: ${{ !github.event.pull_request.draft && github.event.pull_request.user.type != 'Bot' }}
+    # Fork PRs get no secrets, and must never get the subscription token.
+    if: ${{ !github.event.pull_request.draft && github.event.pull_request.user.type != 'Bot' && github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
