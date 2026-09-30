@@ -107,7 +107,12 @@ import {
   toSessionQueuedMessages,
   toSessionRef,
 } from "./app-store-utils";
-import type { CustomProviderConfig } from "../../contracts/ipc";
+import type {
+  CustomProviderConfig,
+  McpServerScope,
+  McpServersSnapshot,
+  NewMcpServerInput,
+} from "../../contracts/ipc";
 import { resolveRepoWorkspaceId } from "../../contracts/workspace-roots";
 import { decodeTaskWorkbenchTemplate, type TaskWorkbenchTemplate } from "../../contracts/workbench";
 import { composerImageSavedSkipMessage } from "../../contracts/composer-attachments";
@@ -1733,23 +1738,106 @@ export class DesktopAppStore {
     return this.withErrorHandling(async () => {
       const snapshot = await this.driver.runtimeSupervisor.refreshRuntime(ws);
       await this.refreshRuntimeForAllWorkspaces(workspaceId, snapshot);
-      // One workspace failing to reload must not keep the others, or Settings, on the old tools.
-      const reloads = await Promise.allSettled(
-        this.state.workspaces.map((workspace) => {
-          this.clearExtensionUiForWorkspace(workspace.id);
-          return this.reloadSessionsForWorkspace(workspace.id);
-        }),
+      const reloaded = await this.reloadOpenSessions(
+        this.state.workspaces.map((workspace) => workspace.id),
       );
       await this.refreshSessionCommandsForAllWorkspaces();
-      const failed = reloads.filter((result) => result.status === "rejected");
-      for (const result of failed) {
-        console.error("[app-store] reload after pi-gui tool switch failed", result.reason);
-      }
       const state = await this.refreshState({ clearLastError: true });
-      return failed.length === 0
+      return reloaded
         ? state
         : this.withError(
             "Some open threads could not reload; they pick up the pi-gui tools change when reopened.",
+          );
+    });
+  }
+
+  /** Reloads open threads so they re-read their config; one failing does not stop the others. */
+  private async reloadOpenSessions(workspaceIds: readonly string[]): Promise<boolean> {
+    const reloads = await Promise.allSettled(
+      workspaceIds.map((workspaceId) => {
+        this.clearExtensionUiForWorkspace(workspaceId);
+        return this.reloadSessionsForWorkspace(workspaceId);
+      }),
+    );
+    const failed = reloads.filter((result) => result.status === "rejected");
+    for (const result of failed) {
+      console.error("[app-store] reloading open threads failed", result.reason);
+    }
+    return failed.length === 0;
+  }
+
+  /* ── MCP servers (pi's mcp.json) and code mode ─────────── */
+
+  async listMcpServers(workspaceId: string): Promise<McpServersSnapshot> {
+    await this.initialize();
+    const ws = this.workspaceRefFromState(workspaceId);
+    if (!ws) {
+      throw new Error(`Unknown workspace: ${workspaceId}`);
+    }
+    const listing = this.driver.runtimeSupervisor.listMcpServers(ws);
+    return {
+      servers: listing.servers.map((server) => ({ ...server })),
+      errors: [...listing.errors],
+      codemodeAlwaysOn: await this.driver.runtimeSupervisor.getCodemodeAlwaysOn(ws),
+    };
+  }
+
+  async addMcpServer(workspaceId: string, server: NewMcpServerInput): Promise<DesktopAppState> {
+    return this.withMcpConfigChange(workspaceId, "global", () =>
+      this.driver.runtimeSupervisor.addMcpServer(server),
+    );
+  }
+
+  async removeMcpServer(workspaceId: string, name: string): Promise<DesktopAppState> {
+    return this.withMcpConfigChange(workspaceId, "global", () =>
+      this.driver.runtimeSupervisor.removeMcpServer(name),
+    );
+  }
+
+  async setMcpServerEnabled(
+    workspaceId: string,
+    scope: McpServerScope,
+    name: string,
+    enabled: boolean,
+  ): Promise<DesktopAppState> {
+    return this.withMcpConfigChange(workspaceId, scope, (ws) =>
+      this.driver.runtimeSupervisor.setMcpServerEnabled(ws, scope, name, enabled),
+    );
+  }
+
+  async setCodemodeAlwaysOn(workspaceId: string, alwaysOn: boolean): Promise<DesktopAppState> {
+    return this.withMcpConfigChange(workspaceId, "global", async (ws) => {
+      await this.driver.runtimeSupervisor.setCodemodeAlwaysOn(ws, alwaysOn);
+      await this.recordSettingsSelfWrite();
+    });
+  }
+
+  /**
+   * pi reads mcp.json and defaultTools when a thread starts, so open threads reload to pick up a
+   * change (restarting their MCP servers): every workspace's for the global files, else only the
+   * workspace whose `.pi/mcp.json` changed.
+   */
+  private async withMcpConfigChange(
+    workspaceId: string,
+    scope: McpServerScope,
+    change: (ws: WorkspaceRef) => void | Promise<void>,
+  ): Promise<DesktopAppState> {
+    await this.initialize();
+    const ws = this.workspaceRefFromState(workspaceId);
+    if (!ws) {
+      return this.withError(`Unknown workspace: ${workspaceId}`);
+    }
+    return this.withErrorHandling(async () => {
+      await change(ws);
+      const workspaceIds =
+        scope === "global" ? this.state.workspaces.map((workspace) => workspace.id) : [workspaceId];
+      const reloaded = await this.reloadOpenSessions(workspaceIds);
+      await Promise.all(workspaceIds.map((id) => this.refreshSessionCommandsForWorkspace(id)));
+      const state = await this.refreshState({ clearLastError: true });
+      return reloaded
+        ? state
+        : this.withError(
+            "Some open threads could not reload; they pick up the MCP change when reopened.",
           );
     });
   }

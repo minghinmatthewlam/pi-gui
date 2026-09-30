@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import {
   BellIcon,
+  ExtensionIcon,
   KeyboardIcon,
   ModelIcon,
   PlugIcon,
@@ -75,6 +76,15 @@ export const SETTINGS_SECTIONS = [
     icon: <ModelIcon />,
     keywords: ["default model", "reasoning", "thinking", "enabled models"],
     description: () => "Choose the default model and which models appear in pickers.",
+    needsWorkspace: true,
+  },
+  {
+    id: "mcp",
+    title: "MCP servers",
+    group: "Agent",
+    icon: <ExtensionIcon />,
+    keywords: ["mcp", "mcp.json", "model context protocol", "servers", "code mode", "codemode"],
+    description: () => "Add, remove and switch the MCP servers pi connects in each thread.",
     needsWorkspace: true,
   },
 ] as const satisfies readonly SettingsSectionDefinition[];

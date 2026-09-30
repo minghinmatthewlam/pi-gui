@@ -24,6 +24,8 @@ import {
 import type {
   CustomProviderConfig,
   CustomProviderProbeInput,
+  McpServerScope,
+  NewMcpServerInput,
   TerminalSize,
 } from "../../contracts/ipc";
 import {
@@ -348,6 +350,30 @@ export function expectCustomProviderConfig(value: unknown): CustomProviderConfig
         contextWindow,
       };
     }),
+  };
+}
+
+export function expectMcpServerScope(value: unknown): McpServerScope {
+  if (value !== "global" && value !== "project") {
+    throw new TypeError("scope must be global or project");
+  }
+  return value;
+}
+
+/** Main re-validates in the driver (URL scheme, empty command); this checks the IPC shape. */
+export function expectNewMcpServerInput(value: unknown): NewMcpServerInput {
+  const record = expectRecord(value, "server");
+  const name = expectNonEmptyString(record.name, "server.name");
+  if (record.url !== undefined) {
+    if (record.command !== undefined || record.args !== undefined) {
+      throw new TypeError("server needs either a url or a command, not both");
+    }
+    return { name, url: expectNonEmptyString(record.url, "server.url") };
+  }
+  return {
+    name,
+    command: expectNonEmptyString(record.command, "server.command"),
+    args: record.args === undefined ? [] : expectStringArray(record.args, "server.args"),
   };
 }
 

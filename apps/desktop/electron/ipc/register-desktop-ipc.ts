@@ -37,7 +37,9 @@ import {
   expectCustomProviderProbeInput,
   expectForkThreadInput,
   expectHostUiResponse,
+  expectMcpServerScope,
   expectModelSettingsScopeMode,
+  expectNewMcpServerInput,
   expectNavigateSessionTreeOptions,
   expectNonEmptyString,
   expectNotificationPreferences,
@@ -146,6 +148,11 @@ type SettingsOwner = Pick<
   | "setScopedModelPatterns"
   | "setSkillEnabled"
   | "setExtensionEnabled"
+  | "listMcpServers"
+  | "addMcpServer"
+  | "removeMcpServer"
+  | "setMcpServerEnabled"
+  | "setCodemodeAlwaysOn"
   | "setNotificationPreferences"
   | "setIntegratedTerminalShell"
   | "setEnableTransparency"
@@ -557,6 +564,48 @@ export function registerDesktopIpc({
           expectNonEmptyString(rawWorkspaceId, "workspaceId"),
           expectNonEmptyString(rawFilePath, "filePath"),
           expectBoolean(rawEnabled, "enabled"),
+        ),
+      ),
+  );
+  ipcMain.handle(desktopIpc.listMcpServers, (event, rawWorkspaceId: unknown) => {
+    windows.windowForSender(event.sender);
+    return owners.settings.listMcpServers(expectNonEmptyString(rawWorkspaceId, "workspaceId"));
+  });
+  ipcMain.handle(desktopIpc.addMcpServer, (event, rawWorkspaceId: unknown, rawServer: unknown) =>
+    run(event, () =>
+      owners.settings.addMcpServer(
+        expectNonEmptyString(rawWorkspaceId, "workspaceId"),
+        expectNewMcpServerInput(rawServer),
+      ),
+    ),
+  );
+  ipcMain.handle(desktopIpc.removeMcpServer, (event, rawWorkspaceId: unknown, rawName: unknown) =>
+    run(event, () =>
+      owners.settings.removeMcpServer(
+        expectNonEmptyString(rawWorkspaceId, "workspaceId"),
+        expectNonEmptyString(rawName, "name"),
+      ),
+    ),
+  );
+  ipcMain.handle(
+    desktopIpc.setMcpServerEnabled,
+    (event, rawWorkspaceId: unknown, rawScope: unknown, rawName: unknown, rawEnabled: unknown) =>
+      run(event, () =>
+        owners.settings.setMcpServerEnabled(
+          expectNonEmptyString(rawWorkspaceId, "workspaceId"),
+          expectMcpServerScope(rawScope),
+          expectNonEmptyString(rawName, "name"),
+          expectBoolean(rawEnabled, "enabled"),
+        ),
+      ),
+  );
+  ipcMain.handle(
+    desktopIpc.setCodemodeAlwaysOn,
+    (event, rawWorkspaceId: unknown, rawAlwaysOn: unknown) =>
+      run(event, () =>
+        owners.settings.setCodemodeAlwaysOn(
+          expectNonEmptyString(rawWorkspaceId, "workspaceId"),
+          expectBoolean(rawAlwaysOn, "alwaysOn"),
         ),
       ),
   );
