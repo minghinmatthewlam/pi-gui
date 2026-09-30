@@ -1,3 +1,5 @@
+import type { ExtensionAction } from "./extension-actions.js";
+
 export interface SessionTranscriptImageAttachment {
   readonly kind: "image";
   readonly mimeType: string;
@@ -65,28 +67,29 @@ export interface ExtensionCardRow {
   readonly value: string;
 }
 
-/** Opens `path` (relative to the thread's workspace) at `line` in the side panel. */
-export interface ExtensionCardAction {
-  readonly label: string;
-  readonly path: string;
-  readonly line?: number;
-}
-
 /**
  * A card an extension declares as data with `pi.appendEntry("pi-gui.card", card)`.
  * pi-gui draws it with its own component; there are no styling knobs.
  */
 export interface ExtensionCard {
+  /**
+   * Writing another card with the same key updates this one where it first appeared,
+   * instead of adding a new row.
+   */
+  readonly key?: string;
   readonly title: string;
   readonly subtitle?: string;
   readonly tone: ExtensionCardTone;
   readonly rows: readonly ExtensionCardRow[];
-  readonly actions: readonly ExtensionCardAction[];
+  readonly actions: readonly ExtensionAction[];
 }
 
 export interface SessionTranscriptCard {
   readonly kind: "card";
-  /** The pi entry id, so the live row and the reopened row are the same item. */
+  /**
+   * `card:<key>` for a keyed card, else the pi entry id, so the live row and the reopened
+   * row are the same item.
+   */
   readonly id: string;
   readonly createdAt: string;
   readonly card: ExtensionCard;

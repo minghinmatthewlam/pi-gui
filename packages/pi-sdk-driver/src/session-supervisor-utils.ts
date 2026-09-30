@@ -6,8 +6,8 @@ import {
   type SessionManager,
 } from "@earendil-works/pi-coding-agent";
 import type {
+  ExtensionAction,
   ExtensionCard,
-  ExtensionCardAction,
   ExtensionCardRow,
   SessionAttachment,
   SessionConfig,
@@ -22,7 +22,7 @@ import type {
   SessionUsageSnapshot,
   WorkspaceRef,
 } from "@pi-gui/session-driver";
-import { EXTENSION_CARD_CUSTOM_TYPE } from "@pi-gui/session-driver";
+import { EXTENSION_CARD_CUSTOM_TYPE, parseExtensionAction } from "@pi-gui/session-driver";
 import type { SessionQueuedMessage } from "@pi-gui/session-driver/types";
 
 const FILE_ATTACHMENT_BLOCK_START = "<pi-gui-file-attachments>";
@@ -290,10 +290,19 @@ function transcriptFromSources(
 ): SessionTranscriptItem[] {
   const transcript: SessionTranscriptItem[] = [];
   const toolIndexByCallId = new Map<string, number>();
+  const cardIndexById = new Map<string, number>();
 
   for (const [index, source] of sources.entries()) {
     if (source.kind === "card") {
-      transcript.push(transcriptItemFromCardEntry(source.entry));
+      const item = transcriptItemFromCardEntry(source.entry);
+      // A keyed card stays where it first appeared and shows its latest write.
+      const existing = cardIndexById.get(item.id);
+      if (existing === undefined) {
+        cardIndexById.set(item.id, transcript.length);
+        transcript.push(item);
+      } else {
+        transcript[existing] = item;
+      }
       continue;
     }
     const { message } = source;
@@ -418,23 +427,40 @@ export function isExtensionCardEntry(entry: { readonly type: string }): entry is
 export function transcriptItemFromCardEntry(
   entry: CustomEntry,
 ): SessionTranscriptCard | SessionTranscriptCustomMessage {
-  const base = { id: entry.id, createdAt: entry.timestamp };
   const card = parseExtensionCard(entry.data);
   if (typeof card === "string") {
     return {
-      ...base,
+      id: entry.id,
+      createdAt: entry.timestamp,
       kind: "custom",
       customType: EXTENSION_CARD_CUSTOM_TYPE,
       text: `This card was not shown: ${card}.`,
     };
   }
-  return { ...base, kind: "card", card };
+  return {
+    id: card.key ? `card:${card.key}` : entry.id,
+    createdAt: entry.timestamp,
+    kind: "card",
+    card,
+  };
 }
+
+/** Card keys: 1 to 64 letters, digits, dots, dashes, underscores or colons. */
+const CARD_KEY_PATTERN = /^[A-Za-z0-9._:-]{1,64}$/;
+/** More buttons than this on one card are dropped. */
+const MAX_CARD_ACTIONS = 8;
 
 function parseExtensionCard(data: unknown): ExtensionCard | string {
   if (!isRecord(data)) return "its data must be an object";
   const title = typeof data.title === "string" ? data.title.trim() : "";
   if (!title) return "it needs a non-empty string `title`";
+  if (
+    data.key !== undefined &&
+    (typeof data.key !== "string" || !CARD_KEY_PATTERN.test(data.key))
+  ) {
+    return "its `key` must be 1 to 64 letters, digits, dots, dashes, underscores or colons";
+  }
+  const key = data.key as string | undefined;
   const subtitle = typeof data.subtitle === "string" ? data.subtitle.trim() : "";
   const tone =
     data.tone === "success" || data.tone === "warning" || data.tone === "error"
@@ -448,21 +474,14 @@ function parseExtensionCard(data: unknown): ExtensionCard | string {
       )
     : [];
   const actions = Array.isArray(data.actions)
-    ? data.actions.flatMap((action): ExtensionCardAction[] =>
-        isRecord(action) && nonEmptyString(action.label) && nonEmptyString(action.path)
-          ? [
-              {
-                label: action.label,
-                path: action.path,
-                ...(Number.isSafeInteger(action.line) && (action.line as number) > 0
-                  ? { line: action.line as number }
-                  : {}),
-              },
-            ]
-          : [],
-      )
+    ? data.actions
+        .flatMap((action): ExtensionAction[] => {
+          const parsed = parseExtensionAction(action);
+          return parsed ? [parsed] : [];
+        })
+        .slice(0, MAX_CARD_ACTIONS)
     : [];
-  return { title, ...(subtitle ? { subtitle } : {}), tone, rows, actions };
+  return { ...(key ? { key } : {}), title, ...(subtitle ? { subtitle } : {}), tone, rows, actions };
 }
 
 function nonEmptyString(value: unknown): value is string {

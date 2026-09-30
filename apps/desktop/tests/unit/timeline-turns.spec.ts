@@ -117,3 +117,19 @@ test("an extension message or card posted after the run neither stretches the ma
   const marker = buildDisplayTimelineItems(transcript).find((item) => item.kind === "turn-marker");
   expect(marker?.durationMs).toBe(6_000);
 });
+
+test("a keyed card updated long after its turn does not stretch that turn's marker", () => {
+  const transcript: TranscriptMessage[] = [
+    message("u1", "user", 0),
+    {
+      kind: "card",
+      id: "card:ci",
+      // The card's latest write, an hour and a half after the turn ended.
+      createdAt: at(5_400),
+      card: { key: "ci", title: "CI passed", tone: "success", rows: [], actions: [] },
+    },
+    message("a1", "assistant", 60),
+  ];
+  const marker = buildDisplayTimelineItems(transcript).find((item) => item.kind === "turn-marker");
+  expect(marker?.durationMs).toBe(60_000);
+});

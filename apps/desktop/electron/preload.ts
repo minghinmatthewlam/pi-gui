@@ -25,6 +25,7 @@ import {
   type TerminalPanelSnapshot,
   type TerminalSize,
 } from "../contracts/ipc";
+import type { ExtensionActionEffect, ExtensionActionRequest } from "../contracts/extension-actions";
 import type { ClipboardImageRead } from "../contracts/composer-attachments";
 import type { SaveTaskWorkbenchTemplateInput, TaskWorkbenchTemplate } from "../contracts/workbench";
 import type {
@@ -126,6 +127,11 @@ contextBridge.exposeInMainWorld("piApp", {
     subscribeIpc(desktopIpc.extensionViewCatalogChanged, listener),
   onExtensionViewOpenFile: (listener: (event: ExtensionViewOpenFile) => void) =>
     subscribeIpc(desktopIpc.extensionViewOpenFile, listener),
+  runExtensionAction: (request: ExtensionActionRequest) =>
+    ipcRenderer.invoke(
+      desktopIpc.runExtensionAction,
+      request,
+    ) as Promise<ExtensionActionEffect | null>,
   getTurnChanges: (input: TurnChangesInput) =>
     ipcRenderer.invoke(desktopIpc.getTurnChanges, input) as Promise<TurnChangesResult>,
   getReview: (input: GetReviewInput) =>

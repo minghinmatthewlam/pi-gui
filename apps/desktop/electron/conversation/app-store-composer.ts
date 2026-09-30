@@ -164,6 +164,12 @@ export interface ConversationOwner {
     options?: { readonly deliverAs?: "steer" | "followUp" },
   ): Promise<DesktopAppState>;
   composerSubmitNeedsSenderView(sessionRef: SessionRef | undefined, textInput: string): boolean;
+  /**
+   * Runs an extension command for a card button. It is not a user message: nothing is added
+   * to the thread or taken from the composer, and the driver refuses anything that is not an
+   * extension command. Throws on failure so the caller shows one kind of error.
+   */
+  runExtensionCommand(sessionRef: SessionRef, command: string): Promise<DesktopAppState>;
   submitComposerToSession(
     sessionRef: SessionRef,
     textInput: string,
@@ -201,6 +207,7 @@ export function createConversationOwner(store: ConversationOwnerHost): Conversat
     steerQueuedComposerMessage: (sessionRef, messageId) =>
       steerQueuedComposerMessage(store, sessionRef, messageId),
     submitComposer: (sessionRef, text, options) => submitComposer(store, sessionRef, text, options),
+    runExtensionCommand: (sessionRef, command) => runExtensionCommand(store, sessionRef, command),
     composerSubmitNeedsSenderView: (sessionRef, text) =>
       sessionRef
         ? composerSubmitNeedsSenderView(
@@ -599,6 +606,44 @@ async function submitComposerToSession(
     }
     return store.withSessionError(sessionRef, error);
   }
+}
+
+async function runExtensionCommand(
+  store: ComposerStore,
+  sessionRef: SessionRef,
+  commandText: string,
+): Promise<DesktopAppState> {
+  await store.initialize();
+  const text = commandText.trim();
+  const command = resolveRuntimeSlashCommand(
+    text,
+    store.runtimeForWorkspace(sessionRef.workspaceId),
+    store.conversationState.sessionCommandsBySession.get(sessionKey(sessionRef)) ?? [],
+  );
+  // The driver is the check that matters (`extensionCommandOnly`); this only keeps the
+  // terminal-only bookkeeping the same as a typed command.
+  const tracked = command?.source === "extension" ? command : undefined;
+  if (tracked) {
+    const compatibility = store.getLearnedRuntimeCommandCompatibility(
+      sessionRef.workspaceId,
+      tracked,
+    );
+    if (compatibility?.status === "terminal-only") throw new Error(compatibility.message);
+    store.beginRuntimeCommandExecution(sessionRef, tracked);
+  }
+  // Not a message from the user: no bubble, no recency bump, no unarchive, and the draft,
+  // attachments and a streaming reply stay as they are. pi saves nothing for the command
+  // itself, so the live thread matches the reopened one.
+  try {
+    if (!store.conversationState.loadedTranscriptKeys.has(sessionKey(sessionRef))) {
+      await store.ensureSessionReady(sessionRef);
+    }
+    await store.driver.sendUserMessage(sessionRef, { text, extensionCommandOnly: true });
+  } finally {
+    if (tracked) store.finishRuntimeCommandExecution(sessionRef);
+  }
+  await store.refreshSessionCommandsFor(sessionRef);
+  return store.refreshState({ markSelectedSessionViewed: false });
 }
 
 async function setSessionModel(

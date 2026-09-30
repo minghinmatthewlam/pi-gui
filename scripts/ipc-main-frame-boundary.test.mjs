@@ -33,6 +33,7 @@ const mainFrameChannels = [
   "getTaskWorkbenchTemplate",
   "saveTaskWorkbenchTemplate",
   "persistComposerDraft",
+  "runExtensionAction",
 ];
 
 function ipcViolations(filePath, source) {

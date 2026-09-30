@@ -18,7 +18,7 @@ import {
 } from "./annotations/annotation-markers";
 import { parseAnnotatedPrompt } from "./annotations/annotation-prompt";
 import { SentAnnotations } from "./annotations/sent-annotations";
-import { ExtensionCardItem } from "./extension-card";
+import { ExtensionCardItem, type RunExtensionAction } from "./extension-card";
 import { ImageAttachmentThumb } from "./image-attachment-thumb";
 import { MessageMarkdown } from "./message-markdown";
 import { TurnChangesCard, type OpenTurnChange } from "./turn-changes-card";
@@ -46,6 +46,7 @@ export function TimelineItem({
   scheduledOrigin,
   workspacePath,
   onOpenWorkspaceFileLine,
+  onExtensionAction,
   annotationMarkers,
   onOpenAnnotation,
 }: {
@@ -59,6 +60,7 @@ export function TimelineItem({
   readonly scheduledOrigin?: ScheduledTaskOrigin;
   readonly workspacePath?: string;
   readonly onOpenWorkspaceFileLine?: (target: WorkspaceFileLine) => void;
+  readonly onExtensionAction?: RunExtensionAction;
   readonly annotationMarkers?: readonly AnnotationMarker[];
   readonly onOpenAnnotation?: OpenAnnotation;
 }) {
@@ -96,9 +98,7 @@ export function TimelineItem({
     case "custom":
       return <TimelineCustomMessage item={item} />;
     case "card":
-      return (
-        <ExtensionCardItem card={item.card} onOpenWorkspaceFileLine={onOpenWorkspaceFileLine} />
-      );
+      return <ExtensionCardItem card={item.card} onAction={onExtensionAction} />;
     default:
       return unhandledTimelineItem(item);
   }

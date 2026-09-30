@@ -146,3 +146,23 @@ test("a card or its error row appended mid-reply goes above the streaming reply,
     ["entry-card", "entry-broken", "Checking CI. Done."],
   );
 });
+
+test("a keyed card's later write updates it where it is, even mid-reply, without splitting the reply", () => {
+  const h = fixture();
+  const keyed = (title: string) => ({
+    kind: "card" as const,
+    id: "card:ci",
+    createdAt: timestamp,
+    card: { key: "ci", title, tone: "neutral" as const, rows: [], actions: [] },
+  });
+  h.send({ type: "transcriptItemAppended", sessionRef, timestamp, item: keyed("CI running") });
+  h.append("Rerunning.");
+  h.send({ type: "transcriptItemAppended", sessionRef, timestamp, item: keyed("CI passed") });
+  h.append(" All green.");
+  const rows = h.transcript.get(key)!;
+  expect(rows.map((row) => (row.kind === "message" ? row.text : row.id))).toEqual([
+    "card:ci",
+    "Rerunning. All green.",
+  ]);
+  expect(rows[0]?.kind === "card" && rows[0].card.title).toBe("CI passed");
+});
