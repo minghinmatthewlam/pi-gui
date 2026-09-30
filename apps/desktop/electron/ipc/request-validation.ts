@@ -373,7 +373,7 @@ export function expectNewMcpServerInput(value: unknown): NewMcpServerInput {
   return {
     name,
     command: expectNonEmptyString(record.command, "server.command"),
-    args: record.args === undefined ? [] : expectStringArray(record.args, "server.args"),
+    args: record.args === undefined ? [] : [...expectStringArray(record.args, "server.args")],
   };
 }
 
