@@ -17,6 +17,7 @@ import {
 import type {
   RuntimeLoginCallbacks,
   RuntimeExtensionDiagnostic,
+  RuntimeExtensionFlag,
   RuntimeExtensionRecord,
   RuntimeModelRecord,
   RuntimeProviderRecord,
@@ -857,6 +858,7 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
           flags: loaded
             ? [...loaded.flags.keys()].sort((left, right) => left.localeCompare(right))
             : [],
+          flagDetails: loaded ? describeFlags(loaded.flags) : [],
           shortcuts: loaded
             ? [...loaded.shortcuts.keys()].sort((left, right) => left.localeCompare(right))
             : [],
@@ -901,6 +903,7 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
         .map((tool) => tool.definition.name)
         .sort((left, right) => left.localeCompare(right)),
       flags: [...extension.flags.keys()].sort((left, right) => left.localeCompare(right)),
+      flagDetails: describeFlags(extension.flags),
       shortcuts: [...extension.shortcuts.keys()].sort((left, right) => left.localeCompare(right)),
       diagnostics: [],
     };
@@ -1308,4 +1311,20 @@ function firstNonEmptyLine(value: string): string | undefined {
     .split(/\r?\n/)
     .map((line) => line.trim())
     .find(Boolean);
+}
+
+function describeFlags(
+  flags: ReadonlyMap<
+    string,
+    { description?: string; type: "boolean" | "string"; default?: boolean | string }
+  >,
+): RuntimeExtensionFlag[] {
+  return [...flags.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([name, flag]) => ({
+      name,
+      ...(flag.description ? { description: flag.description } : {}),
+      type: flag.type,
+      ...(flag.default !== undefined ? { default: flag.default } : {}),
+    }));
 }

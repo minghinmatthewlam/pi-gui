@@ -1102,6 +1102,8 @@ export default function App() {
                   newThread.setModelId(modelId);
                 }}
                 onSetThinking={newThread.setThinkingLevel}
+                extensionFlags={newThread.extensionFlags}
+                onSetExtensionFlag={newThread.setExtensionFlag}
                 onOpenModelSettings={(section) => openSettings(newThread.workspace?.id, section)}
                 onComposerKeyDown={newThread.handleComposerKeyDown}
                 onComposerPaste={newThread.handleComposerPaste}
@@ -1197,6 +1199,7 @@ export default function App() {
                     ? snapshot?.sessionUsageBySession[selectedSessionKey]
                     : undefined
                 }
+                extensionFlags={snapshot.extensionFlagsBySession[selectedSessionKey]}
                 provider={resolvedSessionProvider}
                 modelId={resolvedSessionModelId}
                 thinkingLevel={resolvedSessionThinkingLevel}

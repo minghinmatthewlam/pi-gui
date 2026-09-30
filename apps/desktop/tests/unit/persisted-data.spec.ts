@@ -18,6 +18,8 @@ for (const invalid of [
   { version: 15, notificationPreferences: { futureSetting: true } },
   { version: 16, lastInteractedAtBySession: { one: 42 } },
   { version: 17, threadGrouping: "priority" },
+  { version: 19, extensionFlagsByWorkspace: { ws: { retries: 3 } } },
+  { version: 19, extensionFlagsBySession: { "ws:sess": ["plan"] } },
   [],
 ]) {
   test(`preserves invalid UI state ${JSON.stringify(invalid)}`, async () => {
@@ -66,6 +68,19 @@ test("reads v16 ui-state without threadGrouping and writes the saved choice as v
   };
   expect(written.version).toBe(19);
   expect(written.threadGrouping).toBe("workspace");
+});
+
+test("extension flag defaults and per-thread flags round-trip through ui-state", async () => {
+  const path = join(await mkdtemp(join(tmpdir(), "ui-state-flags-")), "ui-state.json");
+  await writePersistedUiState(path, {
+    extensionFlagsByWorkspace: { ws: { plan: true, "dry-run": false, env: "" } },
+    extensionFlagsBySession: { "ws:sess": { plan: true }, "ws:empty": {} },
+  });
+  const decoded = await readPersistedUiState(path);
+  expect(decoded.extensionFlagsByWorkspace).toEqual({
+    ws: { plan: true, "dry-run": false, env: "" },
+  });
+  expect(decoded.extensionFlagsBySession).toEqual({ "ws:sess": { plan: true } });
 });
 
 test("backup recovery retains damaged bytes and the good backup", async () => {

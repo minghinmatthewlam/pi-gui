@@ -1,4 +1,9 @@
-import type { HostUiRequest, SessionConfig, SessionUsageSnapshot } from "@pi-gui/session-driver";
+import type {
+  ExtensionFlagValues,
+  HostUiRequest,
+  SessionConfig,
+  SessionUsageSnapshot,
+} from "@pi-gui/session-driver";
 import type {
   ModelSettingsSnapshot,
   RuntimeCommandRecord,
@@ -295,6 +300,12 @@ export type StartThreadInput = {
   readonly provider?: string;
   readonly modelId?: string;
   readonly thinkingLevel?: string;
+  /**
+   * The flag values chosen for this thread, `false` and empty strings included so
+   * they are remembered as the workspace's next defaults. Main checks them against
+   * the flags the workspace's extensions registered before pi sees them.
+   */
+  readonly extensionFlags?: ExtensionFlagValues;
 };
 
 export type ForkThreadPosition = "before" | "at" | "after";
@@ -346,6 +357,10 @@ export interface DesktopAppState {
   readonly extensionCommandCompatibilityByWorkspace: Readonly<
     Record<string, readonly ExtensionCommandCompatibilityRecord[]>
   >;
+  /** Flag values last chosen for a new thread in each root workspace: the next thread's defaults. */
+  readonly extensionFlagsByWorkspace: Readonly<Record<string, ExtensionFlagValues>>;
+  /** Flag values each thread's pi session started with (only the ones pi receives). */
+  readonly extensionFlagsBySession: Readonly<Record<string, ExtensionFlagValues>>;
   readonly orchestrationChildren: readonly OrchestrationChildThread[];
   readonly scheduledTasks: readonly ScheduledTaskRecord[];
   readonly notificationPreferences: NotificationPreferences;
@@ -394,6 +409,8 @@ export function createEmptyDesktopAppState(): DesktopAppState {
     sessionUsageBySession: {},
     sessionExtensionUiBySession: {},
     extensionCommandCompatibilityByWorkspace: {},
+    extensionFlagsByWorkspace: {},
+    extensionFlagsBySession: {},
     orchestrationChildren: [],
     scheduledTasks: [],
     notificationPreferences: {

@@ -1,4 +1,8 @@
-import { parseExtensionAction, type HostUiResponse } from "@pi-gui/session-driver";
+import {
+  parseExtensionAction,
+  type ExtensionFlagValues,
+  type HostUiResponse,
+} from "@pi-gui/session-driver";
 import type { ExtensionActionRequest } from "../../contracts/extension-actions";
 import type { NavigateSessionTreeOptions } from "@pi-gui/session-driver/types";
 import type { RuntimeSettingsSnapshot } from "@pi-gui/session-driver/runtime-types";
@@ -241,7 +245,24 @@ export function expectStartThreadInput(value: unknown): StartThreadInput {
     provider: expectOptionalNonEmptyString(record.provider, "input.provider"),
     modelId: expectOptionalNonEmptyString(record.modelId, "input.modelId"),
     thinkingLevel: expectOptionalString(record.thinkingLevel, "input.thinkingLevel"),
+    extensionFlags:
+      record.extensionFlags === undefined
+        ? undefined
+        : expectExtensionFlags(record.extensionFlags, "input.extensionFlags"),
   };
+}
+
+/** Flag values keyed by flag name; which names and types are valid is checked against the runtime in main. */
+function expectExtensionFlags(value: unknown, label: string): ExtensionFlagValues {
+  return Object.fromEntries(
+    Object.entries(expectRecord(value, label)).map(([name, flagValue]) => {
+      if (!name.trim()) throw new TypeError(`${label} flag names must be non-empty`);
+      if (typeof flagValue !== "boolean" && typeof flagValue !== "string") {
+        throw new TypeError(`${label}.${name} must be a boolean or string`);
+      }
+      return [name, flagValue] as const;
+    }),
+  );
 }
 
 export function expectForkThreadInput(value: unknown): ForkThreadInput {
