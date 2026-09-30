@@ -11,7 +11,7 @@ Users hide a thread from the active sidebar and recover it from the Archived gro
 ## How to get to it (user POV)
 
 - Hover a thread row and click its Archive action (tooltip shows ⇧⌘A).
-- Or choose Archive thread from the thread-actions menu (header Thread actions button, right-click a row, or Cmd-K), or press Shift+Cmd+A (Shift+Control+A elsewhere) on the selected thread. There is no confirmation.
+- Or choose Archive thread from the thread-actions menu (header Thread actions button, right-click a row, or Cmd-K), or press Shift+Cmd+A (Ctrl+Shift+A elsewhere) on the selected thread. There is no confirmation.
 - Expand Archived (collapsed by default), hover the archived row, and click Restore, or right-click it and choose Restore thread. Restore has no shortcut.
 
 ## Driving it with Playwright
@@ -28,3 +28,6 @@ Preconditions: isolated workspace with fixture threads Thread one and Thread two
 
 - The action starts invisible until hover; do not force-click it to bypass the behavior under test.
 - Seeded thread creation is not part of archive proof. Archiving is not deletion.
+- Archiving a pinned thread also unpins it.
+- Sending a message to an archived thread restores it.
+- For a pi-gui worktree thread the archived context reads `<folder> / <worktree>`, so the Restore label ends `in <folder> / <worktree>`.

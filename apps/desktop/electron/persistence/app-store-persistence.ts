@@ -12,6 +12,7 @@ import type {
   ThreadGrouping,
 } from "../../contracts/desktop-state";
 import { isThemeMode, isThemePresetId, isThreadGrouping } from "../../contracts/desktop-state";
+import type { ExtensionFlagValues } from "@pi-gui/session-driver";
 import type { ModelSettingsSnapshot } from "@pi-gui/session-driver/runtime-types";
 import { readJsonWithBackup, writeFileAtomicQueued } from "./atomic-file-write";
 import { decodeAttachments } from "./attachment-store";
@@ -32,6 +33,10 @@ export interface PersistedUiState {
     string,
     readonly ExtensionCommandCompatibilityRecord[]
   >;
+  /** Flag values last chosen for a new thread, by root workspace. */
+  readonly extensionFlagsByWorkspace?: Record<string, ExtensionFlagValues>;
+  /** Flag values each thread's pi session started with, by session key. */
+  readonly extensionFlagsBySession?: Record<string, ExtensionFlagValues>;
   readonly notificationPreferences?: Partial<NotificationPreferences>;
   /** Names of pi-gui built-in extensions the user switched off. */
   readonly disabledBuiltinExtensions?: readonly string[];
@@ -96,6 +101,8 @@ export function decodePersistedUiState(parsed: unknown): LegacyPersistedUiState 
     extensionCommandCompatibilityByWorkspace: toPersistedCompatibilityByWorkspace(
       candidate.extensionCommandCompatibilityByWorkspace,
     ),
+    extensionFlagsByWorkspace: toExtensionFlagRecords(candidate.extensionFlagsByWorkspace),
+    extensionFlagsBySession: toExtensionFlagRecords(candidate.extensionFlagsBySession),
     notificationPreferences: toNotificationPreferences(candidate.notificationPreferences),
     disabledBuiltinExtensions: toStringArray(candidate.disabledBuiltinExtensions),
     integratedTerminalShell:
@@ -199,6 +206,8 @@ function validateUiState(value: unknown): Record<string, unknown> {
       "composerDraft",
       "composerDraftsBySession",
       "extensionCommandCompatibilityByWorkspace",
+      "extensionFlagsByWorkspace",
+      "extensionFlagsBySession",
       "notificationPreferences",
       "disabledBuiltinExtensions",
       "integratedTerminalShell",
@@ -299,6 +308,21 @@ function validateUiState(value: unknown): Record<string, unknown> {
       strings,
       "appGlobalModelSettings.enabledModelPatterns",
     );
+  }
+  for (const key of ["extensionFlagsByWorkspace", "extensionFlagsBySession"]) {
+    if (root[key] === undefined) continue;
+    const records = objectRecord(root[key]) ?? fail(key);
+    for (const [id, flags] of Object.entries(records)) {
+      const values = objectRecord(flags);
+      if (
+        !id ||
+        !values ||
+        !Object.entries(values).every(
+          ([name, value]) => name && (typeof value === "boolean" || typeof value === "string"),
+        )
+      )
+        fail(`${key}.${id}`);
+    }
   }
   if (root.extensionCommandCompatibilityByWorkspace !== undefined) {
     const records =
@@ -786,6 +810,17 @@ function toStringRecord(value: unknown): Record<string, string> | undefined {
     (entry): entry is [string, string] =>
       Boolean(entry[0]) && typeof entry[1] === "string" && Boolean(entry[1]),
   );
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+}
+
+/** Shape is checked by validateUiState; empty records are dropped. */
+function toExtensionFlagRecords(value: unknown): Record<string, ExtensionFlagValues> | undefined {
+  const entries = Object.entries(objectRecord(value) ?? {}).flatMap(([id, flags]) => {
+    const values = objectRecord(flags);
+    return values && Object.keys(values).length > 0
+      ? [[id, values as ExtensionFlagValues] as const]
+      : [];
+  });
   return entries.length > 0 ? Object.fromEntries(entries) : undefined;
 }
 
