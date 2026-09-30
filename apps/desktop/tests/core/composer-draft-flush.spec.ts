@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import {
   createNamedThread,
+  getDesktopState,
   launchDesktop,
   makeUserDataDir,
   makeWorkspace,
@@ -8,17 +9,29 @@ import {
   type DesktopHarness,
 } from "../helpers/electron-app";
 
-// The composer saves its draft 350 ms after the last keystroke. These specs archive the thread,
-// close the window or quit straight after typing, well inside that debounce, and expect the
-// draft to survive.
+// The composer saves its draft 350 ms after the last keystroke. These specs pause the renderer's
+// timers so that save cannot happen on its own, confirm main has not received the draft, and
+// then archive the thread, close the window or quit. The draft must survive anyway.
 const draft = "Unsent draft typed just before shutdown";
 
-async function typeDraftIntoNewThread(window: Page, title: string): Promise<void> {
-  await createNamedThread(window, title);
+/** Freezes renderer timers, so a debounced draft save waits until something flushes it. */
+async function pauseRendererTimers(window: Page): Promise<void> {
+  await window.clock.install();
+  await window.clock.pauseAt(Date.now() + 1_000);
+}
+
+async function expectDraftNotSaved(window: Page): Promise<void> {
+  expect((await getDesktopState(window)).composerDraft).toBe("");
+}
+
+async function typeUnsavedDraft(window: Page, text = draft): Promise<void> {
   const composer = window.getByTestId("composer");
   await composer.click();
-  await composer.pressSequentially(draft, { delay: 5 });
-  await expect(composer).toHaveValue(draft);
+  await composer.pressSequentially(text, { delay: 5 });
+  await expect(composer).toHaveValue(text);
+  // Longer than the debounce in real time: the save stays pending however slow the runner is.
+  await window.waitForTimeout(500);
+  await expectDraftNotSaved(window);
 }
 
 async function expectDraftAfterRelaunch(
@@ -35,52 +48,68 @@ async function expectDraftAfterRelaunch(
   }
 }
 
-for (const shutdown of ["quit", "close-last-window"] as const) {
-  test(`keeps a draft typed just before ${shutdown === "quit" ? "quitting" : "closing the last window"}`, async () => {
-    test.setTimeout(90_000);
-    const userDataDir = await makeUserDataDir();
-    const workspace = await makeWorkspace(`draft-shutdown-${shutdown}`);
-    const launch = () =>
-      launchDesktop(userDataDir, { initialWorkspaces: [workspace], testMode: "background" });
-    const title = "Shutdown draft";
+function launcher(name: string): () => Promise<DesktopHarness> {
+  const setup = Promise.all([makeUserDataDir(), makeWorkspace(name)]);
+  return async () => {
+    const [userDataDir, workspace] = await setup;
+    return launchDesktop(userDataDir, { initialWorkspaces: [workspace], testMode: "background" });
+  };
+}
 
-    const harness = await launch();
-    const window = await harness.firstWindow();
-    await typeDraftIntoNewThread(window, title);
-    if (shutdown === "quit") {
-      // Playwright quits through app.quit(), the same path as Cmd-Q and the Quit menu item.
-      await harness.close();
-    } else {
-      // Title-bar close; on Linux and Windows closing the last window quits the app.
-      const exited = new Promise<void>((resolve) =>
-        harness.electronApp.process().once("exit", () => resolve()),
-      );
-      await harness.electronApp.evaluate(({ BrowserWindow }) => {
-        BrowserWindow.getAllWindows()[0]?.close();
-      });
-      await exited;
-    }
+function processExit(harness: DesktopHarness): Promise<void> {
+  return new Promise((resolve) => harness.electronApp.process().once("exit", () => resolve()));
+}
 
-    await expectDraftAfterRelaunch(launch, title);
+async function closeFirstWindow(harness: DesktopHarness): Promise<void> {
+  await harness.electronApp.evaluate(({ BrowserWindow }) => {
+    BrowserWindow.getAllWindows()[0]?.close();
   });
 }
 
+test("keeps a draft typed just before quitting", async () => {
+  test.setTimeout(90_000);
+  const launch = launcher("draft-shutdown-quit");
+  const harness = await launch();
+  const window = await harness.firstWindow();
+  await createNamedThread(window, "Quit draft");
+  await pauseRendererTimers(window);
+  await typeUnsavedDraft(window);
+  // Playwright quits through app.quit(), the same path as Cmd-Q and the Quit menu item.
+  await harness.close();
+
+  await expectDraftAfterRelaunch(launch, "Quit draft");
+});
+
+test("keeps a draft typed just before closing the last window", async () => {
+  test.setTimeout(90_000);
+  const launch = launcher("draft-shutdown-close");
+  const harness = await launch();
+  const window = await harness.firstWindow();
+  await createNamedThread(window, "Close draft");
+  await pauseRendererTimers(window);
+  await typeUnsavedDraft(window);
+  // Title-bar close; on Linux and Windows closing the last window quits the app.
+  const exited = processExit(harness);
+  await closeFirstWindow(harness);
+  await exited;
+
+  await expectDraftAfterRelaunch(launch, "Close draft");
+});
+
 test("keeps a draft when the thread is archived by shortcut straight after typing", async () => {
   test.setTimeout(90_000);
-  const userDataDir = await makeUserDataDir();
-  const workspace = await makeWorkspace("draft-archive-shortcut");
-  const harness = await launchDesktop(userDataDir, {
-    initialWorkspaces: [workspace],
-    testMode: "background",
-  });
+  const harness = await launcher("draft-archive-shortcut")();
   const modifier = process.platform === "darwin" ? "Meta" : "Control";
 
   try {
     const window = await harness.firstWindow();
     await createNamedThread(window, "Kept");
-    await typeDraftIntoNewThread(window, "Archived");
+    await createNamedThread(window, "Archived");
+    await pauseRendererTimers(window);
+    await typeUnsavedDraft(window);
     await window.keyboard.press(`${modifier}+Shift+A`);
     await expect(window.locator(".chat-header__title")).toHaveText("Kept");
+    await window.clock.resume();
 
     await window.locator(".archived-thread-group__toggle").click();
     const archivedRow = window.locator(".session-list--archived .session-row", {
@@ -98,10 +127,7 @@ test("keeps a draft when the thread is archived by shortcut straight after typin
 
 test("keeps the drafts of every window when quitting straight after typing", async () => {
   test.setTimeout(90_000);
-  const userDataDir = await makeUserDataDir();
-  const workspace = await makeWorkspace("draft-shutdown-multi-window");
-  const launch = () =>
-    launchDesktop(userDataDir, { initialWorkspaces: [workspace], testMode: "background" });
+  const launch = launcher("draft-shutdown-multi-window");
   const nativeModifier = process.platform === "darwin" ? "meta" : "control";
   const drafts = { First: "Draft in the first window", Second: "Draft in the second window" };
 
@@ -111,28 +137,29 @@ test("keeps the drafts of every window when quitting straight after typing", asy
   await createNamedThread(firstWindow, "First");
   const opened = harness.electronApp.waitForEvent("window");
   // Same route as the multi-window spec: a native key event reaches main's shortcut handler.
-  await harness.electronApp.evaluate(({ BrowserWindow }, nativeModifier) => {
+  await harness.electronApp.evaluate(({ BrowserWindow }, modifier) => {
     BrowserWindow.getAllWindows()[0]?.webContents.sendInputEvent({
       type: "keyDown",
       keyCode: "n",
-      modifiers: [nativeModifier, "shift"],
+      modifiers: [modifier, "shift"],
     });
   }, nativeModifier);
   const secondWindow = await opened;
   await secondWindow.waitForFunction(() => Boolean(globalThis.window.piApp));
   await selectSession(secondWindow, "Second");
 
-  // fill() makes each edit one input event, so both drafts are still inside their debounce.
-  await secondWindow.getByTestId("composer").fill(drafts.Second);
-  await firstWindow.getByTestId("composer").fill(drafts.First);
+  await pauseRendererTimers(secondWindow);
+  await typeUnsavedDraft(secondWindow, drafts.Second);
+  await pauseRendererTimers(firstWindow);
+  await typeUnsavedDraft(firstWindow, drafts.First);
   await harness.close();
 
   const relaunched = await launch();
   try {
     const window = await relaunched.firstWindow();
-    for (const [title, draft] of Object.entries(drafts)) {
+    for (const [title, text] of Object.entries(drafts)) {
       await selectSession(window, title);
-      await expect(window.getByTestId("composer")).toHaveValue(draft);
+      await expect(window.getByTestId("composer")).toHaveValue(text);
     }
   } finally {
     await relaunched.close();
