@@ -943,7 +943,10 @@ export class SessionSupervisor {
   async sendUserMessage(sessionRef: SessionRef, input: SessionMessageInput): Promise<void> {
     const record = await this.ensureRecord(sessionRef);
     // A reload swaps the session's extensions and tools; the message goes to the reloaded ones.
-    await record.reloadInFlight?.catch(() => undefined);
+    // Loop: a reload queued while this one ran must finish too before the prompt starts.
+    while (record.reloadInFlight) {
+      await record.reloadInFlight.catch(() => undefined);
+    }
     const session = this.requireSession(record);
     const isExtensionCommand = this.isExtensionCommand(session, input.text);
     if (session.isStreaming && !isExtensionCommand && !input.deliverAs) {
