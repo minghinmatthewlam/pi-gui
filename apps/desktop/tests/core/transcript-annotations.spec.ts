@@ -45,10 +45,13 @@ async function dragSelect(page: Page, phrase: string): Promise<void> {
   await page.mouse.up();
 }
 
-test("adds transcript selections to chat with comments and sends them before the message", async () => {
-  test.setTimeout(90_000);
+/** Launches the app on a thread whose saved transcript holds `messages`. */
+async function launchWithTranscript(
+  name: string,
+  messages: Parameters<typeof appendMessagesToSessionFile>[1],
+) {
   const userDataDir = await makeUserDataDir();
-  const workspacePath = await makeWorkspace("transcript-annotations");
+  const workspacePath = await makeWorkspace(name);
   const firstRun = await launchDesktop(userDataDir, {
     initialWorkspaces: [workspacePath],
     testMode: "background",
@@ -66,12 +69,16 @@ test("adds transcript selections to chat with comments and sends them before the
     await firstRun.close();
   }
   const sessionFilePath = await sessionFilePathFromCatalog(userDataDir, { workspaceId, sessionId });
-  await appendMessagesToSessionFile(sessionFilePath, [
+  await appendMessagesToSessionFile(sessionFilePath, messages);
+  return launchDesktop(userDataDir, { testMode: "background" });
+}
+
+test("adds transcript selections to chat with comments and sends them before the message", async () => {
+  test.setTimeout(90_000);
+  const harness = await launchWithTranscript("transcript-annotations", [
     { role: "user", text: SENT_EARLIER },
     { role: "assistant", text: REPLY },
   ]);
-
-  const harness = await launchDesktop(userDataDir, { testMode: "background" });
   try {
     const page = await harness.firstWindow();
     await expect(page.locator(".timeline-item--assistant").last()).toContainText("TN stamps");
@@ -197,6 +204,87 @@ test("adds transcript selections to chat with comments and sends them before the
       ]);
     await expect(page.getByTestId("annotation-chip")).toHaveCount(0);
     await expect(page.getByTestId("annotation-marker")).toHaveCount(0);
+  } finally {
+    await harness.close();
+  }
+});
+
+/** Where `phrase` sits in the reply: the middle of its first line, and its left and right edges. */
+async function phraseBox(page: Page, phrase: string) {
+  return page.evaluate((target) => {
+    const root = [...document.querySelectorAll("[data-annotation-root]")].find((element) =>
+      element.textContent?.includes(target),
+    );
+    const walker = root && document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    for (let node = walker?.nextNode(); node; node = walker?.nextNode()) {
+      const index = node.nodeValue?.indexOf(target) ?? -1;
+      if (index < 0) continue;
+      const range = document.createRange();
+      range.setStart(node, index);
+      range.setEnd(node, index + target.length);
+      const rect = range.getClientRects()[0]!;
+      const rootRect = root!.getBoundingClientRect();
+      return {
+        left: rect.left,
+        right: rect.right,
+        y: rect.top + rect.height / 2,
+        rootLeft: rootRect.left,
+        rootRight: rootRect.right,
+      };
+    }
+    throw new Error(`Missing reply text ${target}`);
+  }, phrase);
+}
+
+test("a multi-line drag that runs past the text still adds its lines", async () => {
+  test.setTimeout(90_000);
+  const paragraph = (label: string) =>
+    `${label} starts here and carries on for a while so the line is long enough to read.`;
+  const harness = await launchWithTranscript("transcript-annotation-drags", [
+    { role: "user", text: "Tell me three things." },
+    {
+      role: "assistant",
+      text: [paragraph("First"), paragraph("Second"), paragraph("Third")].join("\n\n"),
+    },
+    { role: "user", text: "And one more." },
+    { role: "assistant", text: "A short last reply." },
+  ]);
+  try {
+    const page = await harness.firstWindow();
+    await expect(page.getByTestId("transcript")).toContainText("A short last reply.");
+    const drag = async (from: { x: number; y: number }, to: { x: number; y: number }) => {
+      await page.mouse.move(from.x, from.y);
+      await page.mouse.down();
+      await page.mouse.move(to.x, to.y, { steps: 10 });
+      await page.mouse.up();
+    };
+
+    // Past the end of the second line, out into the margin beside the text.
+    const first = await phraseBox(page, "First starts");
+    const second = await phraseBox(page, "Second starts");
+    await drag({ x: first.left + 1, y: first.y }, { x: second.rootRight + 40, y: second.y });
+    await expect(page.getByTestId("add-to-chat")).toBeVisible();
+    await page.keyboard.press("Control+L");
+    await page.getByTestId("annotation-editor").getByRole("textbox").press("Enter");
+
+    // Down past the reply's last line, onto its Fork button.
+    const third = await phraseBox(page, "Third starts");
+    await drag({ x: second.left + 1, y: second.y }, { x: third.left + 40, y: third.y + 30 });
+    await expect(page.getByTestId("add-to-chat")).toBeVisible();
+    await page.keyboard.press("Control+L");
+    await page.getByTestId("annotation-editor").getByRole("textbox").press("Enter");
+
+    await page.getByRole("button", { name: "2 annotations" }).hover();
+    const items = page.getByTestId("annotation-chip-popover").locator(".annotation-chip__quote");
+    await expect(items).toHaveText([
+      `${paragraph("First")}\n\n${paragraph("Second")}`,
+      `${paragraph("Second")}\n\n${paragraph("Third")}`,
+    ]);
+
+    // A drag on into the next message is not one message's text.
+    const last = await phraseBox(page, "A short last reply");
+    await drag({ x: third.left + 1, y: third.y }, { x: last.right - 1, y: last.y });
+    await expect(page.getByTestId("add-to-chat")).toHaveCount(0);
   } finally {
     await harness.close();
   }

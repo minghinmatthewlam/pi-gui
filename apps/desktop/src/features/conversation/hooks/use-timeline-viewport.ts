@@ -188,7 +188,10 @@ export function useTimelineViewport({
       // place them before this frame paints, so no row shows at an old or estimated top.
       for (const row of pane.querySelectorAll<HTMLElement>("[data-message-id]")) {
         const id = row.dataset.messageId;
-        if (id) current.heights.set(id, Math.max(1, Math.ceil(row.getBoundingClientRect().height)));
+        const content = row.firstElementChild;
+        if (id && content) {
+          current.heights.set(id, Math.max(1, Math.ceil(content.getBoundingClientRect().height)));
+        }
       }
       current.geometryRevision += 1;
       current.generation += 1;
