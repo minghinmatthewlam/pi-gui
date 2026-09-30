@@ -52,6 +52,9 @@ export function useComposerDraftSync(params: UseComposerDraftSyncParams) {
   const flushComposerDraftRef = useRef<() => void>(() => {});
   const currentSessionKeyRef = useRef(selectedSessionKey);
   currentSessionKeyRef.current = selectedSessionKey;
+  const selectedSessionRef = useRef(selectedSession);
+  selectedSessionRef.current = selectedSession;
+  const flushComposerDraftAsyncRef = useRef<(target: SessionRef) => Promise<void>>(async () => {});
 
   composerDraftRef.current = composerDraft;
   const persistedComposerDraft = snapshot?.composerDraft ?? "";
@@ -201,6 +204,14 @@ export function useComposerDraftSync(params: UseComposerDraftSyncParams) {
     () =>
       api?.onPendingComposerDraftFlush(async () => {
         flushComposerDraftRef.current();
+        // An edit React has not committed yet has no pending write, so also save the latest
+        // text for the open task, after that task's earlier writes.
+        const target = selectedSessionRef.current;
+        if (target && localEditGenerationRef.current > acknowledgedLocalEditGenerationRef.current) {
+          await flushComposerDraftAsyncRef.current(target).catch((error: unknown) => {
+            console.error("[renderer] saving the draft before shutdown failed", error);
+          });
+        }
         await Promise.allSettled(inFlightComposerDraftWritesRef.current.values());
       }),
     [api],
@@ -270,6 +281,8 @@ export function useComposerDraftSync(params: UseComposerDraftSyncParams) {
     },
     [api],
   );
+
+  flushComposerDraftAsyncRef.current = flushComposerDraftAsync;
 
   return {
     composerDraft,

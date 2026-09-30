@@ -48,6 +48,43 @@ async function expectDraftAfterRelaunch(
   }
 }
 
+/** Keeps a real-time clock usable after the page clock is paused. Call before pausing. */
+async function keepRealClock(window: Page): Promise<void> {
+  await window.evaluate(() => {
+    (globalThis as { realNow?: () => number }).realNow = Date.now.bind(Date);
+  });
+}
+
+/**
+ * Blocks the renderer for a second in a task that starts as soon as this returns, so main's
+ * flush request queues behind it. With `draftAtEnd`, the task ends by calling the composer's
+ * change handler outside any DOM event, which React commits in a later task: the text is in
+ * the composer but not yet in a pending write when the flush request runs.
+ */
+async function holdRendererBusy(window: Page, draftAtEnd?: string): Promise<void> {
+  await window.evaluate((nextDraft) => {
+    const channel = new MessageChannel();
+    channel.port1.onmessage = () => {
+      const realNow = (globalThis as { realNow?: () => number }).realNow;
+      if (!realNow) throw new Error("real clock unavailable");
+      const until = realNow() + 1_000;
+      while (realNow() < until) {
+        // Busy on purpose.
+      }
+      if (nextDraft === null) return;
+      const composer = document.querySelector("[data-testid='composer']");
+      const propsKey =
+        composer && Object.keys(composer).find((key) => key.startsWith("__reactProps$"));
+      if (!composer || !propsKey) throw new Error("composer change handler unavailable");
+      const props = (composer as unknown as Record<string, { onChange(event: unknown): void }>)[
+        propsKey
+      ];
+      props.onChange({ target: { value: nextDraft } });
+    };
+    channel.port2.postMessage(null);
+  }, draftAtEnd ?? null);
+}
+
 function launcher(name: string): () => Promise<DesktopHarness> {
   const setup = Promise.all([makeUserDataDir(), makeWorkspace(name)]);
   return async () => {
@@ -102,31 +139,33 @@ test("keeps a draft when the window is closed while quit is saving drafts", asyn
   const harness = await launch();
   const window = await harness.firstWindow();
   await createNamedThread(window, "Close during quit");
-  await window.evaluate(() => {
-    (globalThis as { realNow?: () => number }).realNow = Date.now.bind(Date);
-  });
+  await keepRealClock(window);
   await pauseRendererTimers(window);
   await typeUnsavedDraft(window);
-  // Keep the renderer busy for a second, so quit is still waiting for its draft when the
-  // window is closed. The busy task starts as soon as this evaluate returns.
-  await window.evaluate(() => {
-    const channel = new MessageChannel();
-    channel.port1.onmessage = () => {
-      const realNow = (globalThis as { realNow?: () => number }).realNow;
-      if (!realNow) throw new Error("real clock unavailable");
-      const until = realNow() + 1_000;
-      while (realNow() < until) {
-        // Busy on purpose.
-      }
-    };
-    channel.port2.postMessage(null);
-  });
+  // Quit is still waiting for this renderer's draft when the window is closed.
+  await holdRendererBusy(window);
   const exited = processExit(harness);
   await harness.electronApp.evaluate(({ app }) => app.quit());
   await closeFirstWindow(harness);
   await exited;
 
   await expectDraftAfterRelaunch(launch, "Close during quit");
+});
+
+test("keeps an edit React has not committed yet when quitting", async () => {
+  test.setTimeout(90_000);
+  const launch = launcher("draft-shutdown-uncommitted-edit");
+  const harness = await launch();
+  const window = await harness.firstWindow();
+  await createNamedThread(window, "Uncommitted edit");
+  await keepRealClock(window);
+  await pauseRendererTimers(window);
+  await holdRendererBusy(window, draft);
+  const exited = processExit(harness);
+  await harness.electronApp.evaluate(({ app }) => app.quit());
+  await exited;
+
+  await expectDraftAfterRelaunch(launch, "Uncommitted edit");
 });
 
 test("keeps a draft when the thread is archived by shortcut straight after typing", async () => {
