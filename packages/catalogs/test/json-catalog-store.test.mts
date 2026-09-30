@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { link, mkdtemp, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -287,5 +287,31 @@ await test("a failed load can be retried after the original catalog is repaired"
     await assert.rejects(store.sessions.listSessions(), /Invalid catalog file contents/);
     await writeFile(catalogFilePath, JSON.stringify(validCatalog));
     assert.deepEqual((await store.sessions.listSessions()).sessions, [validSession]);
+  });
+});
+
+await test("session writes that change nothing leave the catalog file alone", async () => {
+  await withTempDir(async (dir) => {
+    const catalogFilePath = join(dir, "catalogs.json");
+    const store = new JsonCatalogStore({ catalogFilePath });
+    const session = { ...validSession, status: "running" as const, previewSnippet: "Working" };
+    await store.sessions.upsertSession(session);
+    await store.setSessionFile(session.sessionRef, "/session.jsonl");
+    // A committed write renames a new file into place, which drops this extra hard link.
+    await link(catalogFilePath, join(dir, "watch.json"));
+    const linkCount = async () => (await stat(catalogFilePath)).nlink;
+
+    await store.sessions.upsertSession({ ...session, sessionRef: { ...session.sessionRef } });
+    await store.setSessionFile(session.sessionRef, "/session.jsonl");
+    assert.equal(await linkCount(), 2);
+
+    await store.sessions.upsertSession({ ...session, previewSnippet: undefined });
+    assert.equal(await linkCount(), 1);
+    const reopened = new JsonCatalogStore({ catalogFilePath });
+    assert.equal(
+      (await reopened.sessions.getSession(session.sessionRef))?.previewSnippet,
+      undefined,
+    );
+    assert.equal(await reopened.getSessionFile(session.sessionRef), "/session.jsonl");
   });
 });
