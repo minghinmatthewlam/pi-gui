@@ -1,7 +1,7 @@
 import { stat } from "node:fs/promises";
 import path from "node:path";
 import { parseExtensionUrl, type ExtensionAction, type SessionRef } from "@pi-gui/session-driver";
-import type { DesktopAppState, WorkspaceRecord } from "../../contracts/desktop-state";
+import type { WorkspaceRecord } from "../../contracts/desktop-state";
 import type { ExtensionActionEffect } from "../../contracts/extension-actions";
 import { resolveExistingWorkspacePath } from "../platform/files/workspace-paths";
 
@@ -18,7 +18,7 @@ export interface AppOperationHost {
   readonly runExtensionCommand: (target: SessionRef, command: string) => Promise<void>;
   readonly workspaces: () => readonly WorkspaceRecord[];
   /** Selects the thread `resolve` names once the window's queue reaches it. */
-  readonly selectThread: (resolve: () => SessionRef) => Promise<DesktopAppState>;
+  readonly selectThread: (resolve: () => SessionRef) => Promise<void>;
 }
 
 /** An action as the app runs it; the label only matters for drawing a button. */
@@ -64,8 +64,7 @@ export async function runExtensionAction(
       };
       // Refuse at once, and again in the queue in case the thread was archived meanwhile.
       resolve();
-      const state = await host.selectThread(resolve);
-      if (state.lastError) throw new Error(state.lastError);
+      await host.selectThread(resolve);
       return undefined;
     }
     default:

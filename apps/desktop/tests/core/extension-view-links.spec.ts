@@ -53,7 +53,9 @@ export default function extension(pi) {
   button("Open pull request", () => run(host.actions.openUrl("https://github.com/minghinmatthewlam/pi-gui/pull/220")));
   button("Open plain link", () => run(host.actions.openUrl("http://example.com")));
   root.append(thread);
-  button("Open thread", () => run(host.actions.openThread(thread.value)));
+  button("Open thread", () =>
+    run(host.actions.openThread(thread.value).then(() => console.log("view saw thread open"))),
+  );
   root.append(error);
   return () => {};
 }`,
@@ -119,8 +121,12 @@ test("an extension view opens https links and threads beside its own", async () 
     await expect(window.locator(".chat-header__title")).toHaveText("Current thread");
 
     await frame.getByLabel("Thread id").fill(earlierThread);
+    const viewLogs: string[] = [];
+    window.on("console", (message) => viewLogs.push(message.text()));
     await frame.getByRole("button", { name: "Open thread" }).click();
     await expect(window.locator(".chat-header__title")).toHaveText("Earlier thread");
+    // The view's call succeeds even though switching threads then closes the view.
+    await expect.poll(() => viewLogs).toContain("view saw thread open");
     expect((await getDesktopState(window)).selectedSessionId).toBe(earlierThread);
 
     // A card button opens a thread through the same check.

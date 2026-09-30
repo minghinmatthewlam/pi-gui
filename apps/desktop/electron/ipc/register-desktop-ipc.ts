@@ -847,11 +847,13 @@ export function registerDesktopIpc({
           });
         },
         workspaces: () => owners.workspace.getWorkspaceRecords(),
-        selectThread: (resolve) =>
-          run(event, async () => {
+        selectThread: async (resolve) => {
+          const state = await run(event, async () => {
             requireCardThread();
             return owners.conversation.selectSession(resolve());
-          }),
+          });
+          if (state.lastError) throw new Error(state.lastError);
+        },
       };
       try {
         return (await runExtensionAction(host, target, action)) ?? null;

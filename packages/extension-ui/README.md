@@ -44,7 +44,8 @@ state with `env.replicatedState`, which uses the host's Chord instance.
 `host.actions.prepareTaskDraft({ title, prompt, files? })` prepares a task draft.
 `host.actions.openUrl(url)` opens an https link in the browser.
 `host.actions.openThread(sessionId)` opens another thread of the same folder or its
-pi-gui worktrees, by pi session id; any other thread is refused.
+pi-gui worktrees, by pi session id; any other thread is refused. It resolves once the
+thread is found, and the app's switch to it then closes the view.
 None accepts a workspace or window identity. The desktop binds actions
 to the initiating connection. The host supplies theme colors and an `AbortSignal`
 that reports connection loss; the frontend should stop using old service handles

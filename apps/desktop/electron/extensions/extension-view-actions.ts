@@ -44,11 +44,18 @@ export async function performExtensionViewHostAction(
       openExternal: owners.openExternal,
       runExtensionCommand: () => Promise.reject(new Error("Views can't run commands")),
       workspaces: () => owners.store.getWorkspaceRecords(),
-      selectThread: (resolve) =>
-        owners.windows.runStateAction(window, async () => {
-          requireCurrentTask();
-          return owners.store.selectSession(resolve());
-        }),
+      // Selecting the thread closes this view, so the view's call settles once the thread is
+      // found and queued; a later failure shows in the app like any selection failure.
+      selectThread: async (resolve) => {
+        void owners.windows
+          .runStateAction(window, async () => {
+            requireCurrentTask();
+            return owners.store.selectSession(resolve());
+          })
+          .catch((error: unknown) => {
+            console.error("[extension-view] open thread failed", error);
+          });
+      },
     };
     await runExtensionAction(
       host,
