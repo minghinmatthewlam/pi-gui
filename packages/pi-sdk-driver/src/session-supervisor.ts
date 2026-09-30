@@ -236,6 +236,8 @@ interface ManagedSessionRecord {
   transcriptDiskMtimeMs: number | undefined;
   /** Custom message entries already sent as live transcript items. */
   appendedCustomEntryIds: Set<string>;
+  /** A reload asked for while a turn or compaction ran; it runs once the session is idle. */
+  reloadPending: boolean;
 }
 
 type NotifyHostUiRequest = Extract<
@@ -1106,6 +1108,7 @@ export class SessionSupervisor {
     record.status = "idle";
     await this.persistSnapshot(record);
     await this.emit(record, sessionUpdatedEvent(record));
+    this.runPendingReload(record);
   }
 
   async setSessionModel(sessionRef: SessionRef, selection: SessionModelSelection): Promise<void> {
@@ -1184,12 +1187,45 @@ export class SessionSupervisor {
     this.refreshUsage(record);
     await this.persistSnapshot(record);
     await this.emit(record, sessionUpdatedEvent(record));
+    this.runPendingReload(record);
+  }
+
+  /**
+   * Reloads now when the session is idle. A reload tears down extensions (and their MCP
+   * connections and tools), so, like pi's own /reload, it never interrupts a running turn or a
+   * compaction: the reload waits and runs when that ends.
+   */
+  async reloadSessionWhenIdle(sessionRef: SessionRef): Promise<"reloaded" | "deferred"> {
+    const record = await this.ensureRecord(sessionRef);
+    if (isRecordBusy(record)) {
+      record.reloadPending = true;
+      return "deferred";
+    }
+    await this.reloadSession(sessionRef);
+    return "reloaded";
+  }
+
+  /** Runs a deferred reload once the events of the turn that held it are delivered. */
+  private runPendingReload(record: ManagedSessionRecord): void {
+    if (!record.reloadPending) return;
+    record.eventQueue
+      .then(async () => {
+        if (!record.reloadPending || record.closed || isRecordBusy(record)) return;
+        await this.reloadSession(record.ref);
+      })
+      .catch((error: unknown) => {
+        console.warn(
+          `[pi-sdk-driver] deferred reload failed for ${sessionKey(record.ref)}:`,
+          error,
+        );
+      });
   }
 
   async reloadSession(sessionRef: SessionRef): Promise<void> {
     const record = await this.ensureRecord(sessionRef);
     const session = this.requireSession(record);
 
+    record.reloadPending = false;
     this.resetExtensionUi(record);
     await session.reload();
     await this.syncRecordAfterSessionMutation(record, { emitUpdate: true });
@@ -1412,6 +1448,7 @@ export class SessionSupervisor {
       leasePath: undefined,
       transcriptDiskMtimeMs: undefined,
       appendedCustomEntryIds: new Set(),
+      reloadPending: false,
     };
     return record;
   }
@@ -2261,12 +2298,18 @@ export class SessionSupervisor {
   private handleAgentEvent(record: ManagedSessionRecord, event: AgentSessionEvent): void {
     const mapped = this.mapAgentEvent(record, event);
     if (mapped.length === 0) {
+      if (event.type === "agent_settled" || event.type === "compaction_end") {
+        this.runPendingReload(record);
+      }
       return;
     }
 
     this.queueDriverEvents(record, mapped, {
       persistSnapshot: shouldPersistSnapshotForAgentEvent(event.type),
     });
+    if (event.type === "agent_settled" || event.type === "compaction_end") {
+      this.runPendingReload(record);
+    }
   }
 
   private mapAgentEvent(
@@ -3399,4 +3442,14 @@ function toDriverEvents(
   const id = runId ?? record.runningRunId;
   const event = id ? { ...base, runId: id } : base;
   return [event, sessionUpdatedEvent(record)];
+}
+
+/** A turn (or the steps before it) or a compaction is running. */
+function isRecordBusy(record: ManagedSessionRecord): boolean {
+  return (
+    record.runningRunId !== undefined ||
+    record.promptStarting ||
+    record.session?.isStreaming === true ||
+    record.session?.isCompacting === true
+  );
 }
