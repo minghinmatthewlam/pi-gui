@@ -98,6 +98,7 @@ async function startHarness(t: test.TestContext) {
     streaming: false,
     /** Extension loads counted when the model was last called. */
     loadsAtLastTurn: -1,
+    commandRunning: false,
   };
   const streamFunction: StreamFunction = (model, _context, options) => {
     const stream = createAssistantMessageEventStream();
@@ -138,7 +139,9 @@ async function startHarness(t: test.TestContext) {
           pi.registerCommand("hold", {
             description: "Waits until the test lets it finish",
             handler: async () => {
+              state.commandRunning = true;
               await commandGate.current.wait;
+              state.commandRunning = false;
             },
           });
         },
@@ -271,4 +274,20 @@ await test("a message sent during a reload starts its turn after the reload", as
   assert.equal(state.loadsAtLastTurn, loadsAtStart + 1);
   state.turnGate.open();
   await sent;
+});
+
+await test("a reload waits for a running extension command", async (t) => {
+  const { driver, ref, state, commandGate } = await startHarness(t);
+  const loadsAtStart = state.loads;
+
+  // Like `/mcp login` waiting in its sign-in dialog.
+  const sent = driver.sendUserMessage(ref, { text: "/hold" });
+  await waitFor(() => state.commandRunning, "the command to start");
+  assert.equal(await driver.reloadSessionWhenIdle(ref), "deferred");
+  await settle();
+  assert.equal(state.loads, loadsAtStart, "the command keeps its extension");
+
+  commandGate.current.open();
+  await sent;
+  await waitFor(() => state.loads === loadsAtStart + 1, "the deferred reload after the command");
 });

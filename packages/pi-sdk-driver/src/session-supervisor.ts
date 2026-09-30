@@ -1006,10 +1006,17 @@ export class SessionSupervisor {
         }
         await this.queuePrompt(session, promptText, input.deliverAs!, images);
       } else if (isExtensionCommand) {
-        await session.prompt(promptText, {
-          ...(images && images.length > 0 ? { images } : {}),
-          source: "interactive",
-        });
+        // A command can wait on the person (a sign-in dialog), so a reload waits for it.
+        record.extensionCommandsRunning += 1;
+        try {
+          await session.prompt(promptText, {
+            ...(images && images.length > 0 ? { images } : {}),
+            source: "interactive",
+          });
+        } finally {
+          record.extensionCommandsRunning -= 1;
+          this.runPendingReload(record);
+        }
       } else {
         try {
           await session.prompt(promptText, {
@@ -3469,12 +3476,13 @@ function toDriverEvents(
   return [event, sessionUpdatedEvent(record)];
 }
 
-/** A turn (or the steps before it) or a compaction is running. */
+/** A turn (or the steps before it), a compaction or an extension command is running. */
 function isRecordBusy(record: ManagedSessionRecord): boolean {
   return (
     record.runningRunId !== undefined ||
     record.promptStarting ||
     record.session?.isStreaming === true ||
-    record.session?.isCompacting === true
+    record.session?.isCompacting === true ||
+    record.extensionCommandsRunning > 0
   );
 }
