@@ -30,6 +30,8 @@ interface UseThreadActionsParams {
   readonly scheduledTasks: readonly ScheduledTaskRecord[];
   readonly sidebarCollapsed: boolean;
   readonly openScheduledEditor: (editor: ScheduledEditorState) => void;
+  /** Sends the open thread's debounced draft now, before an action can deselect that thread. */
+  readonly flushComposerDraft: () => void;
 }
 
 /** Where a thread menu is open: a sidebar row's right-click menu, or the thread header. */
@@ -65,6 +67,7 @@ export function useThreadActions({
   scheduledTasks,
   sidebarCollapsed,
   openScheduledEditor,
+  flushComposerDraft,
 }: UseThreadActionsParams): ThreadMenuState {
   const [openMenu, setOpenMenu] = useState<OpenThreadMenu | null>(null);
   const [renameSessionId, setRenameSessionId] = useState<string | null>(null);
@@ -105,8 +108,11 @@ export function useThreadActions({
       console.error("[renderer] updateSnapshot failed", error);
     });
   };
-  const archive = (target: WorkspaceSessionTarget) =>
+  // Archiving the open thread selects another one, which drops a draft still in its debounce.
+  const archive = (target: WorkspaceSessionTarget) => {
+    flushComposerDraft();
     mutate((desktopApi) => desktopApi.archiveSession(target));
+  };
   const restore = (target: WorkspaceSessionTarget) =>
     mutate((desktopApi) => desktopApi.unarchiveSession(target));
   const setPinned = (target: WorkspaceSessionTarget, pinned: boolean) =>

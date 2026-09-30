@@ -534,6 +534,7 @@ export default function App() {
     scheduledTasks: snapshot?.scheduledTasks ?? [],
     sidebarCollapsed: snapshot?.sidebarCollapsed ?? false,
     openScheduledEditor: setScheduledEditor,
+    flushComposerDraft,
   });
 
   const newThread = useNewThreadController({
