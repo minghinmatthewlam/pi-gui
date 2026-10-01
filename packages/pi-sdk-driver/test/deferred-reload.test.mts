@@ -327,3 +327,29 @@ await test("a message sent before a pending reload has started runs after that r
   await settle();
   assert.equal(state.loads, loadsAtStart + 1, "the queued pending reload does not run again");
 });
+
+await test("a reload asked for while an extension command is starting waits for it", async (t) => {
+  const { driver, ref, state, commandGate } = await startHarness(t);
+  const loadsAtStart = state.loads;
+  // Holding the listener on the command's first update keeps the send in its awaits before
+  // pi runs the command: the window where a Settings change can ask for a reload.
+  const listenerGate = gate();
+  let updateHeld = false;
+  const unsubscribe = driver.subscribe(ref, async (event) => {
+    if (event.type !== "sessionUpdated" || updateHeld) return;
+    updateHeld = true;
+    await listenerGate.wait;
+  });
+  t.after(unsubscribe);
+
+  const sent = driver.sendUserMessage(ref, { text: "/hold", extensionCommandOnly: true });
+  await waitFor(() => updateHeld, "the command's update to be held");
+  assert.equal(await driver.reloadSessionWhenIdle(ref), "deferred");
+
+  listenerGate.open();
+  await waitFor(() => state.commandRunning, "the command to start");
+  assert.equal(state.loads, loadsAtStart, "the command runs on the extension that registered it");
+  commandGate.current.open();
+  await sent;
+  await waitFor(() => state.loads === loadsAtStart + 1, "the deferred reload after the command");
+});

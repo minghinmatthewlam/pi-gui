@@ -954,6 +954,25 @@ export class SessionSupervisor {
       );
     }
 
+    // A command can wait on the person (a sign-in dialog), so a reload waits for it. Counted
+    // from here so a pending reload cannot start during the awaits before pi runs it.
+    if (isExtensionCommand) record.extensionCommandsRunning += 1;
+    try {
+      await this.sendCheckedMessage(record, session, input, isExtensionCommand);
+    } finally {
+      if (isExtensionCommand) {
+        record.extensionCommandsRunning -= 1;
+        this.runPendingReload(record);
+      }
+    }
+  }
+
+  private async sendCheckedMessage(
+    record: ManagedSessionRecord,
+    session: AgentSession,
+    input: SessionMessageInput,
+    isExtensionCommand: boolean,
+  ): Promise<void> {
     const isQueuedMessage = session.isStreaming && !isExtensionCommand && Boolean(input.deliverAs);
     const runId = isQueuedMessage || isExtensionCommand ? undefined : crypto.randomUUID();
     if (!isQueuedMessage && !isExtensionCommand) {
@@ -1015,17 +1034,10 @@ export class SessionSupervisor {
         }
         await this.queuePrompt(session, promptText, input.deliverAs!, images);
       } else if (isExtensionCommand) {
-        // A command can wait on the person (a sign-in dialog), so a reload waits for it.
-        record.extensionCommandsRunning += 1;
-        try {
-          await session.prompt(promptText, {
-            ...(images && images.length > 0 ? { images } : {}),
-            source: "interactive",
-          });
-        } finally {
-          record.extensionCommandsRunning -= 1;
-          this.runPendingReload(record);
-        }
+        await session.prompt(promptText, {
+          ...(images && images.length > 0 ? { images } : {}),
+          source: "interactive",
+        });
       } else {
         try {
           await session.prompt(promptText, {
