@@ -131,7 +131,7 @@ export function SettingsMcpSection({ workspaceId, actions }: SettingsMcpSectionP
       <SettingsGroup title="Code mode">
         <SettingsRow
           title="Always on"
-          description="Lets the model run scripts that call tools in new threads; open threads keep their tools. Off, pi turns it on when an MCP server needs it."
+          description="Lets the model run scripts that call tools. Turning it on also applies to open threads; turning it off applies to new threads. Off, pi turns it on when an MCP server needs it."
         >
           <SettingsSwitch
             checked={snapshot?.codemodeAlwaysOn ?? false}

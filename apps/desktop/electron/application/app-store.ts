@@ -1873,7 +1873,15 @@ export class DesktopAppStore {
     return this.withErrorHandling(async () => {
       await this.driver.runtimeSupervisor.setCodemodeAlwaysOn(ws, alwaysOn);
       await this.recordSettingsSelfWrite();
-      return this.refreshState({ clearLastError: true });
+      // pi's reload turns on tools newly added to defaultTools but leaves removed ones on, so
+      // only switching on reaches open threads (a thread mid-turn picks it up when it ends).
+      const reloaded = alwaysOn
+        ? await this.reloadOpenSessions(this.state.workspaces.map((workspace) => workspace.id))
+        : true;
+      const state = await this.refreshState({ clearLastError: true });
+      return reloaded
+        ? state
+        : this.withError("Some open threads could not reload; they get code mode when reopened.");
     });
   }
 
