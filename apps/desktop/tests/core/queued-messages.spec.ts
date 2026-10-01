@@ -1,3 +1,6 @@
+import { existsSync } from "node:fs";
+import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { desktopIpc } from "../../contracts/ipc";
 import { expect, test } from "@playwright/test";
 import type {
@@ -17,7 +20,10 @@ import {
   makeUserDataDir,
   makeWorkspace,
   pasteTinyPng,
+  seedAgentDir,
   selectSession,
+  waitForWorkspaceByPath,
+  writeProjectExtension,
 } from "../helpers/electron-app";
 
 async function selectedSessionContext(window: Parameters<typeof getDesktopState>[0]): Promise<{
@@ -173,18 +179,82 @@ test("shows queued messages while running and preserves attachments through inli
   }
 });
 
+// A model that never answers: the reply stays running until the app closes, as the queue needs.
+const OPEN_REPLY_PROVIDER = "open-reply";
+const openReplyProvider = (calledFile: string) => String.raw`
+import { writeFileSync } from "node:fs";
+import { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
+
+export default function openReplyProvider(pi) {
+  pi.registerProvider("${OPEN_REPLY_PROVIDER}", {
+    baseUrl: "http://127.0.0.1:9/never-contact",
+    apiKey: "LOCAL_TEST_CANARY",
+    api: "${OPEN_REPLY_PROVIDER}",
+    models: [{
+      id: "open",
+      name: "Open reply",
+      reasoning: false,
+      input: ["text"],
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+      contextWindow: 200000,
+      maxTokens: 4096,
+    }],
+    streamSimple(model, _context, options) {
+      const stream = createAssistantMessageEventStream();
+      writeFileSync(${JSON.stringify(calledFile)}, "called");
+      options?.signal?.addEventListener("abort", () => {
+        const aborted = {
+          role: "assistant", content: [], api: model.api, provider: model.provider, model: model.id,
+          usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0,
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+          stopReason: "aborted", timestamp: Date.now(),
+        };
+        stream.push({ type: "error", reason: "aborted", error: aborted });
+      });
+      return stream;
+    },
+  });
+}
+`;
+
 test("delineates queued follow-ups and submitted steers in the timeline", async () => {
   test.setTimeout(60_000);
   const userDataDir = await makeUserDataDir();
+  const agentDir = join(userDataDir, "agent");
   const workspacePath = await makeWorkspace("queued-messages-timeline");
+  const called = join(userDataDir, "model-called");
+  await seedAgentDir(agentDir, { withOpenAiAuth: false, withDefaultModel: false });
+  await writeFile(
+    join(agentDir, "settings.json"),
+    JSON.stringify({
+      defaultProvider: OPEN_REPLY_PROVIDER,
+      defaultModel: "open",
+      enabledModels: [`${OPEN_REPLY_PROVIDER}/open`],
+      packages: [],
+      cacheWarming: "off",
+      compaction: { enabled: false },
+    }),
+  );
+  await writeProjectExtension(workspacePath, "open-reply.ts", openReplyProvider(called));
   const harness = await launchDesktop(userDataDir, {
+    agentDir,
     initialWorkspaces: [workspacePath],
+    scrubProviderEnv: true,
     testMode: "background",
   });
 
   try {
     const window = await harness.firstWindow();
-    await createNamedThread(window, "Queued timeline messages");
+    await waitForWorkspaceByPath(window, workspacePath);
+    // The queue belongs to a reply that is really running: with pi idle, the app would start
+    // the first queued message as the next reply instead.
+    await window
+      .getByRole("complementary")
+      .getByRole("button", { name: "New thread", exact: true })
+      .click();
+    await window.getByLabel("New thread prompt", { exact: true }).fill("Start a long reply");
+    await window.getByRole("button", { name: "Start thread", exact: true }).click();
+    await expect.poll(() => existsSync(called)).toBe(true);
 
     const queuedSteer: SessionQueuedMessage = {
       id: "queued-steer-1",
@@ -247,6 +317,7 @@ test("delineates queued follow-ups and submitted steers in the timeline", async 
     await expect
       .poll(async () => transcriptMessages(window))
       .toEqual([
+        "user:Start a long reply",
         `user:${queuedSteer.text}`,
         "user:Steer the current run now",
         `user:${queuedFollowUp.text}`,

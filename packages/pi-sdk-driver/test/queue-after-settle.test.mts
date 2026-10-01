@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import test from "node:test";
+import test, { type TestContext } from "node:test";
 import { createAssistantMessageEventStream, type AssistantMessage } from "@earendil-works/pi-ai";
-import type { AgentSessionRuntime } from "@earendil-works/pi-coding-agent";
+import type { AgentSessionRuntime, ExtensionFactory } from "@earendil-works/pi-coding-agent";
 import type { SessionDriverEvent } from "@pi-gui/session-driver";
 import { PiSdkDriver } from "../dist/pi-sdk-driver.js";
 import { createAgentSessionRuntimeWithNpmFallback } from "../dist/npm-package-fallback.js";
@@ -37,7 +37,7 @@ const streamFunction: StreamFunction = (model) => {
   return stream;
 };
 
-await test("a message queued after pi settled, before the app heard, starts the next turn", async (t) => {
+async function setUp(t: TestContext, extensionFactories: ExtensionFactory[] = []) {
   const root = await mkdtemp(join(tmpdir(), "pi-gui-queue-settle-"));
   const agentDir = join(root, "agent");
   const cwd = join(root, "workspace");
@@ -76,7 +76,17 @@ await test("a message queued after pi settled, before the app heard, starts the 
     agentDir,
     catalogFilePath: join(root, "catalogs.json"),
     createAgentSessionRuntimeImpl: async (runtimeOptions) => {
-      runtime = await createAgentSessionRuntimeWithNpmFallback({ ...runtimeOptions, tools: [] });
+      runtime = await createAgentSessionRuntimeWithNpmFallback({
+        ...runtimeOptions,
+        tools: [],
+        resourceLoaderOptions: {
+          ...runtimeOptions.resourceLoaderOptions,
+          extensionFactories: [
+            ...(runtimeOptions.resourceLoaderOptions?.extensionFactories ?? []),
+            ...extensionFactories,
+          ],
+        },
+      });
       runtime.session.agent.streamFunction = streamFunction;
       return runtime;
     },
@@ -88,61 +98,185 @@ await test("a message queued after pi settled, before the app heard, starts the 
 
   // The driver awaits listeners, so holding the first run's completion holds every event after
   // it: the app still sees that run as running, as it does when its events lag behind pi.
-  let release!: () => void;
-  const held = new Promise<void>((resolve) => {
-    release = resolve;
+  let holdCompletion = false;
+  let releaseCompletion!: () => void;
+  const completionHeld = new Promise<void>((resolve) => {
+    releaseCompletion = resolve;
   });
-  let holding = true;
   const events: SessionDriverEvent[] = [];
   let lastSnapshot: Extract<SessionDriverEvent, { type: "sessionUpdated" }>["snapshot"] | undefined;
   const unsubscribe = driver.subscribe(ref, async (event) => {
     events.push(event);
     if (event.type === "sessionUpdated") lastSnapshot = event.snapshot;
-    if (holding && event.type === "runCompleted") await held;
+    if (holdCompletion && event.type === "runCompleted") await completionHeld;
   });
   t.after(async () => {
     unsubscribe();
     await driver.closeSession(ref);
   });
 
-  await driver.sendUserMessage(ref, { text: "first" });
-  assert.equal(runtime.session.isStreaming, false, "pi has settled");
-  assert.equal(lastSnapshot?.status, "running", "the app has not heard yet");
+  const count = (type: SessionDriverEvent["type"]) =>
+    events.filter((event) => event.type === type).length;
+  return {
+    driver,
+    ref,
+    runtime: () => runtime,
+    events,
+    lastSnapshot: () => lastSnapshot,
+    holdCompletion: () => {
+      holdCompletion = true;
+    },
+    releaseCompletion: () => {
+      holdCompletion = false;
+      releaseCompletion();
+    },
+    queue: (...texts: string[]) => {
+      const now = new Date().toISOString();
+      return driver.replaceQueuedMessages(
+        ref,
+        texts.map((text) => ({
+          id: text,
+          mode: "followUp" as const,
+          text,
+          createdAt: now,
+          updatedAt: now,
+        })),
+      );
+    },
+    async waitForRuns(runs: number) {
+      const deadline = Date.now() + 5_000;
+      while (count("runCompleted") < runs && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      await runtime.session.waitForIdle();
+      // Anything still on its way would show here.
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    },
+    turns: () =>
+      runtime.session.messages.flatMap((message) =>
+        message.role === "user"
+          ? [
+              typeof message.content === "string"
+                ? message.content
+                : message.content.map((part) => ("text" in part ? part.text : "")).join(""),
+            ]
+          : message.role === "assistant"
+            ? ["-"]
+            : [],
+      ),
+    started: () =>
+      events.flatMap((event) =>
+        event.type === "queuedMessageStarted" ? [event.message.text] : [],
+      ),
+    count,
+  };
+}
 
-  const now = new Date().toISOString();
-  const queued = driver.replaceQueuedMessages(ref, [
-    { id: "again", mode: "followUp", text: "Again.", createdAt: now, updatedAt: now },
-  ]);
-  setTimeout(() => {
-    holding = false;
-    release();
-  }, 50);
-  await queued;
-  await runtime.session.waitForIdle();
+await test("a message queued after pi settled, before the app heard, starts the next turn", async (t) => {
+  const app = await setUp(t);
+  app.holdCompletion();
+  await app.driver.sendUserMessage(app.ref, { text: "first" });
+  assert.equal(app.runtime().session.isStreaming, false, "pi has settled");
+  assert.equal(app.lastSnapshot()?.status, "running", "the app has not heard yet");
 
-  assert.deepEqual(
-    runtime.session.messages.flatMap((message) =>
-      message.role === "user" || message.role === "assistant" ? [message.role] : [],
-    ),
-    ["user", "assistant", "user", "assistant"],
-    "pi ran a second turn for the queued message",
-  );
+  await app.queue("Again.");
+  setTimeout(app.releaseCompletion, 50);
+  await app.waitForRuns(2);
 
-  const deadline = Date.now() + 5_000;
-  while (
-    events.filter((event) => event.type === "runCompleted").length < 2 &&
-    Date.now() < deadline
-  ) {
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
-  const order = events.flatMap((event) =>
+  assert.deepEqual(app.turns(), ["first", "-", "Again.", "-"]);
+  const order = app.events.flatMap((event) =>
     event.type === "runCompleted" || event.type === "queuedMessageStarted" ? [event.type] : [],
   );
   // The first run's completion reaches the app before the message starts the next turn, which
   // shows it in the transcript like any queued message.
   assert.deepEqual(order, ["runCompleted", "queuedMessageStarted", "runCompleted"]);
-  const started = events.find((event) => event.type === "queuedMessageStarted");
-  assert.equal(started?.type === "queuedMessageStarted" && started.message.text, "Again.");
-  assert.deepEqual(lastSnapshot?.queuedMessages ?? [], []);
-  assert.equal(lastSnapshot?.status, "idle");
+  assert.deepEqual(app.started(), ["Again."]);
+  assert.deepEqual(app.lastSnapshot()?.queuedMessages ?? [], []);
+  assert.equal(app.lastSnapshot()?.status, "idle");
+  assert.equal(app.count("runFailed"), 0);
+});
+
+await test("a message queued while pi's settle hooks run starts the next turn", async (t) => {
+  // pi stops streaming before it runs extensions' agent_settled handlers (pi-gui's own turn
+  // capture is one) and tells the driver only after them, so the driver still counts the run.
+  let holdSettle = false;
+  let releaseSettle!: () => void;
+  const settleHeld = new Promise<void>((resolve) => {
+    releaseSettle = resolve;
+  });
+  let reachedSettle!: () => void;
+  const settleReached = new Promise<void>((resolve) => {
+    reachedSettle = resolve;
+  });
+  const app = await setUp(t, [
+    (pi) => {
+      pi.on("agent_settled", async () => {
+        if (!holdSettle) return;
+        holdSettle = false;
+        reachedSettle();
+        await settleHeld;
+      });
+    },
+  ]);
+  holdSettle = true;
+  const sent = app.driver.sendUserMessage(app.ref, { text: "first" });
+  await settleReached;
+  assert.equal(app.runtime().session.isStreaming, false, "pi has stopped streaming");
+
+  await app.queue("Again.");
+  releaseSettle();
+  await sent;
+  await app.waitForRuns(2);
+
+  assert.deepEqual(app.turns(), ["first", "-", "Again.", "-"]);
+  assert.deepEqual(app.started(), ["Again."]);
+  assert.deepEqual(app.lastSnapshot()?.queuedMessages ?? [], []);
+});
+
+await test("queue changes in that gap start one turn, then deliver the rest in order", async (t) => {
+  const app = await setUp(t);
+  app.holdCompletion();
+  await app.driver.sendUserMessage(app.ref, { text: "first" });
+
+  // A second send while the first is still on its way: the store passes the whole queue each time.
+  await Promise.all([app.queue("A"), app.queue("A", "B")]);
+  setTimeout(app.releaseCompletion, 50);
+  await app.waitForRuns(2);
+
+  assert.deepEqual(app.turns(), ["first", "-", "A", "-", "B", "-"]);
+  assert.deepEqual(app.started(), ["A", "B"]);
+  assert.equal(app.count("runFailed"), 0);
+  assert.deepEqual(app.lastSnapshot()?.queuedMessages ?? [], []);
+});
+
+await test("a queued message that fails to start goes back on the queue until the next change", async (t) => {
+  const app = await setUp(t);
+  app.holdCompletion();
+  await app.driver.sendUserMessage(app.ref, { text: "first" });
+
+  // pi refuses the prompt before any run starts, as with a missing sign-in.
+  const session = app.runtime().session;
+  const prompt = session.prompt.bind(session);
+  session.prompt = () => Promise.reject(new Error("No API key"));
+  await app.queue("A", "B");
+  setTimeout(app.releaseCompletion, 50);
+  const deadline = Date.now() + 5_000;
+  while (app.count("runFailed") === 0 && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  await new Promise((resolve) => setTimeout(resolve, 300));
+
+  assert.equal(app.count("runFailed"), 1, "it is not retried on its own");
+  assert.deepEqual(
+    (app.lastSnapshot()?.queuedMessages ?? []).map((message) => message.text),
+    ["A", "B"],
+  );
+  assert.equal(session.pendingMessageCount, 2);
+  assert.deepEqual(app.turns(), ["first", "-"]);
+
+  session.prompt = prompt;
+  await app.queue("A", "B");
+  await app.waitForRuns(2);
+  assert.deepEqual(app.turns(), ["first", "-", "A", "-", "B", "-"]);
+  assert.deepEqual(app.lastSnapshot()?.queuedMessages ?? [], []);
 });
