@@ -24,12 +24,12 @@
     "test": "tsc -p tsconfig.json && node --test \"test/**/*.test.mts\""
   },
   "dependencies": {
-    "@earendil-works/pi-coding-agent": "^0.99.1",
+    "@earendil-works/pi-coding-agent": "^1.0.0",
     "@pi-gui/catalogs": "workspace:*",
     "@pi-gui/extension-ui": "workspace:*",
     "@pi-gui/session-driver": "workspace:*"
   },
   "devDependencies": {
-    "@earendil-works/pi-ai": "^0.99.1"
+    "@earendil-works/pi-ai": "^1.0.0"
   }
 }
