@@ -23,6 +23,7 @@ import { SentAnnotations } from "./annotations/sent-annotations";
 import { ExtensionCardItem, type RunExtensionAction } from "./extension-card";
 import { ImageAttachmentThumb } from "./image-attachment-thumb";
 import { MessageMarkdown } from "./message-markdown";
+import { stringifyToolValue, toolOutputImageSrc, toolOutputImages } from "./tool-output-images";
 import { TurnChangesCard, type OpenTurnChange } from "./turn-changes-card";
 import type { WorkspaceFileLine } from "./workspace-file-line";
 import { InlineDiff, extractDiffFromOutput } from "../../ui/diff-inline";
@@ -281,6 +282,7 @@ function TimelineToolCallItem({
   const filePath = writeTool ? extractFilename(item.input) || undefined : undefined;
   const diffLanguage = diffText && filePath ? extensionToLanguage(filePath) : undefined;
   const inlineDetail = item.status === "error" ? item.detail : undefined;
+  const images = toolOutputImages(item.output);
 
   const handleCopy = () => {
     const text = diffText ?? formatToolContent(item.input, item.output);
@@ -337,6 +339,19 @@ function TimelineToolCallItem({
           </button>
         ) : null}
       </div>
+      {images.length > 0 ? (
+        // Shown while collapsed too: an image a tool made is a result in itself.
+        <div className="timeline-tool__images" data-testid="timeline-tool-images">
+          {images.map((image, index) => (
+            <ImageAttachmentThumb
+              className="timeline-tool__image"
+              key={`${item.callId}:${index}`}
+              name={`${item.toolName} image ${index + 1}`}
+              src={toolOutputImageSrc(image)}
+            />
+          ))}
+        </div>
+      ) : null}
       {expanded && hasContent ? (
         <div className="timeline-tool__body">
           {diffText ? (
@@ -450,10 +465,10 @@ function countDiffStats(diff: string): { added: number; removed: number } {
 function formatToolContent(input: unknown, output: unknown): string {
   const parts: string[] = [];
   if (input !== undefined) {
-    parts.push(typeof input === "string" ? input : JSON.stringify(input, null, 2));
+    parts.push(typeof input === "string" ? input : stringifyToolValue(input));
   }
   if (output !== undefined) {
-    parts.push(typeof output === "string" ? output : JSON.stringify(output, null, 2));
+    parts.push(typeof output === "string" ? output : stringifyToolValue(output));
   }
   return parts.join("\n\n");
 }
