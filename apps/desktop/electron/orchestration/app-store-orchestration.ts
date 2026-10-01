@@ -2082,7 +2082,8 @@ function toChildTranscript(
 function recentTranscriptItems(
   transcript: readonly TranscriptMessage[],
 ): readonly TranscriptMessage[] {
-  return transcript.slice(-MAX_CHILD_TRANSCRIPT_MESSAGES);
+  // Pins sit at the end of a transcript but are never child messages, so they take no slots.
+  return transcript.filter((item) => item.kind !== "pin").slice(-MAX_CHILD_TRANSCRIPT_MESSAGES);
 }
 
 function transcriptText(message: TranscriptMessage): string {
@@ -2100,6 +2101,9 @@ function transcriptText(message: TranscriptMessage): string {
       return message.detail ? `${message.label}: ${message.detail}` : message.label;
     case "summary":
       return message.metadata ? `${message.label}: ${message.metadata}` : message.label;
+    // A pin is extension state above the composer, not something the thread said.
+    case "pin":
+      return "";
     default: {
       const unhandled: never = message;
       void unhandled;

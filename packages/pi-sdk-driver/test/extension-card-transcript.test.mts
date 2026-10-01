@@ -10,6 +10,7 @@ import { createAgentSessionRuntimeWithNpmFallback } from "../dist/npm-package-fa
 import {
   transcriptFromSession,
   transcriptItemFromCardEntry,
+  transcriptItemFromPinEntry,
 } from "../dist/session-supervisor-utils.js";
 
 const cardEntry = (data: unknown): CustomEntry => ({
@@ -169,6 +170,133 @@ await test("the session projection places cards in entry order and skips other c
   );
 });
 
+const pinEntry = (data: unknown): CustomEntry => ({
+  ...cardEntry(data),
+  customType: "pi-gui.pin",
+});
+
+await test("a pin entry parses like a card with a required key; remove unpins it", () => {
+  const item = transcriptItemFromPinEntry(
+    pinEntry({
+      key: "todo",
+      title: "Plan",
+      subtitle: "1 done",
+      tone: "warning",
+      rows: [{ label: "✓", value: "Read the code" }, { label: "Bad row" }],
+      actions: [{ type: "command", label: "Open list", command: "/todos" }],
+    }),
+  );
+  assert.deepEqual(item, {
+    kind: "pin",
+    id: "pin:todo",
+    createdAt: "2026-09-30T00:00:00.000Z",
+    card: {
+      key: "todo",
+      title: "Plan",
+      subtitle: "1 done",
+      tone: "warning",
+      rows: [{ label: "✓", value: "Read the code" }],
+      actions: [{ type: "command", label: "Open list", command: "/todos" }],
+    },
+  });
+  assert.deepEqual(transcriptItemFromPinEntry(pinEntry({ key: "todo", remove: true })), {
+    kind: "pin",
+    id: "pin:todo",
+    createdAt: "2026-09-30T00:00:00.000Z",
+    card: null,
+  });
+});
+
+await test("a malformed pin is one error row per key; without a valid key it keeps the entry id", () => {
+  for (const data of [{ title: "No key" }, { key: "has space", title: "Bad key" }, "text", null]) {
+    const item = transcriptItemFromPinEntry(pinEntry(data));
+    assert.ok(item.kind === "custom", JSON.stringify(data));
+    assert.equal(item.id, "entry-1");
+    assert.equal(item.customType, "pi-gui.pin");
+    assert.match(item.text, /^This pinned card was not shown: it needs a `key`/);
+  }
+  for (const data of [{ key: "todo" }, { key: "todo", title: "  " }, { key: "todo", remove: 1 }]) {
+    const item = transcriptItemFromPinEntry(pinEntry(data));
+    assert.ok(item.kind === "custom", JSON.stringify(data));
+    assert.equal(item.id, "pin-error:todo");
+    assert.match(item.text, /^This pinned card was not shown: it needs a non-empty string `title`/);
+  }
+});
+
+await test("the projection keeps each pin's latest write, removes it, and re-pins it as new", () => {
+  const manager = SessionManager.inMemory();
+  const userId = manager.appendMessage({ role: "user", content: "plan", timestamp: Date.now() });
+  manager.appendCustomEntry("pi-gui.pin", { key: "todo", title: "Plan", subtitle: "0 done" });
+  manager.appendCustomEntry("pi-gui.pin", { key: "ci", title: "CI running" });
+  manager.appendCustomEntry("pi-gui.pin", { key: "todo", title: "Plan", subtitle: "1 done" });
+  manager.appendCustomEntry("pi-gui.pin", { key: "ci", rows: [] });
+  const pins = () =>
+    transcriptFromSession(manager).flatMap((item) =>
+      item.kind === "pin" ? [[item.id, item.card?.subtitle ?? item.card?.title ?? null]] : [],
+    );
+  // One row per pin key in first-write order; the broken write leaves its pin as it was.
+  assert.deepEqual(pins(), [
+    ["pin:todo", "1 done"],
+    ["pin:ci", "CI running"],
+  ]);
+  assert.deepEqual(
+    transcriptFromSession(manager).map((item) => [item.kind, item.id]),
+    [
+      ["message", userId],
+      ["custom", "pin-error:ci"],
+      ["pin", "pin:todo"],
+      ["pin", "pin:ci"],
+    ],
+    "a pin's only row in the conversation is its error row",
+  );
+
+  manager.appendCustomEntry("pi-gui.pin", { key: "todo", remove: true });
+  assert.deepEqual(pins(), [
+    ["pin:todo", null],
+    ["pin:ci", "CI running"],
+  ]);
+  manager.appendCustomEntry("pi-gui.pin", { key: "todo", title: "New plan" });
+  assert.deepEqual(pins(), [
+    ["pin:ci", "CI running"],
+    ["pin:todo", "New plan"],
+  ]);
+});
+
+await test("a pin written before a compaction's kept range survives it", () => {
+  const manager = SessionManager.inMemory();
+  manager.appendMessage({ role: "user", content: "summarized question", timestamp: Date.now() });
+  manager.appendCustomEntry("pi-gui.pin", { key: "todo", title: "Plan" });
+  manager.appendCustomEntry("pi-gui.card", { key: "ci", title: "CI passed" });
+  const keptId = manager.appendMessage({
+    role: "user",
+    content: "kept question",
+    timestamp: Date.now(),
+  });
+  manager.appendCompaction("summary", keptId, 1000);
+  const transcript = transcriptFromSession(manager);
+  assert.equal(
+    transcript.some((item) => item.kind === "card"),
+    false,
+    "a card before the kept range is summarized away",
+  );
+  const pins = transcript.filter((item) => item.kind === "pin");
+  assert.equal(pins.length, 1);
+  assert.ok(pins[0]?.kind === "pin");
+  assert.equal(pins[0].card?.title, "Plan");
+});
+
+await test("a pin on another branch is not shown", () => {
+  const manager = SessionManager.inMemory();
+  const rootId = manager.appendMessage({ role: "user", content: "start", timestamp: Date.now() });
+  manager.appendCustomEntry("pi-gui.pin", { key: "todo", title: "Abandoned plan" });
+  manager.branch(rootId);
+  manager.appendCustomEntry("pi-gui.pin", { key: "other", title: "This branch" });
+  assert.deepEqual(
+    transcriptFromSession(manager).flatMap((item) => (item.kind === "pin" ? [item.id] : [])),
+    ["pin:other"],
+  );
+});
+
 await test("a live card and the reopened transcript show the same card once", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "pi-gui-card-"));
   const agentDir = join(root, "agent");
@@ -211,6 +339,12 @@ await test("a live card and the reopened transcript show the same card once", as
                 description: "Append or update the keyed CI card",
                 handler: async (args) => {
                   pi.appendEntry("pi-gui.card", { key: "ci", title: `CI ${args || "running"}` });
+                },
+              });
+              pi.registerCommand("pin", {
+                description: "Pin or update the plan",
+                handler: async (args) => {
+                  pi.appendEntry("pi-gui.pin", { key: "plan", title: `Plan ${args || "draft"}` });
                 },
               });
             },
@@ -263,8 +397,19 @@ await test("a live card and the reopened transcript show the same card once", as
   }
   assert.equal((await driver.getTranscript(ref)).length, before, "a refused button sends nothing");
 
+  await driver.sendUserMessage(ref, { text: "/pin", extensionCommandOnly: true });
+  await driver.sendUserMessage(ref, { text: "/pin final", extensionCommandOnly: true });
+  const livePins = appended.filter((item) => item.kind === "pin");
+  assert.deepEqual(
+    livePins.map((item) => item.kind === "pin" && item.card?.title),
+    ["Plan draft", "Plan final"],
+  );
+  const pins = async () => (await driver.getTranscript(ref)).filter((item) => item.kind === "pin");
+  assert.deepEqual(await pins(), [livePins[1]], "the projection reads the live pin's latest write");
+
   const allCards = await cards();
   await driver.closeSession(ref);
   assert.deepEqual(await cards(), allCards, "the closed session reads the same cards from disk");
   assert.deepEqual(allCards[0], live);
+  assert.deepEqual(await pins(), [livePins[1]], "and the same pin");
 });

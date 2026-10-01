@@ -1,7 +1,8 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import type { HostUiResponse } from "@pi-gui/session-driver";
 import { trapDialogFocus } from "../../ui/dialog-focus";
-import { ChevronDownIcon, ChevronRightIcon } from "../../ui/icons";
+import { focusComposerAfter } from "./focus-composer";
+import { ChevronDownIcon, ChevronRightIcon, CloseIcon } from "../../ui/icons";
 import type {
   SessionExtensionDialogRecord,
   SessionExtensionUiStateRecord,
@@ -19,6 +20,8 @@ interface ExtensionDockBlock {
 export interface ExtensionDockModel {
   readonly summaryText: string;
   readonly bodyText: string;
+  /** The widget lines alone: a hidden dock shows again when these change, not on a status tick. */
+  readonly widgetText: string;
 }
 
 export function hasExtensionDockContent(uiState?: SessionExtensionUiStateRecord): boolean {
@@ -49,39 +52,90 @@ export function buildExtensionDockModel(
   return {
     summaryText,
     bodyText: buildDockBodyText(statuses, primaryBlocks, secondaryBlocks),
+    widgetText: JSON.stringify([...primaryBlocks, ...secondaryBlocks]),
   };
+}
+
+/**
+ * The selected thread's dock unless the user hid it. Hiding remembers the widget text, so the
+ * dock comes back when an extension changes its widget. Kept at app level, per thread.
+ */
+export function useDismissibleExtensionDock(
+  sessionKey: string,
+  uiState: SessionExtensionUiStateRecord | undefined,
+  dock: ExtensionDockModel | undefined,
+): { readonly dock: ExtensionDockModel | undefined; readonly dismiss: () => void } {
+  const [dismissedWidgetText, setDismissedWidgetText] = useState<ReadonlyMap<string, string>>(
+    () => new Map(),
+  );
+  // Unknown until the thread's extension UI has loaded; empty once it has and shows no dock.
+  const widgetText = dock?.widgetText ?? (uiState ? "" : undefined);
+  const dismiss = useCallback(() => {
+    if (!widgetText) return;
+    setDismissedWidgetText((current) => new Map(current).set(sessionKey, widgetText));
+  }, [sessionKey, widgetText]);
+  const dismissed = dismissedWidgetText.get(sessionKey);
+  const changed = dismissed !== undefined && widgetText !== undefined && dismissed !== widgetText;
+  // Once the widget changes or is cleared, the hide is spent: the same text coming back later
+  // shows the dock.
+  useEffect(() => {
+    if (!changed) return;
+    setDismissedWidgetText((current) => {
+      const next = new Map(current);
+      next.delete(sessionKey);
+      return next;
+    });
+  }, [changed, sessionKey]);
+  const hidden = dock !== undefined && dismissed === dock.widgetText;
+  return { dock: hidden ? undefined : dock, dismiss };
 }
 
 export function ExtensionDock({
   dock,
   expanded,
   onToggle,
+  onDismiss,
 }: {
   readonly dock: ExtensionDockModel;
   readonly expanded: boolean;
   readonly onToggle: () => void;
+  readonly onDismiss?: () => void;
 }) {
   return (
     <div
       className={`extension-dock ${expanded ? "extension-dock--expanded" : ""}`}
       data-testid="extension-dock"
     >
-      <button
-        aria-controls="extension-dock-body"
-        aria-expanded={expanded}
-        className="extension-dock__toggle"
-        data-testid="extension-dock-toggle"
-        title={dock.summaryText}
-        type="button"
-        onClick={onToggle}
-      >
-        <span className="extension-dock__summary" data-testid="extension-dock-summary">
-          {dock.summaryText}
-        </span>
-        <span className="extension-dock__chevron" aria-hidden="true">
-          {expanded ? <ChevronDownIcon /> : <ChevronRightIcon />}
-        </span>
-      </button>
+      <div className="extension-dock__bar">
+        <button
+          aria-controls="extension-dock-body"
+          aria-expanded={expanded}
+          className="extension-dock__toggle"
+          data-testid="extension-dock-toggle"
+          title={dock.summaryText}
+          type="button"
+          onClick={onToggle}
+        >
+          <span className="extension-dock__summary" data-testid="extension-dock-summary">
+            {dock.summaryText}
+          </span>
+          <span className="extension-dock__chevron" aria-hidden="true">
+            {expanded ? <ChevronDownIcon /> : <ChevronRightIcon />}
+          </span>
+        </button>
+        {onDismiss ? (
+          <button
+            aria-label="Hide extension status"
+            className="extension-dock__dismiss icon-button"
+            data-testid="extension-dock-dismiss"
+            title="Hide until the extension changes it"
+            type="button"
+            onClick={(event) => focusComposerAfter(event.currentTarget, onDismiss)}
+          >
+            <CloseIcon />
+          </button>
+        ) : null}
+      </div>
       {expanded ? (
         <pre
           className="extension-dock__body"
