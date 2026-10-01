@@ -65,11 +65,6 @@ function formatPercent(value) {
   if (value > 0 && value < 0.01) return "<1%";
   return `${Math.round(value * 100)}%`;
 }
-function formatCost(value) {
-  if (value === 0) return "$0";
-  if (value < 1e-3) return "<$0.001";
-  return `$${value.toFixed(value < 1 ? 3 : 2)}`;
-}
 function runTitle(run) {
   return run.kind === "reply" ? `Reply ${run.number}` : `Compaction ${run.number}`;
 }
@@ -97,7 +92,6 @@ function runTotals(run, now) {
     toolCalls: 0,
     input: 0,
     output: 0,
-    cost: 0,
     peak: null
   };
   for (const span of run.spans) {
@@ -107,7 +101,6 @@ function runTotals(run, now) {
     if (!span.usage) continue;
     totals.input += promptTokens(span.usage);
     totals.output += span.usage.output;
-    totals.cost += span.usage.cost;
     if (!totals.peak?.usage || promptTokens(span.usage) > promptTokens(totals.peak.usage))
       totals.peak = span;
   }
@@ -217,7 +210,6 @@ pre{margin:4px 0 0;padding:8px 10px;border-radius:6px;background:var(--track);fo
 @container trace (max-width:520px){
   .stats{grid-template-columns:repeat(2,minmax(0,1fr))}
   .waterfall{--name:minmax(120px,48%);--dur:50px}
-  .name .meta:not(.ctx){display:none}
 }
 `;
 var CHEVRON_ICON = '<svg viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 3.8 5 6.6 8 3.8"/></svg>';
@@ -455,7 +447,6 @@ async function mount(root, host) {
       fact("Model calls", String(totals.modelCalls));
       fact("Tool calls", String(totals.toolCalls));
       fact("Tokens", `${formatTokens(totals.input)} in \xB7 ${formatTokens(totals.output)} out`);
-      if (totals.cost > 0) fact("Cost", formatCost(totals.cost));
       fact("Peak context", totals.peak ? contextMeter(totals.peak) : "\u2014");
     } else {
       const span = row.span;
@@ -559,7 +550,6 @@ async function mount(root, host) {
         `${formatTokens(usage.input)} new \xB7 ${formatTokens(usage.cacheRead)} cached${usage.cacheWrite ? ` \xB7 ${formatTokens(usage.cacheWrite)} written to cache` : ""} \xB7 ${formatTokens(usage.output)} out`,
         "trace-detail-tokens"
       );
-      if (usage.cost > 0) fact("Cost", formatCost(usage.cost));
     }
     if (span.stopReason) fact("Stop reason", span.stopReason);
     if (span.error) fact("Error", span.error);

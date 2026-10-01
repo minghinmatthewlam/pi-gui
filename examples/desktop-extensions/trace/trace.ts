@@ -276,13 +276,11 @@ function outcomeOf(stopReason: unknown): Outcome {
 /** Stopped or failed calls that report no tokens show as unknown, as pi's own totals skip them. */
 function callUsage(value: unknown, stopReason: string | null): CallUsage | null {
   if (!isRecord(value)) return null;
-  const cost = isRecord(value.cost) ? count(value.cost.total) : 0;
   const usage = {
     input: count(value.input),
     output: count(value.output),
     cacheRead: count(value.cacheRead),
     cacheWrite: count(value.cacheWrite),
-    cost,
   };
   const empty = promptTokens(usage) + usage.output === 0;
   return empty && (stopReason === "aborted" || stopReason === "error") ? null : usage;

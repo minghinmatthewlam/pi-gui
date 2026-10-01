@@ -31,7 +31,7 @@ changes nothing the model sees, and writes nothing to the session.
 
 The view picks a reply (it follows the newest one), shows its time, model calls,
 tool calls and peak context, and a waterfall that grows live. Click a row for its
-details: timing, first response, context, tokens and cost for a model call;
+details: timing, first response, context and tokens for a model call;
 arguments and result for a tool. Terminal Pi gets `/trace`, a text outline of the
 latest reply.
 

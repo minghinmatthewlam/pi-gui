@@ -10,7 +10,6 @@ import {
 } from "./contract.ts";
 import {
   callContext,
-  formatCost,
   formatDuration,
   formatPercent,
   formatTokens,
@@ -106,7 +105,6 @@ pre{margin:4px 0 0;padding:8px 10px;border-radius:6px;background:var(--track);fo
 @container trace (max-width:520px){
   .stats{grid-template-columns:repeat(2,minmax(0,1fr))}
   .waterfall{--name:minmax(120px,48%);--dur:50px}
-  .name .meta:not(.ctx){display:none}
 }
 `;
 
@@ -374,7 +372,6 @@ export async function mount(root: HTMLElement, host: DesktopViewContext): Promis
       fact("Model calls", String(totals.modelCalls));
       fact("Tool calls", String(totals.toolCalls));
       fact("Tokens", `${formatTokens(totals.input)} in · ${formatTokens(totals.output)} out`);
-      if (totals.cost > 0) fact("Cost", formatCost(totals.cost));
       fact("Peak context", totals.peak ? contextMeter(totals.peak) : "—");
     } else {
       const span = row.span;
@@ -487,7 +484,6 @@ export async function mount(root: HTMLElement, host: DesktopViewContext): Promis
         `${formatTokens(usage.input)} new · ${formatTokens(usage.cacheRead)} cached${usage.cacheWrite ? ` · ${formatTokens(usage.cacheWrite)} written to cache` : ""} · ${formatTokens(usage.output)} out`,
         "trace-detail-tokens",
       );
-      if (usage.cost > 0) fact("Cost", formatCost(usage.cost));
     }
     if (span.stopReason) fact("Stop reason", span.stopReason);
     if (span.error) fact("Error", span.error);

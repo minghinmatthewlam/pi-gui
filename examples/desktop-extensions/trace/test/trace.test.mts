@@ -11,12 +11,11 @@ const assistant = (stopReason: string, usage: Record<string, unknown> = {}, extr
   usage,
   ...extra,
 });
-const usage = (input: number, cacheRead: number, output: number, cost = 0) => ({
+const usage = (input: number, cacheRead: number, output: number) => ({
   input,
   cacheRead,
   cacheWrite: 0,
   output,
-  cost: { total: cost },
 });
 
 /** Plays events one millisecond step apart, or at the given times. */
@@ -58,13 +57,13 @@ await test("one reply with a tool call becomes Run › Turn › Model call, tool
     [1_000, { type: "turn_start" }],
     [1_010, { type: "context", model }],
     [1_400, { type: "message_start", message: assistant("") }],
-    [1_900, { type: "message_end", message: assistant("toolUse", usage(1_000, 9_000, 50, 0.01)) }],
+    [1_900, { type: "message_end", message: assistant("toolUse", usage(1_000, 9_000, 50)) }],
     [1_910, toolTurn("read-1")[0]!],
     [1_950, toolTurn("read-1")[1]!],
     [1_960, { type: "turn_end", message: assistant("toolUse") }],
     [1_960, { type: "turn_start" }],
     [1_970, { type: "context", model }],
-    [2_500, { type: "message_end", message: assistant("stop", usage(1_200, 10_800, 80, 0.02)) }],
+    [2_500, { type: "message_end", message: assistant("stop", usage(1_200, 10_800, 80)) }],
     [2_510, { type: "turn_end", message: assistant("stop") }],
     [2_520, { type: "agent_end" }],
     [2_600, { type: "agent_settled" }],

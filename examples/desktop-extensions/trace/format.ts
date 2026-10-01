@@ -28,12 +28,6 @@ export function formatPercent(value: number): string {
   return `${Math.round(value * 100)}%`;
 }
 
-export function formatCost(value: number): string {
-  if (value === 0) return "$0";
-  if (value < 0.001) return "<$0.001";
-  return `$${value.toFixed(value < 1 ? 3 : 2)}`;
-}
-
 export function runTitle(run: Run): string {
   return run.kind === "reply" ? `Reply ${run.number}` : `Compaction ${run.number}`;
 }
@@ -66,7 +60,6 @@ export interface RunTotals {
   toolCalls: number;
   input: number;
   output: number;
-  cost: number;
   /** The largest context any call sent, with that call's window. */
   peak: ModelSpan | null;
 }
@@ -78,7 +71,6 @@ export function runTotals(run: Run, now: number): RunTotals {
     toolCalls: 0,
     input: 0,
     output: 0,
-    cost: 0,
     peak: null,
   };
   for (const span of run.spans) {
@@ -88,7 +80,6 @@ export function runTotals(run: Run, now: number): RunTotals {
     if (!span.usage) continue;
     totals.input += promptTokens(span.usage);
     totals.output += span.usage.output;
-    totals.cost += span.usage.cost;
     if (!totals.peak?.usage || promptTokens(span.usage) > promptTokens(totals.peak.usage))
       totals.peak = span;
   }

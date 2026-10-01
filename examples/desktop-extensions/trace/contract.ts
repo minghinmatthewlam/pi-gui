@@ -18,13 +18,12 @@ export interface TurnSpan extends SpanBase {
   number: number;
 }
 
-/** Tokens as pi records them on the assistant message; cost is the provider-reported USD total. */
+/** Tokens as pi records them on the assistant message. */
 export interface CallUsage {
   input: number;
   output: number;
   cacheRead: number;
   cacheWrite: number;
-  cost: number;
 }
 
 /** From pi's `context` event (the request is being built) to the assistant `message_end`. */
