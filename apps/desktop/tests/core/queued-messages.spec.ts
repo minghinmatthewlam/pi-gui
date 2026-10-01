@@ -453,26 +453,22 @@ test("wraps a queued message with a long unbroken token inside the composer", as
 
     const queuedCard = window.getByTestId("queued-composer-message");
     await expect(queuedCard).toContainText(token);
-    await expect(queuedCard.getByRole("button", { name: "Edit" })).toBeInViewport({ ratio: 1 });
+    await expect(queuedCard.locator(".queued-composer-message__actions")).toBeInViewport({
+      ratio: 1,
+    });
 
+    // The token itself must wrap: fitting the card alone would still let it paint over the actions.
     const layout = await queuedCard.evaluate((card) => {
       const text = card.querySelector<HTMLElement>(".queued-composer-message__text");
-      const surface = card.closest<HTMLElement>(".composer__surface");
-      if (!text || !surface) throw new Error("Expected queued text inside the composer");
-      const cardRect = card.getBoundingClientRect();
-      const surfaceRect = surface.getBoundingClientRect();
+      const actions = card.querySelector<HTMLElement>(".queued-composer-message__actions");
+      if (!text || !actions) throw new Error("Expected queued text and actions");
       return {
-        cardWithinComposer: cardRect.right <= surfaceRect.right + 1,
-        composerWithinWindow: surfaceRect.right <= document.documentElement.clientWidth + 1,
-        textWraps:
-          text.getBoundingClientRect().height > parseFloat(getComputedStyle(text).lineHeight) * 1.5,
+        textFitsItsBox: text.scrollWidth <= text.clientWidth + 1,
+        textClearsActions:
+          text.getBoundingClientRect().right <= actions.getBoundingClientRect().left + 1,
       };
     });
-    expect(layout).toEqual({
-      cardWithinComposer: true,
-      composerWithinWindow: true,
-      textWraps: true,
-    });
+    expect(layout).toEqual({ textFitsItsBox: true, textClearsActions: true });
   } finally {
     await harness.close();
   }

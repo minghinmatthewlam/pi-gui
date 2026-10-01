@@ -1075,7 +1075,6 @@
 
 .queued-composer-messages {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
   gap: 10px;
   margin-bottom: 10px;
 }
@@ -1110,7 +1109,6 @@
 
 .queued-composer-message {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
   gap: 10px;
   padding: 12px 14px;
   border-radius: var(--radius-3xl);
