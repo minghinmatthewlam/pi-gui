@@ -68,7 +68,7 @@ h2{font-size:12px;font-weight:500;color:var(--muted);margin:0}
 .rows{list-style:none;margin:0;padding:0;position:relative}
 .row{all:unset;box-sizing:border-box;display:grid;grid-template-columns:var(--name) minmax(0,1fr) var(--dur);column-gap:10px;align-items:center;width:100%;height:28px;padding:0 2px 0 0;border-radius:5px;cursor:pointer}
 .row:hover{background:var(--hover)}
-.row[aria-current=true]{background:var(--selected)}
+.row[aria-pressed=true]{background:var(--selected)}
 .name{display:flex;align-items:center;gap:6px;min-width:0;padding-left:calc(var(--depth) * 14px + 4px)}
 .name .dot{width:8px;height:8px;border-radius:2px;flex:none;background:var(--c)}
 .name .label{white-space:nowrap}
@@ -116,6 +116,8 @@ const STEPS = [
   100, 200, 500, 1_000, 2_000, 5_000, 10_000, 15_000, 30_000, 60_000, 120_000, 300_000, 600_000,
 ];
 
+const LIVE_FRAME_MS = 100;
+
 type Child = Node | string | null | undefined | false;
 
 function h<K extends keyof HTMLElementTagNameMap>(
@@ -154,6 +156,11 @@ export async function mount(root: HTMLElement, host: DesktopViewContext): Promis
   let error = "";
   let disposed = false;
   let frame = 0;
+  let laidOutAt = 0;
+  const tick = (time: number) => {
+    if (time - laidOutAt >= LIVE_FRAME_MS) layout();
+    else frame = requestAnimationFrame(tick);
+  };
 
   const shownRun = (): Run | undefined => {
     const runs = state?.runs ?? [];
@@ -176,11 +183,16 @@ export async function mount(root: HTMLElement, host: DesktopViewContext): Promis
     body,
   );
   let pickerOptions = "";
+  /** What the body last showed; an update that changes none of it leaves the body alone. */
+  let shown = "";
 
   const render = () => {
     if (disposed) return;
     const run = shownRun();
     syncHeader(run);
+    const next = JSON.stringify([state === null, error, selected, run ?? null]);
+    if (next === shown) return;
+    shown = next;
     const focused = (document.activeElement as HTMLElement | null)?.dataset?.id;
     const children: Child[] = [];
     if (error) children.push(h("p", { class: "note", role: "alert" }, error));
@@ -214,7 +226,10 @@ export async function mount(root: HTMLElement, host: DesktopViewContext): Promis
         children.push(h("p", { class: "note" }, `${run.dropped} more spans not shown.`));
     }
     body.replaceChildren(...children.filter((child): child is Node => child instanceof Node));
-    if (focused) body.querySelector<HTMLElement>(`[data-id="${CSS.escape(focused)}"]`)?.focus();
+    if (focused)
+      body
+        .querySelector<HTMLElement>(`[data-id="${CSS.escape(focused)}"]`)
+        ?.focus({ preventScroll: true });
     layout();
   };
 
@@ -256,7 +271,7 @@ export async function mount(root: HTMLElement, host: DesktopViewContext): Promis
 
   const stats = (run: Run) => {
     const totals = runTotals(run, Date.now());
-    const stat = (label: string, value: string, testId: string, title?: string) =>
+    const stat = (label: string, value: Child, testId: string, title?: string) =>
       h(
         "div",
         { class: "stat" },
@@ -267,7 +282,7 @@ export async function mount(root: HTMLElement, host: DesktopViewContext): Promis
     return h(
       "dl",
       { class: "stats" },
-      stat("Time", formatDuration(totals.durationMs), "trace-duration"),
+      stat("Time", liveDuration(run.startedAt, run.endedAt), "trace-duration"),
       stat("Model calls", String(totals.modelCalls), "trace-model-calls"),
       stat("Tool calls", String(totals.toolCalls), "trace-tool-calls"),
       stat(
@@ -280,8 +295,8 @@ export async function mount(root: HTMLElement, host: DesktopViewContext): Promis
   };
 
   const waterfall = (run: Run, rows: Row[]) => {
-    const list = h("ol", { class: "rows", role: "tree", "aria-label": `${runTitle(run)} spans` });
-    for (const row of rows) list.append(h("li", { role: "none" }, rowButton(row)));
+    const list = h("ol", { class: "rows", "aria-label": `${runTitle(run)} spans` });
+    for (const row of rows) list.append(h("li", {}, rowButton(row)));
     return h(
       "section",
       { class: "waterfall", "aria-label": "Waterfall" },
@@ -326,9 +341,7 @@ export async function mount(root: HTMLElement, host: DesktopViewContext): Promis
       {
         class: `row k-${kind}`,
         type: "button",
-        role: "treeitem",
-        "aria-level": row.depth + 1,
-        "aria-current": String(id === selected),
+        "aria-pressed": String(id === selected),
         "data-testid": "trace-row",
         "data-id": id,
         "data-kind": kind,
@@ -368,7 +381,7 @@ export async function mount(root: HTMLElement, host: DesktopViewContext): Promis
       title = runTitle(run);
       badge = run.outcome;
       const totals = runTotals(run, now);
-      fact("Time", formatDuration(totals.durationMs));
+      fact("Time", liveDuration(run.startedAt, run.endedAt));
       fact("Model calls", String(totals.modelCalls));
       fact("Tool calls", String(totals.toolCalls));
       fact("Tokens", `${formatTokens(totals.input)} in · ${formatTokens(totals.output)} out`);
@@ -504,12 +517,13 @@ export async function mount(root: HTMLElement, host: DesktopViewContext): Promis
     );
   };
 
-  /** Places bars on the run's time axis and fills durations; repeats each frame while live. */
+  /** Places bars on the run's time axis and fills durations; repeats while live, about 10 times a second. */
   const layout = () => {
     cancelAnimationFrame(frame);
     frame = 0;
     const run = shownRun();
     if (disposed || !run) return;
+    laidOutAt = performance.now();
     const now = Date.now();
     const end = run.endedAt ?? now;
     const total = Math.max(end - run.startedAt, 1);
@@ -524,12 +538,7 @@ export async function mount(root: HTMLElement, host: DesktopViewContext): Promis
         labels.push(label);
       }
       // Drop a last label that would crowd the right edge.
-      if (
-        labels.length > 1 &&
-        (total - (labels.length - 1) * step) / total < 0.08 &&
-        labels.length > 2
-      )
-        labels.pop();
+      if ((total - (labels.length - 1) * step) / total < 0.08 && labels.length > 2) labels.pop();
       ticks.replaceChildren(...labels);
     }
     const grid = `${(step / total) * 100}%`;
@@ -549,7 +558,7 @@ export async function mount(root: HTMLElement, host: DesktopViewContext): Promis
       const stop = cell.dataset.end ? Number(cell.dataset.end) : now;
       cell.textContent = formatDuration(stop - start);
     }
-    if (run.endedAt === null) frame = requestAnimationFrame(layout);
+    if (run.endedAt === null) frame = requestAnimationFrame(tick);
   };
 
   const binding = host.services.open({
@@ -588,6 +597,11 @@ export async function mount(root: HTMLElement, host: DesktopViewContext): Promis
     throw reason;
   }
   return dispose;
+}
+
+/** A duration that layout() keeps current while the span is open. */
+function liveDuration(start: number, end: number | null): HTMLElement {
+  return h("span", { class: "dur", "data-start": start, "data-end": end ?? "" });
 }
 
 function rowId(row: Row): string {

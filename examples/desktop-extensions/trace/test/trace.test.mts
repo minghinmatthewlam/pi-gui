@@ -60,11 +60,9 @@ await test("one reply with a tool call becomes Run › Turn › Model call, tool
     [1_900, { type: "message_end", message: assistant("toolUse", usage(1_000, 9_000, 50)) }],
     [1_910, toolTurn("read-1")[0]!],
     [1_950, toolTurn("read-1")[1]!],
-    [1_960, { type: "turn_end", message: assistant("toolUse") }],
     [1_960, { type: "turn_start" }],
     [1_970, { type: "context", model }],
     [2_500, { type: "message_end", message: assistant("stop", usage(1_200, 10_800, 80)) }],
-    [2_510, { type: "turn_end", message: assistant("stop") }],
     [2_520, { type: "agent_end" }],
     [2_600, { type: "agent_settled" }],
   ]);
@@ -78,7 +76,7 @@ await test("one reply with a tool call becomes Run › Turn › Model call, tool
   assert.equal(first!.firstResponseAt, 1_400);
   assert.equal(first!.endedAt, 1_900);
   assert.equal(callContext(first!), "10k · 5%");
-  // An error before the stream starts still records the response time as the end.
+  // With no separate first-response event, the end of the reply counts as the first response.
   assert.equal(second!.firstResponseAt, 2_500);
   assert.equal(callContext(second!), "12k · 6%");
   const tool = run.spans.find((span): span is ToolSpan => span.kind === "tool")!;
@@ -98,7 +96,7 @@ await test("one reply with a tool call becomes Run › Turn › Model call, tool
       "  Turn 1 · 960ms",
       "    Model call · context 10k · 5% · 890ms",
       "    read notes.txt · 40ms",
-      "  Turn 2 · 550ms",
+      "  Turn 2 · 560ms",
       "    Model call · context 12k · 6% · 530ms",
     ].join("\n"),
   );
@@ -112,14 +110,12 @@ await test("a retried reply is one run with turns numbered across passes", () =>
     { type: "context", model },
     { type: "message_start", message: assistant("error") },
     { type: "message_end", message: assistant("error", {}, { errorMessage: "overloaded" }) },
-    { type: "turn_end", message: assistant("error") },
     { type: "agent_end" },
     // pi retries with agent.continue(): a new pass, same reply.
     { type: "agent_start" },
     { type: "turn_start" },
     { type: "context", model },
     { type: "message_end", message: assistant("stop", usage(100, 0, 10)) },
-    { type: "turn_end", message: assistant("stop") },
     { type: "agent_end" },
     { type: "agent_settled" },
   ]);
@@ -165,7 +161,6 @@ await test("a stopped reply ends aborted and keeps unknown context as a dash", (
     { type: "turn_start" },
     { type: "context", model },
     { type: "message_end", message: assistant("aborted", usage(0, 0, 0)) },
-    { type: "turn_end", message: assistant("aborted") },
     { type: "agent_end" },
     { type: "agent_settled" },
   ]);
@@ -216,7 +211,6 @@ await test("compaction joins the open reply, or stands alone and closes on failu
   play(recorder, [
     { type: "agent_start" },
     { type: "turn_start" },
-    { type: "turn_end", message: assistant("stop") },
     { type: "agent_end" },
     { type: "session_before_compact", reason: "threshold" },
     { type: "session_compact" },
@@ -260,4 +254,60 @@ await test("shutdown closes everything; runs and spans are capped", () => {
   const big = busy.snapshot().runs[0]!;
   assert.equal(big.spans.length, MAX_SPANS);
   assert.equal(big.dropped, 6);
+});
+
+await test("calls that fail before an answer show their error and no first response", () => {
+  const recorder = new TraceRecorder();
+  play(recorder, [
+    { type: "agent_start" },
+    { type: "turn_start" },
+    { type: "context", model },
+    // The provider never answered: pi starts and ends the call with its error message.
+    { type: "message_start", message: assistant("error", {}, { errorMessage: "429" }) },
+    { type: "message_end", message: assistant("error", {}, { errorMessage: "429" }) },
+    { type: "agent_end" },
+    { type: "agent_start" },
+    { type: "turn_start" },
+    // Preparing the request failed, so no context event came before the error.
+    { type: "message_start", message: assistant("error", {}, { errorMessage: "no route" }) },
+    { type: "message_end", message: assistant("error", {}, { errorMessage: "no route" }) },
+    { type: "agent_end" },
+    { type: "agent_settled" },
+  ]);
+  const run = recorder.snapshot().runs[0]!;
+  const calls = run.spans.filter((span): span is ModelSpan => span.kind === "model");
+  assert.deepEqual(
+    calls.map((call) => [call.error, call.firstResponseAt, call.outcome]),
+    [
+      ["429", null, "error"],
+      ["no route", null, "error"],
+    ],
+  );
+  assert.equal(run.outcome, "error");
+});
+
+await test("the model that answered names the call and sets its window", () => {
+  const recorder = new TraceRecorder();
+  play(recorder, [
+    { type: "agent_start" },
+    { type: "turn_start" },
+    { type: "context", model: { name: "Auto", contextWindow: 1_000_000 } },
+    {
+      type: "message_end",
+      message: assistant("stop", usage(50_000, 0, 10)),
+      model: { name: "Fast 1", contextWindow: 200_000 },
+    },
+    { type: "agent_end" },
+    // A threshold compaction that fails after a good answer does not fail the reply.
+    { type: "session_before_compact", reason: "threshold" },
+    { type: "session_compact_failed", aborted: false, errorMessage: "summary failed" },
+    { type: "agent_settled" },
+  ]);
+  const run = recorder.latest()!;
+  const call = run.spans.find((span): span is ModelSpan => span.kind === "model")!;
+  assert.equal(call.model, "Fast 1");
+  assert.equal(callContext(call), "50k · 25%");
+  assert.equal(run.outcome, "ok");
+  // Finished runs are copied once and reused.
+  assert.equal(recorder.snapshot().runs[0], recorder.snapshot().runs[0]);
 });

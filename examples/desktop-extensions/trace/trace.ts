@@ -15,14 +15,19 @@ export const MAX_SPANS = 400;
 export const ARGS_LIMIT = 1_000;
 export const RESULT_LIMIT = 2_000;
 
+export interface ModelFacts {
+  name: string;
+  contextWindow: number | null;
+}
+
 /** The pi events the trace listens to, reduced to what it keeps. */
 export type TraceEvent =
   | { type: "agent_start" }
   | { type: "turn_start" }
-  | { type: "turn_end"; message: unknown }
-  | { type: "context"; model: { name: string; contextWindow: number | null } }
+  | { type: "context"; model: ModelFacts }
   | { type: "message_start"; message: unknown }
-  | { type: "message_end"; message: unknown }
+  /** `model` is the model that answered, when known; routed models can differ from the selected one. */
+  | { type: "message_end"; message: unknown; model?: ModelFacts }
   | {
       type: "tool_execution_start";
       toolCallId: string;
@@ -56,10 +61,28 @@ export class TraceRecorder {
   private tools = new Map<string, ToolSpan>();
   private compaction: CompactionSpan | null = null;
   private spanCount = 0;
+  /** Copies of finished runs, which never change again, so a snapshot only copies the open run. */
+  private copies = new WeakMap<Run, Run>();
 
-  /** A copy safe to publish: plain JSON with no shared references. */
+  /** A copy safe to publish: plain JSON with no references into the recorder. */
   snapshot(): TraceState {
-    return structuredClone({ runs: this.runs });
+    return { runs: this.runs.map((run) => this.copy(run)) };
+  }
+
+  /** A copy of the newest run, reply or compaction. */
+  latest(): Run | undefined {
+    const run = this.runs.at(-1);
+    return run && this.copy(run);
+  }
+
+  private copy(run: Run): Run {
+    if (run.endedAt === null) return structuredClone(run);
+    let copy = this.copies.get(run);
+    if (!copy) {
+      copy = structuredClone(run);
+      this.copies.set(run, copy);
+    }
+    return copy;
   }
 
   record(event: TraceEvent, now: number): void {
@@ -69,8 +92,10 @@ export class TraceRecorder {
         this.run ??= this.openRun("reply", now);
         return;
       case "turn_start": {
+        // No turn_end handler: one makes pi build the session context for it on every turn.
+        // A turn ends when the next one starts or the pass ends.
         const run = this.run ?? (this.run = this.openRun("reply", now));
-        this.endTurn(now, null);
+        this.endTurn(now);
         this.turns += 1;
         this.turn = this.add<TurnSpan>(run, {
           kind: "turn",
@@ -98,14 +123,22 @@ export class TraceRecorder {
         return;
       }
       case "message_start":
-        if (isAssistant(event.message) && this.model && this.model.firstResponseAt === null)
-          this.model.firstResponseAt = now;
+        // A call that fails before the provider answers starts and ends with its error message.
+        if (isAssistant(event.message) && !failed(event.message) && this.model)
+          this.model.firstResponseAt ??= now;
         return;
       case "message_end": {
         const message = event.message;
-        if (!isAssistant(message) || !this.model) return;
-        const model = this.model;
-        model.firstResponseAt ??= now;
+        if (!isAssistant(message)) return;
+        // A failure while preparing the request (before `context`) still gets a span, so its error shows.
+        const model = this.model ?? (failed(message) ? this.failedCall(now) : null);
+        if (!model) return;
+        this.model = model;
+        if (!failed(message)) model.firstResponseAt ??= now;
+        if (event.model) {
+          model.model = event.model.name;
+          model.contextWindow = event.model.contextWindow;
+        }
         model.stopReason = typeof message.stopReason === "string" ? message.stopReason : null;
         model.error = typeof message.errorMessage === "string" ? message.errorMessage : null;
         model.usage = callUsage(message.usage, model.stopReason);
@@ -137,12 +170,9 @@ export class TraceRecorder {
         this.tools.delete(event.toolCallId);
         return;
       }
-      case "turn_end":
-        this.endTurn(now, isAssistant(event.message) ? outcomeOf(event.message.stopReason) : "ok");
-        return;
       case "agent_end":
         // A pass is over; anything it left open was cut short. The run waits for agent_settled.
-        this.endTurn(now, null);
+        this.endTurn(now);
         return;
       case "session_before_compact": {
         this.endCompaction(now, "aborted", null);
@@ -213,8 +243,23 @@ export class TraceRecorder {
     this.model = null;
   }
 
-  /** Closes the open turn and whatever ran inside it; `null` derives the outcome from its call. */
-  private endTurn(now: number, outcome: Outcome | null) {
+  private failedCall(now: number): ModelSpan | null {
+    if (!this.run) return null;
+    return this.add<ModelSpan>(this.run, {
+      kind: "model",
+      parentId: this.turn?.id ?? null,
+      startedAt: now,
+      model: "Model",
+      contextWindow: null,
+      firstResponseAt: null,
+      usage: null,
+      stopReason: null,
+      error: null,
+    });
+  }
+
+  /** Closes the open turn and whatever ran inside it; the turn ends however its model call did. */
+  private endTurn(now: number) {
     this.endModel(now, "aborted");
     for (const span of this.tools.values()) close(span, now, "aborted");
     this.tools.clear();
@@ -224,7 +269,7 @@ export class TraceRecorder {
     const call = this.run
       ? lastOf(this.run.spans, (span) => span.kind === "model" && span.parentId === turn.id)
       : undefined;
-    close(turn, now, outcome ?? call?.outcome ?? "aborted");
+    close(turn, now, call?.outcome ?? "aborted");
   }
 
   private endCompaction(now: number, outcome: Outcome, error: string | null) {
@@ -239,11 +284,14 @@ export class TraceRecorder {
   private endRun(now: number) {
     const run = this.run;
     if (!run) return;
-    this.endTurn(now, null);
+    this.endTurn(now);
     this.run = null;
     this.endCompaction(now, "aborted", null);
-    // The run ends however its last model call or compaction did.
-    const last = lastOf(run.spans, (span) => span.kind === "model" || span.kind === "compaction");
+    // A reply ends however its last model call did; a compaction on its own, however it did.
+    const last = lastOf(
+      run.spans,
+      (span) => span.kind === (run.kind === "reply" ? "model" : "compaction"),
+    );
     for (const span of run.spans) close(span, now, "aborted");
     run.endedAt = now;
     run.outcome = last?.outcome ?? "ok";
@@ -265,6 +313,10 @@ function close(span: Span, now: number, outcome: Outcome) {
   if (span.endedAt !== null) return;
   span.endedAt = now;
   span.outcome = outcome;
+}
+
+function failed(message: AssistantMessage): boolean {
+  return message.stopReason === "error" || message.stopReason === "aborted";
 }
 
 function outcomeOf(stopReason: unknown): Outcome {
