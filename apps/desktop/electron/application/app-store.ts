@@ -353,7 +353,7 @@ export class DesktopAppStore {
           revision: this.state.revision + 1,
         };
       },
-      finishLocalComposerCommand: (sessionRef, update) => {
+      applyLocalSessionUpdate: (sessionRef, update) => {
         this.state = {
           ...this.state,
           workspaces: this.state.workspaces.map((workspaceEntry) =>
@@ -373,11 +373,6 @@ export class DesktopAppStore {
                 }
               : workspaceEntry,
           ),
-          composerAttachments:
-            this.state.selectedWorkspaceId === sessionRef.workspaceId &&
-            this.state.selectedSessionId === sessionRef.sessionId
-              ? []
-              : this.state.composerAttachments,
           lastError: undefined,
           revision: this.state.revision + 1,
         };

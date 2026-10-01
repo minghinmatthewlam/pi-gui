@@ -2,6 +2,7 @@ import type {
   SessionTranscriptCard,
   SessionTranscriptCustomMessage,
   SessionTranscriptMessage,
+  SessionTranscriptPin,
   SessionTranscriptRole,
 } from "@pi-gui/session-driver";
 import type { TurnChangeSummary } from "./review";
@@ -48,9 +49,16 @@ export type TranscriptMessage =
   | SessionTranscriptMessage
   | SessionTranscriptCustomMessage
   | SessionTranscriptCard
+  | SessionTranscriptPin
   | TimelineActivity
   | TimelineToolCall
   | TimelineSummary;
+
+/**
+ * What the conversation timeline draws: the transcript without its pins, which show above the
+ * composer. The renderer splits them off once, so a pin reaching the timeline fails typecheck.
+ */
+export type TimelineTranscriptItem = Exclude<TranscriptMessage, SessionTranscriptPin>;
 
 /**
  * A derived, view-only marker inserted between turns to show how long the agent
@@ -71,4 +79,4 @@ export interface TimelineTurnChanges {
   readonly turn: TurnChangeSummary;
 }
 
-export type DisplayTimelineItem = TranscriptMessage | TimelineTurnMarker | TimelineTurnChanges;
+export type DisplayTimelineItem = TimelineTranscriptItem | TimelineTurnMarker | TimelineTurnChanges;

@@ -7,8 +7,10 @@ import {
   useState,
   type RefObject,
 } from "react";
-import type { TranscriptMessage } from "../../../contracts/desktop-state";
-import type { DisplayTimelineItem } from "../../../contracts/timeline-types";
+import type {
+  DisplayTimelineItem,
+  TimelineTranscriptItem,
+} from "../../../contracts/timeline-types";
 import type { ScheduledTaskOrigin } from "../../../contracts/scheduled-tasks";
 import type { TimelineViewport } from "./hooks/use-timeline-viewport";
 import type { AnnotationMarker, OpenAnnotation } from "./annotations/annotation-markers";
@@ -33,7 +35,7 @@ interface ThreadSearchModel {
   readonly close: () => void;
 }
 interface ConversationTimelineProps {
-  readonly transcript: readonly TranscriptMessage[];
+  readonly transcript: readonly TimelineTranscriptItem[];
   readonly isTranscriptLoading: boolean;
   readonly transcriptFailed?: { readonly retrying: boolean } | null;
   readonly onRetryTranscript?: () => void;

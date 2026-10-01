@@ -71,9 +71,12 @@ interface ComposerSurfaceProps {
   readonly textareaTestId: string;
   readonly textareaPlaceholder: string;
   readonly textareaClassName?: string;
+  /** Cards extensions pinned above the composer, over the extension dock. */
+  readonly pinnedCards?: ReactNode;
   readonly extensionDock?: ExtensionDockModel;
   readonly extensionDockExpanded?: boolean;
   readonly onToggleExtensionDock?: () => void;
+  readonly onDismissExtensionDock?: () => void;
   readonly footer: ReactNode;
   /** Transcript annotations waiting to go with the next message. */
   readonly annotationChip?: ReactNode;
@@ -117,9 +120,11 @@ export function ComposerSurface({
   textareaTestId,
   textareaPlaceholder,
   textareaClassName,
+  pinnedCards,
   extensionDock,
   extensionDockExpanded = false,
   onToggleExtensionDock,
+  onDismissExtensionDock,
   footer,
   annotationChip,
 }: ComposerSurfaceProps) {
@@ -244,11 +249,13 @@ export function ComposerSurface({
           ))}
         </div>
       ) : null}
+      {pinnedCards}
       {extensionDock && onToggleExtensionDock ? (
         <ExtensionDock
           dock={extensionDock}
           expanded={extensionDockExpanded}
           onToggle={onToggleExtensionDock}
+          onDismiss={onDismissExtensionDock}
         />
       ) : null}
       {lastError ? (

@@ -166,3 +166,51 @@ test("a keyed card's later write updates it where it is, even mid-reply, without
   ]);
   expect(rows[0]?.kind === "card" && rows[0].card.title).toBe("CI passed");
 });
+
+test("a pin appended mid-reply never splits the streaming reply, and later writes replace it", () => {
+  const h = fixture();
+  const pin = (title: string | null, createdAt = timestamp) => ({
+    kind: "pin" as const,
+    id: "pin:todo",
+    createdAt,
+    card: title ? { key: "todo", title, tone: "neutral" as const, rows: [], actions: [] } : null,
+  });
+  const other = { ...pin("CI"), id: "pin:ci" };
+  h.append("Planning.");
+  h.send({ type: "transcriptItemAppended", sessionRef, timestamp, item: pin("Plan: 0 done") });
+  h.append(" Step one.");
+  h.send({ type: "transcriptItemAppended", sessionRef, timestamp, item: other });
+  h.send({ type: "transcriptItemAppended", sessionRef, timestamp, item: pin("Plan: 1 done") });
+  h.append(" Step two.");
+  const rows = () =>
+    h.transcript
+      .get(key)!
+      .map((row) =>
+        row.kind === "message" ? row.text : row.kind === "pin" ? (row.card?.title ?? row.id) : "",
+      );
+  expect(rows()).toEqual(["Planning. Step one. Step two.", "Plan: 1 done", "CI"]);
+
+  // A removal keeps the row so a later write replaces it; a write after removal is a new pin.
+  h.send({ type: "transcriptItemAppended", sessionRef, timestamp, item: pin(null) });
+  expect(rows()).toEqual(["Planning. Step one. Step two.", "pin:todo", "CI"]);
+  h.send({ type: "transcriptItemAppended", sessionRef, timestamp, item: pin("New plan") });
+  expect(rows()).toEqual(["Planning. Step one. Step two.", "CI", "New plan"]);
+});
+
+test("a malformed pin's error row goes above the streaming reply and updates in place", () => {
+  const h = fixture();
+  const broken = (text: string) => ({
+    kind: "custom" as const,
+    id: "pin-error:todo",
+    createdAt: timestamp,
+    customType: "pi-gui.pin",
+    text,
+  });
+  h.append("Working.");
+  h.send({ type: "transcriptItemAppended", sessionRef, timestamp, item: broken("first") });
+  h.send({ type: "transcriptItemAppended", sessionRef, timestamp, item: broken("second") });
+  h.append(" Done.");
+  expect(
+    h.transcript.get(key)!.map((row) => (row.kind === "custom" ? row.text : row.kind)),
+  ).toEqual(["second", "message"]);
+});

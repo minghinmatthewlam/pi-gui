@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { ExtensionAction, ExtensionCard, ExtensionCardTone } from "@pi-gui/session-driver";
 import { ExtensionIcon } from "../../ui/icons";
 
@@ -6,17 +7,22 @@ export type RunExtensionAction = (action: ExtensionAction) => void;
 
 /**
  * A card an extension declared with `pi.appendEntry("pi-gui.card", ...)`, drawn in the
- * "Edited N files" shell: tone as a word, rows and buttons like file rows.
+ * "Edited N files" shell: tone as a word, rows and buttons like file rows. A pinned card adds
+ * header controls and can collapse to its header.
  */
 export function ExtensionCardItem({
   card,
   onAction,
+  controls,
+  collapsed = false,
 }: {
   readonly card: ExtensionCard;
   readonly onAction?: RunExtensionAction;
+  readonly controls?: ReactNode;
+  readonly collapsed?: boolean;
 }) {
   const toneLabel = cardToneLabel(card.tone);
-  const hasBody = card.rows.length > 0 || card.actions.length > 0;
+  const hasBody = !collapsed && (card.rows.length > 0 || card.actions.length > 0);
   return (
     <section
       className={`turn-changes extension-card extension-card--${card.tone}`}
@@ -33,6 +39,7 @@ export function ExtensionCardItem({
           {card.subtitle ? <span className="extension-card__subtitle">{card.subtitle}</span> : null}
         </div>
         {toneLabel ? <span className="extension-card__tone">{toneLabel}</span> : null}
+        {controls}
       </header>
       {hasBody ? (
         <ul className="turn-changes__files">
