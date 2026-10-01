@@ -2546,7 +2546,9 @@ export class SessionSupervisor {
         return [sessionUpdatedEvent(record)];
       case "message_start":
       case "message_end":
-        if (event.message.role === "user") {
+        // pi emits both for a user message; only the start may match, or a second queued
+        // message with the same text would count as started too.
+        if (event.type === "message_start" && event.message.role === "user") {
           const queuedMessage =
             takeStartingQueuedMessage(record, timestamp) ??
             reconcileQueuedMessagesForStartedUserMessage(record, event.message, timestamp);

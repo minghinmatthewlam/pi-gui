@@ -134,8 +134,8 @@ async function setUp(t: TestContext, extensionFactories: ExtensionFactory[] = []
       const now = new Date().toISOString();
       return driver.replaceQueuedMessages(
         ref,
-        texts.map((text) => ({
-          id: text,
+        texts.map((text, index) => ({
+          id: `${index}:${text}`,
           mode: "followUp" as const,
           text,
           createdAt: now,
@@ -298,4 +298,17 @@ await test("a queue change from a list that still shows the started message does
 
   assert.deepEqual(app.turns(), ["first", "-", "A", "-", "B", "-"]);
   assert.deepEqual(app.started(), ["A", "B"]);
+});
+
+await test("two queued messages with the same text each get their own turn", async (t) => {
+  const app = await setUp(t);
+  app.holdCompletion();
+  await app.driver.sendUserMessage(app.ref, { text: "first" });
+  await app.queue("Again.", "Again.");
+  setTimeout(app.releaseCompletion, 50);
+  await app.waitForRuns(3);
+
+  assert.deepEqual(app.turns(), ["first", "-", "Again.", "-", "Again.", "-"]);
+  assert.deepEqual(app.started(), ["Again.", "Again."]);
+  assert.deepEqual(app.lastSnapshot()?.queuedMessages ?? [], []);
 });
