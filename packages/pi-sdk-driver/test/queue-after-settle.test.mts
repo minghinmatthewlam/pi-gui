@@ -280,3 +280,22 @@ await test("a queued message that fails to start goes back on the queue until th
   assert.deepEqual(app.turns(), ["first", "-", "A", "-", "B", "-"]);
   assert.deepEqual(app.lastSnapshot()?.queuedMessages ?? [], []);
 });
+
+await test("a queue change from a list that still shows the started message does not resend it", async (t) => {
+  const app = await setUp(t);
+  app.holdCompletion();
+  await app.driver.sendUserMessage(app.ref, { text: "first" });
+  await app.queue("A");
+  setTimeout(app.releaseCompletion, 50);
+  const deadline = Date.now() + 5_000;
+  while (!app.started().includes("A") && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+
+  // The app has not caught up with A starting, so its list still holds it.
+  await app.queue("A", "B");
+  await app.waitForRuns(3);
+
+  assert.deepEqual(app.turns(), ["first", "-", "A", "-", "B", "-"]);
+  assert.deepEqual(app.started(), ["A", "B"]);
+});

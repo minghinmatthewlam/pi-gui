@@ -138,7 +138,10 @@ await test("extensions see rpc mode and idle custom messages reach the live tran
   h.pi().sendMessage({ customType: "ci-status", content: "**Build** passed", display: true });
   h.pi().sendMessage({ customType: "ci-status", content: "model only", display: false });
   h.pi().sendMessage({ customType: "ci-status", content: "**Build** passed", display: true });
-  await new Promise((resolve) => setTimeout(resolve, 50));
+  // Each message reaches the app through the driver's event queue, which can lag under load.
+  for (let attempt = 0; attempt < 500 && h.appended().length < 2; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
 
   const reloaded = customRows(await h.driver.getTranscript(h.ref));
   assert.equal(reloaded.length, 2, "display false stays hidden, like terminal pi");
