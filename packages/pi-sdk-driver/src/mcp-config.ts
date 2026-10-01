@@ -220,6 +220,11 @@ function summarizeServer(
     typeof value.description === "string" && value.description.trim()
       ? { description: value.description.trim() }
       : {};
+  // pi treats a server with both as http, so the url wins here too.
+  if (typeof value.url === "string" && value.url) {
+    const url = redactUrl(value.url);
+    return { name, scope, transport: "http", url, ...description, enabled, hasHiddenSettings };
+  }
   if (typeof value.command === "string" && value.command) {
     const args = Array.isArray(value.args)
       ? redactArgs(value.args.filter((arg): arg is string => typeof arg === "string"))
@@ -234,10 +239,6 @@ function summarizeServer(
       enabled,
       hasHiddenSettings,
     };
-  }
-  if (typeof value.url === "string" && value.url) {
-    const url = redactUrl(value.url);
-    return { name, scope, transport: "http", url, ...description, enabled, hasHiddenSettings };
   }
   return undefined;
 }

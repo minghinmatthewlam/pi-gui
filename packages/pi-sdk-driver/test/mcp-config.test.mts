@@ -334,6 +334,7 @@ await test("listings name the servers pi skips, and why", () => {
       mcpServers: {
         shared: { command: "node" },
         repo: { url: "https://example.com/repo", auth: { provider: "radius" } },
+        both: { url: "https://example.com/both", command: "node", auth: { provider: "radius" } },
       },
     }),
   );
@@ -341,11 +342,20 @@ await test("listings name the servers pi skips, and why", () => {
   const listing = listMcpServers({ agentDir, cwd });
   assert.deepEqual(
     listing.servers.map((server) => `${server.scope}:${server.name}`),
-    ["global:my-docs", "global:my_docs", "global:shared", "project:shared", "project:repo"],
+    [
+      "global:my-docs",
+      "global:my_docs",
+      "global:shared",
+      "project:shared",
+      "project:repo",
+      "project:both",
+    ],
   );
-  assert.equal(listing.errors.length, 2);
+  assert.equal(listing.errors.length, 3);
   assert.match(listing.errors[0] ?? "", /skips MCP server "my_docs".*clashes with "my-docs"/);
   assert.match(listing.errors[1] ?? "", /skips MCP server "repo".*only allowed in the global/);
+  // pi takes a server with both a url and a command as http.
+  assert.match(listing.errors[2] ?? "", /skips MCP server "both".*only allowed in the global/);
   assert.equal(
     listing.servers.find((server) => server.name === "shared" && server.scope === "global")
       ?.hasHiddenSettings,

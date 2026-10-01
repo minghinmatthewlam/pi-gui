@@ -1861,8 +1861,9 @@ export class DesktopAppStore {
   }
 
   /**
-   * pi reads `defaultTools` only when it creates a thread, and a reload keeps the active tools,
-   * so this applies to new threads; open ones are left alone.
+   * Writes `+codemode` in pi's `defaultTools`. Switching it on also reloads open threads in every
+   * workspace, since pi's reload turns on newly added default tools; switching it off reaches new
+   * threads only.
    */
   async setCodemodeAlwaysOn(workspaceId: string, alwaysOn: boolean): Promise<DesktopAppState> {
     await this.initialize();
