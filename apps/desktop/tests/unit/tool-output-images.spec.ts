@@ -1,4 +1,7 @@
 import { expect, test } from "@playwright/test";
+import { sessionKey } from "@pi-gui/session-driver";
+import type { TranscriptMessage } from "../../contracts/timeline-types";
+import { applyTimelineEvent } from "../../electron/conversation/app-store-timeline";
 import {
   stringifyToolValue,
   toolOutputImages,
@@ -25,4 +28,37 @@ test("the row's text hides every image's data, shown or not", () => {
   expect(text).not.toContain("UE5HREFUQQ==");
   expect(text).not.toContain("PHN2Zz4=");
   expect(text).toContain("two images");
+});
+
+test("a failed tool that returned only images names them in its detail", () => {
+  const sessionRef = { workspaceId: "workspace", sessionId: "session" };
+  const timestamp = "2026-10-01T21:00:00.000Z";
+  const transcript = new Map<string, readonly TranscriptMessage[]>();
+  const state: Parameters<typeof applyTimelineEvent>[2] = {
+    activeAssistantMessageBySession: new Map(),
+    pendingAssistantMessageBySession: new Map(),
+    activeWorkingActivityBySession: new Map(),
+    extensionToolLabels: () => new Map(),
+    runningSinceBySession: new Map(),
+    runMetricsBySession: new Map(),
+  };
+  applyTimelineEvent(
+    transcript,
+    { type: "toolStarted", sessionRef, timestamp, toolName: "read", callId: "c", input: {} },
+    state,
+  );
+  applyTimelineEvent(
+    transcript,
+    {
+      type: "toolFinished",
+      sessionRef,
+      timestamp,
+      callId: "c",
+      success: false,
+      output: { content: [{ type: "image", data: "UE5HREFUQQ==", mimeType: "image/png" }] },
+    },
+    state,
+  );
+  const [row] = transcript.get(sessionKey(sessionRef))!.filter((item) => item.kind === "tool");
+  expect(row).toMatchObject({ detail: "[image/png image]" });
 });
