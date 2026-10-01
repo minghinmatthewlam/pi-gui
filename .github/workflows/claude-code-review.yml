@@ -34,6 +34,8 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           plugin_marketplaces: https://github.com/anthropics/claude-code.git
           plugins: code-review@claude-code-plugins
+          # Show Claude's final message in the run summary (same-repo PRs only, see `if`).
+          display_report: true
           prompt: /code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }} --comment
           # The plugin's own allowed-tools list is not applied in CI; grant it here
           # so it can read the PR, launch its review agents, and comment inline.
