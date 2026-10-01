@@ -1012,12 +1012,6 @@ export class SessionSupervisor {
     record.config = deriveSessionConfig(session.sessionManager);
     // A card button's command is not something the user said, so it leaves the preview.
     if (!input.extensionCommandOnly) record.preview = truncate(input.text);
-    if (isQueuedMessage) {
-      record.queuedMessages = [
-        ...record.queuedMessages,
-        queuedMessageFromInput(input, record.updatedAt),
-      ];
-    }
     try {
       await this.persistSnapshot(record);
       await this.emit(record, sessionUpdatedEvent(record));
@@ -1052,12 +1046,26 @@ export class SessionSupervisor {
         // steer/follow-up now would attach to nothing and be silently dropped,
         // so re-check the live streaming state and surface a retryable error
         // instead. The catch below rolls back the optimistic queued entry.
-        if (!session.isStreaming) {
-          throw new Error(
+        const finished = () =>
+          new Error(
             "Session finished streaming before the queued message could be delivered. Retry to send it as a new turn.",
           );
-        }
-        await this.changeQueue(record);
+        if (!session.isStreaming) throw finished();
+        // Added to pi's queue as it is, in a queue step so it can't interleave with a change.
+        const entry = queuedMessageFromInput(input, record.updatedAt);
+        await this.queueStep(record, async (current) => {
+          if (!current.isStreaming) throw finished();
+          record.queuedMessages = [...record.queuedMessages, entry];
+          try {
+            await this.queuePrompt(current, promptText, input.deliverAs!, images);
+          } catch (error) {
+            record.queuedMessages = record.queuedMessages.filter((message) => message !== entry);
+            throw error;
+          }
+        });
+        record.updatedAt = nowIso();
+        await this.persistSnapshot(record);
+        await this.emit(record, sessionUpdatedEvent(record));
       } else if (isExtensionCommand) {
         await session.prompt(promptText, {
           ...(images && images.length > 0 ? { images } : {}),
@@ -1088,9 +1096,6 @@ export class SessionSupervisor {
       // A card button's command failing says nothing about the thread, which may be mid-run:
       // leave its state alone and let the app report the failure.
       if (input.extensionCommandOnly) throw error;
-      if (isQueuedMessage) {
-        record.queuedMessages = record.queuedMessages.slice(0, -1);
-      }
       if (!isQueuedMessage) {
         record.runningRunId = undefined;
       }
@@ -1169,18 +1174,28 @@ export class SessionSupervisor {
     record: ManagedSessionRecord,
     update: (session: AgentSession) => boolean | void = () => undefined,
   ): Promise<void> {
-    const step = record.piQueueSync
+    return this.queueStep(record, async (session) => {
+      // An update that changed nothing returns false, and pi's queue is left as it is.
+      if (update(session) === false) return;
+      session.clearQueue();
+      await this.queueWithPi(session, record.queuedMessages);
+    });
+  }
+
+  /** Runs `step` after every earlier queue step (see changeQueue). */
+  private queueStep(
+    record: ManagedSessionRecord,
+    step: (session: AgentSession) => Promise<void>,
+  ): Promise<void> {
+    const run = record.piQueueSync
       .catch(() => undefined)
       .then(async () => {
         const session = record.session;
         if (!session || record.closed) return;
-        // An update that changed nothing returns false, and pi's queue is left as it is.
-        if (update(session) === false) return;
-        session.clearQueue();
-        await this.queueWithPi(session, record.queuedMessages);
+        await step(session);
       });
-    record.piQueueSync = step;
-    return step;
+    record.piQueueSync = run;
+    return run;
   }
 
   private async queueWithPi(
@@ -1311,8 +1326,10 @@ export class SessionSupervisor {
     // the SDK's own "clear the queue when the user aborts" convention.
     record.session?.clearQueue();
     record.queuedMessages = [];
-    // A rebuild in flight must not refill it.
-    this.changeQueue(record).catch(() => undefined);
+    // Again after queue changes already on their way, so none of them refills it.
+    this.changeQueue(record, () => {
+      record.queuedMessages = [];
+    }).catch(() => undefined);
     record.runningRunId = undefined;
     record.status = "idle";
     await this.persistSnapshot(record);

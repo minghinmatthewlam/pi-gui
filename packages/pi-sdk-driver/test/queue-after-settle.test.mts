@@ -389,3 +389,33 @@ await test("a queued message pi already delivered under another text is not star
   assert.deepEqual(app.turns(), ["first", "-", "Review the notes", "-", "Next task", "-"]);
   assert.deepEqual(app.lastSnapshot()?.queuedMessages ?? [], []);
 });
+
+await test("a follow-up sent during a queue change is delivered with the queued messages", async (t) => {
+  const app = await setUp(t);
+  let openModel!: () => void;
+  modelGate = new Promise<void>((resolve) => {
+    openModel = resolve;
+  });
+  t.after(() => {
+    modelGate = undefined;
+  });
+  const sent = app.driver.sendUserMessage(app.ref, { text: "first" });
+  while (!app.runtime().session.isStreaming) await new Promise((resolve) => setTimeout(resolve, 5));
+  await app.queue("A");
+  await Promise.all([
+    app.driver.sendUserMessage(app.ref, { text: "X", deliverAs: "followUp" }),
+    app.queue("A", "B"),
+  ]);
+  modelGate = undefined;
+  openModel();
+  await sent;
+  await app.waitForRuns(1);
+
+  assert.deepEqual(
+    app
+      .turns()
+      .filter((turn) => turn !== "-")
+      .sort(),
+    ["A", "B", "X", "first"],
+  );
+});
