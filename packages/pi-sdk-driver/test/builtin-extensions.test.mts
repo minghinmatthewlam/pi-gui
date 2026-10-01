@@ -78,14 +78,14 @@ await test("Settings lists a switched-off built-in with its tools and name", asy
   assert.deepEqual(await demoRecord(false), {
     name: "Demo tools",
     enabled: true,
-    tools: [{ name: "demo_tool", label: "Demo" }],
+    tools: [{ name: "demo_tool", label: "Demo", replacesPiTool: false }],
   });
 
   enabled = false;
   assert.deepEqual(await demoRecord(true), {
     name: "Demo tools",
     enabled: false,
-    tools: [{ name: "demo_tool", label: "Demo" }],
+    tools: [{ name: "demo_tool", label: "Demo", replacesPiTool: false }],
   });
 
   assert.equal(supervisor.builtinExtensionName("<inline:pi-gui-demo>"), "pi-gui-demo");

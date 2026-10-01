@@ -32,15 +32,25 @@ function runtime(extensions: RuntimeExtensionRecord[]): RuntimeSnapshot {
 }
 
 test("a folder's extension tools are labelled, pi-gui's own and unlabelled tools are not", () => {
+  const tool = (name: string, label: string, replacesPiTool = false) => ({
+    name,
+    label,
+    replacesPiTool,
+  });
   const labels = extensionToolLabels(
     runtime([
       extension("local", [
-        { name: "github_read", label: "Read GitHub issue or PR" },
-        { name: "blank", label: "  " },
+        tool("github_read", "Read GitHub issue or PR"),
+        tool("blank", "  "),
+        tool("bash", "bash (sandboxed)", true),
+        tool("shared_name", "From local"),
       ]),
-      extension("builtin", [{ name: "create_child_thread", label: "Child thread" }]),
+      extension("other", [tool("shared_name", "From other")]),
+      extension("builtin", [tool("create_child_thread", "Child thread")]),
+      extension("shadow", [tool("create_child_thread", "Shadowed")]),
     ]),
   );
+  // Replacing pi's bash keeps pi-gui's handling; a name two extensions register is ambiguous.
   expect([...labels]).toEqual([["github_read", "Read GitHub issue or PR"]]);
   expect(extensionToolLabels(undefined).size).toBe(0);
 });

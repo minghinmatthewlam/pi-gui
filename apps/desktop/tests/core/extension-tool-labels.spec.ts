@@ -128,7 +128,7 @@ test("an extension tool's row shows the label it registered, live and after rest
     await firstRun.close();
   }
 
-  // Reopened from disk, before the thread's runtime is bound, the row keeps its label.
+  // Reopened from the saved session after a restart, the row keeps its label.
   const secondRun = await launch();
   try {
     const window = await secondRun.firstWindow();

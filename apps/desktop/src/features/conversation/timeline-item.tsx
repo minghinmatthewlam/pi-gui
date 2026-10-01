@@ -269,9 +269,9 @@ function TimelineToolCallItem({
   readonly onViewFileInDiff?: (path: string) => void;
 }) {
   const hasContent = item.input !== undefined || item.output !== undefined;
-  // An extension's tool shows the label it registered; its name says nothing about edits or files.
+  // An extension's tool shows the label it registered instead of a guess from its name.
   const extensionLabel = useExtensionToolLabel(item.toolName);
-  const writeTool = extensionLabel === undefined && isWriteTool(item.toolName);
+  const writeTool = isWriteTool(item.toolName);
   const diffText = writeTool ? extractDiffFromOutput(item.output) : undefined;
   const diffStats = diffText ? countDiffStats(diffText) : undefined;
   const compactLabel =
@@ -293,7 +293,7 @@ function TimelineToolCallItem({
     <article className={`timeline-tool timeline-tool--${item.status}`}>
       <div className="timeline-tool__header-row">
         <span className="timeline-tool__glyph" aria-hidden="true">
-          {extensionLabel === undefined ? toolGlyph(item.toolName) : <SparkIcon />}
+          {extensionLabel === undefined || diffText ? toolGlyph(item.toolName) : <SparkIcon />}
         </span>
         <button
           className="timeline-tool__header"

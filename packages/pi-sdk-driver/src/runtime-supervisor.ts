@@ -1313,11 +1313,28 @@ function firstNonEmptyLine(value: string): string | undefined {
     .find(Boolean);
 }
 
+/** pi's own tools (its `allToolNames`, which pi does not export). An extension may replace one. */
+const PI_TOOL_NAMES: ReadonlySet<string> = new Set([
+  "read",
+  "bash",
+  "powershell",
+  "edit",
+  "write",
+  "grep",
+  "find",
+  "ls",
+]);
+
 function describeTools(
-  tools: ReadonlyMap<string, { definition: { name: string; label: string } }>,
+  tools: ReadonlyMap<string, { definition: { name: string; label?: unknown } }>,
 ): RuntimeExtensionTool[] {
   return [...tools.values()]
-    .map(({ definition }) => ({ name: definition.name, label: definition.label }))
+    .map(({ definition }) => ({
+      name: definition.name,
+      // pi does not check the label, so an untyped extension can leave it out.
+      label: typeof definition.label === "string" ? definition.label : "",
+      replacesPiTool: PI_TOOL_NAMES.has(definition.name),
+    }))
     .sort((left, right) => left.name.localeCompare(right.name));
 }
 

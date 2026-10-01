@@ -6,23 +6,26 @@ export type ExtensionToolLabels = ReadonlyMap<string, string>;
 const NO_LABELS: ExtensionToolLabels = new Map();
 
 /**
- * Labels of the tools a folder's own extensions registered. pi-gui's built-in extensions are
- * skipped: their tools keep pi-gui's wording ("Started child thread", ...).
+ * Labels of the tools a folder's own extensions registered. A tool keeps pi-gui's own wording
+ * when it replaces one of pi's tools, comes from pi-gui's built-in extensions, or is registered by
+ * more than one extension (the label shown could be another extension's than the one pi runs).
  */
 export function extensionToolLabels(runtime: RuntimeSnapshot | undefined): ExtensionToolLabels {
   if (!runtime) {
     return NO_LABELS;
   }
+  const registrations = runtime.extensions.flatMap((extension) =>
+    extension.tools.map((tool) => ({ tool, builtin: extension.sourceInfo.source === "builtin" })),
+  );
+  const counts = new Map<string, number>();
+  for (const { tool } of registrations) {
+    counts.set(tool.name, (counts.get(tool.name) ?? 0) + 1);
+  }
   const labels = new Map<string, string>();
-  for (const extension of runtime.extensions) {
-    if (extension.sourceInfo.source === "builtin") {
-      continue;
-    }
-    for (const tool of extension.tools) {
-      const label = tool.label.trim();
-      if (label && !labels.has(tool.name)) {
-        labels.set(tool.name, label);
-      }
+  for (const { tool, builtin } of registrations) {
+    const label = tool.label.trim();
+    if (label && !builtin && !tool.replacesPiTool && counts.get(tool.name) === 1) {
+      labels.set(tool.name, label);
     }
   }
   return labels;

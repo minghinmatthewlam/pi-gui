@@ -64,7 +64,10 @@ export interface RuntimeExtensionFlag {
 /** A tool an extension registered: the name the model calls and the label it gave for UIs. */
 export interface RuntimeExtensionTool {
   readonly name: string;
+  /** Empty when the extension gave none. */
   readonly label: string;
+  /** It replaces one of pi's own tools (read, bash, edit, ...), which keep pi-gui's handling. */
+  readonly replacesPiTool: boolean;
 }
 
 export interface RuntimeExtensionRecord {
