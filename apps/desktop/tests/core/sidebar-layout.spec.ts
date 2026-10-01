@@ -85,6 +85,26 @@ test("the sidebar can be dragged wider, remembers its width and resets on double
     await expect.poll(() => sidebarWidth(window)).toBe(200);
     await window.keyboard.press("ArrowRight");
     await expect.poll(() => sidebarWidth(window)).toBe(220);
+
+    // A step starts from the width on screen, even before the handle has re-measured the pane
+    // (a busy or background window can hold that back for a while).
+    await window.keyboard.press("End");
+    await expect.poll(() => sidebarWidth(window)).toBe(max);
+    const shownBeforeStep = await handle.evaluate(async (element) => {
+      const press = (key: string) =>
+        element.dispatchEvent(
+          new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }),
+        );
+      press("Home");
+      // Let React render the new width, but not a new frame, so the resize observer has not run.
+      await Promise.resolve();
+      await Promise.resolve();
+      const shown = Math.round(element.parentElement!.getBoundingClientRect().width);
+      press("ArrowRight");
+      return shown;
+    });
+    expect(shownBeforeStep).toBe(200);
+    await expect.poll(() => sidebarWidth(window)).toBe(220);
   } finally {
     await harness.close();
   }
