@@ -315,6 +315,23 @@ await test("a new server whose name differs from another only by - and _ is refu
   assert.deepEqual(savedNames(globalPath), ["my-docs", "team-search"]);
 });
 
+await test("a new global server is refused when it clashes with another open folder's", () => {
+  const { agentDir, cwd, globalPath } = setup();
+  const other = mkdtempSync(join(tmpdir(), "pi-gui-mcp-other-"));
+  mkdirSync(join(other, ".pi"));
+  writeFileSync(
+    join(other, ".pi", "mcp.json"),
+    JSON.stringify({ mcpServers: { "my-docs": { command: "node" } } }),
+  );
+  assert.throws(
+    () => addMcpServer({ agentDir, cwd }, { name: "my_docs", command: "node" }, [other]),
+    /"my-docs" already exists in .*pi-gui-mcp-other-/,
+    "pi would skip the other folder's server once the global file has the new one",
+  );
+  addMcpServer({ agentDir, cwd }, { name: "my-docs", command: "node" }, [other]);
+  assert.deepEqual(savedNames(globalPath), ["my-docs"]);
+});
+
 await test("listings name the servers pi skips, and why", () => {
   const { agentDir, cwd, globalPath } = setup();
   writeFileSync(

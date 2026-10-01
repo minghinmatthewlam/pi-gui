@@ -1838,8 +1838,16 @@ export class DesktopAppStore {
   }
 
   async addMcpServer(workspaceId: string, server: NewMcpServerInput): Promise<DesktopAppState> {
+    // The global file reaches every folder, so a clash with any folder's project file counts.
     return this.withMcpConfigChange(workspaceId, "global", (ws) =>
-      this.driver.runtimeSupervisor.addMcpServer(ws, server),
+      this.driver.runtimeSupervisor.addMcpServer(
+        ws,
+        server,
+        this.state.workspaces.flatMap((workspace) => {
+          const ref = this.workspaceRefFromState(workspace.id);
+          return ref && ref.workspaceId !== ws.workspaceId ? [ref] : [];
+        }),
+      ),
     );
   }
 

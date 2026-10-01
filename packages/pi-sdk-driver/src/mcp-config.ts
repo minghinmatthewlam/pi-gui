@@ -107,25 +107,38 @@ export function listMcpServers(location: McpConfigLocation): McpServerListing {
   return { globalConfigPath: mcpConfigPath(location, "global"), servers, errors };
 }
 
-/** Adds a server to the global `mcp.json`, creating the file when missing. */
-export function addMcpServer(location: McpConfigLocation, server: NewMcpServer): void {
+/**
+ * Adds a server to the global `mcp.json`, creating the file when missing. Every open folder's
+ * project file shares the global servers, so `otherProjects` (their paths) are checked too.
+ */
+export function addMcpServer(
+  location: McpConfigLocation,
+  server: NewMcpServer,
+  otherProjects: readonly string[] = [],
+): void {
   const name = server.name.trim();
   if (!isValidMcpServerName(name)) {
     throw new Error(`Invalid MCP server name "${name}" (use letters, digits, "_" and "-")`);
   }
   const config = newServerConfig(server);
-  // The project file is read only for its names: a clash there would make pi skip one server.
-  for (const scope of ["global", "project"] as const) {
+  // Project files are read only for their names: a clash there would make pi skip one server.
+  const paths = [
+    mcpConfigPath(location, "global"),
+    ...[...new Set([location.cwd, ...otherProjects])].map((cwd) =>
+      mcpConfigPath({ ...location, cwd }, "project"),
+    ),
+  ];
+  for (const path of paths) {
     let existing: Record<string, unknown> | undefined;
     try {
-      existing = readMcpServers(mcpConfigPath(location, scope));
+      existing = readMcpServers(path);
     } catch {
       continue; // The global file is checked again below; an unreadable project file is skipped by pi too.
     }
     const clash = namespaceClash(Object.keys(existing ?? {}), name);
     if (clash) {
       throw new Error(
-        `An MCP server named "${clash}" already exists, and pi treats "-" and "_" in names as the same`,
+        `An MCP server named "${clash}" already exists in ${path}, and pi treats "-" and "_" in names as the same`,
       );
     }
   }

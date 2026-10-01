@@ -352,9 +352,20 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
     return listMcpServers(this.mcpConfigLocation(workspace));
   }
 
-  /** Adds a server to the global `mcp.json`, refusing a name that clashes with this workspace's. */
-  addMcpServer(workspace: WorkspaceRef, server: NewMcpServer): void {
-    addMcpServer(this.mcpConfigLocation(workspace), server);
+  /**
+   * Adds a server to the global `mcp.json`, refusing a name that clashes with this workspace's or
+   * with any of `otherWorkspaces`, since the global file reaches them all.
+   */
+  addMcpServer(
+    workspace: WorkspaceRef,
+    server: NewMcpServer,
+    otherWorkspaces: readonly WorkspaceRef[] = [],
+  ): void {
+    addMcpServer(
+      this.mcpConfigLocation(workspace),
+      server,
+      otherWorkspaces.map((other) => other.path),
+    );
   }
 
   removeMcpServer(name: string): void {
