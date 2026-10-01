@@ -87,7 +87,7 @@ interface ConversationOwnerHost {
     sessionRef: SessionRef,
     attachments: readonly ComposerAttachment[],
   ): void;
-  finishLocalComposerCommand(
+  applyLocalSessionUpdate(
     sessionRef: SessionRef,
     update: {
       readonly title?: string;
@@ -659,7 +659,7 @@ async function setSessionModel(
   return store.withErrorHandling(async () => {
     await store.driver.setSessionModel(sessionRef, { provider, modelId });
     syncSessionConfig(store, key, { provider, modelId });
-    return finishComposerCommand(store, sessionRef, key, `Model set to ${provider}:${modelId}`);
+    return finishSessionChange(store, sessionRef, key, `Model set to ${provider}:${modelId}`);
   });
 }
 
@@ -673,7 +673,7 @@ async function setSessionThinkingLevel(
   return store.withErrorHandling(async () => {
     await store.driver.setSessionThinkingLevel(sessionRef, thinkingLevel);
     syncSessionConfig(store, key, { thinkingLevel });
-    return finishComposerCommand(store, sessionRef, key, `Thinking set to ${thinkingLevel}`);
+    return finishSessionChange(store, sessionRef, key, `Thinking set to ${thinkingLevel}`);
   });
 }
 
@@ -935,6 +935,7 @@ function appendLocalActivity(store: ComposerStore, sessionRef: SessionRef, label
   store.conversationState.transcriptCache.set(key, transcript);
 }
 
+/** A typed slash command ran: it consumed the composer, so clear it, then record the change. */
 function finishComposerCommand(
   store: ComposerStore,
   sessionRef: SessionRef,
@@ -943,11 +944,22 @@ function finishComposerCommand(
   options: { readonly sessionTitle?: string } = {},
 ): DesktopAppState {
   store.conversationState.composerAttachmentsBySession.delete(key);
+  store.setComposerDraftForSession(sessionRef, "", "command");
+  return finishSessionChange(store, sessionRef, key, label, options);
+}
+
+/** Record a session change in the transcript and sidebar without touching the composer. */
+function finishSessionChange(
+  store: ComposerStore,
+  sessionRef: SessionRef,
+  key: string,
+  label: string,
+  options: { readonly sessionTitle?: string } = {},
+): DesktopAppState {
   appendLocalActivity(store, sessionRef, label);
   const transcript = store.conversationState.transcriptCache.get(key) ?? [];
   const preview = previewFromTranscript(transcript);
-  store.setComposerDraftForSession(sessionRef, "", "command");
-  store.finishLocalComposerCommand(sessionRef, {
+  store.applyLocalSessionUpdate(sessionRef, {
     ...(options.sessionTitle ? { title: options.sessionTitle } : {}),
     ...(preview ? { preview } : {}),
     config: store.conversationState.sessionConfigBySession.get(key),

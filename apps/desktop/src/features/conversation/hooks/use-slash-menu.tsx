@@ -353,13 +353,9 @@ export function useSlashMenu(params: UseSlashMenuParams): SlashMenuState {
       }
       void updateSnapshot(setSnapshot, () =>
         api.setSessionModel(selectedWorkspace.id, selectedSession.id, providerId, option.value),
-      )
-        .then((state) => {
-          setComposerDraft(state.composerDraft);
-        })
-        .catch((error: unknown) => {
-          console.error("[renderer] updateSnapshot failed", error);
-        });
+      ).catch((error: unknown) => {
+        console.error("[renderer] updateSnapshot failed", error);
+      });
       return;
     }
 
@@ -379,13 +375,9 @@ export function useSlashMenu(params: UseSlashMenuParams): SlashMenuState {
           selectedSession.id,
           option.value as NonNullable<RuntimeSnapshot["settings"]["defaultThinkingLevel"]>,
         ),
-      )
-        .then((state) => {
-          setComposerDraft(state.composerDraft);
-        })
-        .catch((error: unknown) => {
-          console.error("[renderer] updateSnapshot failed", error);
-        });
+      ).catch((error: unknown) => {
+        console.error("[renderer] updateSnapshot failed", error);
+      });
       return;
     }
 
