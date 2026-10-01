@@ -353,7 +353,7 @@ export class DesktopAppStore {
           revision: this.state.revision + 1,
         };
       },
-      finishLocalComposerCommand: (sessionRef, update) => {
+      applyLocalSessionUpdate: (sessionRef, update) => {
         this.state = {
           ...this.state,
           workspaces: this.state.workspaces.map((workspaceEntry) =>
