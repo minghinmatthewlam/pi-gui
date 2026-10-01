@@ -14,9 +14,12 @@ export function extensionToolLabels(runtime: RuntimeSnapshot | undefined): Exten
   if (!runtime) {
     return NO_LABELS;
   }
-  const registrations = runtime.extensions.flatMap((extension) =>
-    extension.tools.map((tool) => ({ tool, builtin: extension.sourceInfo.source === "builtin" })),
-  );
+  // A switched-off extension's tools are still listed for Settings, but pi does not run them.
+  const registrations = runtime.extensions
+    .filter((extension) => extension.enabled)
+    .flatMap((extension) =>
+      extension.tools.map((tool) => ({ tool, builtin: extension.sourceInfo.source === "builtin" })),
+    );
   const counts = new Map<string, number>();
   for (const { tool } of registrations) {
     counts.set(tool.name, (counts.get(tool.name) ?? 0) + 1);

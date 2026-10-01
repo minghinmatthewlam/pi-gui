@@ -48,10 +48,16 @@ test("a folder's extension tools are labelled, pi-gui's own and unlabelled tools
       extension("other", [tool("shared_name", "From other")]),
       extension("builtin", [tool("create_child_thread", "Child thread")]),
       extension("shadow", [tool("create_child_thread", "Shadowed")]),
+      { ...extension("builtin", [tool("ticket_read", "Off built-in")]), enabled: false },
+      extension("tickets", [tool("ticket_read", "Look up ticket")]),
     ]),
   );
   // Replacing pi's bash keeps pi-gui's handling; a name two extensions register is ambiguous.
-  expect([...labels]).toEqual([["github_read", "Read GitHub issue or PR"]]);
+  // A switched-off extension's tool does not count as a clash.
+  expect([...labels]).toEqual([
+    ["github_read", "Read GitHub issue or PR"],
+    ["ticket_read", "Look up ticket"],
+  ]);
   expect(extensionToolLabels(undefined).size).toBe(0);
 });
 

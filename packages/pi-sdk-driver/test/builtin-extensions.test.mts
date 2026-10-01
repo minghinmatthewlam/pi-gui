@@ -148,3 +148,39 @@ await test(
     assert.equal(loads, 1, "switching off stops it registering again");
   },
 );
+
+await test("Settings records each tool's label, and whether it replaces one of pi's tools", async () => {
+  const { agentDir, workspacePath } = await createDirs();
+  const tools: BuiltinExtension = {
+    name: "pi-gui-tools",
+    displayName: "Tools",
+    description: "Replaces ls and adds a tool without a label",
+    factory: (pi: ExtensionAPI) => {
+      const execute = () => Promise.resolve({ content: [], details: undefined });
+      const parameters = { type: "object", properties: {} };
+      pi.registerTool({
+        name: "ls",
+        label: "List (fancy)",
+        description: "ls",
+        parameters,
+        execute,
+      });
+      // An untyped extension can leave the label out; pi does not check it.
+      pi.registerTool({ name: "bare_tool", description: "bare", parameters, execute } as never);
+    },
+  };
+  const supervisor = new RuntimeSupervisor({
+    agentDir,
+    builtinExtensions: [tools],
+    isBuiltinExtensionEnabled: () => true,
+  });
+  const snapshot = await supervisor.getRuntimeSnapshot({
+    workspaceId: "workspace-1",
+    path: workspacePath,
+  });
+  const record = snapshot.extensions.find((entry) => entry.path === "<inline:pi-gui-tools>");
+  assert.deepEqual(record?.tools, [
+    { name: "bare_tool", label: "", replacesPiTool: false },
+    { name: "ls", label: "List (fancy)", replacesPiTool: true },
+  ]);
+});
