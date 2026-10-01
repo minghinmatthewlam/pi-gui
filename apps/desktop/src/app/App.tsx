@@ -338,7 +338,11 @@ export default function App() {
     () => buildExtensionDockModel(selectedExtensionUi),
     [selectedExtensionUi],
   );
-  const shownExtensionDock = useDismissibleExtensionDock(selectedSessionKey, selectedExtensionDock);
+  const shownExtensionDock = useDismissibleExtensionDock(
+    selectedSessionKey,
+    selectedExtensionUi,
+    selectedExtensionDock,
+  );
   const displayedSessionTitle = selectedExtensionUi?.title ?? selectedSession?.title ?? "";
   const activeExtensionDialog = selectedExtensionUi?.pendingDialogs[0];
   const selectedExtensionUiInstance =

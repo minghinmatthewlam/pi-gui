@@ -53,6 +53,13 @@ export default function plan(pi) {
     description: "Set a status",
     handler: async (args, ctx) => ctx.ui.setStatus("tick", args.trim()),
   });
+  pi.registerCommand("quiet", {
+    description: "Clear the widget and status",
+    handler: async (_args, ctx) => {
+      ctx.ui.setWidget("progress", undefined);
+      ctx.ui.setStatus("tick", undefined);
+    },
+  });
   pi.registerProvider("pinned-cards-test", {
     baseUrl: "http://127.0.0.1:9/never-contact",
     apiKey: "LOCAL_TEST_CANARY",
@@ -217,6 +224,24 @@ test("a pinned card stays above the composer through updates, hiding, compaction
     await send(window, "/widget Testing");
     await expect(dock).toBeVisible();
     await expect(window.getByTestId("extension-dock-summary")).toHaveText("Tick 2");
+
+    // Clearing the dock spends the hide too: the same text shown again later is visible.
+    await window.getByTestId("extension-dock-dismiss").click();
+    await expect(dock).toHaveCount(0);
+    await send(window, "/quiet now");
+    await expect
+      .poll(async () => {
+        const state = await getDesktopState(window);
+        const ui =
+          state.sessionExtensionUiBySession[
+            `${state.selectedWorkspaceId}:${state.selectedSessionId}`
+          ];
+        return (ui?.statuses.length ?? 0) + (ui?.widgets.length ?? 0);
+      })
+      .toBe(0);
+    await send(window, "/widget Testing");
+    await expect(dock).toBeVisible();
+    await expect(window.getByTestId("extension-dock-summary")).toHaveText("Testing");
   } finally {
     await secondRun.close();
   }

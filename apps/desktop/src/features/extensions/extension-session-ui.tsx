@@ -62,19 +62,22 @@ export function buildExtensionDockModel(
  */
 export function useDismissibleExtensionDock(
   sessionKey: string,
+  uiState: SessionExtensionUiStateRecord | undefined,
   dock: ExtensionDockModel | undefined,
 ): { readonly dock: ExtensionDockModel | undefined; readonly dismiss: () => void } {
   const [dismissedWidgetText, setDismissedWidgetText] = useState<ReadonlyMap<string, string>>(
     () => new Map(),
   );
-  const widgetText = dock?.widgetText;
+  // Unknown until the thread's extension UI has loaded; empty once it has and shows no dock.
+  const widgetText = dock?.widgetText ?? (uiState ? "" : undefined);
   const dismiss = useCallback(() => {
-    if (widgetText === undefined) return;
+    if (!widgetText) return;
     setDismissedWidgetText((current) => new Map(current).set(sessionKey, widgetText));
   }, [sessionKey, widgetText]);
   const dismissed = dismissedWidgetText.get(sessionKey);
   const changed = dismissed !== undefined && widgetText !== undefined && dismissed !== widgetText;
-  // Once the widget changes, the hide is spent: the same text coming back later shows the dock.
+  // Once the widget changes or is cleared, the hide is spent: the same text coming back later
+  // shows the dock.
   useEffect(() => {
     if (!changed) return;
     setDismissedWidgetText((current) => {
