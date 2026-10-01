@@ -425,3 +425,55 @@ test("an unsaved keystroke does not overwrite a queued edit or its cancel", asyn
     await harness.close();
   }
 });
+
+test("wraps a queued message with a long unbroken token inside the composer", async () => {
+  test.setTimeout(60_000);
+  const userDataDir = await makeUserDataDir();
+  const workspacePath = await makeWorkspace("queued-messages-long-token");
+  const harness = await launchDesktop(userDataDir, {
+    initialWorkspaces: [workspacePath],
+    testMode: "background",
+  });
+
+  try {
+    const window = await harness.firstWindow();
+    await createNamedThread(window, "Queued long token");
+
+    const token = `eyJhbGciOiJIUzI1NiJ9.${"eyJzdWIiOiJxdWV1ZWQtdG9rZW4ifQ".repeat(12)}.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c`;
+    const now = new Date().toISOString();
+    await emitRunningSnapshot(harness, window, [
+      {
+        id: "queued-long-token",
+        mode: "followUp",
+        text: `Bearer ${token}`,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+
+    const queuedCard = window.getByTestId("queued-composer-message");
+    await expect(queuedCard).toContainText(token);
+    await expect(queuedCard.getByRole("button", { name: "Edit" })).toBeInViewport({ ratio: 1 });
+
+    const layout = await queuedCard.evaluate((card) => {
+      const text = card.querySelector<HTMLElement>(".queued-composer-message__text");
+      const surface = card.closest<HTMLElement>(".composer__surface");
+      if (!text || !surface) throw new Error("Expected queued text inside the composer");
+      const cardRect = card.getBoundingClientRect();
+      const surfaceRect = surface.getBoundingClientRect();
+      return {
+        cardWithinComposer: cardRect.right <= surfaceRect.right + 1,
+        composerWithinWindow: surfaceRect.right <= document.documentElement.clientWidth + 1,
+        textWraps:
+          text.getBoundingClientRect().height > parseFloat(getComputedStyle(text).lineHeight) * 1.5,
+      };
+    });
+    expect(layout).toEqual({
+      cardWithinComposer: true,
+      composerWithinWindow: true,
+      textWraps: true,
+    });
+  } finally {
+    await harness.close();
+  }
+});
