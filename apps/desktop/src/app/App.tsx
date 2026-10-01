@@ -80,6 +80,7 @@ import {
   buildExtensionDockModel,
   ExtensionDialog,
   hasExtensionDockContent,
+  useDismissibleExtensionDock,
 } from "../features/extensions/extension-session-ui";
 import { PinnedCards, usePinnedCards } from "../features/extensions/pinned-cards";
 import { TreeModal } from "../features/conversation/tree-modal";
@@ -337,6 +338,7 @@ export default function App() {
     () => buildExtensionDockModel(selectedExtensionUi),
     [selectedExtensionUi],
   );
+  const shownExtensionDock = useDismissibleExtensionDock(selectedSessionKey, selectedExtensionDock);
   const displayedSessionTitle = selectedExtensionUi?.title ?? selectedSession?.title ?? "";
   const activeExtensionDialog = selectedExtensionUi?.pendingDialogs[0];
   const selectedExtensionUiInstance =
@@ -1256,9 +1258,10 @@ export default function App() {
                     onAction={runExtensionCardAction}
                   />
                 }
-                extensionDock={selectedExtensionDock}
+                extensionDock={shownExtensionDock.dock}
                 extensionDockExpanded={isSelectedExtensionDockExpanded}
                 onToggleExtensionDock={handleToggleExtensionDock}
+                onDismissExtensionDock={shownExtensionDock.dismiss}
                 extensionNotices={selectedExtensionUi?.notices}
                 annotations={transcriptAnnotations}
               />

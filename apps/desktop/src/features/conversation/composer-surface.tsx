@@ -76,6 +76,7 @@ interface ComposerSurfaceProps {
   readonly extensionDock?: ExtensionDockModel;
   readonly extensionDockExpanded?: boolean;
   readonly onToggleExtensionDock?: () => void;
+  readonly onDismissExtensionDock?: () => void;
   readonly footer: ReactNode;
   /** Transcript annotations waiting to go with the next message. */
   readonly annotationChip?: ReactNode;
@@ -123,6 +124,7 @@ export function ComposerSurface({
   extensionDock,
   extensionDockExpanded = false,
   onToggleExtensionDock,
+  onDismissExtensionDock,
   footer,
   annotationChip,
 }: ComposerSurfaceProps) {
@@ -253,6 +255,7 @@ export function ComposerSurface({
           dock={extensionDock}
           expanded={extensionDockExpanded}
           onToggle={onToggleExtensionDock}
+          onDismiss={onDismissExtensionDock}
         />
       ) : null}
       {lastError ? (

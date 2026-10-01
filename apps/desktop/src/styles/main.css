@@ -2694,22 +2694,42 @@
   border-bottom: 1px solid var(--line);
 }
 
+.extension-dock__bar {
+  display: flex;
+  align-items: center;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--line);
+  background: var(--surface-muted);
+}
+
 .extension-dock__toggle {
-  width: 100%;
-  min-height: 34px;
+  min-width: 0;
+  flex: 1 1 auto;
+  min-height: 32px;
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 7px 10px;
-  border-radius: var(--radius-xl);
-  border: 1px solid var(--line);
-  background: var(--surface-muted);
+  border-radius: inherit;
   color: var(--muted-strong);
   text-align: left;
 }
 
 .extension-dock__toggle:hover {
   background: var(--overlay-hover);
+}
+
+.extension-dock__dismiss {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  margin-right: 4px;
+  color: var(--muted-soft);
+}
+
+.extension-dock__dismiss svg {
+  width: 14px;
+  height: 14px;
 }
 
 .extension-dock__summary {

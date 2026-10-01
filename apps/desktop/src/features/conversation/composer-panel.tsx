@@ -92,6 +92,7 @@ interface ComposerPanelProps {
   readonly extensionDock?: ExtensionDockModel;
   readonly extensionDockExpanded: boolean;
   readonly onToggleExtensionDock: () => void;
+  readonly onDismissExtensionDock: () => void;
   readonly extensionNotices?: readonly SessionExtensionNoticeRecord[];
   readonly annotations: TranscriptAnnotations;
 }
@@ -148,6 +149,7 @@ export function ComposerPanel({
   extensionDock,
   extensionDockExpanded,
   onToggleExtensionDock,
+  onDismissExtensionDock,
   extensionNotices,
   annotations,
 }: ComposerPanelProps) {
@@ -205,6 +207,7 @@ export function ComposerPanel({
           extensionDock={extensionDock}
           extensionDockExpanded={extensionDockExpanded}
           onToggleExtensionDock={onToggleExtensionDock}
+          onDismissExtensionDock={onDismissExtensionDock}
           annotationChip={
             <AnnotationChip annotations={annotations.list} onRemove={annotations.remove} />
           }
