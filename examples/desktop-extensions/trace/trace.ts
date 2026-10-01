@@ -260,16 +260,21 @@ export class TraceRecorder {
 
   /** Closes the open turn and whatever ran inside it; the turn ends however its model call did. */
   private endTurn(now: number) {
+    const turn = this.turn;
+    const children = turn
+      ? (this.run?.spans ?? []).filter((span) => span.parentId === turn.id)
+      : [];
+    // Work pi does between turns (a compaction, say) is not the turn's: it ends with its last
+    // child, unless something in it was still open and is cut short now.
+    const cutShort = children.length === 0 || children.some((span) => span.endedAt === null);
     this.endModel(now, "aborted");
     for (const span of this.tools.values()) close(span, now, "aborted");
     this.tools.clear();
-    const turn = this.turn;
     if (!turn) return;
     this.turn = null;
-    const call = this.run
-      ? lastOf(this.run.spans, (span) => span.kind === "model" && span.parentId === turn.id)
-      : undefined;
-    close(turn, now, call?.outcome ?? "aborted");
+    const call = lastOf(children, (span) => span.kind === "model");
+    const end = cutShort ? now : Math.max(...children.map((span) => span.endedAt ?? now));
+    close(turn, end, call?.outcome ?? "aborted");
   }
 
   private endCompaction(now: number, outcome: Outcome, error: string | null) {

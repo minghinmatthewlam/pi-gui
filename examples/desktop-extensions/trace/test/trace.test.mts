@@ -93,10 +93,10 @@ await test("one reply with a tool call becomes Run › Turn › Model call, tool
     outline(run, 3_000),
     [
       "Reply 1 · 1.6s · 2 model calls · 1 tool",
-      "  Turn 1 · 960ms",
+      "  Turn 1 · 950ms",
       "    Model call · context 10k · 5% · 890ms",
       "    read notes.txt · 40ms",
-      "  Turn 2 · 560ms",
+      "  Turn 2 · 540ms",
       "    Model call · context 12k · 6% · 530ms",
     ].join("\n"),
   );
@@ -310,4 +310,28 @@ await test("the model that answered names the call and sets its window", () => {
   assert.equal(run.outcome, "ok");
   // Finished runs are copied once and reused.
   assert.equal(recorder.snapshot().runs[0], recorder.snapshot().runs[0]);
+});
+
+await test("a compaction between turns is not counted in the turn before it", () => {
+  const recorder = new TraceRecorder();
+  play(recorder, [
+    [0, { type: "agent_start" }],
+    [0, { type: "turn_start" }],
+    [10, { type: "context", model }],
+    [500, { type: "message_end", message: assistant("toolUse", usage(10, 0, 1)) }],
+    [510, toolTurn("read-1")[0]!],
+    [600, toolTurn("read-1")[1]!],
+    [610, { type: "session_before_compact", reason: "threshold" }],
+    [40_000, { type: "session_compact" }],
+    [40_010, { type: "turn_start" }],
+    [40_020, { type: "agent_end" }],
+    [40_030, { type: "agent_settled" }],
+  ]);
+  const run = recorder.latest()!;
+  const [turn, , , compaction, cut] = run.spans;
+  assert.equal(turn!.endedAt, 600);
+  assert.equal(compaction!.kind, "compaction");
+  assert.equal(compaction!.endedAt, 40_000);
+  // A turn with nothing in it ends when it is cut short.
+  assert.equal(cut!.endedAt, 40_020);
 });
