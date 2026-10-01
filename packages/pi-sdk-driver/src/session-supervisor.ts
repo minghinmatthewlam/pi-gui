@@ -1121,10 +1121,17 @@ export class SessionSupervisor {
   ): Promise<void> {
     const record = await this.ensureRecord(sessionRef);
     const session = this.requireSession(record);
+    // The app queues while it believes a turn is running, but pi may have settled with the news
+    // still on its way, and pi reads its queue only during a turn: a message queued now would
+    // wait for a turn nobody starts. So the turn's last events go out first, then the first
+    // message starts the next turn and the rest queue behind it.
+    if (messages.length > 0 && !isRecordBusy(record)) await record.eventQueue;
+    const startNow = messages.length > 0 && !isRecordBusy(record);
     session.clearQueue();
 
     record.queuedMessages = messages.map((message) => cloneQueuedMessage(message));
-    for (const message of record.queuedMessages) {
+    const [first] = record.queuedMessages;
+    for (const message of startNow ? record.queuedMessages.slice(1) : record.queuedMessages) {
       const images = message.attachments?.flatMap(
         (attachment: NonNullable<SessionQueuedMessage["attachments"]>[number]) =>
           attachment.kind === "image"
@@ -1144,6 +1151,24 @@ export class SessionSupervisor {
     record.updatedAt = nowIso();
     await this.persistSnapshot(record);
     await this.emit(record, sessionUpdatedEvent(record));
+    if (!startNow || !first) return;
+
+    // It stays listed until pi starts it, as a queued message does, which puts it in the
+    // transcript; one that never started is taken off the list.
+    try {
+      await this.sendUserMessage(sessionRef, {
+        text: first.text,
+        ...(first.attachments ? { attachments: first.attachments } : {}),
+      });
+    } finally {
+      const index = record.queuedMessages.findIndex((message) => message.id === first.id);
+      if (index !== -1) {
+        record.queuedMessages.splice(index, 1);
+        record.updatedAt = nowIso();
+        await this.persistSnapshot(record);
+        await this.emit(record, sessionUpdatedEvent(record));
+      }
+    }
   }
 
   async cancelCurrentRun(sessionRef: SessionRef): Promise<void> {
