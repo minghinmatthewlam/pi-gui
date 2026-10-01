@@ -87,7 +87,7 @@ interface ConversationOwnerHost {
     sessionRef: SessionRef,
     attachments: readonly ComposerAttachment[],
   ): void;
-  finishLocalComposerCommand(
+  applyLocalSessionUpdate(
     sessionRef: SessionRef,
     update: {
       readonly title?: string;
@@ -164,6 +164,12 @@ export interface ConversationOwner {
     options?: { readonly deliverAs?: "steer" | "followUp" },
   ): Promise<DesktopAppState>;
   composerSubmitNeedsSenderView(sessionRef: SessionRef | undefined, textInput: string): boolean;
+  /**
+   * Runs an extension command for a card button. It is not a user message: nothing is added
+   * to the thread or taken from the composer, and the driver refuses anything that is not an
+   * extension command. Throws on failure so the caller shows one kind of error.
+   */
+  runExtensionCommand(sessionRef: SessionRef, command: string): Promise<DesktopAppState>;
   submitComposerToSession(
     sessionRef: SessionRef,
     textInput: string,
@@ -201,6 +207,7 @@ export function createConversationOwner(store: ConversationOwnerHost): Conversat
     steerQueuedComposerMessage: (sessionRef, messageId) =>
       steerQueuedComposerMessage(store, sessionRef, messageId),
     submitComposer: (sessionRef, text, options) => submitComposer(store, sessionRef, text, options),
+    runExtensionCommand: (sessionRef, command) => runExtensionCommand(store, sessionRef, command),
     composerSubmitNeedsSenderView: (sessionRef, text) =>
       sessionRef
         ? composerSubmitNeedsSenderView(
@@ -601,6 +608,44 @@ async function submitComposerToSession(
   }
 }
 
+async function runExtensionCommand(
+  store: ComposerStore,
+  sessionRef: SessionRef,
+  commandText: string,
+): Promise<DesktopAppState> {
+  await store.initialize();
+  const text = commandText.trim();
+  const command = resolveRuntimeSlashCommand(
+    text,
+    store.runtimeForWorkspace(sessionRef.workspaceId),
+    store.conversationState.sessionCommandsBySession.get(sessionKey(sessionRef)) ?? [],
+  );
+  // The driver is the check that matters (`extensionCommandOnly`); this only keeps the
+  // terminal-only bookkeeping the same as a typed command.
+  const tracked = command?.source === "extension" ? command : undefined;
+  if (tracked) {
+    const compatibility = store.getLearnedRuntimeCommandCompatibility(
+      sessionRef.workspaceId,
+      tracked,
+    );
+    if (compatibility?.status === "terminal-only") throw new Error(compatibility.message);
+    store.beginRuntimeCommandExecution(sessionRef, tracked);
+  }
+  // Not a message from the user: no bubble, no recency bump, no unarchive, and the draft,
+  // attachments and a streaming reply stay as they are. pi saves nothing for the command
+  // itself, so the live thread matches the reopened one.
+  try {
+    if (!store.conversationState.loadedTranscriptKeys.has(sessionKey(sessionRef))) {
+      await store.ensureSessionReady(sessionRef);
+    }
+    await store.driver.sendUserMessage(sessionRef, { text, extensionCommandOnly: true });
+  } finally {
+    if (tracked) store.finishRuntimeCommandExecution(sessionRef);
+  }
+  await store.refreshSessionCommandsFor(sessionRef);
+  return store.refreshState({ markSelectedSessionViewed: false });
+}
+
 async function setSessionModel(
   store: ComposerStore,
   target: WorkspaceSessionTarget,
@@ -614,7 +659,7 @@ async function setSessionModel(
   return store.withErrorHandling(async () => {
     await store.driver.setSessionModel(sessionRef, { provider, modelId });
     syncSessionConfig(store, key, { provider, modelId });
-    return finishComposerCommand(store, sessionRef, key, `Model set to ${provider}:${modelId}`);
+    return finishSessionChange(store, sessionRef, key, `Model set to ${provider}:${modelId}`);
   });
 }
 
@@ -628,7 +673,7 @@ async function setSessionThinkingLevel(
   return store.withErrorHandling(async () => {
     await store.driver.setSessionThinkingLevel(sessionRef, thinkingLevel);
     syncSessionConfig(store, key, { thinkingLevel });
-    return finishComposerCommand(store, sessionRef, key, `Thinking set to ${thinkingLevel}`);
+    return finishSessionChange(store, sessionRef, key, `Thinking set to ${thinkingLevel}`);
   });
 }
 
@@ -797,7 +842,7 @@ function removeOptimisticQueuedUserMessage(
   store.publishSelectedTranscriptFor(sessionRef);
 }
 
-/** Eagerly merge config fields so finishComposerCommand sees them before the async sessionUpdated event arrives. */
+/** Eagerly merge config fields so finishSessionChange sees them before the async sessionUpdated event arrives. */
 function syncSessionConfig(store: ComposerStore, key: string, patch: Partial<SessionConfig>): void {
   const current = store.conversationState.sessionConfigBySession.get(key) ?? {};
   store.conversationState.sessionConfigBySession.set(key, { ...current, ...patch });
@@ -890,6 +935,10 @@ function appendLocalActivity(store: ComposerStore, sessionRef: SessionRef, label
   store.conversationState.transcriptCache.set(key, transcript);
 }
 
+/**
+ * A typed slash command ran: it consumed the command text, so clear the draft, then record the
+ * change. Attachments stay for the next message, since a command is not a message.
+ */
 function finishComposerCommand(
   store: ComposerStore,
   sessionRef: SessionRef,
@@ -897,12 +946,22 @@ function finishComposerCommand(
   label: string,
   options: { readonly sessionTitle?: string } = {},
 ): DesktopAppState {
-  store.conversationState.composerAttachmentsBySession.delete(key);
+  store.setComposerDraftForSession(sessionRef, "", "command");
+  return finishSessionChange(store, sessionRef, key, label, options);
+}
+
+/** Record a session change in the transcript and sidebar without touching the composer. */
+function finishSessionChange(
+  store: ComposerStore,
+  sessionRef: SessionRef,
+  key: string,
+  label: string,
+  options: { readonly sessionTitle?: string } = {},
+): DesktopAppState {
   appendLocalActivity(store, sessionRef, label);
   const transcript = store.conversationState.transcriptCache.get(key) ?? [];
   const preview = previewFromTranscript(transcript);
-  store.setComposerDraftForSession(sessionRef, "", "command");
-  store.finishLocalComposerCommand(sessionRef, {
+  store.applyLocalSessionUpdate(sessionRef, {
     ...(options.sessionTitle ? { title: options.sessionTitle } : {}),
     ...(preview ? { preview } : {}),
     config: store.conversationState.sessionConfigBySession.get(key),

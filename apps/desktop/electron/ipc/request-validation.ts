@@ -1,4 +1,9 @@
-import type { ExtensionFlagValues, HostUiResponse } from "@pi-gui/session-driver";
+import {
+  parseExtensionAction,
+  type ExtensionFlagValues,
+  type HostUiResponse,
+} from "@pi-gui/session-driver";
+import type { ExtensionActionRequest } from "../../contracts/extension-actions";
 import type { NavigateSessionTreeOptions } from "@pi-gui/session-driver/types";
 import type { RuntimeSettingsSnapshot } from "@pi-gui/session-driver/runtime-types";
 import {
@@ -530,4 +535,12 @@ export function expectUpdateScheduledTaskInput(value: unknown): UpdateScheduledT
       : { target: assertScheduledTaskTarget(record.target, "patch.target") }),
     ...(status ? { status } : {}),
   };
+}
+
+/** A card button's click. The action is extension-authored data, parsed by its one parser. */
+export function expectExtensionActionRequest(raw: unknown): ExtensionActionRequest {
+  const input = expectRecord(raw, "extension action request");
+  const action = parseExtensionAction(input.action);
+  if (!action) throw new Error("pi-gui does not support this button's action");
+  return { target: expectSessionTarget(input.target), action };
 }

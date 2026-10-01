@@ -945,6 +945,9 @@ export class SessionSupervisor {
     await this.settleReloadsBeforeSend(record);
     const session = this.requireSession(record);
     const isExtensionCommand = this.isExtensionCommand(session, input.text);
+    if (input.extensionCommandOnly && !isExtensionCommand) {
+      throw new Error(`${input.text.trim().split(/\s/, 1)[0]} is not an extension command`);
+    }
     if (session.isStreaming && !isExtensionCommand && !input.deliverAs) {
       throw new Error(
         "Session is already streaming. Specify deliverAs ('steer' or 'followUp') to queue the message.",
@@ -963,7 +966,8 @@ export class SessionSupervisor {
     record.status = isQueuedMessage || isExtensionCommand ? record.status : "running";
     record.updatedAt = nowIso();
     record.config = deriveSessionConfig(session.sessionManager);
-    record.preview = truncate(input.text);
+    // A card button's command is not something the user said, so it leaves the preview.
+    if (!input.extensionCommandOnly) record.preview = truncate(input.text);
     if (isQueuedMessage) {
       record.queuedMessages = [
         ...record.queuedMessages,
@@ -976,6 +980,12 @@ export class SessionSupervisor {
     } catch (error) {
       record.promptStarting = false;
       throw error;
+    }
+
+    // An extension reload during the awaits above can unregister the command, and pi would
+    // then send the text to the model. Refuse outside the try so the thread is left alone.
+    if (input.extensionCommandOnly && !this.isExtensionCommand(session, input.text)) {
+      throw new Error(`${input.text.trim().split(/\s/, 1)[0]} is no longer an extension command`);
     }
 
     try {
@@ -1038,6 +1048,9 @@ export class SessionSupervisor {
         await this.syncRecordAfterSessionMutation(record, { emitUpdate: true });
       }
     } catch (error) {
+      // A card button's command failing says nothing about the thread, which may be mid-run:
+      // leave its state alone and let the app report the failure.
+      if (input.extensionCommandOnly) throw error;
       if (isQueuedMessage) {
         record.queuedMessages = record.queuedMessages.slice(0, -1);
       }

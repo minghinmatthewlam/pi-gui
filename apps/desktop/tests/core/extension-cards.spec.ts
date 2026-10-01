@@ -78,7 +78,7 @@ export default function ciCards(pi) {
             { label: "Job", value: "unit-tests (ubuntu-latest)" },
             { label: "Failed", value: "search.test.ts › returns [] for a blank query" },
           ],
-          actions: [{ label: "Open failing line", path: "search.ts", line: 3 }],
+          actions: [{ type: "openFile", label: "Open failing line", path: "search.ts", line: 3 }],
         });
         await ui.confirm("Finish the reply?", "The card is in; the reply is still streaming.");
         const done = message("Checking CI. The search test fails on a blank query.");

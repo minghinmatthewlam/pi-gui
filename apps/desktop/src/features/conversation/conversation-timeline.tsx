@@ -15,6 +15,7 @@ import type { AnnotationMarker, OpenAnnotation } from "./annotations/annotation-
 import { useAnnotationSelection } from "./annotations/annotation-selection";
 import type { TranscriptAnnotations } from "./annotations/use-transcript-annotations";
 import { ThreadSearchBar } from "./thread-search";
+import type { RunExtensionAction } from "./extension-card";
 import { TimelineItem } from "./timeline-item";
 import { sameRowContent, type TimelineRow } from "./timeline-layout";
 import type { OpenTurnChange } from "./turn-changes-card";
@@ -42,6 +43,7 @@ interface ConversationTimelineProps {
   readonly onOpenTurnChange?: OpenTurnChange;
   readonly onForkFromMessage?: (messageIndex: number, preview?: string) => void;
   readonly onOpenWorkspaceFileLine?: (target: WorkspaceFileLine) => void;
+  readonly onExtensionAction?: RunExtensionAction;
   readonly scheduledOrigins?: ReadonlyMap<string, ScheduledTaskOrigin>;
   readonly workspacePath?: string;
   readonly annotations?: TranscriptAnnotations;
@@ -59,6 +61,7 @@ export function ConversationTimeline({
   onOpenTurnChange,
   onForkFromMessage,
   onOpenWorkspaceFileLine,
+  onExtensionAction,
   scheduledOrigins,
   workspacePath,
   annotations,
@@ -167,6 +170,7 @@ export function ConversationTimeline({
                   sourceMessageIndex={renderedMessageIndexById.get(item.id)}
                   onForkFromMessage={onForkFromMessage}
                   onOpenWorkspaceFileLine={onOpenWorkspaceFileLine}
+                  onExtensionAction={onExtensionAction}
                   workspacePath={workspacePath}
                   annotationMarkers={
                     markersByMessage.get(item.id) ??
@@ -276,6 +280,7 @@ interface MeasuredTimelineItemProps {
   readonly sourceMessageIndex?: number;
   readonly onForkFromMessage?: (messageIndex: number, preview?: string) => void;
   readonly onOpenWorkspaceFileLine?: (target: WorkspaceFileLine) => void;
+  readonly onExtensionAction?: RunExtensionAction;
   readonly scheduledOrigin?: ScheduledTaskOrigin;
   readonly workspacePath?: string;
   readonly annotationMarkers: readonly AnnotationMarker[];
@@ -296,6 +301,7 @@ function MeasuredTimelineItemBase({
   sourceMessageIndex,
   onForkFromMessage,
   onOpenWorkspaceFileLine,
+  onExtensionAction,
   scheduledOrigin,
   workspacePath,
   annotationMarkers,
@@ -343,6 +349,7 @@ function MeasuredTimelineItemBase({
           sourceMessageIndex={sourceMessageIndex}
           onForkFromMessage={onForkFromMessage}
           onOpenWorkspaceFileLine={onOpenWorkspaceFileLine}
+          onExtensionAction={onExtensionAction}
           scheduledOrigin={scheduledOrigin}
           workspacePath={workspacePath}
           annotationMarkers={annotationMarkers}
@@ -429,6 +436,7 @@ function areMeasuredTimelineItemPropsEqual(
     prev.sourceMessageIndex === next.sourceMessageIndex &&
     prev.onForkFromMessage === next.onForkFromMessage &&
     prev.onOpenWorkspaceFileLine === next.onOpenWorkspaceFileLine &&
+    prev.onExtensionAction === next.onExtensionAction &&
     prev.workspacePath === next.workspacePath &&
     prev.annotationMarkers === next.annotationMarkers &&
     prev.onOpenAnnotation === next.onOpenAnnotation &&

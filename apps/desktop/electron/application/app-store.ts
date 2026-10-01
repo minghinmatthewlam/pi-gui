@@ -2,6 +2,7 @@ import { JsonCatalogStore } from "@pi-gui/catalogs/node";
 import { sessionKey } from "@pi-gui/session-driver";
 import type { ExtensionFlagValues, SessionSchemaInfo } from "@pi-gui/session-driver";
 import type { BrowserWindow } from "electron";
+import { randomUUID } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import { homedir, hostname } from "node:os";
 import { join, resolve, sep } from "node:path";
@@ -55,12 +56,14 @@ import {
   type SendChildThreadFollowUpInput,
   type SetChildSupervisionLoopInput,
   type SelectedTranscriptRecord,
+  type SessionExtensionNoticeRecord,
   type StartThreadInput,
   type StartupDiagnostic,
   type ThemeMode,
   type ThemePresetId,
   type ThreadGrouping,
   type TranscriptMessage,
+  type WorkspaceRecord,
   type WorkspaceSessionTarget,
   isThemeMode,
   isThemePresetId,
@@ -359,7 +362,7 @@ export class DesktopAppStore {
           revision: this.state.revision + 1,
         };
       },
-      finishLocalComposerCommand: (sessionRef, update) => {
+      applyLocalSessionUpdate: (sessionRef, update) => {
         this.state = {
           ...this.state,
           workspaces: this.state.workspaces.map((workspaceEntry) =>
@@ -379,11 +382,6 @@ export class DesktopAppStore {
                 }
               : workspaceEntry,
           ),
-          composerAttachments:
-            this.state.selectedWorkspaceId === sessionRef.workspaceId &&
-            this.state.selectedSessionId === sessionRef.sessionId
-              ? []
-              : this.state.composerAttachments,
           lastError: undefined,
           revision: this.state.revision + 1,
         };
@@ -871,6 +869,11 @@ export class DesktopAppStore {
     return this.state.workspaces.find((w) => w.id === workspaceId)?.path;
   }
 
+  /** The current folders and their threads, for checks that must not wait on a state copy. */
+  getWorkspaceRecords(): readonly WorkspaceRecord[] {
+    return this.state.workspaces;
+  }
+
   getSkillFilePath(workspaceId: string, filePath: string): string | undefined {
     return this.runtimeByWorkspace.get(workspaceId)?.skills.find((s) => s.filePath === filePath)
       ?.filePath;
@@ -1107,6 +1110,26 @@ export class DesktopAppStore {
 
   composerSubmitNeedsSenderView(sessionRef: SessionRef | undefined, textInput: string): boolean {
     return this.conversationOwner.composerSubmitNeedsSenderView(sessionRef, textInput);
+  }
+
+  async runExtensionCommand(sessionRef: SessionRef, command: string): Promise<DesktopAppState> {
+    return this.conversationOwner.runExtensionCommand(sessionRef, command);
+  }
+
+  /** Shows why a card button did nothing, as the same toast an extension's notify uses. */
+  reportExtensionActionFailure(sessionRef: SessionRef, error: unknown): DesktopAppState {
+    const message = error instanceof Error ? error.message : String(error);
+    this.addExtensionNotice(sessionRef, {
+      id: `action-failure:${randomUUID()}`,
+      level: "error",
+      message: `Couldn't run that button: ${message}`,
+      createdAt: new Date().toISOString(),
+    });
+    this.state = this.syncDerivedSessionState(
+      { ...this.state, revision: this.state.revision + 1 },
+      sessionRef,
+    );
+    return this.emit();
   }
 
   async editQueuedComposerMessage(
@@ -3225,15 +3248,12 @@ export class DesktopAppStore {
           "extension-editor-text",
         );
         break;
-      case "notify": {
-        const notice = extensionNoticeFromRequest(event.request, event.timestamp);
-        const dropped = appendExtensionNotice(uiState, notice);
-        for (const entry of dropped) {
-          this.clearExtensionDialogTimeout(event.sessionRef, extensionNoticeTimerId(entry.id));
-        }
-        this.scheduleExtensionNoticeExpiry(event.sessionRef, notice.id);
+      case "notify":
+        this.addExtensionNotice(
+          event.sessionRef,
+          extensionNoticeFromRequest(event.request, event.timestamp),
+        );
         break;
-      }
       default:
         if (isExtensionUiDialogRequest(event.request)) {
           const dialog = event.request;
@@ -3298,6 +3318,14 @@ export class DesktopAppStore {
   }
 
   /** Notices share the dialog timer map, so session reset and close clear both. */
+  private addExtensionNotice(sessionRef: SessionRef, notice: SessionExtensionNoticeRecord): void {
+    const dropped = appendExtensionNotice(this.getOrCreateExtensionUiState(sessionRef), notice);
+    for (const entry of dropped) {
+      this.clearExtensionDialogTimeout(sessionRef, extensionNoticeTimerId(entry.id));
+    }
+    this.scheduleExtensionNoticeExpiry(sessionRef, notice.id);
+  }
+
   private scheduleExtensionNoticeExpiry(sessionRef: SessionRef, noticeId: string): void {
     const timerId = extensionNoticeTimerId(noticeId);
     this.clearExtensionDialogTimeout(sessionRef, timerId);

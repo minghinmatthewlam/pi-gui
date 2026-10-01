@@ -63,7 +63,9 @@ import {
   expectThreadGrouping,
   expectThinkingLevel,
   expectWorkspaceFileListOptions,
+  expectExtensionActionRequest,
 } from "./request-validation";
+import { runExtensionAction, type AppOperationHost } from "../extensions/app-operations";
 
 type StateOwner = Pick<
   DesktopAppStore,
@@ -88,6 +90,7 @@ type WorkspaceOwner = Pick<
   | "removeWorktree"
   | "syncCurrentWorkspace"
   | "getWorkspacePath"
+  | "getWorkspaceRecords"
 >;
 
 type ConversationOwner = Pick<
@@ -112,6 +115,8 @@ type ConversationOwner = Pick<
   | "updateComposerDraft"
   | "submitComposer"
   | "composerSubmitNeedsSenderView"
+  | "runExtensionCommand"
+  | "reportExtensionActionFailure"
   | "getSessionTree"
   | "navigateSessionTree"
   | "respondToHostUiRequest"
@@ -863,6 +868,53 @@ export function registerDesktopIpc({
       : immediate;
     return dispatch(event, () => owners.conversation.submitComposer(target, text, options));
   });
+  // Card buttons carry extension-authored data, so only the app's own frame may send them.
+  handleMainFrame(
+    desktopIpc.runExtensionAction,
+    expectExtensionActionRequest,
+    async ({ target, action }, { event }) => {
+      // Main may have switched threads before the renderer redrew; never act on another one.
+      const requireCardThread = () => {
+        const selected = windows.targetForSender(event.sender);
+        if (
+          selected?.workspaceId !== target.workspaceId ||
+          selected.sessionId !== target.sessionId
+        ) {
+          throw new Error("Return to the card's thread to use its buttons");
+        }
+      };
+      requireCardThread();
+      const host: AppOperationHost = {
+        workspacePath: (workspaceId) => owners.workspace.getWorkspacePath(workspaceId),
+        openExternal: capabilities.openExternal,
+        // Like a typed extension command, it may change selection, so it keeps the window's queue,
+        // and checks the thread again once its turn in that queue comes.
+        runExtensionCommand: async (sessionRef, command) => {
+          await run(event, async () => {
+            requireCardThread();
+            return owners.conversation.runExtensionCommand(sessionRef, command);
+          });
+        },
+        workspaces: () => owners.workspace.getWorkspaceRecords(),
+        selectThread: async (resolve) => {
+          const state = await run(event, async () => {
+            requireCardThread();
+            return owners.conversation.selectSession(resolve());
+          });
+          if (state.lastError) throw new Error(state.lastError);
+        },
+      };
+      try {
+        return (await runExtensionAction(host, target, action)) ?? null;
+      } catch (error) {
+        await run(event, async () =>
+          owners.conversation.reportExtensionActionFailure(target, error),
+        );
+        return null;
+      }
+    },
+  );
+
   ipcMain.handle(desktopIpc.getSessionTree, (event, rawTarget: unknown) => {
     windows.windowForSender(event.sender);
     return owners.conversation.getSessionTree(expectSessionTarget(rawTarget));

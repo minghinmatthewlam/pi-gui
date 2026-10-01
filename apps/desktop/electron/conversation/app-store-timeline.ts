@@ -295,7 +295,13 @@ export function applyTimelineEvent(
       break;
     case "transcriptItemAppended": {
       // Same id as the persisted entry, so a transcript reload replaces rather than duplicates it.
-      if (transcript.some((item) => item.id === event.item.id)) return;
+      // A keyed card that is already shown updates where it is, as the session file projects it.
+      const existingIndex = transcript.findIndex((item) => item.id === event.item.id);
+      if (existingIndex >= 0) {
+        if (event.item.kind !== "card") return;
+        transcript[existingIndex] = event.item;
+        break;
+      }
       // pi saves a streaming reply only when it ends, so a card (or its error row) appended
       // mid-reply comes before that reply in the session file. Place it there now so a reload never moves it.
       const streamingId = state.activeAssistantMessageBySession.get(key);
