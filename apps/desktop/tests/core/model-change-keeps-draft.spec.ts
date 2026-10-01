@@ -54,7 +54,8 @@ test("changing model or thinking from the composer footer keeps the typed prompt
     await expect(attachment).toHaveCount(1);
     await expect.poll(async () => (await getDesktopState(window)).composerDraft).toBe(prompt);
 
-    // Picking from the /model menu consumes the command text, and the saved "/model" must not return.
+    // Picking from the /model menu consumes only the command text; the saved "/model" must not
+    // return, and the attachment stays.
     await composer.fill("/model");
     await expect.poll(async () => (await getDesktopState(window)).composerDraft).toBe("/model");
     const optionsMenu = window.getByTestId("slash-options-menu");
@@ -64,6 +65,7 @@ test("changing model or thinking from the composer footer keeps the typed prompt
     await expect(composer).toHaveValue("");
     await expect.poll(async () => (await getDesktopState(window)).composerDraft).toBe("");
     await expect(composer).toHaveValue("");
+    await expect(attachment).toHaveCount(1);
   } finally {
     await harness.close();
   }

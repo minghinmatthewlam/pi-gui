@@ -842,7 +842,7 @@ function removeOptimisticQueuedUserMessage(
   store.publishSelectedTranscriptFor(sessionRef);
 }
 
-/** Eagerly merge config fields so finishComposerCommand sees them before the async sessionUpdated event arrives. */
+/** Eagerly merge config fields so finishSessionChange sees them before the async sessionUpdated event arrives. */
 function syncSessionConfig(store: ComposerStore, key: string, patch: Partial<SessionConfig>): void {
   const current = store.conversationState.sessionConfigBySession.get(key) ?? {};
   store.conversationState.sessionConfigBySession.set(key, { ...current, ...patch });
