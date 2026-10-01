@@ -18,6 +18,7 @@ import type {
   RuntimeLoginCallbacks,
   RuntimeExtensionDiagnostic,
   RuntimeExtensionFlag,
+  RuntimeExtensionTool,
   RuntimeExtensionRecord,
   RuntimeModelRecord,
   RuntimeProviderRecord,
@@ -855,11 +856,7 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
           commands: loaded
             ? [...loaded.commands.keys()].sort((left, right) => left.localeCompare(right))
             : [],
-          tools: loaded
-            ? [...loaded.tools.values()]
-                .map((tool) => tool.definition.name)
-                .sort((left, right) => left.localeCompare(right))
-            : [],
+          tools: loaded ? describeTools(loaded.tools) : [],
           flags: loaded
             ? [...loaded.flags.keys()].sort((left, right) => left.localeCompare(right))
             : [],
@@ -904,9 +901,7 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
         origin: "top-level",
       },
       commands: [...extension.commands.keys()].sort((left, right) => left.localeCompare(right)),
-      tools: [...extension.tools.values()]
-        .map((tool) => tool.definition.name)
-        .sort((left, right) => left.localeCompare(right)),
+      tools: describeTools(extension.tools),
       flags: [...extension.flags.keys()].sort((left, right) => left.localeCompare(right)),
       flagDetails: describeFlags(extension.flags),
       shortcuts: [...extension.shortcuts.keys()].sort((left, right) => left.localeCompare(right)),
@@ -1316,6 +1311,14 @@ function firstNonEmptyLine(value: string): string | undefined {
     .split(/\r?\n/)
     .map((line) => line.trim())
     .find(Boolean);
+}
+
+function describeTools(
+  tools: ReadonlyMap<string, { definition: { name: string; label: string } }>,
+): RuntimeExtensionTool[] {
+  return [...tools.values()]
+    .map(({ definition }) => ({ name: definition.name, label: definition.label }))
+    .sort((left, right) => left.name.localeCompare(right.name));
 }
 
 function describeFlags(

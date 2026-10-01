@@ -114,6 +114,7 @@ import type { CustomProviderConfig } from "../../contracts/ipc";
 import { resolveRepoWorkspaceId } from "../../contracts/workspace-roots";
 import { decodeTaskWorkbenchTemplate, type TaskWorkbenchTemplate } from "../../contracts/workbench";
 import { composerImageSavedSkipMessage } from "../../contracts/composer-attachments";
+import { extensionToolLabels } from "../../contracts/tool-labels";
 import { quarantinePersistedComposerAttachments } from "../ipc/composer-attachment-pixels";
 import { SessionStateMap, type QueuedComposerEditState } from "../conversation/session-state-map";
 import {
@@ -2524,7 +2525,10 @@ export class DesktopAppStore {
       return;
     }
 
-    const transcript = timelineFromDriverTranscript(await this.driver.getTranscript(sessionRef));
+    const transcript = timelineFromDriverTranscript(
+      await this.driver.getTranscript(sessionRef),
+      extensionToolLabels(this.runtimeByWorkspace.get(sessionRef.workspaceId)),
+    );
     this.sessionState.loadedTranscriptKeys.add(key);
     this.sessionState.transcriptCache.set(key, transcript);
     await this.recordSelectedTranscriptFileStat(sessionRef);
@@ -2532,7 +2536,10 @@ export class DesktopAppStore {
 
   async reloadTranscriptFromDriver(sessionRef: SessionRef): Promise<void> {
     const key = sessionKey(sessionRef);
-    const transcript = timelineFromDriverTranscript(await this.driver.getTranscript(sessionRef));
+    const transcript = timelineFromDriverTranscript(
+      await this.driver.getTranscript(sessionRef),
+      extensionToolLabels(this.runtimeByWorkspace.get(sessionRef.workspaceId)),
+    );
     this.sessionState.loadedTranscriptKeys.add(key);
     this.sessionState.transcriptCache.set(key, transcript);
     await this.recordSelectedTranscriptFileStat(sessionRef);
@@ -3365,6 +3372,8 @@ export class DesktopAppStore {
         activeAssistantMessageBySession: this.sessionState.activeAssistantMessageBySession,
         pendingAssistantMessageBySession: this.sessionState.pendingAssistantMessageBySession,
         activeWorkingActivityBySession: this.sessionState.activeWorkingActivityBySession,
+        extensionToolLabels: (ref) =>
+          extensionToolLabels(this.runtimeByWorkspace.get(ref.workspaceId)),
       });
       this.state = applySessionEventState(
         this.state,

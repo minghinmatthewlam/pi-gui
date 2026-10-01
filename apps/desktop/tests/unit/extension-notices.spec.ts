@@ -58,6 +58,7 @@ test("only error notices add a transcript row", () => {
     activeAssistantMessageBySession: new Map(),
     pendingAssistantMessageBySession: new Map(),
     activeWorkingActivityBySession: new Map(),
+    extensionToolLabels: () => new Map(),
     runningSinceBySession: new Map(),
     runMetricsBySession: new Map(),
   };

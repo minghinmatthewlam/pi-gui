@@ -53,6 +53,7 @@ export type {
   RuntimeCommandSource,
   RuntimeExtensionDiagnostic,
   RuntimeExtensionFlag,
+  RuntimeExtensionTool,
   RuntimeExtensionRecord,
   RuntimeLoginAuthInfo,
   RuntimeLoginCallbacks,

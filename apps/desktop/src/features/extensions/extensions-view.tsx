@@ -136,7 +136,7 @@ function ExtensionDetail({
           </SettingsRow>
         )}
       </SettingsGroup>
-      <ExtensionContributionSection title="Tools" items={selected.tools} />
+      <ExtensionContributionSection title="Tools" items={selected.tools.map((tool) => tool.name)} />
       {selected.commands.length > 0 ? (
         <ExtensionCompatibilitySection
           commands={selected.commands}

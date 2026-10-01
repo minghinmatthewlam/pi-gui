@@ -17,6 +17,7 @@ function fixture() {
     activeAssistantMessageBySession: new Map(),
     pendingAssistantMessageBySession: new Map(),
     activeWorkingActivityBySession: new Map(),
+    extensionToolLabels: () => new Map(),
     runningSinceBySession: new Map(),
     runMetricsBySession: new Map(),
   };
