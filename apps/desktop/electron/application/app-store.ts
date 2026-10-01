@@ -373,11 +373,6 @@ export class DesktopAppStore {
                 }
               : workspaceEntry,
           ),
-          composerAttachments:
-            this.state.selectedWorkspaceId === sessionRef.workspaceId &&
-            this.state.selectedSessionId === sessionRef.sessionId
-              ? []
-              : this.state.composerAttachments,
           lastError: undefined,
           revision: this.state.revision + 1,
         };

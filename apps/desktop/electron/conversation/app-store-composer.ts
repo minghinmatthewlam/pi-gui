@@ -942,7 +942,7 @@ function finishComposerCommand(
   label: string,
   options: { readonly sessionTitle?: string } = {},
 ): DesktopAppState {
-  store.conversationState.composerAttachmentsBySession.delete(key);
+  // A local command is not a message: attachments stay in the composer for the next send.
   appendLocalActivity(store, sessionRef, label);
   const transcript = store.conversationState.transcriptCache.get(key) ?? [];
   const preview = previewFromTranscript(transcript);
