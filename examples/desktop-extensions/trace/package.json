@@ -1,0 +1,22 @@
+{
+  "name": "@pi-gui/example-trace",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "pi": {
+    "extensions": [
+      "./index.ts"
+    ]
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "build:check": "node build.mjs --check",
+    "test": "node --experimental-strip-types --test test/*.test.mts",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "peerDependencies": {
+    "@earendil-works/chord": "^0.99.1",
+    "@earendil-works/pi-coding-agent": "^0.99.1",
+    "@pi-gui/extension-ui": "*"
+  }
+}

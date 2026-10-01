@@ -66,7 +66,9 @@ window.addEventListener('message', async (event) => {
     if (typeof mount !== 'function') throw new Error('The extension frontend must export mount(root, host).');
     dispose = await mount(root,{services:connection.services,signal:connection.signal,theme,actions:{
       openFile: target => action({type:'openFile',...target}),
-      prepareTaskDraft: draft => action({type:'prepareTaskDraft',...draft})
+      prepareTaskDraft: draft => action({type:'prepareTaskDraft',...draft}),
+      openUrl: url => action({type:'openUrl',url}),
+      openThread: sessionId => action({type:'openThread',sessionId})
     }});
     if (typeof dispose !== 'function') throw new Error('The extension mount must return a cleanup function.');
     if (connection.signal.aborted) await dispose();

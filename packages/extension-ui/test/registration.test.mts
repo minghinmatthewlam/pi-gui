@@ -87,7 +87,19 @@ await test("host actions reject foreign target identities and non-JSON values", 
       files: [{ path: "src/app.ts", line: 3 }],
     },
   );
+  assert.deepEqual(parseDesktopHostAction({ type: "openUrl", url: "https://github.com/a/b" }), {
+    type: "openUrl",
+    url: "https://github.com/a/b",
+  });
+  assert.deepEqual(parseDesktopHostAction({ type: "openThread", sessionId: "0199-abc_d.e" }), {
+    type: "openThread",
+    sessionId: "0199-abc_d.e",
+  });
   for (const action of [
+    { type: "openUrl", url: "" },
+    { type: "openUrl", url: "https://a.example", workspaceId: "other" },
+    { type: "openThread", sessionId: "../other" },
+    { type: "openThread", sessionId: "a", workspaceId: "other" },
     { type: "openFile", path: "src/app.ts", sessionId: "other" },
     { type: "openFile", path: "src/app.ts", line: 0 },
     { type: "openFile", path: "src/app.ts", column: Number.NaN },

@@ -108,11 +108,10 @@ export default [
   ...["catalogs", "pi-sdk-driver", "session-driver", "extension-ui"].map((name) =>
     typedProject([`packages/${name}/**/*.{ts,tsx,mts,cts}`], `packages/${name}/tsconfig.lint.json`),
   ),
-  ...["pr-review", "test-runs"].map((name) =>
-    typedProject(
-      [`examples/desktop-extensions/${name}/**/*.{ts,tsx,mts,cts}`],
-      `examples/desktop-extensions/${name}/tsconfig.lint.json`,
-    ),
+  // One program for every example: a program per example ran typed lint out of memory in CI.
+  typedProject(
+    ["examples/desktop-extensions/**/*.{ts,tsx,mts,cts}"],
+    "examples/desktop-extensions/tsconfig.lint.json",
   ),
   typedProject(["apps/website/**/*.{ts,tsx,mts,cts}"], "apps/website/tsconfig.json"),
   typedProject(["video/**/*.{ts,tsx,mts,cts}"], "video/tsconfig.lint.json"),

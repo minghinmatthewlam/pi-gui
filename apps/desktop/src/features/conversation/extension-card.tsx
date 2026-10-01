@@ -77,6 +77,8 @@ function actionTarget(action: ExtensionAction): string {
       return new URL(action.url).host;
     case "command":
       return action.command;
+    case "openThread":
+      return "Opens thread";
     default:
       return unhandledAction(action);
   }

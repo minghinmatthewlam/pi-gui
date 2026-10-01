@@ -32,8 +32,8 @@
     "format:check": "prettier --check .",
     "test:desktop-unit": "playwright test -c apps/desktop/playwright.config.ts apps/desktop/tests/unit",
     "build:shared": "pnpm --filter @pi-gui/session-driver build && pnpm --filter @pi-gui/catalogs build && pnpm --filter @pi-gui/extension-ui build && pnpm --filter @pi-gui/pi-sdk-driver build",
-    "typecheck:extension-examples": "pnpm --dir examples/desktop-extensions/pr-review typecheck && pnpm --dir examples/desktop-extensions/test-runs typecheck",
-    "test:extension-examples": "pnpm --dir examples/desktop-extensions/pr-review test && pnpm --dir examples/desktop-extensions/test-runs test && pnpm --dir examples/desktop-extensions/pr-review build:check && pnpm --dir examples/desktop-extensions/test-runs build:check"
+    "typecheck:extension-examples": "pnpm --dir examples/desktop-extensions/pr-review typecheck && pnpm --dir examples/desktop-extensions/test-runs typecheck && pnpm --dir examples/desktop-extensions/github typecheck && pnpm --dir examples/desktop-extensions/usage typecheck && pnpm --dir examples/desktop-extensions/trace typecheck",
+    "test:extension-examples": "pnpm --dir examples/desktop-extensions/pr-review test && pnpm --dir examples/desktop-extensions/test-runs test && pnpm --dir examples/desktop-extensions/github test && pnpm --dir examples/desktop-extensions/usage test && pnpm --dir examples/desktop-extensions/trace test && pnpm --dir examples/desktop-extensions/pr-review build:check && pnpm --dir examples/desktop-extensions/test-runs build:check && pnpm --dir examples/desktop-extensions/github build:check && pnpm --dir examples/desktop-extensions/usage build:check && pnpm --dir examples/desktop-extensions/trace build:check"
   },
   "devDependencies": {
     "@pi-gui/extension-ui": "workspace:*",

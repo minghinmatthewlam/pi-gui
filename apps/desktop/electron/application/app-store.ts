@@ -63,6 +63,7 @@ import {
   type ThemePresetId,
   type ThreadGrouping,
   type TranscriptMessage,
+  type WorkspaceRecord,
   type WorkspaceSessionTarget,
   isThemeMode,
   isThemePresetId,
@@ -862,6 +863,11 @@ export class DesktopAppStore {
 
   getWorkspacePath(workspaceId: string): string | undefined {
     return this.state.workspaces.find((w) => w.id === workspaceId)?.path;
+  }
+
+  /** The current folders and their threads, for checks that must not wait on a state copy. */
+  getWorkspaceRecords(): readonly WorkspaceRecord[] {
+    return this.state.workspaces;
   }
 
   getSkillFilePath(workspaceId: string, filePath: string): string | undefined {

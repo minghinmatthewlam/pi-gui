@@ -88,6 +88,7 @@ type WorkspaceOwner = Pick<
   | "removeWorktree"
   | "syncCurrentWorkspace"
   | "getWorkspacePath"
+  | "getWorkspaceRecords"
 >;
 
 type ConversationOwner = Pick<
@@ -844,6 +845,14 @@ export function registerDesktopIpc({
             requireCardThread();
             return owners.conversation.runExtensionCommand(sessionRef, command);
           });
+        },
+        workspaces: () => owners.workspace.getWorkspaceRecords(),
+        selectThread: async (resolve) => {
+          const state = await run(event, async () => {
+            requireCardThread();
+            return owners.conversation.selectSession(resolve());
+          });
+          if (state.lastError) throw new Error(state.lastError);
         },
       };
       try {
