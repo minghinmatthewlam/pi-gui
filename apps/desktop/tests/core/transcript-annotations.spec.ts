@@ -120,7 +120,7 @@ test("adds transcript selections to chat with comments and sends them before the
     // Select, then add with the shortcut; the comment box opens on a numbered marker.
     await dragSelect(page, "hold up the reply");
     await expect(page.getByTestId("add-to-chat")).toContainText("Add to Chat");
-    await page.keyboard.press("Control+L");
+    await page.keyboard.press("ControlOrMeta+L");
     const editor = page.getByTestId("annotation-editor");
     await expect(editor.getByRole("textbox")).toBeFocused();
     await editor.getByRole("textbox").fill("Why not?");
@@ -270,7 +270,7 @@ test("a multi-line drag that runs past the text still adds its lines", async () 
     const second = await phraseBox(page, "Second starts");
     await drag({ x: first.left + 1, y: first.y }, { x: second.rootRight + 40, y: second.y });
     await expect(page.getByTestId("add-to-chat")).toBeVisible();
-    await page.keyboard.press("Control+L");
+    await page.keyboard.press("ControlOrMeta+L");
     await page.getByTestId("annotation-editor").getByRole("textbox").press("Enter");
 
     // Down past the reply's last line, onto its Fork button.
@@ -278,7 +278,7 @@ test("a multi-line drag that runs past the text still adds its lines", async () 
     const third = await phraseBox(page, "Third starts");
     await drag({ x: second.left + 1, y: second.y }, { x: third.left + 40, y: third.y + 30 });
     await expect(page.getByTestId("add-to-chat")).toBeVisible();
-    await page.keyboard.press("Control+L");
+    await page.keyboard.press("ControlOrMeta+L");
     await page.getByTestId("annotation-editor").getByRole("textbox").press("Enter");
 
     await settled();

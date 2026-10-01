@@ -157,8 +157,9 @@ test("without gh the GitHub example says how to get it", async () => {
     initialWorkspaces: [await makeWorkspace("github-example-no-gh")],
     scrubProviderEnv: true,
     testMode: "background",
-    // No gh anywhere on this PATH (GitHub's runners install one in /usr/bin).
-    envOverrides: { PATH: await pathWithoutGh() },
+    // No gh anywhere on this PATH (GitHub's runners install one in /usr/bin, and on a Mac in
+    // /opt/homebrew/bin, which the app would otherwise add back).
+    envOverrides: { PATH: await pathWithoutGh(), PI_APP_TEST_EXACT_PATH: "1" },
   });
   try {
     const window = await harness.firstWindow();
