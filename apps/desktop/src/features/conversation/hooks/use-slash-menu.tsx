@@ -351,9 +351,13 @@ export function useSlashMenu(params: UseSlashMenuParams): SlashMenuState {
       if (!selectedWorkspace || !selectedSession || !api) {
         return;
       }
-      void updateSnapshot(setSnapshot, () =>
-        api.setSessionModel(selectedWorkspace.id, selectedSession.id, providerId, option.value),
-      ).catch((error: unknown) => {
+      const target = { workspaceId: selectedWorkspace.id, sessionId: selectedSession.id };
+      // The pick consumed the command text: save the cleared draft now rather than after the
+      // debounce, so quitting right away cannot bring "/model" back.
+      void updateSnapshot(setSnapshot, async () => {
+        await api.updateComposerDraft("", target);
+        return api.setSessionModel(target.workspaceId, target.sessionId, providerId, option.value);
+      }).catch((error: unknown) => {
         console.error("[renderer] updateSnapshot failed", error);
       });
       return;
@@ -369,13 +373,15 @@ export function useSlashMenu(params: UseSlashMenuParams): SlashMenuState {
       if (!selectedWorkspace || !selectedSession || !api) {
         return;
       }
-      void updateSnapshot(setSnapshot, () =>
-        api.setSessionThinkingLevel(
-          selectedWorkspace.id,
-          selectedSession.id,
+      const target = { workspaceId: selectedWorkspace.id, sessionId: selectedSession.id };
+      void updateSnapshot(setSnapshot, async () => {
+        await api.updateComposerDraft("", target);
+        return api.setSessionThinkingLevel(
+          target.workspaceId,
+          target.sessionId,
           option.value as NonNullable<RuntimeSnapshot["settings"]["defaultThinkingLevel"]>,
-        ),
-      ).catch((error: unknown) => {
+        );
+      }).catch((error: unknown) => {
         console.error("[renderer] updateSnapshot failed", error);
       });
       return;

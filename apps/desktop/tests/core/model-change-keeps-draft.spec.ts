@@ -61,6 +61,8 @@ test("changing model or thinking from the composer footer keeps the typed prompt
     const optionsMenu = window.getByTestId("slash-options-menu");
     await optionsMenu.getByRole("button", { name: /GPT-5/ }).first().click();
     await expect(window.getByTestId("transcript")).toContainText("Model set to openai:gpt-5");
+    // The cleared draft is saved before the model changes, not after the typing debounce.
+    expect((await getDesktopState(window)).composerDraft).toBe("");
     await expect(footer.getByRole("button", { name: "openai:gpt-5" })).toBeVisible();
     await expect(composer).toHaveValue("");
     await expect.poll(async () => (await getDesktopState(window)).composerDraft).toBe("");
