@@ -1,5 +1,5 @@
 import { isCardEntryItem, sessionKey } from "@pi-gui/session-driver";
-import type { SessionTranscriptItem } from "@pi-gui/session-driver";
+import type { SessionTranscriptItem, SessionTranscriptPin } from "@pi-gui/session-driver";
 import type { SessionDriverEvent, SessionQueuedMessage, SessionRef } from "@pi-gui/session-driver";
 import type { TranscriptMessage } from "../../contracts/desktop-state";
 import {
@@ -294,11 +294,17 @@ export function applyTimelineEvent(
       transcript.push(makeActivityItem("Stopped", { metadata: relativeDetail(event.timestamp) }));
       break;
     case "transcriptItemAppended": {
+      // A pin shows above the composer, so it never ends or moves a streaming reply.
+      if (event.item.kind === "pin") {
+        upsertPin(transcript, event.item);
+        break;
+      }
       // Same id as the persisted entry, so a transcript reload replaces rather than duplicates it.
-      // A keyed card that is already shown updates where it is, as the session file projects it.
+      // A keyed card (or a pin's error row) that is already shown updates where it is, as the
+      // session file projects it.
       const existingIndex = transcript.findIndex((item) => item.id === event.item.id);
       if (existingIndex >= 0) {
-        if (event.item.kind !== "card") return;
+        if (!isCardEntryItem(event.item)) return;
         transcript[existingIndex] = event.item;
         break;
       }
@@ -335,6 +341,18 @@ export function applyTimelineEvent(
   }
 
   transcriptCache.set(key, transcript);
+}
+
+/** Replaces a pin's earlier write, as the projection does; a pin written after removal is new. */
+function upsertPin(transcript: TranscriptMessage[], pin: SessionTranscriptPin): void {
+  const index = transcript.findIndex((item) => item.id === pin.id);
+  const existing = transcript[index];
+  if (existing?.kind === "pin" && (existing.card || !pin.card)) {
+    transcript[index] = pin;
+    return;
+  }
+  if (index >= 0) transcript.splice(index, 1);
+  transcript.push(pin);
 }
 
 function upsertToolRow(

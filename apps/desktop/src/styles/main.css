@@ -2748,6 +2748,59 @@
   word-break: break-word;
 }
 
+/* Pinned extension cards: the transcript card shell, tighter, with the body capped so a long
+   plan never pushes the composer off screen. */
+.pinned-cards {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.pinned-cards .turn-changes {
+  border-radius: var(--radius-xl);
+}
+
+.pinned-cards .turn-changes__header {
+  gap: 10px;
+  padding: 8px 8px 8px 10px;
+}
+
+.pinned-cards .turn-changes__header:last-child {
+  border-bottom: 0;
+}
+
+.pinned-cards .turn-changes__glyph {
+  width: 28px;
+  height: 28px;
+}
+
+.pinned-cards .turn-changes__glyph svg {
+  width: 16px;
+  height: 16px;
+}
+
+.pinned-cards .turn-changes__files {
+  max-height: min(180px, 24vh);
+  overflow-y: auto;
+}
+
+.pinned-card__controls {
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: 2px;
+}
+
+.pinned-card__control {
+  width: 24px;
+  height: 24px;
+  color: var(--muted-soft);
+}
+
+.pinned-card__control svg {
+  width: 14px;
+  height: 14px;
+}
+
 /* Floats over the transcript so a toast never moves the composer. */
 .extension-notices {
   position: absolute;

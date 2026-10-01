@@ -2100,6 +2100,9 @@ function transcriptText(message: TranscriptMessage): string {
       return message.detail ? `${message.label}: ${message.detail}` : message.label;
     case "summary":
       return message.metadata ? `${message.label}: ${message.metadata}` : message.label;
+    // A pin is extension state above the composer, not something the thread said.
+    case "pin":
+      return "";
     default: {
       const unhandled: never = message;
       void unhandled;

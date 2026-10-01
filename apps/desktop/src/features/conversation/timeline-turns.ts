@@ -1,13 +1,13 @@
 import type { TurnChangeSummary } from "../../../contracts/review";
 import type {
   DisplayTimelineItem,
+  TimelineTranscriptItem,
   TimelineTurnMarker,
-  TranscriptMessage,
 } from "../../../contracts/timeline-types";
 
 const MIN_WORKED_DURATION_MS = 1_000;
 
-function isUserMessage(item: TranscriptMessage | undefined): boolean {
+function isUserMessage(item: TimelineTranscriptItem | undefined): boolean {
   return item?.kind === "message" && item.role === "user";
 }
 
@@ -28,7 +28,7 @@ function isUserMessage(item: TranscriptMessage | undefined): boolean {
  * message or extension message.
  */
 export function buildDisplayTimelineItems(
-  transcript: readonly TranscriptMessage[],
+  transcript: readonly TimelineTranscriptItem[],
   options: {
     readonly lastTurnRunning?: boolean;
     readonly turnChanges?: readonly TurnChangeSummary[];
@@ -113,7 +113,7 @@ export function buildDisplayTimelineItems(
 }
 
 function turnChangeCardPositions(
-  transcript: readonly TranscriptMessage[],
+  transcript: readonly TimelineTranscriptItem[],
   turnChanges: readonly TurnChangeSummary[],
 ): ReadonlyMap<number, TurnChangeSummary[]> {
   const positions = new Map<number, TurnChangeSummary[]>();
@@ -138,7 +138,7 @@ function turnChangeCardPositions(
   }
   return positions;
 
-  function startsAnotherTurn(item: TranscriptMessage | undefined, turn: TurnChangeSummary) {
+  function startsAnotherTurn(item: TimelineTranscriptItem | undefined, turn: TurnChangeSummary) {
     // A later extension message or card is not part of the turn's work, so the card stays above it.
     if (item?.kind === "custom" || item?.kind === "card") return true;
     if (item?.kind !== "message") return false;

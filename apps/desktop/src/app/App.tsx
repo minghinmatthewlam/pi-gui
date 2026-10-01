@@ -81,6 +81,7 @@ import {
   ExtensionDialog,
   hasExtensionDockContent,
 } from "../features/extensions/extension-session-ui";
+import { PinnedCards, usePinnedCards } from "../features/extensions/pinned-cards";
 import { TreeModal } from "../features/conversation/tree-modal";
 import { ForkModal } from "../features/conversation/fork-modal";
 import { getEffectiveModelRuntime } from "../features/settings/model-settings";
@@ -255,6 +256,7 @@ export default function App() {
       ? selectedTranscript
       : null;
   const activeTranscript = selectedTranscriptForSession?.transcript ?? [];
+  const pins = usePinnedCards(selectedSessionKey, activeTranscript);
   const scheduledOrigins = useMemo(() => {
     if (!snapshot || !selectedWorkspace || !selectedSession) {
       return new Map();
@@ -263,9 +265,9 @@ export default function App() {
       snapshot.scheduledTasks,
       selectedWorkspace.id,
       selectedSession.id,
-      activeTranscript,
+      pins.timeline,
     );
-  }, [activeTranscript, selectedSession, selectedWorkspace, snapshot]);
+  }, [pins.timeline, selectedSession, selectedWorkspace, snapshot]);
   const scheduledBinding = selectedSession
     ? nonCompletedBindingForSession(snapshot?.scheduledTasks ?? [], selectedSession.id)
     : undefined;
@@ -282,11 +284,11 @@ export default function App() {
   });
   const timelineRows = useMemo(
     () =>
-      buildDisplayTimelineItems(activeTranscript, {
+      buildDisplayTimelineItems(pins.timeline, {
         lastTurnRunning: selectedSessionRunning,
         turnChanges: turnChanges.turns,
       }),
-    [activeTranscript, selectedSessionRunning, turnChanges.turns],
+    [pins.timeline, selectedSessionRunning, turnChanges.turns],
   );
   const viewport = useTimelineViewport({
     sessionKey: selectedSessionKey,
@@ -1158,7 +1160,7 @@ export default function App() {
 
                   <ConversationTimeline
                     key={selectedSessionKey}
-                    transcript={activeTranscript}
+                    transcript={pins.timeline}
                     isTranscriptLoading={isTranscriptLoading}
                     transcriptFailed={transcriptFailed}
                     onRetryTranscript={desktop.retry}
@@ -1245,6 +1247,15 @@ export default function App() {
                 selectedMentionIndex={mentionMenu.selectedIndex}
                 onSelectMention={mentionMenu.insertMention}
                 onEnableMentionExtension={mentionMenu.enableMentionExtension}
+                pinnedCards={
+                  <PinnedCards
+                    pins={pins.visiblePins}
+                    collapsedPinIds={pins.collapsedPinIds}
+                    onToggle={pins.togglePin}
+                    onDismiss={pins.dismissPin}
+                    onAction={runExtensionCardAction}
+                  />
+                }
                 extensionDock={selectedExtensionDock}
                 extensionDockExpanded={isSelectedExtensionDockExpanded}
                 onToggleExtensionDock={handleToggleExtensionDock}

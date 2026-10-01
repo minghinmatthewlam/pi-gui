@@ -71,6 +71,8 @@ interface ComposerSurfaceProps {
   readonly textareaTestId: string;
   readonly textareaPlaceholder: string;
   readonly textareaClassName?: string;
+  /** Cards extensions pinned above the composer, over the extension dock. */
+  readonly pinnedCards?: ReactNode;
   readonly extensionDock?: ExtensionDockModel;
   readonly extensionDockExpanded?: boolean;
   readonly onToggleExtensionDock?: () => void;
@@ -117,6 +119,7 @@ export function ComposerSurface({
   textareaTestId,
   textareaPlaceholder,
   textareaClassName,
+  pinnedCards,
   extensionDock,
   extensionDockExpanded = false,
   onToggleExtensionDock,
@@ -244,6 +247,7 @@ export function ComposerSurface({
           ))}
         </div>
       ) : null}
+      {pinnedCards}
       {extensionDock && onToggleExtensionDock ? (
         <ExtensionDock
           dock={extensionDock}

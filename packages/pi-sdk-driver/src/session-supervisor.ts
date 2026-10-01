@@ -93,6 +93,7 @@ import {
   extractPreview,
   injectFileAttachmentPreamble,
   isExtensionCardEntry,
+  isExtensionPinEntry,
   messageText,
   nowIso,
   persistedToolOutput,
@@ -105,6 +106,7 @@ import {
   transcriptFromMessages,
   transcriptFromSession,
   transcriptItemFromCardEntry,
+  transcriptItemFromPinEntry,
   customMessageTranscriptItem,
   isHiddenCustomMessage,
   truncate,
@@ -2395,13 +2397,15 @@ export class SessionSupervisor {
         this.refreshUsage(record);
         return [sessionUpdatedEvent(record)];
       case "entry_appended":
-        if (isExtensionCardEntry(event.entry)) {
+        if (isExtensionCardEntry(event.entry) || isExtensionPinEntry(event.entry)) {
           return [
             {
               type: "transcriptItemAppended" as const,
               sessionRef: record.ref,
               timestamp,
-              item: transcriptItemFromCardEntry(event.entry),
+              item: isExtensionPinEntry(event.entry)
+                ? transcriptItemFromPinEntry(event.entry)
+                : transcriptItemFromCardEntry(event.entry),
               ...(record.runningRunId ? { runId: record.runningRunId } : {}),
             },
           ];
