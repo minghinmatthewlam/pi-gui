@@ -11,6 +11,9 @@ import { createAgentSessionRuntimeWithNpmFallback } from "../dist/npm-package-fa
 
 type StreamFunction = AgentSessionRuntime["session"]["agent"]["streamFunction"];
 
+/** While set, model calls wait for it, so a test can queue messages during a running turn. */
+let modelGate: Promise<void> | undefined;
+
 const streamFunction: StreamFunction = (model) => {
   const stream = createAssistantMessageEventStream();
   const message: AssistantMessage = {
@@ -30,10 +33,14 @@ const streamFunction: StreamFunction = (model) => {
     stopReason: "stop",
     timestamp: Date.now(),
   };
-  setTimeout(() => {
-    stream.push({ type: "start", partial: { ...message, content: [] } });
-    stream.push({ type: "done", reason: "stop", message });
-  }, 10);
+  (modelGate ?? Promise.resolve())
+    .then(() =>
+      setTimeout(() => {
+        stream.push({ type: "start", partial: { ...message, content: [] } });
+        stream.push({ type: "done", reason: "stop", message });
+      }, 10),
+    )
+    .catch(() => undefined);
   return stream;
 };
 
@@ -135,7 +142,8 @@ async function setUp(t: TestContext, extensionFactories: ExtensionFactory[] = []
       return driver.replaceQueuedMessages(
         ref,
         texts.map((text, index) => ({
-          id: `${index}:${text}`,
+          // Stable across calls; a repeated text gets its own id.
+          id: `${text}#${texts.slice(0, index).filter((other) => other === text).length}`,
           mode: "followUp" as const,
           text,
           createdAt: now,
@@ -310,5 +318,74 @@ await test("two queued messages with the same text each get their own turn", asy
 
   assert.deepEqual(app.turns(), ["first", "-", "Again.", "-", "Again.", "-"]);
   assert.deepEqual(app.started(), ["Again.", "Again."]);
+  assert.deepEqual(app.lastSnapshot()?.queuedMessages ?? [], []);
+});
+
+await test("a queue change during a start's requeue is not undone by it", async (t) => {
+  // An input handler slow on "C" holds the start's requeue of the rest part way.
+  let reachedC!: () => void;
+  const atC = new Promise<void>((resolve) => {
+    reachedC = resolve;
+  });
+  const app = await setUp(t, [
+    (pi) => {
+      let cQueued = 0;
+      pi.on("input", async (event) => {
+        // The first time is the app queueing it; the second is the start's requeue.
+        if (event.text !== "C" || ++cQueued < 2) return;
+        reachedC();
+        await new Promise((resolve) => setTimeout(resolve, 150));
+      });
+    },
+  ]);
+  app.holdCompletion();
+  await app.driver.sendUserMessage(app.ref, { text: "first" });
+  await app.queue("A", "B", "C");
+  setTimeout(app.releaseCompletion, 50);
+  await atC;
+
+  // The person removes C while the start is still queueing it.
+  await app.queue("B");
+  await app.waitForRuns(3);
+  await new Promise((resolve) => setTimeout(resolve, 200));
+
+  assert.deepEqual(app.turns(), ["first", "-", "A", "-", "B", "-"]);
+  assert.equal(app.runtime().session.pendingMessageCount, 0, "C is not left waiting in pi");
+});
+
+await test("a queued message pi already delivered under another text is not started again", async (t) => {
+  const app = await setUp(t, [
+    (pi) => {
+      // Like a prompt template: what pi sends differs from what was queued.
+      pi.on("input", (event) =>
+        event.text === "Review @notes"
+          ? { action: "transform" as const, text: "Review the notes" }
+          : undefined,
+      );
+    },
+  ]);
+  let openModel!: () => void;
+  modelGate = new Promise<void>((resolve) => {
+    openModel = resolve;
+  });
+  t.after(() => {
+    modelGate = undefined;
+  });
+  app.holdCompletion();
+  const sent = app.driver.sendUserMessage(app.ref, { text: "first" });
+  while (!app.runtime().session.isStreaming) await new Promise((resolve) => setTimeout(resolve, 5));
+  await app.queue("Review @notes");
+  modelGate = undefined;
+  openModel();
+  await sent;
+  // pi delivered it in that turn, but under the other text, so it is still listed.
+  assert.deepEqual(app.turns(), ["first", "-", "Review the notes", "-"]);
+
+  // The app, still behind, queues another message after it.
+  await app.queue("Review @notes", "Next task");
+  setTimeout(app.releaseCompletion, 50);
+  await app.waitForRuns(2);
+
+  assert.deepEqual(app.turns(), ["first", "-", "Review the notes", "-", "Next task", "-"]);
   assert.deepEqual(app.lastSnapshot()?.queuedMessages ?? [], []);
 });

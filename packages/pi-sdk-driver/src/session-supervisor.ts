@@ -217,6 +217,8 @@ interface ManagedSessionRecord {
   /** Taken off the queue to start a turn; shown in the transcript when pi starts it. */
   startingQueuedMessage: SessionQueuedMessage | undefined;
   queuedStartScheduled: boolean;
+  /** The latest rebuild of pi's queue from queuedMessages (see changeQueue). */
+  piQueueSync: Promise<void>;
   /** An idle point arrived while a start was scheduled; check again when it finishes. */
   queuedStartRecheck: boolean;
   /**
@@ -1055,7 +1057,7 @@ export class SessionSupervisor {
             "Session finished streaming before the queued message could be delivered. Retry to send it as a new turn.",
           );
         }
-        await this.queuePrompt(session, promptText, input.deliverAs!, images);
+        await this.changeQueue(record);
       } else if (isExtensionCommand) {
         await session.prompt(promptText, {
           ...(images && images.length > 0 ? { images } : {}),
@@ -1141,19 +1143,44 @@ export class SessionSupervisor {
     messages: readonly SessionQueuedMessage[],
   ): Promise<void> {
     const record = await this.ensureRecord(sessionRef);
-    const session = this.requireSession(record);
-    session.clearQueue();
-    record.queuedMessages = messages
-      .filter((message) => !record.startedQueuedMessageIds.has(message.id))
-      .map((message) => cloneQueuedMessage(message));
-    record.queuedStartFailed = false;
-    await this.queueWithPi(session, record.queuedMessages);
+    this.requireSession(record);
+    await this.changeQueue(record, (session) => {
+      // The app's list can still hold messages pi has delivered; they must not go back to pi.
+      forgetDeliveredQueuedMessages(record, session);
+      record.queuedMessages = messages
+        .filter((message) => !record.startedQueuedMessageIds.has(message.id))
+        .map((message) => cloneQueuedMessage(message));
+      record.queuedStartFailed = false;
+    });
 
     record.updatedAt = nowIso();
     await this.persistSnapshot(record);
     await this.emit(record, sessionUpdatedEvent(record));
     // The app queues while it believes a turn is running, but pi may have settled already.
     this.startQueuedMessageWhenIdle(record);
+  }
+
+  /**
+   * Every change to the queue is one step, run one at a time: `update` changes queuedMessages
+   * while pi's queue still matches the list as the last step left it, then pi's queue is rebuilt
+   * from the new list. An older rebuild can then never add back what a newer list dropped.
+   */
+  private changeQueue(
+    record: ManagedSessionRecord,
+    update: (session: AgentSession) => boolean | void = () => undefined,
+  ): Promise<void> {
+    const step = record.piQueueSync
+      .catch(() => undefined)
+      .then(async () => {
+        const session = record.session;
+        if (!session || record.closed) return;
+        // An update that changed nothing returns false, and pi's queue is left as it is.
+        if (update(session) === false) return;
+        session.clearQueue();
+        await this.queueWithPi(session, record.queuedMessages);
+      });
+    record.piQueueSync = step;
+    return step;
   }
 
   private async queueWithPi(
@@ -1198,54 +1225,54 @@ export class SessionSupervisor {
     record.eventQueue
       .then(async () => {
         await this.settleReloadsBeforeSend(record);
-        const session = record.session;
-        // pi delivers steering before follow-ups, so a steer goes first.
-        const steerIndex = record.queuedMessages.findIndex((message) => message.mode === "steer");
-        const firstIndex = Math.max(steerIndex, 0);
-        const first = record.queuedMessages[firstIndex];
-        // pi's own queue decides: a message pi delivered can stay listed when its text did not
-        // match the started one (an expanded template), and must not be sent twice.
-        if (
-          !session ||
-          !first ||
-          record.closed ||
-          record.queuedStartFailed ||
-          isRecordBusy(record) ||
-          session.pendingMessageCount === 0
-        ) {
-          return;
-        }
-        const rest = record.queuedMessages.filter((_, index) => index !== firstIndex);
-        session.clearQueue();
-        record.queuedMessages = rest;
-        // Shown in the transcript when pi starts it (see takeStartingQueuedMessage).
-        record.startingQueuedMessage = first;
-        record.startedQueuedMessageIds.add(first.id);
-        started = true;
-        // sendReadyMessage marks the session busy before its first await, so nothing else
-        // starts a turn in between.
-        const [send, queue] = await Promise.allSettled([
-          this.sendReadyMessage(record, {
-            text: first.text,
-            ...(first.attachments ? { attachments: first.attachments } : {}),
-          }),
-          this.queueWithPi(session, rest),
-        ]);
-        const neverStarted = record.startingQueuedMessage === first;
-        if (neverStarted) record.startingQueuedMessage = undefined;
-        if (send.status === "rejected" && neverStarted && !record.closed) {
-          // pi never took it: back to the front, and no more starts until the person acts.
-          record.startedQueuedMessageIds.delete(first.id);
-          record.queuedStartFailed = true;
-          record.queuedMessages = [first, ...record.queuedMessages];
+        let first: SessionQueuedMessage | undefined;
+        let sent: Promise<void> | undefined;
+        await this.changeQueue(record, (session) => {
+          if (record.queuedStartFailed || isRecordBusy(record)) return false;
+          if (record.reloadPending || record.reloadInFlight) {
+            record.queuedStartRecheck = true;
+            return false;
+          }
+          const pending = forgetDeliveredQueuedMessages(record, session);
+          // pi delivers steering before follow-ups, so a steer goes first.
+          first = pending.find((message) => message.mode === "steer") ?? pending[0];
+          if (!first) return false;
+          const starting = first;
+          record.queuedMessages = pending.filter((message) => message !== starting);
+          // Shown in the transcript when pi starts it (see takeStartingQueuedMessage).
+          record.startingQueuedMessage = starting;
+          record.startedQueuedMessageIds.add(starting.id);
+          started = true;
+          // pi's queue is cleared before the prompt reads it. sendReadyMessage marks the session
+          // busy before its first await, so nothing else starts a turn in between.
           session.clearQueue();
-          await this.queueWithPi(session, record.queuedMessages);
-          record.updatedAt = nowIso();
-          await this.persistSnapshot(record);
-          await this.emit(record, sessionUpdatedEvent(record));
+          sent = this.sendReadyMessage(record, {
+            text: starting.text,
+            ...(starting.attachments ? { attachments: starting.attachments } : {}),
+          });
+          sent.catch(() => undefined);
+        });
+        if (!first || !sent) return;
+        const starting = first;
+        try {
+          await sent;
+        } catch (error) {
+          const neverStarted = record.startingQueuedMessage === starting;
+          if (neverStarted && !record.closed) {
+            // pi never took it: back to the front, and no more starts until the person acts.
+            await this.changeQueue(record, () => {
+              record.startedQueuedMessageIds.delete(starting.id);
+              record.queuedStartFailed = true;
+              record.queuedMessages = [starting, ...record.queuedMessages];
+            });
+            record.updatedAt = nowIso();
+            await this.persistSnapshot(record);
+            await this.emit(record, sessionUpdatedEvent(record));
+          }
+          throw error;
+        } finally {
+          if (record.startingQueuedMessage === starting) record.startingQueuedMessage = undefined;
         }
-        if (send.status === "rejected") throw send.reason;
-        if (queue.status === "rejected") throw queue.reason;
       })
       .catch((error: unknown) => {
         console.warn(
@@ -1284,6 +1311,8 @@ export class SessionSupervisor {
     // the SDK's own "clear the queue when the user aborts" convention.
     record.session?.clearQueue();
     record.queuedMessages = [];
+    // A rebuild in flight must not refill it.
+    this.changeQueue(record).catch(() => undefined);
     record.runningRunId = undefined;
     record.status = "idle";
     await this.persistSnapshot(record);
@@ -1640,6 +1669,7 @@ export class SessionSupervisor {
       queuedMessages: [],
       startingQueuedMessage: undefined,
       queuedStartScheduled: false,
+      piQueueSync: Promise.resolve(),
       queuedStartRecheck: false,
       startedQueuedMessageIds: new Set(),
       queuedStartFailed: false,
@@ -3569,6 +3599,29 @@ function queuedMessageFromInput(
     createdAt: timestamp,
     updatedAt: timestamp,
   };
+}
+
+/**
+ * A message pi delivered stays listed when its text did not match the started one (pi expanded
+ * a template, say). pi queues each kind in list order and takes from the front, so what it still
+ * holds is the last of each kind, as many as it counts; the rest count as started. Call it only
+ * when pi's queue was built from the list (no rebuild in flight).
+ */
+function forgetDeliveredQueuedMessages(
+  record: ManagedSessionRecord,
+  session: AgentSession,
+): SessionQueuedMessage[] {
+  const steers = record.queuedMessages.filter((message) => message.mode === "steer");
+  const followUps = record.queuedMessages.filter((message) => message.mode === "followUp");
+  const held = new Set([
+    ...steers.slice(Math.max(0, steers.length - session.getSteeringMessages().length)),
+    ...followUps.slice(Math.max(0, followUps.length - session.getFollowUpMessages().length)),
+  ]);
+  for (const message of record.queuedMessages) {
+    if (!held.has(message)) record.startedQueuedMessageIds.add(message.id);
+  }
+  record.queuedMessages = record.queuedMessages.filter((message) => held.has(message));
+  return record.queuedMessages;
 }
 
 /** pi's first user message after a queued message started a turn is that message. */
