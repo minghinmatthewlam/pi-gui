@@ -424,7 +424,7 @@ export async function mount(
     const { checks } = pr;
     if (checks.state === "failing") {
       stat.classList.add("is-red");
-      stat.append(icon("cross"), String(checks.failed.length));
+      stat.append(icon("cross"), String(checks.failedCount));
     } else if (checks.state === "passing") {
       stat.classList.add("is-green");
       stat.append(icon("check"));
@@ -442,13 +442,15 @@ export async function mount(
     const { checks } = pr;
     switch (checks.state) {
       case "failing":
-        return `${checks.failed.length} of ${checks.total} checks failing`;
+        return `${checks.failedCount} of ${checks.total} checks failing`;
       case "passing":
-        return `All ${checks.total} checks passing`;
+        return checks.skipped
+          ? `${checks.passed} checks passing · ${checks.skipped} skipped`
+          : `All ${checks.total} checks passing`;
       case "pending":
         return `Checks running · ${checks.passed} of ${checks.total} passed`;
       default:
-        return "No checks reported";
+        return checks.total ? `All ${checks.total} checks skipped` : "No checks reported";
     }
   }
 
@@ -471,12 +473,19 @@ export async function mount(
       item.append(icon("cross"), el("span", "gh-check-name", name));
       list.append(item);
     }
+    const unnamed = pr.checks.failedCount - pr.checks.failed.length;
+    if (unnamed > 0) {
+      const item = el("li", "is-red");
+      item.append(icon("cross"), el("span", "gh-check-name", `${unnamed} more failing`));
+      list.append(item);
+    }
     const passed = el("li", pr.checks.total ? "is-green" : "is-muted");
     if (pr.checks.state === "pending") {
       passed.className = "is-amber";
       passed.append(icon("pending"), el("span", "", ciText(pr)));
     } else if (pr.checks.total) {
-      passed.append(icon("check"), el("span", "", `${pr.checks.passed} passed`));
+      const skipped = pr.checks.skipped ? ` · ${pr.checks.skipped} skipped` : "";
+      passed.append(icon("check"), el("span", "", `${pr.checks.passed} passed${skipped}`));
     } else passed.append(icon("none"), el("span", "", "No checks reported"));
     list.append(passed);
     checks.append(list);

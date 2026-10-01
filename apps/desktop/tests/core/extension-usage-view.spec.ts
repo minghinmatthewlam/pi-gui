@@ -222,8 +222,11 @@ const MODEL_ID = "scripted";
 
 // Only model streaming is scripted: pi runs the real loop, and the example's agent_end
 // handler writes the card from the run's messages.
-const scriptedProvider = String.raw`
+// failFirst: the first call fails with a retryable error, so pi retries the reply in a new pass.
+const scriptedProvider = (failFirst = false) => String.raw`
 import { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
+
+let calls = 0;
 
 export default function scriptedProvider(pi) {
   pi.registerProvider("${PROVIDER_ID}", {
@@ -254,6 +257,12 @@ export default function scriptedProvider(pi) {
         timestamp: Date.now(),
       };
       const stream = createAssistantMessageEventStream();
+      if (${String(failFirst)} && calls++ === 0) {
+        const usage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } };
+        const failed = { ...message, content: [], usage, stopReason: "error", errorMessage: "Overloaded" };
+        stream.push({ type: "error", reason: "error", error: failed });
+        return stream;
+      }
       stream.push({ type: "start", partial: { ...message, content: [] } });
       stream.push({ type: "text_delta", contentIndex: 0, delta: "Scripted answer", partial: message });
       stream.push({ type: "done", reason: "stop", message });
@@ -281,7 +290,7 @@ test("the Usage example adds a card after each reply with its time, cost and con
       compaction: { enabled: false },
     }),
   );
-  await writeProjectExtension(workspace, "scripted-provider.ts", scriptedProvider);
+  await writeProjectExtension(workspace, "scripted-provider.ts", scriptedProvider());
   const harness = await launchDesktop(userDataDir, {
     agentDir,
     initialWorkspaces: [workspace],
@@ -338,6 +347,55 @@ test("the Usage example adds a card after each reply with its time, cost and con
       "Scripted answer",
       "Scripted answer",
     ]);
+  } finally {
+    await harness.close();
+  }
+});
+
+test("the Usage example writes one card for a reply pi retried", async () => {
+  test.setTimeout(90_000);
+  const userDataDir = await makeUserDataDir();
+  const agentDir = join(userDataDir, "agent");
+  const workspace = await makeWorkspace("usage-reply-card-retry");
+  await seedAgentDir(agentDir, { withOpenAiAuth: false, withDefaultModel: false });
+  await writeFile(
+    join(agentDir, "settings.json"),
+    JSON.stringify({
+      defaultProvider: PROVIDER_ID,
+      defaultModel: MODEL_ID,
+      enabledModels: [`${PROVIDER_ID}/${MODEL_ID}`],
+      packages: [],
+      extensions: [join(examples, "usage", "index.ts")],
+      cacheWarming: "off",
+      compaction: { enabled: false },
+      retry: { enabled: true, maxRetries: 2, baseDelayMs: 10 },
+    }),
+  );
+  await writeProjectExtension(workspace, "scripted-provider.ts", scriptedProvider(true));
+  const harness = await launchDesktop(userDataDir, {
+    agentDir,
+    initialWorkspaces: [workspace],
+    scrubProviderEnv: true,
+    testMode: "background",
+  });
+  try {
+    const window = await harness.firstWindow();
+    await waitForWorkspaceByPath(window, workspace);
+    await window
+      .getByRole("complementary")
+      .getByRole("button", { name: "New thread", exact: true })
+      .click();
+    await window.getByLabel("New thread prompt", { exact: true }).fill("Answer briefly.");
+    await window.getByRole("button", { name: "Start thread", exact: true }).click();
+    await expect(window.locator(".timeline-item--assistant .message__content").last()).toHaveText(
+      "Scripted answer",
+    );
+    // The failed attempt and the retry are one reply: one card that counts both calls.
+    const card = window.getByTestId("extension-card");
+    await expect(card).toHaveCount(1);
+    const values = card.locator(".extension-card__value");
+    await expect(values.nth(1)).toHaveText("2");
+    await expect(values.nth(3)).toHaveText("20k in · 400 out · 90% cached");
   } finally {
     await harness.close();
   }

@@ -72,7 +72,9 @@ await test("data comes from gh with fixed arguments and is normalized", async ()
   assert.deepEqual(pr?.checks, {
     state: "failing",
     failed: ["test", "deploy"],
+    failedCount: 2,
     passed: 1,
+    skipped: 0,
     total: 3,
   });
   assert.equal(merged?.state, "merged");
@@ -138,10 +140,24 @@ await test("check rollups distinguish pending, passing and none", () => {
     summarizeChecks([{ name: "a", status: "IN_PROGRESS", conclusion: "" }]).state,
     "pending",
   );
+  // Skipped and neutral checks finished without passing.
   assert.equal(
     summarizeChecks([{ name: "a", status: "COMPLETED", conclusion: "SKIPPED" }]).state,
-    "passing",
+    "none",
   );
+  const mixed = summarizeChecks([
+    { name: "a", status: "COMPLETED", conclusion: "SUCCESS" },
+    { name: "b", status: "COMPLETED", conclusion: "NEUTRAL" },
+  ]);
+  assert.equal(mixed.state, "passing");
+  assert.equal(mixed.passed, 1);
+  assert.equal(mixed.skipped, 1);
+  // The failure count stays exact when the names are capped.
+  const many = summarizeChecks(
+    Array.from({ length: 25 }, (_, index) => ({ name: `c${index}`, conclusion: "FAILURE" })),
+  );
+  assert.equal(many.failed.length, 20);
+  assert.equal(many.failedCount, 25);
 });
 
 await test("drafts reference the issue or PR and never ask to post to GitHub", async () => {

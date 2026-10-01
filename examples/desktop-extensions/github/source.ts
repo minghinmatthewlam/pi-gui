@@ -270,6 +270,7 @@ const FAILED = new Set([
   "STARTUP_FAILURE",
   "ERROR",
 ]);
+const PASSED = new Set(["SUCCESS"]);
 const PENDING = new Set(["PENDING", "EXPECTED", "QUEUED", "IN_PROGRESS", "WAITING", "REQUESTED"]);
 
 /** Collapse gh's statusCheckRollup (CheckRun and StatusContext items) into one summary. */
@@ -278,16 +279,26 @@ export function summarizeChecks(value: unknown): Checks {
   const failed: string[] = [];
   let passed = 0;
   let pending = 0;
+  let skipped = 0;
   for (const item of items) {
     const name = optionalString(item.name ?? item.context, 200) || "Unnamed check";
     const status = optionalString(item.status, 40).toUpperCase();
     const outcome = optionalString(item.conclusion ?? item.state, 40).toUpperCase();
     if (FAILED.has(outcome)) failed.push(name);
     else if (PENDING.has(outcome) || (status && status !== "COMPLETED")) pending += 1;
-    else passed += 1;
+    else if (PASSED.has(outcome)) passed += 1;
+    // SKIPPED, NEUTRAL, STALE: finished without passing.
+    else skipped += 1;
   }
-  const state = failed.length ? "failing" : pending ? "pending" : items.length ? "passing" : "none";
-  return { state, failed: failed.slice(0, MAX_FAILED_NAMES), passed, total: items.length };
+  const state = failed.length ? "failing" : pending ? "pending" : passed ? "passing" : "none";
+  return {
+    state,
+    failed: failed.slice(0, MAX_FAILED_NAMES),
+    failedCount: failed.length,
+    passed,
+    skipped,
+    total: items.length,
+  };
 }
 
 function reviewDecision(value: unknown): ReviewDecision {

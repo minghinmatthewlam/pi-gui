@@ -5,9 +5,12 @@ export type ReviewDecision = "approved" | "changes_requested" | "review_required
 
 export interface Checks {
   state: CheckState;
-  /** Names of failed checks, capped. */
+  /** Names of failed checks, capped; `failedCount` is the real number. */
   failed: string[];
+  failedCount: number;
+  /** Checks that succeeded; skipped and neutral ones are counted apart, not as passing. */
   passed: number;
+  skipped: number;
   total: number;
 }
 

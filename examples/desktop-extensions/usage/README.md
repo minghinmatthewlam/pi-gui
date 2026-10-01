@@ -5,8 +5,10 @@ the thread after each reply, and a side-panel view that totals token usage acros
 every saved thread of the current folder and estimates what fills each thread's
 context. It reads Pi's own session data; nothing is sent anywhere.
 
-- **After each reply**: on `agent_start` it notes the time; on `agent_end` it sums
-  the run's assistant messages and writes a `pi-gui.card` entry with the reply's
+- **After each reply**: on the first `agent_start` it notes the time, collects each
+  pass's messages on `agent_end` (a retry or continuation is another pass of the same
+  reply), and on `agent_settled` sums the assistant messages and writes one
+  `pi-gui.card` entry with the reply's
   time, model calls, tool calls, tokens (in, out, % cached), cost (or
   **Subscription**) and context used (`ctx.getContextUsage()`). pi-gui draws the
   card below the reply; terminal Pi ignores it, and it never enters the model's

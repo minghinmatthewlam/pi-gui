@@ -83,8 +83,9 @@ Branch: ${pr.branch}` : ""}`;
       title: title(`Fix failing CI on PR #${pr.number}`),
       prompt: [
         `Fix the failing CI on ${header}`,
-        `Failing checks (${pr.checks.failed.length} of ${pr.checks.total}):
-${pr.checks.failed.map((name) => `- ${name}`).join("\n")}`,
+        `Failing checks (${pr.checks.failedCount} of ${pr.checks.total}):
+${pr.checks.failed.map((name) => `- ${name}`).join("\n")}${pr.checks.failedCount > pr.checks.failed.length ? `
+- \u2026and ${pr.checks.failedCount - pr.checks.failed.length} more` : ""}`,
         `Check out the PR branch, read the failing check logs (for example \`gh pr checks ${pr.number}\` and \`gh run view --log-failed\`), and reproduce each failure locally with the repository's own scripts.`,
         "Fix the root cause rather than skipping or loosening checks. Summarize each failure, its cause and the fix.",
         "Don't push, comment on or merge the PR."
@@ -468,7 +469,7 @@ async function mount(root, host) {
     const { checks } = pr;
     if (checks.state === "failing") {
       stat.classList.add("is-red");
-      stat.append(icon("cross"), String(checks.failed.length));
+      stat.append(icon("cross"), String(checks.failedCount));
     } else if (checks.state === "passing") {
       stat.classList.add("is-green");
       stat.append(icon("check"));
@@ -485,13 +486,13 @@ async function mount(root, host) {
     const { checks } = pr;
     switch (checks.state) {
       case "failing":
-        return `${checks.failed.length} of ${checks.total} checks failing`;
+        return `${checks.failedCount} of ${checks.total} checks failing`;
       case "passing":
-        return `All ${checks.total} checks passing`;
+        return checks.skipped ? `${checks.passed} checks passing \xB7 ${checks.skipped} skipped` : `All ${checks.total} checks passing`;
       case "pending":
         return `Checks running \xB7 ${checks.passed} of ${checks.total} passed`;
       default:
-        return "No checks reported";
+        return checks.total ? `All ${checks.total} checks skipped` : "No checks reported";
     }
   }
   function reviewLabel(pr) {
@@ -512,12 +513,19 @@ async function mount(root, host) {
       item.append(icon("cross"), el("span", "gh-check-name", name));
       list.append(item);
     }
+    const unnamed = pr.checks.failedCount - pr.checks.failed.length;
+    if (unnamed > 0) {
+      const item = el("li", "is-red");
+      item.append(icon("cross"), el("span", "gh-check-name", `${unnamed} more failing`));
+      list.append(item);
+    }
     const passed = el("li", pr.checks.total ? "is-green" : "is-muted");
     if (pr.checks.state === "pending") {
       passed.className = "is-amber";
       passed.append(icon("pending"), el("span", "", ciText(pr)));
     } else if (pr.checks.total) {
-      passed.append(icon("check"), el("span", "", `${pr.checks.passed} passed`));
+      const skipped = pr.checks.skipped ? ` \xB7 ${pr.checks.skipped} skipped` : "";
+      passed.append(icon("check"), el("span", "", `${pr.checks.passed} passed${skipped}`));
     } else passed.append(icon("none"), el("span", "", "No checks reported"));
     list.append(passed);
     checks.append(list);

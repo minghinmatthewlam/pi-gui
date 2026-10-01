@@ -45,7 +45,7 @@ export function pullRequestDraft(repo: string, pr: PullRequest): Draft {
       title: title(`Fix failing CI on PR #${pr.number}`),
       prompt: [
         `Fix the failing CI on ${header}`,
-        `Failing checks (${pr.checks.failed.length} of ${pr.checks.total}):\n${pr.checks.failed.map((name) => `- ${name}`).join("\n")}`,
+        `Failing checks (${pr.checks.failedCount} of ${pr.checks.total}):\n${pr.checks.failed.map((name) => `- ${name}`).join("\n")}${pr.checks.failedCount > pr.checks.failed.length ? `\n- …and ${pr.checks.failedCount - pr.checks.failed.length} more` : ""}`,
         `Check out the PR branch, read the failing check logs (for example \`gh pr checks ${pr.number}\` and \`gh run view --log-failed\`), and reproduce each failure locally with the repository's own scripts.`,
         "Fix the root cause rather than skipping or loosening checks. Summarize each failure, its cause and the fix.",
         "Don't push, comment on or merge the PR.",

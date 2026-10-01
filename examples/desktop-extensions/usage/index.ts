@@ -127,6 +127,7 @@ export default function usageExtension(pi: ExtensionAPI): void {
   pi.on("session_start", (_event, ctx) => {
     context = ctx;
     state = initialState();
+    reply = null;
     refreshInBackground();
   });
   pi.on("session_tree", (_event, ctx) => {
@@ -140,19 +141,25 @@ export default function usageExtension(pi: ExtensionAPI): void {
 
   // A card after each reply: how long it took, what it cost and how full the context is now.
   // pi-gui draws it; terminal pi ignores it, and it never reaches the model's context.
-  let replyStartedAt: number | null = null;
+  // One reply can be several passes of pi's loop (a retry, a continuation), each with its own
+  // agent_start/agent_end, so the card sums every pass and is written once the reply settles.
+  let reply: { startedAt: number; messages: unknown[] } | null = null;
   pi.on("agent_start", () => {
-    replyStartedAt = Date.now();
+    reply ??= { startedAt: Date.now(), messages: [] };
   });
-  pi.on("agent_end", (event, ctx) => {
-    if (replyStartedAt === null) return;
-    const elapsedMs = Date.now() - replyStartedAt;
-    replyStartedAt = null;
+  pi.on("agent_end", (event) => {
+    reply?.messages.push(...event.messages);
+  });
+  pi.on("agent_settled", (_event, ctx) => {
+    if (!reply) return;
+    const { startedAt, messages } = reply;
+    reply = null;
+    const elapsedMs = Date.now() - startedAt;
     const usage = ctx.getContextUsage();
     pi.appendEntry(
       "pi-gui.card",
       replyCard({
-        messages: event.messages,
+        messages,
         elapsedMs,
         context: usage ? { tokens: usage.tokens, contextWindow: usage.contextWindow } : null,
         isSubscription: isSubscription(ctx),
