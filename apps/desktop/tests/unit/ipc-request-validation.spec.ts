@@ -247,6 +247,12 @@ test("IPC request validation accepts one MCP server shape and a known scope", ()
     name: "docs",
     url: "https://example.com/mcp",
   });
+  expect(
+    expectNewMcpServerInput({ name: "docs", description: "Team docs", url: "https://x.dev/mcp" }),
+  ).toEqual({ name: "docs", description: "Team docs", url: "https://x.dev/mcp" });
+  expect(() => expectNewMcpServerInput({ name: "docs", description: 1, command: "npx" })).toThrow(
+    "server.description",
+  );
   expect(() =>
     expectNewMcpServerInput({ name: "docs", url: "https://example.com/mcp", command: "npx" }),
   ).toThrow("either a url or a command");

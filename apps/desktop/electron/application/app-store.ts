@@ -1838,8 +1838,8 @@ export class DesktopAppStore {
   }
 
   async addMcpServer(workspaceId: string, server: NewMcpServerInput): Promise<DesktopAppState> {
-    return this.withMcpConfigChange(workspaceId, "global", () =>
-      this.driver.runtimeSupervisor.addMcpServer(server),
+    return this.withMcpConfigChange(workspaceId, "global", (ws) =>
+      this.driver.runtimeSupervisor.addMcpServer(ws, server),
     );
   }
 

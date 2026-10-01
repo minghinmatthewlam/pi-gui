@@ -83,6 +83,8 @@ export interface McpServerRecord {
   readonly command?: string;
   readonly args?: readonly string[];
   readonly url?: string;
+  /** What the server offers, in a sentence; pi shows it to the model with the server. */
+  readonly description?: string;
   readonly enabled: boolean;
   /** Environment variables, headers or sign-in config are set; their values never leave main. */
   readonly hasHiddenSettings: boolean;
@@ -92,15 +94,15 @@ export interface McpServersSnapshot {
   /** The global mcp.json new servers are saved to, with the home directory shown as `~`. */
   readonly globalConfigPath: string;
   readonly servers: readonly McpServerRecord[];
-  /** mcp.json files that could not be read. */
+  /** mcp.json files that could not be read, and servers pi skips, with why. */
   readonly errors: readonly string[];
-  /** Whether pi's global `defaultTools` switches code mode on in new threads. */
+  /** Whether pi's global `defaultTools` switches code mode on. */
   readonly codemodeAlwaysOn: boolean;
 }
 
-export type NewMcpServerInput =
-  | { readonly name: string; readonly command: string; readonly args: readonly string[] }
-  | { readonly name: string; readonly url: string };
+export type NewMcpServerInput = { readonly name: string; readonly description?: string } & (
+  { readonly command: string; readonly args: readonly string[] } | { readonly url: string }
+);
 
 export const desktopIpc = {
   extensionViewOpenFile: "pi-gui:extension-view-open-file",

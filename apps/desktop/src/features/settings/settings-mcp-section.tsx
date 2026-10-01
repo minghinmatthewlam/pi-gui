@@ -164,6 +164,9 @@ function McpServerRow({
     <div className="settings-row" data-testid="mcp-server-row" data-server-name={server.name}>
       <div className="settings-row__label">
         <div className="settings-row__title">{server.name}</div>
+        {server.description ? (
+          <div className="settings-row__description">{server.description}</div>
+        ) : null}
         <div className="settings-row__description">
           {server.scope === "project" ? `This project · ${target}` : target}
         </div>
@@ -210,6 +213,7 @@ function AddMcpServerForm({
   readonly onAdd: (server: NewMcpServerInput) => Promise<string | undefined>;
 }) {
   const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
   const [kind, setKind] = useState<ServerKind>("command");
   const [command, setCommand] = useState("");
   const [args, setArgs] = useState("");
@@ -218,12 +222,16 @@ function AddMcpServerForm({
   const ready = name.trim() !== "" && (kind === "command" ? command.trim() : url.trim()) !== "";
 
   const submit = async () => {
+    const named = description.trim()
+      ? { name: name.trim(), description: description.trim() }
+      : { name: name.trim() };
     const server: NewMcpServerInput =
       kind === "command"
-        ? { name: name.trim(), command: command.trim(), args: splitArguments(args) }
-        : { name: name.trim(), url: url.trim() };
+        ? { ...named, command: command.trim(), args: splitArguments(args) }
+        : { ...named, url: url.trim() };
     if (!(await onAdd(server))) {
       setName("");
+      setDescription("");
       setCommand("");
       setArgs("");
       setUrl("");
@@ -240,6 +248,19 @@ function AddMcpServerForm({
           placeholder="docs"
           value={name}
           onChange={(event) => setName(event.target.value)}
+        />
+      </SettingsRow>
+      <SettingsRow
+        title="What it does"
+        description="Optional. pi tells the model about the server with it."
+      >
+        <input
+          aria-label="Server description"
+          className="settings-text-input"
+          disabled={disabled}
+          placeholder="Searches the team's docs"
+          value={description}
+          onChange={(event) => setDescription(event.target.value)}
         />
       </SettingsRow>
       <SettingsRow title="Type">

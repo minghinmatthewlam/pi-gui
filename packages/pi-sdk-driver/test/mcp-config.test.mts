@@ -54,7 +54,10 @@ await test("editing one server keeps every other field, key and the file's inden
   setMcpServerEnabled({ agentDir, cwd }, "global", "files", true);
   assert.deepEqual(readJson(globalPath), original, "switching back on deletes `enabled`");
 
-  addMcpServer(agentDir, { name: "local", command: "node", args: ["server.mjs", "--flag"] });
+  addMcpServer(
+    { agentDir, cwd },
+    { name: "local", command: "node", args: ["server.mjs", "--flag"] },
+  );
   assert.deepEqual(readJson(globalPath), {
     ...original,
     mcpServers: {
@@ -165,7 +168,10 @@ await test("a file that does not parse is reported and never overwritten", () =>
   const broken = '{ "mcpServers": { "files": { "command": "npx", } ';
   writeFileSync(globalPath, broken);
 
-  assert.throws(() => addMcpServer(agentDir, { name: "local", command: "node" }), /mcp\.json/);
+  assert.throws(
+    () => addMcpServer({ agentDir, cwd }, { name: "local", command: "node" }),
+    /mcp\.json/,
+  );
   assert.throws(() => setMcpServerEnabled({ agentDir, cwd }, "global", "files", false));
   assert.throws(() => removeMcpServer(agentDir, "files"));
   assert.equal(readFileSync(globalPath, "utf8"), broken);
@@ -176,16 +182,19 @@ await test("a file that does not parse is reported and never overwritten", () =>
 });
 
 await test("new servers are validated and never replace an existing one", () => {
-  const { agentDir, globalPath } = setup();
-  assert.throws(() => addMcpServer(agentDir, { name: " ", command: "node" }), /name/);
-  assert.throws(() => addMcpServer(agentDir, { name: "a", command: "  " }), /command/);
-  assert.throws(() => addMcpServer(agentDir, { name: "a", url: "file:///etc/passwd" }), /URL/);
-  assert.throws(() => addMcpServer(agentDir, { name: "a", url: "not a url" }), /URL/);
+  const { agentDir, cwd, globalPath } = setup();
+  assert.throws(() => addMcpServer({ agentDir, cwd }, { name: " ", command: "node" }), /name/);
+  assert.throws(() => addMcpServer({ agentDir, cwd }, { name: "a", command: "  " }), /command/);
+  assert.throws(
+    () => addMcpServer({ agentDir, cwd }, { name: "a", url: "file:///etc/passwd" }),
+    /URL/,
+  );
+  assert.throws(() => addMcpServer({ agentDir, cwd }, { name: "a", url: "not a url" }), /URL/);
   assert.equal(existsSync(globalPath), false, "nothing is written for rejected input");
 
-  addMcpServer(agentDir, { name: "remote", url: "https://example.com/mcp" });
+  addMcpServer({ agentDir, cwd }, { name: "remote", url: "https://example.com/mcp" });
   assert.throws(
-    () => addMcpServer(agentDir, { name: "remote", command: "node" }),
+    () => addMcpServer({ agentDir, cwd }, { name: "remote", command: "node" }),
     /already exists/,
   );
   assert.deepEqual(readJson(globalPath), {
@@ -197,7 +206,7 @@ await test("server names follow pi's rule and Object keys are ordinary names", (
   const { agentDir, cwd, globalPath } = setup();
   for (const name of ["my docs", "docs.v2", "docs/api", "dócs"]) {
     assert.throws(
-      () => addMcpServer(agentDir, { name, command: "node" }),
+      () => addMcpServer({ agentDir, cwd }, { name, command: "node" }),
       /Invalid MCP server name/,
     );
   }
@@ -205,7 +214,7 @@ await test("server names follow pi's rule and Object keys are ordinary names", (
 
   assert.equal(removeMcpServer(agentDir, "toString"), false);
   for (const name of ["toString", "constructor", "__proto__"]) {
-    addMcpServer(agentDir, { name, command: "node" });
+    addMcpServer({ agentDir, cwd }, { name, command: "node" });
   }
   assert.deepEqual(savedNames(globalPath), ["toString", "constructor", "__proto__"]);
   assert.deepEqual(
@@ -213,7 +222,7 @@ await test("server names follow pi's rule and Object keys are ordinary names", (
     ["toString", "constructor", "__proto__"],
   );
   assert.throws(
-    () => addMcpServer(agentDir, { name: "__proto__", command: "node" }),
+    () => addMcpServer({ agentDir, cwd }, { name: "__proto__", command: "node" }),
     /already exists/,
   );
 
@@ -280,5 +289,86 @@ await test("stdio arguments that look like credentials are masked in listings", 
     (readJson(globalPath) as { mcpServers: { tools: { args: string[] } } }).mcpServers.tools.args,
     args,
     "the file keeps the real values",
+  );
+});
+
+await test("a new server whose name differs from another only by - and _ is refused", () => {
+  const { agentDir, cwd, globalPath } = setup();
+  addMcpServer({ agentDir, cwd }, { name: "my-docs", command: "node" });
+  assert.throws(
+    () => addMcpServer({ agentDir, cwd }, { name: "my_docs", command: "node" }),
+    /"my-docs" already exists/,
+  );
+
+  mkdirSync(join(cwd, ".pi"));
+  writeFileSync(
+    join(cwd, ".pi", "mcp.json"),
+    JSON.stringify({ mcpServers: { "team-search": { command: "node" } } }),
+  );
+  assert.throws(
+    () => addMcpServer({ agentDir, cwd }, { name: "team_search", command: "node" }),
+    /"team-search" already exists/,
+    "a clash with this project's file would make pi skip the project's server",
+  );
+  // The same name overrides the global server in pi, so it is not a clash.
+  addMcpServer({ agentDir, cwd }, { name: "team-search", url: "https://example.com/mcp" });
+  assert.deepEqual(savedNames(globalPath), ["my-docs", "team-search"]);
+});
+
+await test("listings name the servers pi skips, and why", () => {
+  const { agentDir, cwd, globalPath } = setup();
+  writeFileSync(
+    globalPath,
+    JSON.stringify({
+      mcpServers: {
+        "my-docs": { command: "node" },
+        my_docs: { command: "node" },
+        shared: { url: "https://example.com/mcp", auth: { provider: "radius" } },
+      },
+    }),
+  );
+  mkdirSync(join(cwd, ".pi"));
+  writeFileSync(
+    join(cwd, ".pi", "mcp.json"),
+    JSON.stringify({
+      mcpServers: {
+        shared: { command: "node" },
+        repo: { url: "https://example.com/repo", auth: { provider: "radius" } },
+      },
+    }),
+  );
+
+  const listing = listMcpServers({ agentDir, cwd });
+  assert.deepEqual(
+    listing.servers.map((server) => `${server.scope}:${server.name}`),
+    ["global:my-docs", "global:my_docs", "global:shared", "project:shared", "project:repo"],
+  );
+  assert.equal(listing.errors.length, 2);
+  assert.match(listing.errors[0] ?? "", /skips MCP server "my_docs".*clashes with "my-docs"/);
+  assert.match(listing.errors[1] ?? "", /skips MCP server "repo".*only allowed in the global/);
+  assert.equal(
+    listing.servers.find((server) => server.name === "shared" && server.scope === "global")
+      ?.hasHiddenSettings,
+    true,
+    "a server signed in through a provider has settings removing it would lose",
+  );
+});
+
+await test("a description is saved when given and listed with the server", () => {
+  const { agentDir, cwd, globalPath } = setup();
+  addMcpServer(
+    { agentDir, cwd },
+    { name: "docs", description: "  Searches the team's docs ", url: "https://example.com/mcp" },
+  );
+  addMcpServer({ agentDir, cwd }, { name: "files", description: "  ", command: "node" });
+  assert.deepEqual(readJson(globalPath), {
+    mcpServers: {
+      docs: { url: "https://example.com/mcp", description: "Searches the team's docs" },
+      files: { command: "node" },
+    },
+  });
+  assert.deepEqual(
+    listMcpServers({ agentDir, cwd }).servers.map((server) => server.description),
+    ["Searches the team's docs", undefined],
   );
 });

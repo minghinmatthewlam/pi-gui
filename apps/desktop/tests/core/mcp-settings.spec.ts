@@ -70,20 +70,35 @@ test("adds, switches and removes an MCP server from Settings, editing mcp.json i
     await expect(surface).not.toContainText("do-not-show-this");
 
     await surface.getByLabel("Server name").fill("fixture");
+    await surface.getByLabel("Server description").fill("Writes marker files");
     await surface.getByLabel("Server command").fill(process.execPath);
     await surface.getByLabel("Server arguments").fill(`"${MCP_SERVER_FIXTURE}" "${markerDir}"`);
     await surface.getByRole("button", { name: "Add server", exact: true }).click();
-    await expect(row("fixture")).toBeVisible();
+    await expect(row("fixture")).toContainText("Writes marker files");
     await expect(surface.getByLabel("Server name")).toHaveValue("");
+    await expect(surface.getByLabel("Server description")).toHaveValue("");
 
     const afterAdd = await readJson(mcpPath);
     expect(afterAdd).toEqual({
       autoEnableCodemode: true,
       mcpServers: {
         existing,
-        fixture: { command: process.execPath, args: [MCP_SERVER_FIXTURE, markerDir] },
+        fixture: {
+          command: process.execPath,
+          args: [MCP_SERVER_FIXTURE, markerDir],
+          description: "Writes marker files",
+        },
       },
     });
+
+    // pi would skip one of two servers whose names differ only by "-" and "_".
+    await surface.getByLabel("Server name").fill("project_docs");
+    await surface.getByLabel("Server command").fill("node");
+    await surface.getByRole("button", { name: "Add server", exact: true }).click();
+    await expect(surface).toContainText('An MCP server named "project-docs" already exists');
+    await expect(row("project_docs")).toHaveCount(0);
+    await surface.getByLabel("Server name").fill("");
+    await surface.getByLabel("Server command").fill("");
     expect(await readFile(mcpPath, "utf8")).toMatch(/^ {4}"autoEnableCodemode"/m);
 
     // A thread starts the servers in mcp.json, the same file terminal pi reads.
@@ -98,7 +113,12 @@ test("adds, switches and removes an MCP server from Settings, editing mcp.json i
     await expect(fixtureSwitch).toBeEnabled();
     expect((await readJson(mcpPath)).mcpServers).toEqual({
       existing,
-      fixture: { command: process.execPath, args: [MCP_SERVER_FIXTURE, markerDir], enabled: false },
+      fixture: {
+        command: process.execPath,
+        args: [MCP_SERVER_FIXTURE, markerDir],
+        description: "Writes marker files",
+        enabled: false,
+      },
     });
 
     await fixtureSwitch.click();
@@ -106,7 +126,11 @@ test("adds, switches and removes an MCP server from Settings, editing mcp.json i
     await expect(fixtureSwitch).toBeEnabled();
     expect((await readJson(mcpPath)).mcpServers).toEqual({
       existing,
-      fixture: { command: process.execPath, args: [MCP_SERVER_FIXTURE, markerDir] },
+      fixture: {
+        command: process.execPath,
+        args: [MCP_SERVER_FIXTURE, markerDir],
+        description: "Writes marker files",
+      },
     });
 
     const projectSwitch = row("project-docs").getByRole("switch", { name: "Enable project-docs" });
@@ -130,7 +154,11 @@ test("adds, switches and removes an MCP server from Settings, editing mcp.json i
     await expect(row("existing")).toBeVisible();
     expect((await readJson(mcpPath)).mcpServers).toEqual({
       existing,
-      fixture: { command: process.execPath, args: [MCP_SERVER_FIXTURE, markerDir] },
+      fixture: {
+        command: process.execPath,
+        args: [MCP_SERVER_FIXTURE, markerDir],
+        description: "Writes marker files",
+      },
     });
 
     const accepted = window.waitForEvent("dialog").then(async (dialog) => {
