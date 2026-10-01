@@ -220,8 +220,8 @@ test("the Usage example totals real pi sessions for the folder and explains what
 const PROVIDER_ID = "usage-card-test";
 const MODEL_ID = "scripted";
 
-// Only model streaming is scripted: pi runs the real loop, and the example's agent_end
-// handler writes the card from the run's messages.
+// Only model streaming is scripted: pi runs the real loop, and the example collects each
+// pass's messages and writes the card once the reply settles.
 // failFirst: the first call fails with a retryable error, so pi retries the reply in a new pass.
 const scriptedProvider = (failFirst = false) => String.raw`
 import { createAssistantMessageEventStream } from "@earendil-works/pi-ai";

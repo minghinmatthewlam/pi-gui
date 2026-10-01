@@ -121,7 +121,7 @@ export default function githubExtension(pi: ExtensionAPI): void {
           `${snapshot.repo}: ${open.length} open PRs (${attention.length} need attention), ${issues.length} open issues`,
           ...attention.map(
             (pr) =>
-              `#${pr.number} ${pr.title} · ${pr.checks.failed.length ? `failing: ${pr.checks.failed.join(", ")}` : "changes requested"}`,
+              `#${pr.number} ${pr.title} · ${pr.checks.failedCount ? `${pr.checks.failedCount} failing: ${pr.checks.failed.join(", ")}${pr.checks.failedCount > pr.checks.failed.length ? ", …" : ""}` : "changes requested"}`,
           ),
         ]
           .filter(Boolean)

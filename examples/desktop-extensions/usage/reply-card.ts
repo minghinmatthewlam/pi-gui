@@ -9,7 +9,7 @@ export interface ReplyCard {
 }
 
 export interface ReplyFacts {
-  /** The run's messages, as pi's `agent_end` event gives them. */
+  /** Every message of the reply, collected from each pass's `agent_end`. */
   messages: readonly unknown[];
   elapsedMs: number;
   /** pi's context usage after the reply, when known. */

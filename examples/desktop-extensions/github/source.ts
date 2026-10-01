@@ -172,7 +172,7 @@ export async function readItem(
     const checks = summarizeChecks(item.statusCheckRollup);
     lines.push(
       `Branch: ${optionalString(item.headRefName, 200)} into ${optionalString(item.baseRefName, 200)}`,
-      `Review: ${reviewDecision(item.reviewDecision).replace("_", " ")} · Checks: ${checks.state}${checks.failed.length ? ` (failed: ${checks.failed.join(", ")})` : ""}`,
+      `Review: ${reviewDecision(item.reviewDecision).replace("_", " ")} · Checks: ${checks.state}${checks.failedCount ? ` (${checks.failedCount} failed: ${checks.failed.join(", ")}${checks.failedCount > checks.failed.length ? ", …" : ""})` : ""}`,
     );
     const files = Array.isArray(item.files)
       ? item.files.filter(isRecord).map((file) => optionalString(file.path, 500))

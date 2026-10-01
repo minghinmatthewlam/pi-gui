@@ -224,7 +224,7 @@ await test("the model's github_read gets one issue or PR as bounded, quoted text
   const pr = await readItem(options, "pr", 7);
   assert.match(pr, /^Pull request #7 in acme\/app: Fix search/);
   assert.match(pr, /Branch: fix-search into main/);
-  assert.match(pr, /Review: changes requested · Checks: failing \(failed: test, deploy\)/);
+  assert.match(pr, /Review: changes requested · Checks: failing \(2 failed: test, deploy\)/);
   assert.match(pr, /Files \(120\): src\/file0\.ts, .*src\/file99\.ts, …/);
   assert.doesNotMatch(pr, /file100/);
 

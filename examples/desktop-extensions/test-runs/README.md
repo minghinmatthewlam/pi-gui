@@ -29,8 +29,8 @@ scoped service connection. No app-specific Test Runs API is needed.
 
 The `--check` command builds in memory and compares the result with the checked-in
 browser bundle. It fails for a missing or stale bundle and never writes `dist`.
-`tsconfig.lint.json` covers the TypeScript source and test files, excluding the
-generated browser bundle.
+Typed lint uses the shared `../tsconfig.lint.json`, which covers every example's source
+and test files, excluding generated browser bundles.
 
 Terminal use remains `/tests passing`, `/tests failing`, `/tests slow`,
 `/tests timeout` and `/tests stop`; the agent tool is `run_tests({suiteId})`.

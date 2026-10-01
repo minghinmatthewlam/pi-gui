@@ -479,13 +479,16 @@ export async function mount(
       item.append(icon("cross"), el("span", "gh-check-name", `${unnamed} more failing`));
       list.append(item);
     }
-    const passed = el("li", pr.checks.total ? "is-green" : "is-muted");
+    const passed = el("li", pr.checks.passed ? "is-green" : "is-muted");
     if (pr.checks.state === "pending") {
       passed.className = "is-amber";
       passed.append(icon("pending"), el("span", "", ciText(pr)));
     } else if (pr.checks.total) {
       const skipped = pr.checks.skipped ? ` · ${pr.checks.skipped} skipped` : "";
-      passed.append(icon("check"), el("span", "", `${pr.checks.passed} passed${skipped}`));
+      passed.append(
+        icon(pr.checks.passed ? "check" : "none"),
+        el("span", "", `${pr.checks.passed} passed${skipped}`),
+      );
     } else passed.append(icon("none"), el("span", "", "No checks reported"));
     list.append(passed);
     checks.append(list);
