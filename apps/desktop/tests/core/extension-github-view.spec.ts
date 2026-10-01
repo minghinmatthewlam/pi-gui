@@ -1,6 +1,6 @@
-import { mkdtemp, readFile, symlink, writeFile } from "node:fs/promises";
+import { access, mkdtemp, readFile, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import {
   expect,
   test,
@@ -26,6 +26,25 @@ async function fakeGhPath(): Promise<{ readonly path: string; readonly log: stri
   const directory = await mkdtemp(join(tmpdir(), "pi-gui-fake-gh-"));
   await symlink(join(example, "test", "fake-gh.mjs"), join(directory, "gh"));
   return { path: `${directory}:${process.env.PATH ?? ""}`, log: join(directory, "calls.log") };
+}
+
+/** A PATH with only the tools the app needs, so no `gh` is found even where CI installs one. */
+async function pathWithoutGh(): Promise<string> {
+  const directory = await mkdtemp(join(tmpdir(), "pi-gui-no-gh-"));
+  const searched = (process.env.PATH ?? "").split(delimiter).filter(Boolean);
+  for (const tool of ["git", "node", "sh"]) {
+    for (const folder of searched) {
+      const found = join(folder, tool);
+      const exists = await access(found).then(
+        () => true,
+        () => false,
+      );
+      if (!exists) continue;
+      await symlink(found, join(directory, tool));
+      break;
+    }
+  }
+  return directory;
 }
 
 async function ghCalls(log: string): Promise<number> {
@@ -138,8 +157,8 @@ test("without gh the GitHub example says how to get it", async () => {
     initialWorkspaces: [await makeWorkspace("github-example-no-gh")],
     scrubProviderEnv: true,
     testMode: "background",
-    // No gh anywhere on this PATH.
-    envOverrides: { PATH: `${await mkdtemp(join(tmpdir(), "pi-gui-no-gh-"))}:/usr/bin:/bin` },
+    // No gh anywhere on this PATH (GitHub's runners install one in /usr/bin).
+    envOverrides: { PATH: await pathWithoutGh() },
   });
   try {
     const window = await harness.firstWindow();
