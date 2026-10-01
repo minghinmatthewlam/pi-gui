@@ -2768,12 +2768,14 @@
   word-break: break-word;
 }
 
-/* Pinned extension cards: the transcript card shell, tighter, with the body capped so a long
-   plan never pushes the composer off screen. */
+/* Pinned extension cards: the transcript card shell, tighter. Each body and the whole stack are
+   capped so a long plan, or three of them, never push the composer off screen. */
 .pinned-cards {
   display: grid;
   gap: 8px;
   margin-bottom: 10px;
+  max-height: min(40vh, 360px);
+  overflow-y: auto;
 }
 
 .pinned-cards .turn-changes {

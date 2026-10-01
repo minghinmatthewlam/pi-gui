@@ -1,30 +1,12 @@
 import { useCallback, useMemo, useState } from "react";
-import type { ExtensionCard, SessionTranscriptPin } from "@pi-gui/session-driver";
-import type { TimelineTranscriptItem, TranscriptMessage } from "../../../contracts/timeline-types";
+import type { SessionTranscriptPin } from "@pi-gui/session-driver";
+import type { TranscriptMessage } from "../../../contracts/timeline-types";
 import { ExtensionCardItem, type RunExtensionAction } from "../conversation/extension-card";
 import { ChevronDownIcon, ChevronRightIcon, CloseIcon } from "../../ui/icons";
+import { focusComposerAfter } from "./focus-composer";
+import { splitPinnedCards, visiblePinnedCards, type PinnedCard } from "./pinned-cards-model";
 
-/** More pins than this stack too high above the composer; the most recently pinned ones show. */
-const MAX_VISIBLE_PINS = 3;
-
-export type PinnedCard = SessionTranscriptPin & { readonly card: ExtensionCard };
-
-/**
- * The only place pins leave the transcript: the timeline gets everything else, typed so a pin
- * cannot reach it, and the composer gets the pins.
- */
-export function splitPinnedCards(transcript: readonly TranscriptMessage[]): {
-  readonly timeline: readonly TimelineTranscriptItem[];
-  readonly pins: readonly SessionTranscriptPin[];
-} {
-  const timeline: TimelineTranscriptItem[] = [];
-  const pins: SessionTranscriptPin[] = [];
-  for (const item of transcript) {
-    if (item.kind === "pin") pins.push(item);
-    else timeline.push(item);
-  }
-  return { timeline, pins };
-}
+export type { PinnedCard } from "./pinned-cards-model";
 
 /**
  * Splits the selected thread's pins off its transcript and keeps which ones the user hid or
@@ -37,12 +19,10 @@ export function usePinnedCards(sessionKey: string, transcript: readonly Transcri
   const { timeline, pins } = useMemo(() => splitPinnedCards(transcript), [transcript]);
   const visiblePins = useMemo(
     () =>
-      pins
-        .filter(
-          (pin): pin is PinnedCard =>
-            pin.card !== null && dismissedAt.get(pinStateKey(sessionKey, pin)) !== pin.createdAt,
-        )
-        .slice(-MAX_VISIBLE_PINS),
+      visiblePinnedCards(
+        pins,
+        (pin) => dismissedAt.get(pinStateKey(sessionKey, pin)) === pin.createdAt,
+      ),
     [dismissedAt, pins, sessionKey],
   );
   const collapsedPinIds = useMemo(
@@ -123,7 +103,7 @@ export function PinnedCards({
                   data-testid="pinned-card-dismiss"
                   title="Hide until it changes"
                   type="button"
-                  onClick={() => onDismiss(pin)}
+                  onClick={(event) => focusComposerAfter(event.currentTarget, () => onDismiss(pin))}
                 >
                   <CloseIcon />
                 </button>

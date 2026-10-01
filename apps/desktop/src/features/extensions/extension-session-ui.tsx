@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import type { HostUiResponse } from "@pi-gui/session-driver";
 import { trapDialogFocus } from "../../ui/dialog-focus";
+import { focusComposerAfter } from "./focus-composer";
 import { ChevronDownIcon, ChevronRightIcon, CloseIcon } from "../../ui/icons";
 import type {
   SessionExtensionDialogRecord,
@@ -71,7 +72,18 @@ export function useDismissibleExtensionDock(
     if (widgetText === undefined) return;
     setDismissedWidgetText((current) => new Map(current).set(sessionKey, widgetText));
   }, [sessionKey, widgetText]);
-  const hidden = dock !== undefined && dismissedWidgetText.get(sessionKey) === dock.widgetText;
+  const dismissed = dismissedWidgetText.get(sessionKey);
+  const changed = dismissed !== undefined && widgetText !== undefined && dismissed !== widgetText;
+  // Once the widget changes, the hide is spent: the same text coming back later shows the dock.
+  useEffect(() => {
+    if (!changed) return;
+    setDismissedWidgetText((current) => {
+      const next = new Map(current);
+      next.delete(sessionKey);
+      return next;
+    });
+  }, [changed, sessionKey]);
+  const hidden = dock !== undefined && dismissed === dock.widgetText;
   return { dock: hidden ? undefined : dock, dismiss };
 }
 
@@ -115,7 +127,7 @@ export function ExtensionDock({
             data-testid="extension-dock-dismiss"
             title="Hide until the extension changes it"
             type="button"
-            onClick={onDismiss}
+            onClick={(event) => focusComposerAfter(event.currentTarget, onDismiss)}
           >
             <CloseIcon />
           </button>
