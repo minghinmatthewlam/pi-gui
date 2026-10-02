@@ -142,8 +142,11 @@ export function useDesktopCommands(input: DesktopCommandsInput) {
   };
   /** Does what the side panel's Add tab button does, then focuses the first choice. */
   const newSidePanelTab = () => {
-    // An open dialog keeps focus; the chooser would open behind it.
-    const dialogOpen = document.querySelector("[aria-modal='true'], .extension-dialog-backdrop");
+    // An open dialog keeps focus; the chooser would open behind it. The palette
+    // is the exception: any other command closes it first.
+    const dialogOpen = document.querySelector(
+      "[aria-modal='true']:not(.command-palette), .extension-dialog-backdrop",
+    );
     if (!sidePanelAvailable || !workbench.ready || dialogOpen) return false;
     workbench.showChooser();
     window.requestAnimationFrame(() => {

@@ -194,13 +194,16 @@ test("Cmd/Ctrl+T opens the Add tab chooser, and a new shell from the terminal", 
   });
   // Native input passes through main's before-input-event, unlike Playwright's keydowns.
   const pressNewTab = () =>
-    harness.electronApp.evaluate(({ BrowserWindow }, modifier) => {
-      BrowserWindow.getAllWindows()[0]?.webContents.sendInputEvent({
-        type: "keyDown",
-        keyCode: "t",
-        modifiers: [modifier],
-      });
-    }, process.platform === "darwin" ? ("meta" as const) : ("control" as const));
+    harness.electronApp.evaluate(
+      ({ BrowserWindow }, modifier) => {
+        BrowserWindow.getAllWindows()[0]?.webContents.sendInputEvent({
+          type: "keyDown",
+          keyCode: "t",
+          modifiers: [modifier],
+        });
+      },
+      process.platform === "darwin" ? ("meta" as const) : ("control" as const),
+    );
   try {
     const window = await harness.firstWindow();
     await selectSession(window, TASK_A);
@@ -217,8 +220,13 @@ test("Cmd/Ctrl+T opens the Add tab chooser, and a new shell from the terminal", 
     await window.keyboard.press("Enter");
     await expectActiveTool(window, "Files");
 
-    // From the open panel, existing tabs stay and the chooser takes the selection.
+    // From the command palette, the palette closes and the chooser opens.
+    await window.keyboard.press(desktopShortcut("K"));
+    await expect(window.getByTestId("command-palette")).toBeVisible();
     await pressNewTab();
+    await expect(window.getByTestId("command-palette")).toHaveCount(0);
+    await expect(chooser).toBeVisible();
+    await expect(tabs).toHaveText(["Review", "Files"]);
     await expect(chooser).toBeVisible();
     await expect(tabs).toHaveText(["Review", "Files"]);
     await chooser.getByRole("button", { name: "Terminal", exact: true }).click();
