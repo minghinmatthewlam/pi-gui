@@ -15,6 +15,9 @@ import {
   type CustomProviderConfig,
   type CustomProviderProbeInput,
   type CustomProviderProbeResult,
+  type McpServerScope,
+  type McpServersSnapshot,
+  type NewMcpServerInput,
   type ChangedFilesResult,
   type DesktopNotificationPermissionStatus,
   type WorkspaceFilePreview,
@@ -371,6 +374,31 @@ contextBridge.exposeInMainWorld("piApp", {
       workspaceId,
       filePath,
       enabled,
+    ) as Promise<DesktopAppState>,
+  listMcpServers: (workspaceId: string) =>
+    ipcRenderer.invoke(desktopIpc.listMcpServers, workspaceId) as Promise<McpServersSnapshot>,
+  addMcpServer: (workspaceId: string, server: NewMcpServerInput) =>
+    ipcRenderer.invoke(desktopIpc.addMcpServer, workspaceId, server) as Promise<DesktopAppState>,
+  removeMcpServer: (workspaceId: string, name: string) =>
+    ipcRenderer.invoke(desktopIpc.removeMcpServer, workspaceId, name) as Promise<DesktopAppState>,
+  setMcpServerEnabled: (
+    workspaceId: string,
+    scope: McpServerScope,
+    name: string,
+    enabled: boolean,
+  ) =>
+    ipcRenderer.invoke(
+      desktopIpc.setMcpServerEnabled,
+      workspaceId,
+      scope,
+      name,
+      enabled,
+    ) as Promise<DesktopAppState>,
+  setCodemodeAlwaysOn: (workspaceId: string, alwaysOn: boolean) =>
+    ipcRenderer.invoke(
+      desktopIpc.setCodemodeAlwaysOn,
+      workspaceId,
+      alwaysOn,
     ) as Promise<DesktopAppState>,
   respondToHostUiRequest: (workspaceId: string, sessionId: string, response: HostUiResponse) =>
     ipcRenderer.invoke(

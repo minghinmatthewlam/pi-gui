@@ -264,7 +264,7 @@ function extensionSearchText(extension: RuntimeExtensionRecord): string {
     extension.sourceInfo.source,
     extensionScopeLabel(extension),
     ...extension.commands,
-    ...extension.tools,
+    ...extension.tools.flatMap((tool) => [tool.name, tool.label]),
     ...extension.flags,
     ...extension.shortcuts,
     ...extension.diagnostics.map((diagnostic) => diagnostic.message),

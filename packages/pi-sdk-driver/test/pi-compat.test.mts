@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { SessionManager, SettingsManager } from "@earendil-works/pi-coding-agent";
+import { savePiGlobalSetting } from "../dist/compat/pi-global-settings.js";
 import { savePiProjectSettings } from "../dist/compat/pi-project-settings.js";
 import { forcePersistPiSession } from "../dist/compat/pi-session-persistence.js";
 
@@ -119,3 +120,37 @@ await test("compatibility hooks match the bundled Pi runtime", async () => {
   await settingsManager.flush();
   assert.equal(settingsManager.getProjectSettings().defaultProvider, "openai");
 });
+
+await test("global setting compatibility fails clearly when upstream hooks change", () => {
+  assert.throws(
+    () => savePiGlobalSetting({}, "defaultTools", ["+codemode"]),
+    /does not support saving this global setting/,
+  );
+});
+
+await test("global setting compatibility writes one field through the bundled Pi runtime", async () => {
+  const directory = mkdtempSync(path.join(tmpdir(), "pi-gui-compat-global-"));
+  const agentDir = path.join(directory, "agent");
+  mkdirSync(agentDir, { recursive: true });
+  writeFileSync(
+    path.join(agentDir, "settings.json"),
+    JSON.stringify({ defaultTools: ["-bash"], theme: "dark" }),
+  );
+  const settingsManager = SettingsManager.create(directory, agentDir);
+
+  savePiGlobalSetting(settingsManager, "defaultTools", ["-bash", "+codemode"]);
+  await settingsManager.flush();
+  assert.deepEqual(readJson(path.join(agentDir, "settings.json")), {
+    defaultTools: ["-bash", "+codemode"],
+    theme: "dark",
+  });
+  assert.deepEqual(settingsManager.getGlobalSettings().defaultTools, ["-bash", "+codemode"]);
+
+  savePiGlobalSetting(settingsManager, "defaultTools", undefined);
+  await settingsManager.flush();
+  assert.deepEqual(readJson(path.join(agentDir, "settings.json")), { theme: "dark" });
+});
+
+function readJson(file: string): unknown {
+  return JSON.parse(readFileSync(file, "utf8"));
+}

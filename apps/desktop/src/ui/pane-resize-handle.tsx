@@ -55,6 +55,10 @@ export function PaneResizeHandle({
 
   const widen = edge === "right" ? 1 : -1;
   const resize = (width: number) => onResize(Math.max(size.min, Math.min(size.max, width)));
+  // `size.width` follows the pane through a ResizeObserver, so it can lag a resize that has just
+  // been applied; steps and drags start from the width on screen now.
+  const currentWidth = () =>
+    Math.round(ref.current?.parentElement?.getBoundingClientRect().width ?? size.width);
   return (
     <div
       ref={ref}
@@ -73,7 +77,7 @@ export function PaneResizeHandle({
         event.preventDefault();
         event.currentTarget.focus();
         event.currentTarget.setPointerCapture(event.pointerId);
-        drag.current = { pointerId: event.pointerId, x: event.clientX, width: size.width };
+        drag.current = { pointerId: event.pointerId, x: event.clientX, width: currentWidth() };
         setResizing(true);
       }}
       onPointerMove={(event) => {
@@ -93,9 +97,9 @@ export function PaneResizeHandle({
       onKeyDown={(event) => {
         const next =
           event.key === "ArrowRight"
-            ? size.width + widen * 20
+            ? currentWidth() + widen * 20
             : event.key === "ArrowLeft"
-              ? size.width - widen * 20
+              ? currentWidth() - widen * 20
               : event.key === "Home"
                 ? size.min
                 : event.key === "End"

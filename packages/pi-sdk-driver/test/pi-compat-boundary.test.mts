@@ -8,6 +8,8 @@ import ts from "typescript";
 const PRIVATE_PI_HOOKS = new Set([
   "_rewriteFile",
   "flushed",
+  "globalSettings",
+  "markModified",
   "markProjectModified",
   "saveProjectSettings",
 ]);

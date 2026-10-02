@@ -11,6 +11,8 @@ import type {
   TimelineTurnMarker,
 } from "../../../contracts/timeline-types";
 import type { ScheduledTaskOrigin } from "../../../contracts/scheduled-tasks";
+import { extensionToolRowLabel } from "../../../contracts/tool-labels";
+import { useExtensionToolLabel } from "../extensions/extension-tool-labels";
 import {
   AnnotationMarkers,
   type AnnotationMarker,
@@ -267,12 +269,16 @@ function TimelineToolCallItem({
   readonly onViewFileInDiff?: (path: string) => void;
 }) {
   const hasContent = item.input !== undefined || item.output !== undefined;
-  const diffText = isWriteTool(item.toolName) ? extractDiffFromOutput(item.output) : undefined;
+  // An extension's tool shows the label it registered instead of a guess from its name.
+  const extensionLabel = useExtensionToolLabel(item.toolName);
+  const writeTool = isWriteTool(item.toolName);
+  const diffText = writeTool ? extractDiffFromOutput(item.output) : undefined;
   const diffStats = diffText ? countDiffStats(diffText) : undefined;
-  const compactLabel = buildCompactLabel(item, diffStats);
-  const filePath = isWriteTool(item.toolName)
-    ? extractFilename(item.input) || undefined
-    : undefined;
+  const compactLabel =
+    extensionLabel === undefined
+      ? buildCompactLabel(item, diffStats)
+      : extensionToolRowLabel(extensionLabel, item.input);
+  const filePath = writeTool ? extractFilename(item.input) || undefined : undefined;
   const diffLanguage = diffText && filePath ? extensionToLanguage(filePath) : undefined;
   const inlineDetail = item.status === "error" ? item.detail : undefined;
 
@@ -287,7 +293,7 @@ function TimelineToolCallItem({
     <article className={`timeline-tool timeline-tool--${item.status}`}>
       <div className="timeline-tool__header-row">
         <span className="timeline-tool__glyph" aria-hidden="true">
-          {toolGlyph(item.toolName)}
+          {extensionLabel === undefined || diffText ? toolGlyph(item.toolName) : <SparkIcon />}
         </span>
         <button
           className="timeline-tool__header"

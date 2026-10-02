@@ -1073,13 +1073,20 @@
   margin-bottom: 10px;
 }
 
+/* Capped like the pinned cards, so a long queue or one huge message never pushes the input off
+   screen. */
 .queued-composer-messages {
   display: grid;
   gap: 10px;
   margin-bottom: 10px;
+  max-height: min(40vh, 360px);
+  overflow-y: auto;
 }
 
 .queued-composer-messages__editing {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1144,6 +1151,9 @@
   font-size: 14px;
   line-height: 1.45;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: min(160px, 20vh);
+  overflow-y: auto;
 }
 
 .queued-composer-message__attachments {
@@ -2041,6 +2051,7 @@
 .settings-row__actions {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   justify-content: flex-end;
   gap: 8px;
 }

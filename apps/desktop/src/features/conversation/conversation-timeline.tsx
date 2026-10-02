@@ -12,6 +12,8 @@ import type {
   TimelineTranscriptItem,
 } from "../../../contracts/timeline-types";
 import type { ScheduledTaskOrigin } from "../../../contracts/scheduled-tasks";
+import type { ExtensionToolLabels } from "../../../contracts/tool-labels";
+import { ExtensionToolLabelsContext } from "../extensions/extension-tool-labels";
 import type { TimelineViewport } from "./hooks/use-timeline-viewport";
 import type { AnnotationMarker, OpenAnnotation } from "./annotations/annotation-markers";
 import { useAnnotationSelection } from "./annotations/annotation-selection";
@@ -46,6 +48,7 @@ interface ConversationTimelineProps {
   readonly onForkFromMessage?: (messageIndex: number, preview?: string) => void;
   readonly onOpenWorkspaceFileLine?: (target: WorkspaceFileLine) => void;
   readonly onExtensionAction?: RunExtensionAction;
+  readonly extensionToolLabels: ExtensionToolLabels;
   readonly scheduledOrigins?: ReadonlyMap<string, ScheduledTaskOrigin>;
   readonly workspacePath?: string;
   readonly annotations?: TranscriptAnnotations;
@@ -64,6 +67,7 @@ export function ConversationTimeline({
   onForkFromMessage,
   onOpenWorkspaceFileLine,
   onExtensionAction,
+  extensionToolLabels,
   scheduledOrigins,
   workspacePath,
   annotations,
@@ -115,94 +119,96 @@ export function ConversationTimeline({
     return indices;
   }, [transcript]);
   return (
-    <div className="timeline-surface" ref={surfaceRef}>
-      <div className="timeline-column">
-        {threadSearch.isOpen ? (
-          <ThreadSearchBar
-            query={threadSearch.query}
-            matchCount={threadSearch.matchCount}
-            activeIndex={threadSearch.activeIndex}
-            inputRef={threadSearch.inputRef}
-            onSearch={threadSearch.search}
-            onNext={() => threadSearch.goToMatch(1)}
-            onPrev={() => threadSearch.goToMatch(-1)}
-            onClose={threadSearch.close}
-          />
-        ) : null}
-        <div
-          className="timeline-pane timeline-pane--thread"
-          data-testid="timeline-pane"
-          ref={viewport.attachPane}
-          tabIndex={0}
-        >
-          {transcriptFailed ? (
-            <div className="timeline" data-testid="transcript">
-              <TranscriptHydrateError
-                retrying={transcriptFailed.retrying}
-                onRetry={onRetryTranscript}
-              />
-            </div>
-          ) : isTranscriptLoading ? (
-            <div className="timeline" data-testid="transcript">
-              <TranscriptSkeleton />
-            </div>
-          ) : transcript.length === 0 ? (
-            <div className="timeline" data-testid="transcript">
-              <TranscriptEmptyState />
-            </div>
-          ) : (
-            <div
-              className="timeline timeline--virtualized"
-              data-testid="transcript"
-              style={{ height: viewport.totalHeight }}
-            >
-              {viewport.visibleRows.map(({ item, top, height }, index, rows) => (
-                <MeasuredTimelineItem
-                  key={item.id}
-                  item={item}
-                  offset={top - rowBottom(rows[index - 1])}
-                  height={height}
-                  className="timeline__virtual-row"
-                  onHeightChange={viewport.measureRow}
-                  generation={viewport.layoutGeneration}
-                  expandedToolCallIds={expandedToolCallIds}
-                  onToggleToolCall={toggleToolCall}
-                  onViewFileInDiff={onViewFileInDiff}
-                  onOpenTurnChange={onOpenTurnChange}
-                  sourceMessageIndex={renderedMessageIndexById.get(item.id)}
-                  onForkFromMessage={onForkFromMessage}
-                  onOpenWorkspaceFileLine={onOpenWorkspaceFileLine}
-                  onExtensionAction={onExtensionAction}
-                  workspacePath={workspacePath}
-                  annotationMarkers={
-                    markersByMessage.get(item.id) ??
-                    (item.kind === "message" && item.sourceMessageId
-                      ? markersByMessage.get(item.sourceMessageId)
-                      : undefined) ??
-                    NO_MARKERS
-                  }
-                  onOpenAnnotation={annotationSelection.openAnnotation}
-                  scheduledOrigin={
-                    item.kind === "message" ? scheduledOrigins?.get(item.id) : undefined
-                  }
-                />
-              ))}
-            </div>
-          )}
-          {!transcriptFailed && viewport.showJumpToLatest ? (
-            <button
-              className="timeline-jump"
-              data-testid="timeline-jump"
-              type="button"
-              onClick={viewport.jumpToLatest}
-            >
-              New activity below
-            </button>
+    <ExtensionToolLabelsContext.Provider value={extensionToolLabels}>
+      <div className="timeline-surface" ref={surfaceRef}>
+        <div className="timeline-column">
+          {threadSearch.isOpen ? (
+            <ThreadSearchBar
+              query={threadSearch.query}
+              matchCount={threadSearch.matchCount}
+              activeIndex={threadSearch.activeIndex}
+              inputRef={threadSearch.inputRef}
+              onSearch={threadSearch.search}
+              onNext={() => threadSearch.goToMatch(1)}
+              onPrev={() => threadSearch.goToMatch(-1)}
+              onClose={threadSearch.close}
+            />
           ) : null}
+          <div
+            className="timeline-pane timeline-pane--thread"
+            data-testid="timeline-pane"
+            ref={viewport.attachPane}
+            tabIndex={0}
+          >
+            {transcriptFailed ? (
+              <div className="timeline" data-testid="transcript">
+                <TranscriptHydrateError
+                  retrying={transcriptFailed.retrying}
+                  onRetry={onRetryTranscript}
+                />
+              </div>
+            ) : isTranscriptLoading ? (
+              <div className="timeline" data-testid="transcript">
+                <TranscriptSkeleton />
+              </div>
+            ) : transcript.length === 0 ? (
+              <div className="timeline" data-testid="transcript">
+                <TranscriptEmptyState />
+              </div>
+            ) : (
+              <div
+                className="timeline timeline--virtualized"
+                data-testid="transcript"
+                style={{ height: viewport.totalHeight }}
+              >
+                {viewport.visibleRows.map(({ item, top, height }, index, rows) => (
+                  <MeasuredTimelineItem
+                    key={item.id}
+                    item={item}
+                    offset={top - rowBottom(rows[index - 1])}
+                    height={height}
+                    className="timeline__virtual-row"
+                    onHeightChange={viewport.measureRow}
+                    generation={viewport.layoutGeneration}
+                    expandedToolCallIds={expandedToolCallIds}
+                    onToggleToolCall={toggleToolCall}
+                    onViewFileInDiff={onViewFileInDiff}
+                    onOpenTurnChange={onOpenTurnChange}
+                    sourceMessageIndex={renderedMessageIndexById.get(item.id)}
+                    onForkFromMessage={onForkFromMessage}
+                    onOpenWorkspaceFileLine={onOpenWorkspaceFileLine}
+                    onExtensionAction={onExtensionAction}
+                    workspacePath={workspacePath}
+                    annotationMarkers={
+                      markersByMessage.get(item.id) ??
+                      (item.kind === "message" && item.sourceMessageId
+                        ? markersByMessage.get(item.sourceMessageId)
+                        : undefined) ??
+                      NO_MARKERS
+                    }
+                    onOpenAnnotation={annotationSelection.openAnnotation}
+                    scheduledOrigin={
+                      item.kind === "message" ? scheduledOrigins?.get(item.id) : undefined
+                    }
+                  />
+                ))}
+              </div>
+            )}
+            {!transcriptFailed && viewport.showJumpToLatest ? (
+              <button
+                className="timeline-jump"
+                data-testid="timeline-jump"
+                type="button"
+                onClick={viewport.jumpToLatest}
+              >
+                New activity below
+              </button>
+            ) : null}
+          </div>
         </div>
+        {annotationSelection.layer}
       </div>
-      {annotationSelection.layer}
-    </div>
+    </ExtensionToolLabelsContext.Provider>
   );
 }
 

@@ -7,13 +7,15 @@ import { ExtensionIcon } from "../../ui/icons";
 import { SettingsGroup, SettingsRow } from "../settings/settings-utils";
 import {
   extensionGroupLabel,
+  isPiAddonExtension,
   isPiGuiBuiltinExtension,
+  PI_ADDONS_LABEL,
   PI_GUI_TOOLS_LABEL,
 } from "./extension-display";
 import { displayPath, ResourceDetail } from "./resource-detail";
 import { ResourceEmptyState, ResourceList, type ResourceListGroup } from "./resource-list";
 
-const GROUP_ORDER = ["Workspace", "User", "This session", PI_GUI_TOOLS_LABEL];
+const GROUP_ORDER = ["Workspace", "User", "This session", PI_ADDONS_LABEL, PI_GUI_TOOLS_LABEL];
 
 interface ExtensionsTabProps {
   readonly workspace: WorkspaceRecord;
@@ -121,14 +123,16 @@ function ExtensionDetail({
         <SettingsRow
           title="Source"
           description={
-            selected.sourceInfo.origin === "package"
-              ? "Installed as a package"
-              : "Loaded from a file"
+            isPiAddonExtension(selected)
+              ? "Ships with pi; this switch also applies to pi in the terminal"
+              : selected.sourceInfo.origin === "package"
+                ? "Installed as a package"
+                : "Loaded from a file"
           }
         >
           <span className="settings-row__value">{extensionGroupLabel(selected)}</span>
         </SettingsRow>
-        {isPiGuiBuiltinExtension(selected) ? null : (
+        {isPiGuiBuiltinExtension(selected) || isPiAddonExtension(selected) ? null : (
           <SettingsRow title="Location">
             <code className="resource-detail__code" title={selected.path}>
               {displayPath(selected.path, workspace.path)}
@@ -136,7 +140,7 @@ function ExtensionDetail({
           </SettingsRow>
         )}
       </SettingsGroup>
-      <ExtensionContributionSection title="Tools" items={selected.tools} />
+      <ExtensionContributionSection title="Tools" items={selected.tools.map((tool) => tool.name)} />
       {selected.commands.length > 0 ? (
         <ExtensionCompatibilitySection
           commands={selected.commands}
@@ -186,11 +190,18 @@ function countLabel(count: number, noun: string): string {
 }
 
 function isFolderExtension(extension: RuntimeExtensionRecord): boolean {
-  return extension.sourceInfo.scope === "project" || extension.sourceInfo.scope === "user";
+  return (
+    !isPiAddonExtension(extension) &&
+    (extension.sourceInfo.scope === "project" || extension.sourceInfo.scope === "user")
+  );
 }
 
 function isToggleableExtension(extension: RuntimeExtensionRecord): boolean {
-  return isFolderExtension(extension) || isPiGuiBuiltinExtension(extension);
+  return (
+    isFolderExtension(extension) ||
+    isPiAddonExtension(extension) ||
+    isPiGuiBuiltinExtension(extension)
+  );
 }
 
 function ExtensionContributionSection({

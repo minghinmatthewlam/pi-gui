@@ -33,6 +33,7 @@ import {
 import { useExtensionViews } from "../features/extensions/use-extension-views";
 import { useExtensionCardActions } from "../features/extensions/use-extension-card-actions";
 import { useExtensionHostActions } from "../features/extensions/use-extension-host-actions";
+import { useExtensionToolLabels } from "../features/extensions/extension-tool-labels";
 import { useSidePanelTabHintsVisible } from "../features/workbench/side-panel-tab-hints";
 import { Workbench } from "../features/workbench/workbench";
 import { renderBuiltinToolPanel } from "../features/workbench/builtin-tools";
@@ -178,6 +179,7 @@ export default function App() {
   const selectedRuntime = selectedWorkspace
     ? snapshot?.runtimeByWorkspace[selectedWorkspace.id]
     : undefined;
+  const extensionToolLabels = useExtensionToolLabels(selectedRuntime);
   const selectedModelRuntime = snapshot
     ? getEffectiveModelRuntime(snapshot, selectedWorkspace)
     : undefined;
@@ -1176,6 +1178,7 @@ export default function App() {
                     onOpenTurnChange={turnChanges.openTurnChange}
                     onOpenWorkspaceFileLine={handleOpenWorkspaceFileLine}
                     onExtensionAction={runExtensionCardAction}
+                    extensionToolLabels={extensionToolLabels}
                     workspacePath={selectedWorkspace.path}
                     onForkFromMessage={
                       selectedSession.status === "running" ? undefined : openForkModal

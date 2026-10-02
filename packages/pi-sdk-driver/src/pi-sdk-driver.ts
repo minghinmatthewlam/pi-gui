@@ -113,6 +113,11 @@ export class PiSdkDriver implements SessionDriver {
     return this.supervisor.reloadSession(sessionRef);
   }
 
+  /** Reloads now, or when the running turn or compaction ends. */
+  reloadSessionWhenIdle(sessionRef: SessionRef): Promise<"reloaded" | "deferred"> {
+    return this.supervisor.reloadSessionWhenIdle(sessionRef);
+  }
+
   getSessionTree(sessionRef: SessionRef): Promise<SessionTreeSnapshot> {
     return this.supervisor.getSessionTree(sessionRef);
   }

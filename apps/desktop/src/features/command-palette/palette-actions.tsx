@@ -38,6 +38,7 @@ const SETTINGS_SECTIONS: readonly SettingsSection[] = [
   "shortcuts",
   "providers",
   "models",
+  "mcp",
 ];
 
 /** What the app can do right now; an action is listed only when it would work. */

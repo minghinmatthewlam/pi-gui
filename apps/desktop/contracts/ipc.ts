@@ -73,6 +73,35 @@ export type CustomProviderProbeResult =
   | { readonly ok: true; readonly models: readonly string[] }
   | { readonly ok: false; readonly error: string };
 
+export type McpServerScope = "global" | "project";
+
+/** An `mcp.json` server as Settings shows it; `env`, `headers` and `oauth` never leave main. */
+export interface McpServerRecord {
+  readonly name: string;
+  readonly scope: McpServerScope;
+  readonly transport: "stdio" | "http";
+  readonly command?: string;
+  readonly args?: readonly string[];
+  readonly url?: string;
+  readonly enabled: boolean;
+  /** Environment variables, headers or sign-in config are set; their values never leave main. */
+  readonly hasHiddenSettings: boolean;
+}
+
+export interface McpServersSnapshot {
+  /** The global mcp.json new servers are saved to, with the home directory shown as `~`. */
+  readonly globalConfigPath: string;
+  readonly servers: readonly McpServerRecord[];
+  /** mcp.json files that could not be read. */
+  readonly errors: readonly string[];
+  /** Whether pi's global `defaultTools` switches code mode on in new threads. */
+  readonly codemodeAlwaysOn: boolean;
+}
+
+export type NewMcpServerInput =
+  | { readonly name: string; readonly command: string; readonly args: readonly string[] }
+  | { readonly name: string; readonly url: string };
+
 export const desktopIpc = {
   extensionViewOpenFile: "pi-gui:extension-view-open-file",
   listExtensionViews: "pi-gui:list-extension-views",
@@ -141,6 +170,11 @@ export const desktopIpc = {
   setScopedModelPatterns: "pi-gui:set-scoped-model-patterns",
   setSkillEnabled: "pi-gui:set-skill-enabled",
   setExtensionEnabled: "pi-gui:set-extension-enabled",
+  listMcpServers: "pi-gui:list-mcp-servers",
+  addMcpServer: "pi-gui:add-mcp-server",
+  removeMcpServer: "pi-gui:remove-mcp-server",
+  setMcpServerEnabled: "pi-gui:set-mcp-server-enabled",
+  setCodemodeAlwaysOn: "pi-gui:set-codemode-always-on",
   respondToHostUiRequest: "pi-gui:respond-to-host-ui-request",
   setNotificationPreferences: "pi-gui:set-notification-preferences",
   setIntegratedTerminalShell: "pi-gui:set-integrated-terminal-shell",
@@ -743,6 +777,16 @@ export interface PiDesktopApi {
     filePath: string,
     enabled: boolean,
   ): Promise<DesktopAppState>;
+  listMcpServers(workspaceId: string): Promise<McpServersSnapshot>;
+  addMcpServer(workspaceId: string, server: NewMcpServerInput): Promise<DesktopAppState>;
+  removeMcpServer(workspaceId: string, name: string): Promise<DesktopAppState>;
+  setMcpServerEnabled(
+    workspaceId: string,
+    scope: McpServerScope,
+    name: string,
+    enabled: boolean,
+  ): Promise<DesktopAppState>;
+  setCodemodeAlwaysOn(workspaceId: string, alwaysOn: boolean): Promise<DesktopAppState>;
   respondToHostUiRequest(
     workspaceId: string,
     sessionId: string,

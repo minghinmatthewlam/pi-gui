@@ -18,6 +18,7 @@ import type {
   RuntimeLoginCallbacks,
   RuntimeExtensionDiagnostic,
   RuntimeExtensionFlag,
+  RuntimeExtensionTool,
   RuntimeExtensionRecord,
   RuntimeModelRecord,
   RuntimeProviderRecord,
@@ -45,7 +46,24 @@ import {
   type CustomProviderEntry,
   type CustomProviderInput,
 } from "./custom-provider-store.js";
+import { savePiGlobalSetting } from "./compat/pi-global-settings.js";
 import { savePiProjectSettings } from "./compat/pi-project-settings.js";
+import {
+  addMcpServer,
+  listMcpServers,
+  removeMcpServer,
+  setMcpServerEnabled,
+  type McpConfigLocation,
+  type McpServerListing,
+  type McpServerScope,
+  type NewMcpServer,
+} from "./mcp-config.js";
+import {
+  isBuiltinExtensionPath,
+  PI_ADDON_EXTENSION_NAMES,
+  piAddonDisplay,
+  piAddonExtensions,
+} from "./pi-addon-extensions.js";
 
 export {
   BUILT_IN_PROVIDER_IDS,
@@ -302,6 +320,61 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
     return this.buildSnapshot(context);
   }
 
+  /** Whether pi's global `defaultTools` switches code mode on for every session. */
+  async getCodemodeAlwaysOn(workspace: WorkspaceRef): Promise<boolean> {
+    const { settingsManager } = await this.ensureContext(workspace);
+    await settingsManager.reload();
+    return (settingsManager.getGlobalSettings().defaultTools ?? []).some(isCodemodeToolEntry);
+  }
+
+  /**
+   * Adds or removes `+codemode` in pi's global `defaultTools`, keeping its other entries. Off
+   * leaves code mode to pi, which switches it on when an MCP server needs it.
+   */
+  async setCodemodeAlwaysOn(workspace: WorkspaceRef, alwaysOn: boolean): Promise<void> {
+    const { settingsManager } = await this.ensureContext(workspace);
+    // Errors left from earlier reads or writes are not this change's; only global-file errors
+    // from here on are (pi skips the save when settings.json does not parse).
+    settingsManager.drainErrors();
+    await settingsManager.reload();
+    throwGlobalSettingsError(settingsManager.drainErrors());
+    const others = (settingsManager.getGlobalSettings().defaultTools ?? []).filter(
+      (entry) => !isCodemodeToolEntry(entry),
+    );
+    const next = alwaysOn ? [...others, "+codemode"] : others;
+    savePiGlobalSetting(settingsManager, "defaultTools", next.length > 0 ? next : undefined);
+    await settingsManager.flush();
+    throwGlobalSettingsError(settingsManager.drainErrors());
+  }
+
+  /** Servers in the global `mcp.json` and this workspace's `.pi/mcp.json`, without secrets. */
+  listMcpServers(workspace: WorkspaceRef): McpServerListing {
+    return listMcpServers(this.mcpConfigLocation(workspace));
+  }
+
+  addMcpServer(server: NewMcpServer): void {
+    addMcpServer(this.agentDir, server);
+  }
+
+  removeMcpServer(name: string): void {
+    if (!removeMcpServer(this.agentDir, name)) {
+      throw new Error(`The global mcp.json does not define MCP server "${name}"`);
+    }
+  }
+
+  setMcpServerEnabled(
+    workspace: WorkspaceRef,
+    scope: McpServerScope,
+    name: string,
+    enabled: boolean,
+  ): void {
+    setMcpServerEnabled(this.mcpConfigLocation(workspace), scope, name, enabled);
+  }
+
+  private mcpConfigLocation(workspace: WorkspaceRef): McpConfigLocation {
+    return { agentDir: this.agentDir, cwd: workspace.path };
+  }
+
   async setScopedModelPatterns(
     workspace: WorkspaceRef,
     patterns: readonly string[],
@@ -403,7 +476,7 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
     const context = await this.ensureContext(workspace);
     const resolvedPaths = await this.resolveRuntimePaths(context);
     const resource = resolvedPaths.extensions.find(
-      (entry) => resolve(entry.path) === resolve(filePath),
+      (entry) => extensionPathKey(entry.path) === extensionPathKey(filePath),
     );
     if (!resource) {
       throw new Error(`Unknown extension: ${filePath}`);
@@ -420,9 +493,28 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
     return findBuiltinExtension(this.builtinExtensions, path)?.name;
   }
 
-  /** Every built-in loads ungated here so Settings can list a switched-off one with its tools. */
+  /**
+   * Every pi-gui built-in loads ungated here so Settings can list a switched-off one with its
+   * tools. pi's add-ons keep their `builtin` flag so pi's `extensions` setting still gates them.
+   */
   private inventoryExtensionFactories(): InlineExtension[] {
-    return this.builtinExtensions.map(({ name, factory }) => ({ name, factory }));
+    return [
+      ...piAddonExtensions(),
+      ...this.builtinExtensions.map(({ name, factory }) => ({ name, factory })),
+    ];
+  }
+
+  /** Resolves pi's add-ons as `builtin:<name>` resources, like `pi config` does. */
+  private createPackageManager(
+    cwd: string,
+    settingsManager: SettingsManager,
+  ): DefaultPackageManager {
+    return new DefaultPackageManager({
+      cwd,
+      agentDir: this.agentDir,
+      settingsManager,
+      builtinExtensions: [...PI_ADDON_EXTENSION_NAMES],
+    });
   }
 
   private async ensureContext(workspace: WorkspaceRef): Promise<RuntimeContext> {
@@ -432,11 +524,7 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
     }
 
     let settingsManager = SettingsManager.create(workspace.path, this.agentDir);
-    let packageManager = new DefaultPackageManager({
-      cwd: workspace.path,
-      agentDir: this.agentDir,
-      settingsManager,
-    });
+    let packageManager = this.createPackageManager(workspace.path, settingsManager);
     let resourceLoader = new DefaultResourceLoader({
       cwd: workspace.path,
       agentDir: this.agentDir,
@@ -462,11 +550,7 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
       );
 
       settingsManager = fallbackSettingsManager;
-      packageManager = new DefaultPackageManager({
-        cwd: workspace.path,
-        agentDir: this.agentDir,
-        settingsManager,
-      });
+      packageManager = this.createPackageManager(workspace.path, settingsManager);
       resourceLoader = new DefaultResourceLoader({
         cwd: workspace.path,
         agentDir: this.agentDir,
@@ -655,11 +739,10 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
         }`,
       );
 
-      const fallbackPackageManager = new DefaultPackageManager({
-        cwd: context.workspace.path,
-        agentDir: this.agentDir,
-        settingsManager: fallbackSettingsManager,
-      });
+      const fallbackPackageManager = this.createPackageManager(
+        context.workspace.path,
+        fallbackSettingsManager,
+      );
       return fallbackPackageManager.resolve();
     }
   }
@@ -823,29 +906,29 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
     const packageMetadataCache = new Map<string, Promise<PackageMetadata>>();
     const loadedByPath = new Map(
       loadedResult.extensions.map(
-        (extension) => [resolve(extension.resolvedPath || extension.path), extension] as const,
+        (extension) =>
+          [extensionPathKey(extension.resolvedPath || extension.path), extension] as const,
       ),
     );
     const diagnosticsByPath = new Map<string, RuntimeExtensionDiagnostic[]>();
 
     for (const error of loadedResult.errors) {
-      const diagnostics = diagnosticsByPath.get(resolve(error.path)) ?? [];
+      const diagnostics = diagnosticsByPath.get(extensionPathKey(error.path)) ?? [];
       diagnostics.push({
         type: "error",
         message: error.error,
         path: error.path,
       });
-      diagnosticsByPath.set(resolve(error.path), diagnostics);
+      diagnosticsByPath.set(extensionPathKey(error.path), diagnostics);
     }
 
     const records = await Promise.all(
       resolvedExtensions.map<Promise<RuntimeExtensionRecord>>(async (resource) => {
-        const path = resolve(resource.path);
+        const path = extensionPathKey(resource.path);
         const loaded = loadedByPath.get(path);
-        const packageMetadata = await inferExtensionPackageMetadata(
-          resource.metadata,
-          packageMetadataCache,
-        );
+        const packageMetadata =
+          piAddonDisplay(path) ??
+          (await inferExtensionPackageMetadata(resource.metadata, packageMetadataCache));
         return {
           path,
           displayName: packageMetadata?.displayName ?? inferExtensionEntryName(path),
@@ -855,11 +938,7 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
           commands: loaded
             ? [...loaded.commands.keys()].sort((left, right) => left.localeCompare(right))
             : [],
-          tools: loaded
-            ? [...loaded.tools.values()]
-                .map((tool) => tool.definition.name)
-                .sort((left, right) => left.localeCompare(right))
-            : [],
+          tools: loaded ? describeTools(loaded.tools) : [],
           flags: loaded
             ? [...loaded.flags.keys()].sort((left, right) => left.localeCompare(right))
             : [],
@@ -871,12 +950,12 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
         };
       }),
     );
-    const resolvedRecordPaths = new Set(records.map((record) => resolve(record.path)));
+    const resolvedRecordPaths = new Set(records.map((record) => extensionPathKey(record.path)));
     const inlineRecords = loadedResult.extensions
       .filter(
         (extension) =>
           extension.path.startsWith("<inline:") &&
-          !resolvedRecordPaths.has(resolve(extension.path)),
+          !resolvedRecordPaths.has(extensionPathKey(extension.path)),
       )
       .map((extension) => this.buildInlineExtensionRecord(extension));
     records.push(...inlineRecords);
@@ -904,9 +983,7 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
         origin: "top-level",
       },
       commands: [...extension.commands.keys()].sort((left, right) => left.localeCompare(right)),
-      tools: [...extension.tools.values()]
-        .map((tool) => tool.definition.name)
-        .sort((left, right) => left.localeCompare(right)),
+      tools: describeTools(extension.tools),
       flags: [...extension.flags.keys()].sort((left, right) => left.localeCompare(right)),
       flagDetails: describeFlags(extension.flags),
       shortcuts: [...extension.shortcuts.keys()].sort((left, right) => left.localeCompare(right)),
@@ -1011,6 +1088,10 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
     scope: ResourceScope,
     origin: PathMetadata["origin"],
   ): string {
+    // pi's add-ons are named by their `builtin:<name>` path, as pi's own `pi config` writes them.
+    if (metadata.source === "builtin") {
+      return filePath;
+    }
     if (origin === "package") {
       const baseDir = metadata.baseDir ?? dirname(filePath);
       return relative(baseDir, filePath);
@@ -1029,6 +1110,22 @@ async function readJsonRecord(filePath: string): Promise<Record<string, unknown>
   } catch {
     return {};
   }
+}
+
+function throwGlobalSettingsError(
+  errors: readonly { readonly scope: string; readonly error: unknown }[],
+): void {
+  const failure = errors.find((entry) => entry.scope === "global");
+  if (failure) throw failure.error;
+}
+
+function isCodemodeToolEntry(entry: string): boolean {
+  return entry === "+codemode" || entry === "codemode";
+}
+
+/** `builtin:<name>` names one of pi's add-ons, not a file, so it is compared as is. */
+function extensionPathKey(path: string): string {
+  return isBuiltinExtensionPath(path) ? path : resolve(path);
 }
 
 function replaceResourcePattern(
@@ -1316,6 +1413,31 @@ function firstNonEmptyLine(value: string): string | undefined {
     .split(/\r?\n/)
     .map((line) => line.trim())
     .find(Boolean);
+}
+
+/** pi's own tools (its `allToolNames`, which pi does not export). An extension may replace one. */
+const PI_TOOL_NAMES: ReadonlySet<string> = new Set([
+  "read",
+  "bash",
+  "powershell",
+  "edit",
+  "write",
+  "grep",
+  "find",
+  "ls",
+]);
+
+function describeTools(
+  tools: ReadonlyMap<string, { definition: { name: string; label?: unknown } }>,
+): RuntimeExtensionTool[] {
+  return [...tools.values()]
+    .map(({ definition }) => ({
+      name: definition.name,
+      // pi does not check the label, so an untyped extension can leave it out.
+      label: typeof definition.label === "string" ? definition.label : "",
+      replacesPiTool: PI_TOOL_NAMES.has(definition.name),
+    }))
+    .sort((left, right) => left.name.localeCompare(right.name));
 }
 
 function describeFlags(

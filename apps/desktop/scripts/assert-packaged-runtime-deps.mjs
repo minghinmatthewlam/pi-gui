@@ -156,6 +156,9 @@ const packagedRuntimeImportChecks = [
   ["@earendil-works", "pi-ai", "dist", "api", "anthropic-messages.js"],
   ["@earendil-works", "pi-ai", "dist", "api", "openai-responses.js"],
   ["@earendil-works", "pi-ai", "dist", "bedrock-provider.js"],
+  // pi loads its MCP client and code mode executor only when a session needs them.
+  ["@earendil-works", "pi-coding-agent", "dist", "extensions", "mcp", "runtime.js"],
+  ["@earendil-works", "pi-coding-agent", "dist", "extensions", "codemode", "execute.js"],
   ["proxy-agent", "dist", "index.js"],
 ];
 
