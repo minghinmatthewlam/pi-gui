@@ -214,6 +214,20 @@ interface ManagedSessionRecord {
   abortOnRunStart: boolean;
   pendingRunOutcome: RunOutcome | undefined;
   queuedMessages: SessionQueuedMessage[];
+  /** Taken off the queue to start a turn; shown in the transcript when pi starts it. */
+  startingQueuedMessage: SessionQueuedMessage | undefined;
+  queuedStartScheduled: boolean;
+  /** The latest rebuild of pi's queue from queuedMessages (see changeQueue). */
+  piQueueSync: Promise<void>;
+  /** An idle point arrived while a start was scheduled; check again when it finishes. */
+  queuedStartRecheck: boolean;
+  /**
+   * Queued messages that already started. The app's list can still hold one for a moment, and a
+   * queue change sent from it must not queue it again.
+   */
+  startedQueuedMessageIds: Set<string>;
+  /** Starting a queued message failed; it waits for the person's next send or queue change. */
+  queuedStartFailed: boolean;
   closed: boolean;
   listeners: Set<SessionEventListener>;
   eventQueue: Promise<void>;
@@ -945,6 +959,15 @@ export class SessionSupervisor {
   async sendUserMessage(sessionRef: SessionRef, input: SessionMessageInput): Promise<void> {
     const record = await this.ensureRecord(sessionRef);
     await this.settleReloadsBeforeSend(record);
+    record.queuedStartFailed = false;
+    return this.sendReadyMessage(record, input);
+  }
+
+  /** Synchronous until the session counts as busy (promptStarting, or a command running). */
+  private async sendReadyMessage(
+    record: ManagedSessionRecord,
+    input: SessionMessageInput,
+  ): Promise<void> {
     const session = this.requireSession(record);
     const isExtensionCommand = this.isExtensionCommand(session, input.text);
     if (input.extensionCommandOnly && !isExtensionCommand) {
@@ -964,7 +987,7 @@ export class SessionSupervisor {
     } finally {
       if (isExtensionCommand) {
         record.extensionCommandsRunning -= 1;
-        this.runPendingReload(record);
+        this.whenIdle(record);
       }
     }
   }
@@ -989,12 +1012,6 @@ export class SessionSupervisor {
     record.config = deriveSessionConfig(session.sessionManager);
     // A card button's command is not something the user said, so it leaves the preview.
     if (!input.extensionCommandOnly) record.preview = truncate(input.text);
-    if (isQueuedMessage) {
-      record.queuedMessages = [
-        ...record.queuedMessages,
-        queuedMessageFromInput(input, record.updatedAt),
-      ];
-    }
     try {
       await this.persistSnapshot(record);
       await this.emit(record, sessionUpdatedEvent(record));
@@ -1029,12 +1046,38 @@ export class SessionSupervisor {
         // steer/follow-up now would attach to nothing and be silently dropped,
         // so re-check the live streaming state and surface a retryable error
         // instead. The catch below rolls back the optimistic queued entry.
-        if (!session.isStreaming) {
-          throw new Error(
+        const finished = () =>
+          new Error(
             "Session finished streaming before the queued message could be delivered. Retry to send it as a new turn.",
           );
+        if (!session.isStreaming) throw finished();
+        // Added to pi's queue as it is, in a queue step so it can't interleave with a change.
+        const entry = queuedMessageFromInput(input, record.updatedAt);
+        let queued = false;
+        await this.queueStep(record, async (current) => {
+          if (!current.isStreaming) throw finished();
+          record.queuedMessages = [...record.queuedMessages, entry];
+          try {
+            await this.queuePrompt(current, promptText, input.deliverAs!, images);
+          } catch (error) {
+            record.queuedMessages = record.queuedMessages.filter((message) => message !== entry);
+            throw error;
+          }
+          queued = true;
+        });
+        // The step is skipped when the session closed while it waited.
+        if (!queued) throw finished();
+        record.updatedAt = nowIso();
+        // The message is queued now, so a failure to save or announce it is not a failed send.
+        try {
+          await this.persistSnapshot(record);
+          await this.emit(record, sessionUpdatedEvent(record));
+        } catch (error) {
+          console.warn(
+            `[pi-sdk-driver] could not save a queued message for ${sessionKey(record.ref)}:`,
+            error,
+          );
         }
-        await this.queuePrompt(session, promptText, input.deliverAs!, images);
       } else if (isExtensionCommand) {
         await session.prompt(promptText, {
           ...(images && images.length > 0 ? { images } : {}),
@@ -1054,7 +1097,7 @@ export class SessionSupervisor {
             record.cancellationRequested = false;
           }
           // pi's agent_settled arrives inside prompt(), while the send still counted as busy.
-          this.runPendingReload(record);
+          this.whenIdle(record);
         }
       }
 
@@ -1065,18 +1108,20 @@ export class SessionSupervisor {
       // A card button's command failing says nothing about the thread, which may be mid-run:
       // leave its state alone and let the app report the failure.
       if (input.extensionCommandOnly) throw error;
-      if (isQueuedMessage) {
-        record.queuedMessages = record.queuedMessages.slice(0, -1);
-      }
       if (!isQueuedMessage) {
         record.runningRunId = undefined;
       }
       if (!isQueuedMessage && !isExtensionCommand) {
         record.promptStarting = false;
         // A prompt that failed before a run started has no turn end to run the reload.
-        this.runPendingReload(record);
+        this.whenIdle(record);
       }
-      record.status = isQueuedMessage ? "running" : isExtensionCommand ? "idle" : "failed";
+      if (isQueuedMessage) {
+        // The run may have settled while the message waited to be queued.
+        if (record.session?.isStreaming || isRecordBusy(record)) record.status = "running";
+      } else {
+        record.status = isExtensionCommand ? "idle" : "failed";
+      }
       record.updatedAt = nowIso();
       record.preview = error instanceof Error ? error.message : String(error);
       await this.persistSnapshot(record);
@@ -1120,11 +1165,61 @@ export class SessionSupervisor {
     messages: readonly SessionQueuedMessage[],
   ): Promise<void> {
     const record = await this.ensureRecord(sessionRef);
-    const session = this.requireSession(record);
-    session.clearQueue();
+    this.requireSession(record);
+    await this.changeQueue(record, (session) => {
+      // The app's list can still hold messages pi has delivered; they must not go back to pi.
+      forgetDeliveredQueuedMessages(record, session);
+      record.queuedMessages = messages
+        .filter((message) => !record.startedQueuedMessageIds.has(message.id))
+        .map((message) => cloneQueuedMessage(message));
+      record.queuedStartFailed = false;
+    });
 
-    record.queuedMessages = messages.map((message) => cloneQueuedMessage(message));
-    for (const message of record.queuedMessages) {
+    record.updatedAt = nowIso();
+    await this.persistSnapshot(record);
+    await this.emit(record, sessionUpdatedEvent(record));
+    // The app queues while it believes a turn is running, but pi may have settled already.
+    this.startQueuedMessageWhenIdle(record);
+  }
+
+  /**
+   * Every change to the queue is one step, run one at a time: `update` changes queuedMessages
+   * while pi's queue still matches the list as the last step left it, then pi's queue is rebuilt
+   * from the new list. An older rebuild can then never add back what a newer list dropped.
+   */
+  private changeQueue(
+    record: ManagedSessionRecord,
+    update: (session: AgentSession) => boolean | void = () => undefined,
+  ): Promise<void> {
+    return this.queueStep(record, async (session) => {
+      // An update that changed nothing returns false, and pi's queue is left as it is.
+      if (update(session) === false) return;
+      session.clearQueue();
+      await this.queueWithPi(session, record.queuedMessages);
+    });
+  }
+
+  /** Runs `step` after every earlier queue step (see changeQueue). */
+  private queueStep(
+    record: ManagedSessionRecord,
+    step: (session: AgentSession) => Promise<void>,
+  ): Promise<void> {
+    const run = record.piQueueSync
+      .catch(() => undefined)
+      .then(async () => {
+        const session = record.session;
+        if (!session || record.closed) return;
+        await step(session);
+      });
+    record.piQueueSync = run;
+    return run;
+  }
+
+  private async queueWithPi(
+    session: AgentSession,
+    messages: readonly SessionQueuedMessage[],
+  ): Promise<void> {
+    for (const message of messages) {
       const images = message.attachments?.flatMap(
         (attachment: NonNullable<SessionQueuedMessage["attachments"]>[number]) =>
           attachment.kind === "image"
@@ -1140,10 +1235,88 @@ export class SessionSupervisor {
       const promptText = injectFileAttachmentPreamble(message.text, message.attachments);
       await this.queuePrompt(session, promptText, message.mode, images);
     }
+  }
 
-    record.updatedAt = nowIso();
-    await this.persistSnapshot(record);
-    await this.emit(record, sessionUpdatedEvent(record));
+  /**
+   * pi reads its queue only during a turn and empties it before the turn settles, so a message
+   * queued after that (the app still showed the turn running) waits for a turn nobody starts.
+   * Once the session is idle and its events are delivered, the first queued message starts the
+   * next turn and the rest stay queued behind it. A start that fails puts the message back and
+   * waits for the person's next send or queue change, rather than retrying on its own.
+   */
+  private startQueuedMessageWhenIdle(record: ManagedSessionRecord): void {
+    if (record.queuedMessages.length === 0) return;
+    if (record.queuedStartScheduled) {
+      record.queuedStartRecheck = true;
+      return;
+    }
+    // Held until the started turn ends, so idle points inside it don't start another.
+    record.queuedStartScheduled = true;
+    record.queuedStartRecheck = false;
+    let started = false;
+    record.eventQueue
+      .then(async () => {
+        await this.settleReloadsBeforeSend(record);
+        let first: SessionQueuedMessage | undefined;
+        let sent: Promise<void> | undefined;
+        await this.changeQueue(record, (session) => {
+          if (record.queuedStartFailed || isRecordBusy(record)) return false;
+          if (record.reloadPending || record.reloadInFlight) {
+            record.queuedStartRecheck = true;
+            return false;
+          }
+          const pending = forgetDeliveredQueuedMessages(record, session);
+          // pi delivers steering before follow-ups, so a steer goes first.
+          first = pending.find((message) => message.mode === "steer") ?? pending[0];
+          if (!first) return false;
+          const starting = first;
+          record.queuedMessages = pending.filter((message) => message !== starting);
+          // Shown in the transcript when pi starts it (see takeStartingQueuedMessage).
+          record.startingQueuedMessage = starting;
+          record.startedQueuedMessageIds.add(starting.id);
+          started = true;
+          // pi's queue is cleared before the prompt reads it. sendReadyMessage marks the session
+          // busy before its first await, so nothing else starts a turn in between.
+          session.clearQueue();
+          sent = this.sendReadyMessage(record, {
+            text: starting.text,
+            ...(starting.attachments ? { attachments: starting.attachments } : {}),
+          });
+          sent.catch(() => undefined);
+        });
+        if (!first || !sent) return;
+        const starting = first;
+        try {
+          await sent;
+        } catch (error) {
+          const neverStarted = record.startingQueuedMessage === starting;
+          if (neverStarted && !record.closed) {
+            // pi never took it: back to the front, and no more starts until the person acts.
+            await this.changeQueue(record, () => {
+              record.startedQueuedMessageIds.delete(starting.id);
+              record.queuedStartFailed = true;
+              record.queuedMessages = [starting, ...record.queuedMessages];
+            });
+            record.updatedAt = nowIso();
+            await this.persistSnapshot(record);
+            await this.emit(record, sessionUpdatedEvent(record));
+          }
+          throw error;
+        } finally {
+          if (record.startingQueuedMessage === starting) record.startingQueuedMessage = undefined;
+        }
+      })
+      .catch((error: unknown) => {
+        console.warn(
+          `[pi-sdk-driver] starting a queued message failed for ${sessionKey(record.ref)}:`,
+          error,
+        );
+      })
+      .finally(() => {
+        record.queuedStartScheduled = false;
+        // A message queued as the started turn ended is now the next one's.
+        if (started || record.queuedStartRecheck) this.startQueuedMessageWhenIdle(record);
+      });
   }
 
   async cancelCurrentRun(sessionRef: SessionRef): Promise<void> {
@@ -1170,11 +1343,15 @@ export class SessionSupervisor {
     // the SDK's own "clear the queue when the user aborts" convention.
     record.session?.clearQueue();
     record.queuedMessages = [];
+    // Again after queue changes already on their way, so none of them refills it.
+    this.changeQueue(record, () => {
+      record.queuedMessages = [];
+    }).catch(() => undefined);
     record.runningRunId = undefined;
     record.status = "idle";
     await this.persistSnapshot(record);
     await this.emit(record, sessionUpdatedEvent(record));
-    this.runPendingReload(record);
+    this.whenIdle(record);
   }
 
   async setSessionModel(sessionRef: SessionRef, selection: SessionModelSelection): Promise<void> {
@@ -1253,7 +1430,7 @@ export class SessionSupervisor {
     this.refreshUsage(record);
     await this.persistSnapshot(record);
     await this.emit(record, sessionUpdatedEvent(record));
-    this.runPendingReload(record);
+    this.whenIdle(record);
   }
 
   /**
@@ -1269,6 +1446,12 @@ export class SessionSupervisor {
     }
     await this.runReload(record);
     return "reloaded";
+  }
+
+  /** The session may have just gone idle: run what waits for that. */
+  private whenIdle(record: ManagedSessionRecord): void {
+    this.runPendingReload(record);
+    this.startQueuedMessageWhenIdle(record);
   }
 
   /** Runs a deferred reload once the events of the turn that held it are delivered. */
@@ -1518,6 +1701,12 @@ export class SessionSupervisor {
       abortOnRunStart: false,
       pendingRunOutcome: undefined,
       queuedMessages: [],
+      startingQueuedMessage: undefined,
+      queuedStartScheduled: false,
+      piQueueSync: Promise.resolve(),
+      queuedStartRecheck: false,
+      startedQueuedMessageIds: new Set(),
+      queuedStartFailed: false,
       closed: false,
       listeners: new Set<SessionEventListener>(),
       eventQueue: Promise.resolve(),
@@ -2380,7 +2569,7 @@ export class SessionSupervisor {
     const mapped = this.mapAgentEvent(record, event);
     if (mapped.length === 0) {
       if (event.type === "agent_settled" || event.type === "compaction_end") {
-        this.runPendingReload(record);
+        this.whenIdle(record);
       }
       return;
     }
@@ -2389,7 +2578,7 @@ export class SessionSupervisor {
       persistSnapshot: shouldPersistSnapshotForAgentEvent(event.type),
     });
     if (event.type === "agent_settled" || event.type === "compaction_end") {
-      this.runPendingReload(record);
+      this.whenIdle(record);
     }
   }
 
@@ -2421,13 +2610,14 @@ export class SessionSupervisor {
         return [sessionUpdatedEvent(record)];
       case "message_start":
       case "message_end":
-        if (event.message.role === "user") {
-          const queuedMessage = reconcileQueuedMessagesForStartedUserMessage(
-            record,
-            event.message,
-            timestamp,
-          );
+        // pi emits both for a user message; only the start may match, or a second queued
+        // message with the same text would count as started too.
+        if (event.type === "message_start" && event.message.role === "user") {
+          const queuedMessage =
+            takeStartingQueuedMessage(record, timestamp) ??
+            reconcileQueuedMessagesForStartedUserMessage(record, event.message, timestamp);
           if (queuedMessage) {
+            record.startedQueuedMessageIds.add(queuedMessage.id);
             this.updatePreviewFromMessage(record, event.message);
             return [
               {
@@ -3443,6 +3633,41 @@ function queuedMessageFromInput(
     createdAt: timestamp,
     updatedAt: timestamp,
   };
+}
+
+/**
+ * A message pi delivered stays listed when its text did not match the started one (pi expanded
+ * a template, say). pi queues each kind in list order and takes from the front, so what it still
+ * holds is the last of each kind, as many as it counts; the rest count as started. Call it only
+ * when pi's queue was built from the list (no rebuild in flight).
+ */
+function forgetDeliveredQueuedMessages(
+  record: ManagedSessionRecord,
+  session: AgentSession,
+): SessionQueuedMessage[] {
+  const steers = record.queuedMessages.filter((message) => message.mode === "steer");
+  const followUps = record.queuedMessages.filter((message) => message.mode === "followUp");
+  const held = new Set([
+    ...steers.slice(Math.max(0, steers.length - session.getSteeringMessages().length)),
+    ...followUps.slice(Math.max(0, followUps.length - session.getFollowUpMessages().length)),
+  ]);
+  for (const message of record.queuedMessages) {
+    if (!held.has(message)) record.startedQueuedMessageIds.add(message.id);
+  }
+  record.queuedMessages = record.queuedMessages.filter((message) => held.has(message));
+  return record.queuedMessages;
+}
+
+/** pi's first user message after a queued message started a turn is that message. */
+function takeStartingQueuedMessage(
+  record: ManagedSessionRecord,
+  timestamp: string,
+): SessionQueuedMessage | undefined {
+  const started = record.startingQueuedMessage;
+  if (!started) return undefined;
+  record.startingQueuedMessage = undefined;
+  record.updatedAt = timestamp;
+  return started;
 }
 
 function reconcileQueuedMessagesForStartedUserMessage(

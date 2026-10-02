@@ -883,8 +883,9 @@ function installApplicationMenu(): void {
 // Ensure npm (and other Homebrew/npm-global binaries) are available even when
 // pi-gui is launched via Finder/Dock (which hands the process a minimal PATH).
 // POSIX-only; on Windows the PATH is left untouched (see augmentPosixPath).
+// Tests that need an exact PATH (no gh, say, on a Mac runner whose Homebrew has one) opt out.
 const augmentedPath = augmentPosixPath();
-if (augmentedPath.changed) {
+if (augmentedPath.changed && !(appTestMode && process.env.PI_APP_TEST_EXACT_PATH === "1")) {
   process.env.PATH = augmentedPath.path;
 }
 
