@@ -238,6 +238,7 @@ export const desktopCommands = {
   toggleTerminal: "toggle-terminal",
   toggleSidePanel: "toggle-side-panel",
   toggleReview: "toggle-review",
+  newSidePanelTab: "new-side-panel-tab",
   closeFocusedSurface: "close-focused-surface",
   toggleSidebar: "toggle-sidebar",
   openCommandPalette: "open-command-palette",
@@ -582,6 +583,7 @@ export function getDesktopCommandFromShortcut(
   const isK = lowerKey === "k" || input.code === "KeyK";
   const isP = lowerKey === "p" || input.code === "KeyP";
   const isN = lowerKey === "n" || input.code === "KeyN";
+  const isT = lowerKey === "t" || input.code === "KeyT";
   const isShiftO = input.shift && (lowerKey === "o" || input.code === "KeyO");
   const isShiftR = input.shift && isR;
   const isShiftA = input.shift && (lowerKey === "a" || input.code === "KeyA");
@@ -615,6 +617,10 @@ export function getDesktopCommandFromShortcut(
 
   if (!input.shift && isP) {
     return desktopCommands.openFilePalette;
+  }
+
+  if (!input.shift && isT) {
+    return desktopCommands.newSidePanelTab;
   }
 
   if ((!input.shift && isN) || isShiftO) {
@@ -661,6 +667,7 @@ export function isSinglePressCommand(command: PiDesktopCommand | undefined): boo
   return (
     isPaletteCommand(command) ||
     command === desktopCommands.toggleReview ||
+    command === desktopCommands.newSidePanelTab ||
     command === desktopCommands.renameThread ||
     command === desktopCommands.archiveThread
   );

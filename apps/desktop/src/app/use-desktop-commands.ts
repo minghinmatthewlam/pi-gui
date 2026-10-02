@@ -140,6 +140,14 @@ export function useDesktopCommands(input: DesktopCommandsInput) {
   const toggleSidePanel = () => {
     if (sidePanelAvailable) workbench.toggleVisibility();
   };
+  /** Does what the side panel's Add tab button does, then focuses the first choice. */
+  const newSidePanelTab = () => {
+    if (!sidePanelAvailable) return false;
+    workbench.showChooser();
+    window.requestAnimationFrame(() => {
+      document.querySelector<HTMLElement>('[data-testid="workbench-chooser"] button')?.focus();
+    });
+  };
   const selectSidePanelTab = (index: number) => {
     const tool = sidePanelAvailable ? workbench.view.tools[index] : undefined;
     if (tool) workbench.activateTool(toolRefId(tool));
@@ -208,6 +216,7 @@ export function useDesktopCommands(input: DesktopCommandsInput) {
       // that same-tick pair while preserving a deliberate second press.
       if (reviewToggleGate.current(performance.now())) toggleWorkbenchTool("changes");
     },
+    [desktopCommands.newSidePanelTab]: newSidePanelTab,
     [desktopCommands.closeFocusedSurface]: closeFocusedSurface,
     [desktopCommands.toggleSidebar]: togglePrimarySidebar,
     [desktopCommands.openCommandPalette]: (source) => togglePalette("commands", source),

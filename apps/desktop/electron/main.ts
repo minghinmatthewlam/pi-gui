@@ -562,8 +562,13 @@ function createWindow(): BrowserWindow {
       (terminalFocused || sidePanelFocusedWebContentsIds.has(webContentsId));
     if (terminalFocused) {
       // Control chords belong to the shell, so only macOS Command chords open
-      // a palette or act on the thread from the terminal.
-      if (process.platform === "darwin" && isSinglePressCommand(command)) {
+      // a palette or act on the thread from the terminal. New Tab stays with the
+      // terminal, which opens another shell.
+      if (
+        process.platform === "darwin" &&
+        isSinglePressCommand(command) &&
+        command !== desktopCommands.newSidePanelTab
+      ) {
         event.preventDefault();
         if (!input.isAutoRepeat) window.webContents.send(desktopIpc.appCommand, command);
       } else if (command === desktopCommands.toggleSidePanel) {

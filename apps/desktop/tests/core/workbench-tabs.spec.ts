@@ -184,6 +184,50 @@ test("adds singleton tool tabs, closes to a neighbor, and keeps an empty chooser
   }
 });
 
+test("Cmd/Ctrl+T opens the Add tab chooser, and a new shell from the terminal", async () => {
+  test.setTimeout(60_000);
+  const fixture = await prepareWorkspace();
+  const harness = await launchDesktop(fixture.userDataDir, {
+    agentDir: fixture.agentDir,
+    initialWorkspaces: [fixture.workspacePath],
+    testMode: "background",
+  });
+  try {
+    const window = await harness.firstWindow();
+    await selectSession(window, TASK_A);
+    await expect(window.getByTestId("workbench")).toHaveCount(0);
+    const chooser = window.getByTestId("workbench-chooser");
+    const tabs = window.getByRole("tablist", { name: "Workspace tools" }).getByRole("tab");
+
+    // From the composer, with the side panel hidden: the panel opens on the chooser.
+    await window.getByTestId("composer").click();
+    await window.keyboard.press(desktopShortcut("T"));
+    await expect(chooser).toBeVisible();
+    await expect(chooser.getByRole("button", { name: "Files", exact: true })).toBeFocused();
+    await expect(tabs).toHaveText(["Review"]);
+    await window.keyboard.press("Enter");
+    await expectActiveTool(window, "Files");
+
+    // From the open panel, existing tabs stay and the chooser takes the selection.
+    await window.keyboard.press(desktopShortcut("T"));
+    await expect(chooser).toBeVisible();
+    await expect(tabs).toHaveText(["Review", "Files"]);
+    await chooser.getByRole("button", { name: "Terminal", exact: true }).click();
+    await expectActiveTool(window, "Terminal");
+
+    // Inside the terminal the shortcut keeps opening another shell instead.
+    const terminal = window.getByTestId("integrated-terminal");
+    await expect(terminal.getByTestId("terminal-tab")).toHaveCount(1);
+    await terminal.locator(".xterm").click();
+    await window.keyboard.press(desktopShortcut("T"));
+    await expect(terminal.getByTestId("terminal-tab")).toHaveCount(2);
+    await expect(chooser).toHaveCount(0);
+    await expectActiveTool(window, "Terminal");
+  } finally {
+    await harness.close();
+  }
+});
+
 test("restores each task's tabs and draft through Settings, switching, and restart", async () => {
   test.setTimeout(90_000);
   const fixture = await prepareWorkspace();
