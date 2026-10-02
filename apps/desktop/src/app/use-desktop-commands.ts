@@ -142,7 +142,9 @@ export function useDesktopCommands(input: DesktopCommandsInput) {
   };
   /** Does what the side panel's Add tab button does, then focuses the first choice. */
   const newSidePanelTab = () => {
-    if (!sidePanelAvailable) return false;
+    // An open dialog keeps focus; the chooser would open behind it.
+    const dialogOpen = document.querySelector("[aria-modal='true'], .extension-dialog-backdrop");
+    if (!sidePanelAvailable || !workbench.ready || dialogOpen) return false;
     workbench.showChooser();
     window.requestAnimationFrame(() => {
       document.querySelector<HTMLElement>('[data-testid="workbench-chooser"] button')?.focus();
@@ -298,6 +300,20 @@ export function useDesktopCommands(input: DesktopCommandsInput) {
       ) {
         event.preventDefault();
         handleCommandRef.current(command);
+      }
+      // The shell opens another terminal for New Tab; the terminal's own tabs and
+      // buttons have no use for it, so it opens the chooser from there.
+      if (
+        command === desktopCommands.newSidePanelTab &&
+        !event.repeat &&
+        !(event.target instanceof Element && event.target.closest(".xterm")) &&
+        platformShortcutModifier(api?.platform ?? "linux", {
+          meta: event.metaKey,
+          control: event.ctrlKey,
+        }) &&
+        handleCommandRef.current(command)
+      ) {
+        event.preventDefault();
       }
       return;
     }

@@ -661,7 +661,8 @@ export function isPaletteCommand(command: PiDesktopCommand | undefined): boolean
  * Commands that act once per press and only from the platform modifier. macOS
  * Control chords stay with text fields, and off macOS the terminal keeps Control
  * chords. Holding Archive would otherwise archive each next thread in turn, and
- * holding Review would flicker the panel.
+ * holding Review would flicker the panel. New Tab is the exception in the terminal,
+ * where the shell keeps it to open another terminal.
  */
 export function isSinglePressCommand(command: PiDesktopCommand | undefined): boolean {
   return (

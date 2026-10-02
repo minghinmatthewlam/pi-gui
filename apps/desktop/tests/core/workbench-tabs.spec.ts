@@ -192,6 +192,15 @@ test("Cmd/Ctrl+T opens the Add tab chooser, and a new shell from the terminal", 
     initialWorkspaces: [fixture.workspacePath],
     testMode: "background",
   });
+  // Native input passes through main's before-input-event, unlike Playwright's keydowns.
+  const pressNewTab = () =>
+    harness.electronApp.evaluate(({ BrowserWindow }, modifier) => {
+      BrowserWindow.getAllWindows()[0]?.webContents.sendInputEvent({
+        type: "keyDown",
+        keyCode: "t",
+        modifiers: [modifier],
+      });
+    }, process.platform === "darwin" ? ("meta" as const) : ("control" as const));
   try {
     const window = await harness.firstWindow();
     await selectSession(window, TASK_A);
@@ -201,7 +210,7 @@ test("Cmd/Ctrl+T opens the Add tab chooser, and a new shell from the terminal", 
 
     // From the composer, with the side panel hidden: the panel opens on the chooser.
     await window.getByTestId("composer").click();
-    await window.keyboard.press(desktopShortcut("T"));
+    await pressNewTab();
     await expect(chooser).toBeVisible();
     await expect(chooser.getByRole("button", { name: "Files", exact: true })).toBeFocused();
     await expect(tabs).toHaveText(["Review"]);
@@ -209,20 +218,26 @@ test("Cmd/Ctrl+T opens the Add tab chooser, and a new shell from the terminal", 
     await expectActiveTool(window, "Files");
 
     // From the open panel, existing tabs stay and the chooser takes the selection.
-    await window.keyboard.press(desktopShortcut("T"));
+    await pressNewTab();
     await expect(chooser).toBeVisible();
     await expect(tabs).toHaveText(["Review", "Files"]);
     await chooser.getByRole("button", { name: "Terminal", exact: true }).click();
     await expectActiveTool(window, "Terminal");
 
-    // Inside the terminal the shortcut keeps opening another shell instead.
+    // Inside the shell the shortcut keeps opening another terminal instead.
     const terminal = window.getByTestId("integrated-terminal");
     await expect(terminal.getByTestId("terminal-tab")).toHaveCount(1);
     await terminal.locator(".xterm").click();
-    await window.keyboard.press(desktopShortcut("T"));
+    await pressNewTab();
     await expect(terminal.getByTestId("terminal-tab")).toHaveCount(2);
     await expect(chooser).toHaveCount(0);
     await expectActiveTool(window, "Terminal");
+
+    // The terminal's own buttons are not the shell, so the chooser opens from there.
+    await terminal.getByTestId("terminal-tab").first().focus();
+    await pressNewTab();
+    await expect(chooser).toBeVisible();
+    await expect(chooser.getByRole("button", { name: "Files", exact: true })).toBeFocused();
   } finally {
     await harness.close();
   }
