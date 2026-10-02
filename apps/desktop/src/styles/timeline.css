@@ -289,6 +289,7 @@
   gap: 6px;
   color: var(--muted-soft);
   font-size: 13px;
+  overflow-wrap: anywhere;
 }
 
 .timeline-activity--error {
