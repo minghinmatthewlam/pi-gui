@@ -595,7 +595,10 @@ async function submitComposerToSession(
     if (resolvedRuntimeSlashCommand) {
       store.finishRuntimeCommandExecution(sessionRef);
     }
-    if (textInput) {
+    if (resolvedRuntimeSlashCommand?.source === "extension") {
+      // The command path cleared the shown draft before sending, so hand the text back there too.
+      store.setComposerDraftForSession(sessionRef, textInput, "command");
+    } else if (textInput) {
       store.conversationState.composerDraftsBySession.set(key, textInput);
     }
     if (attachments.length > 0) {
