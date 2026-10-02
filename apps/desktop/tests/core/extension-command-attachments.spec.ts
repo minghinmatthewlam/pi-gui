@@ -36,6 +36,14 @@ test("a typed extension command keeps attachments and adds no message to the thr
   try {
     const window = await firstRun.firstWindow();
     await createNamedThread(window, "Ping thread");
+    // Until the thread's commands load, "/ping" is not known to be an extension command.
+    await expect
+      .poll(async () => {
+        const state = await getDesktopState(window);
+        const key = `${state.selectedWorkspaceId}:${state.selectedSessionId}`;
+        return state.sessionCommandsBySession[key]?.some((command) => command.name === "ping");
+      })
+      .toBe(true);
     const composer = window.getByTestId("composer");
     const chips = window.locator(".composer-attachment--image");
     await pasteTinyPng(window);

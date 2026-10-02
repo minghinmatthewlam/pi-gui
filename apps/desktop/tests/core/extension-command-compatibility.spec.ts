@@ -117,6 +117,8 @@ test("fails fast for unsupported handoff-like commands and learns terminal-only 
     await expect
       .poll(async () => (await getSelectedTranscript(window))?.transcript.length ?? 0)
       .toBe(transcriptCountBeforeSecondAttempt);
+    // A blocked command gives its text back; wait for that before typing over it.
+    await expect(composer).toHaveValue("/handoff-gui-test local block");
 
     await composer.fill("/prefill-safe ");
     await expect(composer).toHaveValue("/prefill-safe ");
