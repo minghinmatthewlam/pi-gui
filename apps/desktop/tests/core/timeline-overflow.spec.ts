@@ -282,3 +282,56 @@ test("keeps long tool metadata and user rows inside the transcript at wide and n
     await saveProofVideo(video, proofDir);
   }
 });
+
+test("keeps a run error with a huge unbroken token inside the composer and transcript", async () => {
+  test.setTimeout(60_000);
+  const userDataDir = await makeUserDataDir();
+  const workspacePath = await makeWorkspace("composer-error-overflow-workspace");
+  const harness = await launchDesktop(userDataDir, {
+    initialWorkspaces: [workspacePath],
+    testMode: "background",
+  });
+
+  try {
+    const window = await harness.firstWindow();
+    await setElectronWindowSize(harness, window, NARROW_WINDOW);
+    await waitForWorkspaceByPath(window, workspacePath);
+    await createNamedThread(window, "Composer error overflow");
+
+    // A provider error that echoes a pasted token, as a 401 body might.
+    const token = `eyJhbGciOiJIUzI1NiJ9.${"eyJzdWIiOiJlcnJvci10b2tlbiJ9".repeat(300)}.sig`;
+    const failed: Extract<SessionDriverEvent, { type: "runFailed" }> = {
+      type: "runFailed",
+      sessionRef: await selectedSessionRef(window),
+      timestamp: new Date().toISOString(),
+      error: { message: `Provider rejected bearer ${token}` },
+    };
+    await emitTestSessionEvent(harness, failed);
+
+    const banner = window.getByTestId("composer-error-banner");
+    await expect(banner).toContainText(token);
+    for (const control of [window.getByTestId("composer"), window.getByTestId("send")]) {
+      await expect(control).toBeInViewport({ ratio: 1 });
+    }
+    // The same message also lands in the transcript as the failed run's activity row.
+    await expect(window.locator(".timeline-activity--error", { hasText: token })).toBeVisible();
+    const layout = await banner.evaluate((element) => {
+      const surface = element.closest<HTMLElement>(".composer__surface");
+      const pane = document.querySelector<HTMLElement>('[data-testid="timeline-pane"]');
+      if (!surface || !pane) throw new Error("Expected the composer and the timeline pane");
+      return {
+        bannerFitsItsBox: element.scrollWidth <= element.clientWidth + 1,
+        bannerWithinComposer:
+          element.getBoundingClientRect().right <= surface.getBoundingClientRect().right + 1,
+        paneHasNoHorizontalOverflow: pane.scrollWidth <= pane.clientWidth + 1,
+      };
+    });
+    expect(layout).toEqual({
+      bannerFitsItsBox: true,
+      bannerWithinComposer: true,
+      paneHasNoHorizontalOverflow: true,
+    });
+  } finally {
+    await harness.close();
+  }
+});

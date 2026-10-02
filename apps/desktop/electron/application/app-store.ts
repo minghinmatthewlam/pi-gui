@@ -1838,8 +1838,16 @@ export class DesktopAppStore {
   }
 
   async addMcpServer(workspaceId: string, server: NewMcpServerInput): Promise<DesktopAppState> {
-    return this.withMcpConfigChange(workspaceId, "global", () =>
-      this.driver.runtimeSupervisor.addMcpServer(server),
+    // The global file reaches every folder, so a clash with any folder's project file counts.
+    return this.withMcpConfigChange(workspaceId, "global", (ws) =>
+      this.driver.runtimeSupervisor.addMcpServer(
+        ws,
+        server,
+        this.state.workspaces.flatMap((workspace) => {
+          const ref = this.workspaceRefFromState(workspace.id);
+          return ref && ref.workspaceId !== ws.workspaceId ? [ref] : [];
+        }),
+      ),
     );
   }
 
@@ -1861,8 +1869,9 @@ export class DesktopAppStore {
   }
 
   /**
-   * pi reads `defaultTools` only when it creates a thread, and a reload keeps the active tools,
-   * so this applies to new threads; open ones are left alone.
+   * Writes `+codemode` in pi's `defaultTools`. Switching it on also reloads open threads in every
+   * workspace, since pi's reload turns on newly added default tools; switching it off reaches new
+   * threads only.
    */
   async setCodemodeAlwaysOn(workspaceId: string, alwaysOn: boolean): Promise<DesktopAppState> {
     await this.initialize();
@@ -1873,7 +1882,15 @@ export class DesktopAppStore {
     return this.withErrorHandling(async () => {
       await this.driver.runtimeSupervisor.setCodemodeAlwaysOn(ws, alwaysOn);
       await this.recordSettingsSelfWrite();
-      return this.refreshState({ clearLastError: true });
+      // pi's reload turns on tools newly added to defaultTools but leaves removed ones on, so
+      // only switching on reaches open threads (a thread mid-turn picks it up when it ends).
+      const reloaded = alwaysOn
+        ? await this.reloadOpenSessions(this.state.workspaces.map((workspace) => workspace.id))
+        : true;
+      const state = await this.refreshState({ clearLastError: true });
+      return reloaded
+        ? state
+        : this.withError("Some open threads could not reload; they get code mode when reopened.");
     });
   }
 

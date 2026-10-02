@@ -21,6 +21,7 @@ import type { NotificationPermissionService } from "../platform/notification-per
 import type { TerminalService } from "../platform/terminal-service";
 import type { ThemeManager } from "../platform/theme-manager";
 import type { WindowOwner } from "../windows/window-owner";
+import type { PendingComposerDraftFlusher } from "../windows/pending-draft-flush";
 import { WorkbenchRequests, type WorkbenchOwner } from "./workbench-requests";
 import type { DesktopExtensionViewOwner } from "../extensions/extension-view-owner";
 import { registerExtensionViewRequests } from "./extension-view-requests";
@@ -176,6 +177,7 @@ export interface DesktopIpcOwners {
   readonly orchestration: OrchestrationOwner;
   readonly scheduledTasks: ScheduledTaskOwner;
   readonly settings: SettingsOwner;
+  readonly composerDraftFlush: Pick<PendingComposerDraftFlusher, "acknowledge">;
 }
 
 export interface DesktopIpcCapabilities {
@@ -845,6 +847,15 @@ export function registerDesktopIpc({
         owners.conversation.updateComposerDraft(target, draft),
       );
     },
+  );
+  handleMainFrame(
+    desktopIpc.pendingComposerDraftFlushed,
+    (raw) => {
+      if (typeof raw !== "number" || !Number.isSafeInteger(raw) || raw < 1)
+        throw new TypeError("requestId must be a positive integer");
+      return raw;
+    },
+    (requestId, { contents }) => owners.composerDraftFlush.acknowledge(contents, requestId),
   );
   ipcMain.handle(desktopIpc.updateComposerDraft, (event, rawDraft: unknown, rawTarget: unknown) => {
     // A debounced write can arrive after the window selected another task, so it names its own.

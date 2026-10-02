@@ -352,8 +352,20 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
     return listMcpServers(this.mcpConfigLocation(workspace));
   }
 
-  addMcpServer(server: NewMcpServer): void {
-    addMcpServer(this.agentDir, server);
+  /**
+   * Adds a server to the global `mcp.json`, refusing a name that clashes with this workspace's or
+   * with any of `otherWorkspaces`, since the global file reaches them all.
+   */
+  addMcpServer(
+    workspace: WorkspaceRef,
+    server: NewMcpServer,
+    otherWorkspaces: readonly WorkspaceRef[] = [],
+  ): void {
+    addMcpServer(
+      this.mcpConfigLocation(workspace),
+      server,
+      otherWorkspaces.map((other) => other.path),
+    );
   }
 
   removeMcpServer(name: string): void {
@@ -1255,11 +1267,17 @@ function providerSupportsDesktopApiKeySetup(providerId: string): boolean {
   return DESKTOP_API_KEY_PROVIDER_IDS.has(providerId);
 }
 
+/** The option id pi's sign-in choices use for browser login (Anthropic, OpenAI Codex, Radius). */
+const BROWSER_LOGIN_METHOD = "browser";
+
 function toAuthInteraction(callbacks: RuntimeLoginCallbacks): LoginInteraction {
   return {
     ...(callbacks.signal ? { signal: callbacks.signal } : {}),
     prompt: async (prompt) => {
       if (prompt.type === "select") {
+        // pi's sign-ins open with "browser or headless"; pi-gui always runs where the browser is.
+        const browser = prompt.options.find((option) => option.id === BROWSER_LOGIN_METHOD);
+        if (browser) return browser.id;
         const defaultOption = prompt.options[0];
         const choice = await callbacks.onPrompt({
           message: `${prompt.message}\n${prompt.options

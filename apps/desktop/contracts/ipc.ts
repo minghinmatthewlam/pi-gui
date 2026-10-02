@@ -83,6 +83,8 @@ export interface McpServerRecord {
   readonly command?: string;
   readonly args?: readonly string[];
   readonly url?: string;
+  /** What the server offers, in a sentence; pi shows it to the model with the server. */
+  readonly description?: string;
   readonly enabled: boolean;
   /** Environment variables, headers or sign-in config are set; their values never leave main. */
   readonly hasHiddenSettings: boolean;
@@ -92,15 +94,15 @@ export interface McpServersSnapshot {
   /** The global mcp.json new servers are saved to, with the home directory shown as `~`. */
   readonly globalConfigPath: string;
   readonly servers: readonly McpServerRecord[];
-  /** mcp.json files that could not be read. */
+  /** mcp.json files that could not be read, and servers pi skips, with why. */
   readonly errors: readonly string[];
-  /** Whether pi's global `defaultTools` switches code mode on in new threads. */
+  /** Whether pi's global `defaultTools` switches code mode on. */
   readonly codemodeAlwaysOn: boolean;
 }
 
-export type NewMcpServerInput =
-  | { readonly name: string; readonly command: string; readonly args: readonly string[] }
-  | { readonly name: string; readonly url: string };
+export type NewMcpServerInput = { readonly name: string; readonly description?: string } & (
+  { readonly command: string; readonly args: readonly string[] } | { readonly url: string }
+);
 
 export const desktopIpc = {
   extensionViewOpenFile: "pi-gui:extension-view-open-file",
@@ -206,6 +208,8 @@ export const desktopIpc = {
   steerQueuedComposerMessage: "pi-gui:steer-queued-composer-message",
   persistComposerDraft: "pi-gui:persist-composer-draft",
   updateComposerDraft: "pi-gui:update-composer-draft",
+  flushPendingComposerDraft: "pi-gui:flush-pending-composer-draft",
+  pendingComposerDraftFlushed: "pi-gui:pending-composer-draft-flushed",
   submitComposer: "pi-gui:submit-composer",
   getSessionTree: "pi-gui:get-session-tree",
   navigateSessionTree: "pi-gui:navigate-session-tree",
@@ -849,6 +853,11 @@ export interface PiDesktopApi {
   }): Promise<void>;
   /** Saves the draft typed in `target`, even if another task is selected by the time it lands. */
   updateComposerDraft(composerDraft: string, target: SessionRef): Promise<DesktopAppState>;
+  /**
+   * Runs `handler` when the window is about to close or the app to quit; it should resolve
+   * once the debounced draft has been saved. Main waits a bounded time for it.
+   */
+  onPendingComposerDraftFlush(handler: () => Promise<void>): () => void;
   submitComposer(
     text: string,
     options?: { readonly deliverAs?: "steer" | "followUp" },

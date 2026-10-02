@@ -375,14 +375,16 @@ export function expectNewMcpServerInput(value: unknown): NewMcpServerInput {
   if (!MCP_SERVER_NAME.test(name)) {
     throw new TypeError('server.name may only use letters, digits, "_" and "-"');
   }
+  const description = expectOptionalString(record.description, "server.description");
+  const named = description === undefined ? { name } : { name, description };
   if (record.url !== undefined) {
     if (record.command !== undefined || record.args !== undefined) {
       throw new TypeError("server needs either a url or a command, not both");
     }
-    return { name, url: expectNonEmptyString(record.url, "server.url") };
+    return { ...named, url: expectNonEmptyString(record.url, "server.url") };
   }
   return {
-    name,
+    ...named,
     command: expectNonEmptyString(record.command, "server.command"),
     args: record.args === undefined ? [] : [...expectStringArray(record.args, "server.args")],
   };

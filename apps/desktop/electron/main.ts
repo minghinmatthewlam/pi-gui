@@ -26,6 +26,7 @@ import { pathToFileURL } from "node:url";
 import { augmentPosixPath } from "../scripts/augment-path.cjs";
 import { DesktopAppStore } from "./application/app-store";
 import { WindowOwner } from "./windows/window-owner";
+import { PendingComposerDraftFlusher } from "./windows/pending-draft-flush";
 import { TurnCheckpointStore } from "./workbench/checkpoint-store";
 import {
   DesktopExtensionViewOwner,
@@ -173,7 +174,8 @@ let retainedTerminalWorkspacePathSignature = "";
 const terminalFocusedWebContentsIds = new Set<number>();
 const sidePanelFocusedWebContentsIds = new Set<number>();
 const surfaceCloseShortcutIds = new Set<number>();
-let quittingAfterStoreFlush = false;
+// "flushing" while quit saves drafts and the store; "done" once quit may proceed.
+let quitFlush: "idle" | "flushing" | "done" = "idle";
 
 const SUPPORTED_IMAGE_TYPES = SUPPORTED_COMPOSER_IMAGE_TYPES;
 const SUPPORTED_IMAGE_MIME_TYPES = new Set<string>(
@@ -272,6 +274,11 @@ function createTestExtensionContext(sessionRef: SessionRef): ExtensionToolContex
 const OPEN_FOLDER_MENU_ITEM_ID = "file.open-folder";
 const CHECK_FOR_UPDATES_MENU_ITEM_ID = "app.check-for-updates";
 const QUIT_FLUSH_TIMEOUT_MS = 5_000;
+// Part of the quit budget above: renderers get this long to send their debounced drafts.
+const DRAFT_FLUSH_TIMEOUT_MS = 2_000;
+const composerDraftFlusher = new PendingComposerDraftFlusher(DRAFT_FLUSH_TIMEOUT_MS);
+// Windows whose draft was flushed and whose close is now allowed through.
+const windowsClosingAfterDraftFlush = new WeakSet<BrowserWindow>();
 
 function getTerminalService(): TerminalService {
   if (!terminalService) {
@@ -511,11 +518,32 @@ function createWindow(): BrowserWindow {
   });
 
   window.on("close", (event) => {
-    if (!surfaceCloseShortcutIds.has(window.webContents.id)) {
+    if (surfaceCloseShortcutIds.has(window.webContents.id)) {
+      event.preventDefault();
+      surfaceCloseShortcutIds.delete(window.webContents.id);
       return;
     }
+    // Quit flushes every window's draft and then the store before it closes any window. A
+    // close during that flush would drop this window's draft, and closing the last window
+    // would re-enter quit and skip the store flush, so quit closes it once the flush ends.
+    if (quitFlush === "flushing") {
+      event.preventDefault();
+      return;
+    }
+    if (quitFlush === "done" || windowsClosingAfterDraftFlush.delete(window)) return;
+    // Otherwise hold this close until the renderer sends its debounced draft, since closing
+    // the window would discard it.
     event.preventDefault();
-    surfaceCloseShortcutIds.delete(window.webContents.id);
+    void composerDraftFlusher
+      .flush([window])
+      .finally(() => {
+        if (window.isDestroyed()) return;
+        windowsClosingAfterDraftFlush.add(window);
+        window.close();
+      })
+      .catch((error: unknown) => {
+        console.error("[main] Closing the window after its draft flush failed", error);
+      });
   });
   window.once("ready-to-show", () => {
     if (!backgroundTestMode) {
@@ -1126,6 +1154,7 @@ app
         orchestration: store,
         scheduledTasks: store,
         settings: store,
+        composerDraftFlush: composerDraftFlusher,
       },
       capabilities: {
         ping: () =>
@@ -1249,17 +1278,22 @@ app.on("before-quit", (event) => {
   stopPruningTerminals = undefined;
   terminalService?.dispose();
   terminalService = undefined;
-  if (quittingAfterStoreFlush || !store) {
+  if (quitFlush === "done" || !store) {
     return;
   }
 
   event.preventDefault();
-  quittingAfterStoreFlush = true;
-  const flush = Promise.all([store.flushPersistence(), extensionViewOwner?.dispose()]).catch(
-    (error) => {
+  // A second quit request during the flush waits for the one already running.
+  if (quitFlush === "flushing") return;
+  quitFlush = "flushing";
+  const quittingStore = store;
+  // Renderers send their debounced drafts first so the store flush below includes them.
+  const flush = composerDraftFlusher
+    .flush(windowOwner.allWindows())
+    .then(() => Promise.all([quittingStore.flushPersistence(), extensionViewOwner?.dispose()]))
+    .catch((error: unknown) => {
       console.error("pi-gui: persistence flush failed during quit:", error);
-    },
-  );
+    });
   // Never let a hung flush block quit forever — quit after a bounded wait.
   const flushDeadline = new Promise<void>((resolve) => {
     setTimeout(() => {
@@ -1269,6 +1303,7 @@ app.on("before-quit", (event) => {
   });
   void Promise.race([flush, flushDeadline])
     .finally(() => {
+      quitFlush = "done";
       app.quit();
     })
     .catch((error: unknown) => {

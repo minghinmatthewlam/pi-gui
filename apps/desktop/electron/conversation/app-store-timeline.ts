@@ -491,6 +491,15 @@ function detailFromOutput(output: unknown): string | undefined {
     if (text) {
       return summarizeToolDetail(text);
     }
+    // The row shows a tool's images itself, so the detail names them rather than dump their data.
+    const images = output.content.flatMap((part) =>
+      isRecord(part) && part.type === "image"
+        ? [`[${stringProperty(part, "mimeType") ?? "image"} image]`]
+        : [],
+    );
+    if (images.length > 0) {
+      return summarizeToolDetail(images.join(" "));
+    }
   }
   if (typeof output === "string") {
     return summarizeToolDetail(output);
