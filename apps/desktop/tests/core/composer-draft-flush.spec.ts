@@ -1,3 +1,5 @@
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import {
   createNamedThread,
@@ -8,10 +10,12 @@ import {
   selectSession,
   type DesktopHarness,
 } from "../helpers/electron-app";
+import { expectExtensionViewReady } from "../helpers/desktop-extension-fixture";
 
 // The composer saves its draft 350 ms after the last keystroke. These specs pause the renderer's
 // timers so that save cannot happen on its own, confirm main has not received the draft, and
-// then archive the thread, close the window or quit. The draft must survive anyway.
+// then archive the thread, switch threads from an extension, close the window or quit. The
+// draft must survive anyway.
 const draft = "Unsent draft typed just before shutdown";
 
 /** Freezes renderer timers, so a debounced draft save waits until something flushes it. */
@@ -235,5 +239,109 @@ test("keeps the drafts of every window when quitting straight after typing", asy
     }
   } finally {
     await relaunched.close();
+  }
+});
+
+/** A card command and a side-panel view, each with a button that opens a thread by its id. */
+async function installThreadLinks(workspacePath: string): Promise<void> {
+  const extension = join(workspacePath, ".pi", "extensions", "thread-links");
+  await mkdir(join(extension, "dist"), { recursive: true });
+  await writeFile(
+    join(extension, "index.ts"),
+    `import { registerDesktopView } from ${JSON.stringify(require.resolve("@pi-gui/extension-ui"))};
+export default function extension(pi) {
+  registerDesktopView(pi, {
+    id: "thread-links", title: "Thread links", source: import.meta.url,
+    frontend: new URL("./dist/desktop.js", import.meta.url),
+    backend: () => ({ id: "thread-links.backend", setup() {} }),
+  });
+  pi.registerCommand("jump", {
+    description: "Card that opens a thread",
+    handler: async (args) => pi.appendEntry("pi-gui.card", {
+      title: "Related thread",
+      actions: [{ type: "openThread", label: "Open related thread", sessionId: args.trim() }],
+    }),
+  });
+}`,
+  );
+  await writeFile(
+    join(extension, "dist", "desktop.js"),
+    `export function mount(root, host) {
+  const thread = document.createElement("input");
+  thread.setAttribute("aria-label", "Thread id");
+  const button = document.createElement("button");
+  button.textContent = "Open thread";
+  button.onclick = () => void host.actions.openThread(thread.value);
+  root.append(thread, button);
+  return () => {};
+}`,
+  );
+}
+
+async function launchWithThreadLinks(
+  name: string,
+): Promise<{ harness: DesktopHarness; window: Page; targetId: string }> {
+  const workspace = await makeWorkspace(name);
+  await installThreadLinks(workspace);
+  const harness = await launchDesktop(await makeUserDataDir(), {
+    initialWorkspaces: [workspace],
+    testMode: "background",
+  });
+  const window = await harness.firstWindow();
+  await createNamedThread(window, "Target");
+  const targetId = (await getDesktopState(window)).selectedSessionId!;
+  await createNamedThread(window, "Drafting");
+  return { harness, window, targetId };
+}
+
+async function expectDraftBackOnDraftingThread(window: Page): Promise<void> {
+  await expect(window.locator(".chat-header__title")).toHaveText("Target");
+  await window.clock.resume();
+  await selectSession(window, "Drafting");
+  await expect(window.getByTestId("composer")).toHaveValue(draft);
+}
+
+test("keeps a draft when an extension card button opens another thread straight after typing", async () => {
+  test.setTimeout(90_000);
+  const { harness, window, targetId } = await launchWithThreadLinks("draft-card-open-thread");
+  try {
+    const composer = window.getByTestId("composer");
+    await composer.fill(`/jump ${targetId}`);
+    await composer.press("Enter");
+    const openThread = window
+      .getByTestId("extension-card")
+      .getByRole("button", { name: /Open related thread/ });
+    await expect(openThread).toBeVisible();
+
+    await pauseRendererTimers(window);
+    await typeUnsavedDraft(window);
+    await openThread.click();
+    await expectDraftBackOnDraftingThread(window);
+  } finally {
+    await harness.close();
+  }
+});
+
+test("keeps a draft when an extension view opens another thread straight after typing", async () => {
+  test.setTimeout(90_000);
+  const { harness, window, targetId } = await launchWithThreadLinks("draft-view-open-thread");
+  try {
+    if (!(await window.getByTestId("workbench").isVisible()))
+      await window.getByTestId("toggle-side-panel").click();
+    await window.getByTestId("workbench-add-tab").click();
+    await window
+      .getByTestId("workbench-chooser")
+      .getByRole("button", { name: "Thread links", exact: true })
+      .click();
+    await expectExtensionViewReady(window);
+    const frame = window.frameLocator('[data-testid="extension-view-frame"]');
+    await frame.getByLabel("Thread id").fill(targetId);
+
+    await pauseRendererTimers(window);
+    await typeUnsavedDraft(window);
+    await frame.getByRole("button", { name: "Open thread" }).click();
+    await expectDraftBackOnDraftingThread(window);
+  } finally {
+    await harness.close();
   }
 });

@@ -983,7 +983,13 @@ app
       },
       onHostAction: (context) =>
         performExtensionViewHostAction(
-          { store, windows: windowOwner, views: extensionViews, openExternal: openExternalLink },
+          {
+            store,
+            windows: windowOwner,
+            views: extensionViews,
+            openExternal: openExternalLink,
+            saveComposerDraft: (window) => composerDraftFlusher.flush([window]),
+          },
           context,
         ),
       onDiagnostic: (target, source, message) =>

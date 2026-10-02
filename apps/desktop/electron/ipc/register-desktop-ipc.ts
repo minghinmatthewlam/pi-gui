@@ -177,7 +177,7 @@ export interface DesktopIpcOwners {
   readonly orchestration: OrchestrationOwner;
   readonly scheduledTasks: ScheduledTaskOwner;
   readonly settings: SettingsOwner;
-  readonly composerDraftFlush: Pick<PendingComposerDraftFlusher, "acknowledge">;
+  readonly composerDraftFlush: Pick<PendingComposerDraftFlusher, "acknowledge" | "flush">;
 }
 
 export interface DesktopIpcCapabilities {
@@ -895,12 +895,17 @@ export function registerDesktopIpc({
         }
       };
       requireCardThread();
+      // A switch drops the composer's debounced draft, so save it first. Outside the queue:
+      // the save itself goes through it.
+      const saveDraftBeforeSwitch = () =>
+        owners.composerDraftFlush.flush([senderWindow(windows, event)]);
       const host: AppOperationHost = {
         workspacePath: (workspaceId) => owners.workspace.getWorkspacePath(workspaceId),
         openExternal: capabilities.openExternal,
         // Like a typed extension command, it may change selection, so it keeps the window's queue,
         // and checks the thread again once its turn in that queue comes.
         runExtensionCommand: async (sessionRef, command) => {
+          await saveDraftBeforeSwitch();
           await run(event, async () => {
             requireCardThread();
             return owners.conversation.runExtensionCommand(sessionRef, command);
@@ -908,6 +913,7 @@ export function registerDesktopIpc({
         },
         workspaces: () => owners.workspace.getWorkspaceRecords(),
         selectThread: async (resolve) => {
+          await saveDraftBeforeSwitch();
           const state = await run(event, async () => {
             requireCardThread();
             return owners.conversation.selectSession(resolve());
