@@ -34,6 +34,9 @@ const execFileAsync = promisify(execFile);
 const require = createRequire(__filename);
 const electronExecutablePath = require("electron") as string;
 const REAL_AUTH_ENV_VAR = "PI_APP_REAL_AUTH";
+// Quit is bounded at a few seconds in main; past this the app is stuck, not slow.
+const APP_EXIT_TIMEOUT_MS = 30_000;
+const APP_OUTPUT_TAIL_LINES = 40;
 const REAL_AUTH_SOURCE_DIR_ENV_VAR = "PI_APP_REAL_AUTH_SOURCE_DIR";
 const REQUIRED_REAL_AUTH_FILES = ["auth.json"] as const;
 const OPTIONAL_REAL_AUTH_FILES = ["settings.json", "models.json"] as const;
@@ -253,6 +256,11 @@ async function waitForDesktopRendererPage(
 
 function createDesktopHarness(electronApp: ElectronApplication): DesktopHarness {
   let page: Page | undefined;
+  const outputTail: string[] = [];
+  electronApp.process().stderr?.on("data", (chunk: Buffer) => {
+    outputTail.push(...chunk.toString("utf8").split("\n").filter(Boolean));
+    outputTail.splice(0, Math.max(0, outputTail.length - APP_OUTPUT_TAIL_LINES));
+  });
 
   async function getWindow(): Promise<Page> {
     if (!page) {
@@ -306,9 +314,69 @@ function createDesktopHarness(electronApp: ElectronApplication): DesktopHarness 
         .toBe(true);
     },
     close: async () => {
-      await electronApp.close();
+      // Playwright waits with no bound until the app and every process holding its output
+      // pipes are gone, and the worker's teardown then hangs on the same wait. Log quit's
+      // progress to the output and fail fast instead.
+      let timer: NodeJS.Timeout | undefined;
+      const timedOut = new Promise<false>((resolveTimeout) => {
+        timer = setTimeout(() => resolveTimeout(false), APP_EXIT_TIMEOUT_MS);
+      });
+      const closed = electronApp
+        .evaluate(({ app, BrowserWindow }) => {
+          const log = (stage: string) => process.stderr.write(`[test quit] ${stage}\n`);
+          app.prependListener("before-quit", () => log("before-quit"));
+          app.once("will-quit", () => log("will-quit"));
+          for (const window of BrowserWindow.getAllWindows()) {
+            window.on("close", (event) =>
+              log(`window ${window.id} close${event.defaultPrevented ? " held" : ""}`),
+            );
+          }
+        })
+        .catch(() => undefined)
+        .then(() => electronApp.close())
+        .then(() => true);
+      const exited = await Promise.race([closed, timedOut]).finally(() => clearTimeout(timer));
+      if (exited) return;
+      closed.catch(() => undefined);
+      const appProcess = electronApp.process();
+      const exitState =
+        appProcess.exitCode === null && appProcess.signalCode === null
+          ? "is still running"
+          : `exited (${appProcess.exitCode ?? appProcess.signalCode})`;
+      const leftovers = await processGroupListing(appProcess.pid);
+      // Playwright launches the app as a process group leader, so this also ends the
+      // processes it started that still hold its output pipes.
+      if (appProcess.pid && process.platform !== "win32") {
+        try {
+          process.kill(-appProcess.pid, "SIGKILL");
+        } catch {
+          // The group is already gone.
+        }
+      } else {
+        appProcess.kill("SIGKILL");
+      }
+      throw new Error(
+        [
+          `The app did not finish closing within ${APP_EXIT_TIMEOUT_MS / 1000} s of quitting, so it was killed. The app ${exitState}.`,
+          `Processes left in its group:\n${leftovers}`,
+          `Last app output:\n${outputTail.join("\n")}`,
+        ].join("\n"),
+      );
     },
   };
+}
+
+async function processGroupListing(groupId: number | undefined): Promise<string> {
+  if (!groupId || process.platform === "win32") return "(not listed on this platform)";
+  try {
+    const { stdout } = await execFileAsync("ps", ["-A", "-o", "pid=,pgid=,command="], {
+      timeout: 5_000,
+    });
+    const rows = stdout.split("\n").filter((row) => row.trim().split(/\s+/)[1] === String(groupId));
+    return rows.join("\n") || "(none)";
+  } catch (error) {
+    return `(ps failed: ${String(error)})`;
+  }
 }
 
 async function focusElectronAppProcess(electronApp: ElectronApplication): Promise<void> {
