@@ -585,6 +585,41 @@
   letter-spacing: 0.01em;
 }
 
+/* ---- Working line ------------------------------------------------------ */
+
+/* A brighter band sweeps across the muted label, like the Codex and Cursor status lines. */
+.timeline-working {
+  display: flex;
+  align-items: center;
+  min-height: 20px;
+  font-size: 13px;
+}
+
+.timeline-working__label {
+  color: transparent;
+  background: linear-gradient(
+      90deg,
+      var(--muted-soft) 0%,
+      var(--muted-soft) 35%,
+      var(--text-strong) 50%,
+      var(--muted-soft) 65%,
+      var(--muted-soft) 100%
+    )
+    0 0 / 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation: working-shimmer 2s linear infinite;
+}
+
+@keyframes working-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0% 0;
+  }
+}
+
 /* ---- Loading skeleton --------------------------------------------------- */
 
 .transcript-skeleton {
@@ -882,6 +917,13 @@
   .timeline:not(.timeline--virtualized) > *,
   .skeleton-line,
   .timeline-tool--running .timeline-tool__status-pip {
+    animation: none;
+  }
+
+  /* The ticking elapsed time still shows the run is alive. */
+  .timeline-working__label {
+    color: var(--muted-soft);
+    background: none;
     animation: none;
   }
 

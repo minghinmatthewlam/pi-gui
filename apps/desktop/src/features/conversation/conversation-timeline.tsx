@@ -412,6 +412,10 @@ function isSameDisplayItem(a: DisplayTimelineItem, b: DisplayTimelineItem): bool
   if (a.kind === "turn-marker" && b.kind === "turn-marker") {
     return a.durationMs === b.durationMs;
   }
+  if (a.kind === "working" && b.kind === "working") {
+    // The line ticks its own elapsed time, so only a new run start redraws it.
+    return a.startedAt === b.startedAt;
+  }
   if (a.kind === "turn-changes" && b.kind === "turn-changes") {
     // A card's id is its checkpoint, and a captured turn's files never change.
     return true;
