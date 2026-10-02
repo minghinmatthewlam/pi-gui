@@ -573,7 +573,14 @@ async function submitComposerToSession(
       });
     }
 
-    await sendMessageToSession(store, sessionRef, text, attachments);
+    if (resolvedRuntimeSlashCommand?.source === "extension") {
+      // pi runs an extension command and ignores attachments, so it is not a message: only the
+      // typed text is used up.
+      store.setComposerDraftForSession(sessionRef, "", "command");
+      await sendExtensionCommand(store, sessionRef, text);
+    } else {
+      await sendMessageToSession(store, sessionRef, text, attachments);
+    }
     const runtimeCommandOutcome = resolvedRuntimeSlashCommand
       ? store.finishRuntimeCommandExecution(sessionRef)
       : undefined;
@@ -631,19 +638,30 @@ async function runExtensionCommand(
     if (compatibility?.status === "terminal-only") throw new Error(compatibility.message);
     store.beginRuntimeCommandExecution(sessionRef, tracked);
   }
-  // Not a message from the user: no bubble, no recency bump, no unarchive, and the draft,
-  // attachments and a streaming reply stay as they are. pi saves nothing for the command
-  // itself, so the live thread matches the reopened one.
+  // A button is not typed text, so the draft stays too.
   try {
-    if (!store.conversationState.loadedTranscriptKeys.has(sessionKey(sessionRef))) {
-      await store.ensureSessionReady(sessionRef);
-    }
-    await store.driver.sendUserMessage(sessionRef, { text, extensionCommandOnly: true });
+    await sendExtensionCommand(store, sessionRef, text);
   } finally {
     if (tracked) store.finishRuntimeCommandExecution(sessionRef);
   }
   await store.refreshSessionCommandsFor(sessionRef);
   return store.refreshState({ markSelectedSessionViewed: false });
+}
+
+/**
+ * Run an extension command. Not a message from the user: no bubble, no recency bump, no
+ * unarchive, and attachments and a streaming reply stay as they are. pi saves nothing for the
+ * command itself, so the live thread matches the reopened one.
+ */
+async function sendExtensionCommand(
+  store: ComposerStore,
+  sessionRef: SessionRef,
+  text: string,
+): Promise<void> {
+  if (!store.conversationState.loadedTranscriptKeys.has(sessionKey(sessionRef))) {
+    await store.ensureSessionReady(sessionRef);
+  }
+  await store.driver.sendUserMessage(sessionRef, { text, extensionCommandOnly: true });
 }
 
 async function setSessionModel(
