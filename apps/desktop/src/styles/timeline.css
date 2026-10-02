@@ -1077,3 +1077,23 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.timeline-tool__images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 6px 0 2px 22px;
+}
+
+.timeline-tool__image {
+  width: 160px;
+  height: 120px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-muted);
+  overflow: hidden;
+}
+
+.timeline-tool__image img {
+  object-fit: contain;
+}

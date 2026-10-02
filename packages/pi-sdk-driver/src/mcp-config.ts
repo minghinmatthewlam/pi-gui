@@ -21,6 +21,8 @@ export interface McpServerSummary {
   readonly command?: string;
   readonly args?: readonly string[];
   readonly url?: string;
+  /** What the server offers, in a sentence; pi shows it to the model with the server. */
+  readonly description?: string;
   readonly enabled: boolean;
   /** The entry has environment variables, headers or sign-in config, which are never listed. */
   readonly hasHiddenSettings: boolean;
@@ -30,13 +32,13 @@ export interface McpServerListing {
   /** The global `mcp.json`, where new servers go. */
   readonly globalConfigPath: string;
   readonly servers: readonly McpServerSummary[];
-  /** Files that could not be read, with why. */
+  /** Files that could not be read, and servers pi skips, with why. */
   readonly errors: readonly string[];
 }
 
-export type NewMcpServer =
-  | { readonly name: string; readonly command: string; readonly args?: readonly string[] }
-  | { readonly name: string; readonly url: string };
+export type NewMcpServer = { readonly name: string; readonly description?: string } & (
+  { readonly command: string; readonly args?: readonly string[] } | { readonly url: string }
+);
 
 export interface McpConfigLocation {
   readonly agentDir: string;
@@ -50,6 +52,14 @@ export function isValidMcpServerName(name: string): boolean {
   return MCP_SERVER_NAME.test(name);
 }
 
+/**
+ * pi's `mcpNamespace` (`core/mcp-servers.js`, not exported): tool names replace `-` with `_`, so
+ * two names that differ only there share a namespace and pi skips the second one it reads.
+ */
+function mcpNamespace(name: string): string {
+  return `mcp__${name.replaceAll("-", "_")}`;
+}
+
 export function mcpConfigPath(location: McpConfigLocation, scope: McpServerScope): string {
   return scope === "global"
     ? join(location.agentDir, "mcp.json")
@@ -59,6 +69,9 @@ export function mcpConfigPath(location: McpConfigLocation, scope: McpServerScope
 export function listMcpServers(location: McpConfigLocation): McpServerListing {
   const servers: McpServerSummary[] = [];
   const errors: string[] = [];
+  // pi reads the global file first; a later name in either file that shares a namespace
+  // with an earlier one is skipped (the same name in the project file overrides instead).
+  const seen: string[] = [];
   for (const scope of ["global", "project"] as const) {
     const path = mcpConfigPath(location, scope);
     let entries: Record<string, unknown> | undefined;
@@ -70,21 +83,66 @@ export function listMcpServers(location: McpConfigLocation): McpServerListing {
     }
     for (const [name, value] of Object.entries(entries ?? {})) {
       const summary = summarizeServer(name, scope, value);
-      if (summary) servers.push(summary);
-      else errors.push(`${path}: MCP server "${name}" needs a "command" or a "url"`);
+      if (!summary) {
+        errors.push(`${path}: MCP server "${name}" needs a "command" or a "url"`);
+        continue;
+      }
+      servers.push(summary);
+      const clash = namespaceClash(seen, name);
+      if (clash) {
+        errors.push(
+          `${path}: pi skips MCP server "${name}" because its name clashes with "${clash}"`,
+        );
+        continue;
+      }
+      if (scope === "project" && summary.transport === "http" && isRecord(value) && value.auth) {
+        errors.push(
+          `${path}: pi skips MCP server "${name}" because "auth" is only allowed in the global mcp.json`,
+        );
+        continue;
+      }
+      if (!seen.includes(name)) seen.push(name);
     }
   }
   return { globalConfigPath: mcpConfigPath(location, "global"), servers, errors };
 }
 
-/** Adds a server to the global `mcp.json`, creating the file when missing. */
-export function addMcpServer(agentDir: string, server: NewMcpServer): void {
+/**
+ * Adds a server to the global `mcp.json`, creating the file when missing. Every open folder's
+ * project file shares the global servers, so `otherProjects` (their paths) are checked too.
+ */
+export function addMcpServer(
+  location: McpConfigLocation,
+  server: NewMcpServer,
+  otherProjects: readonly string[] = [],
+): void {
   const name = server.name.trim();
   if (!isValidMcpServerName(name)) {
     throw new Error(`Invalid MCP server name "${name}" (use letters, digits, "_" and "-")`);
   }
   const config = newServerConfig(server);
-  const path = join(agentDir, "mcp.json");
+  // Project files are read only for their names: a clash there would make pi skip one server.
+  const paths = [
+    mcpConfigPath(location, "global"),
+    ...[...new Set([location.cwd, ...otherProjects])].map((cwd) =>
+      mcpConfigPath({ ...location, cwd }, "project"),
+    ),
+  ];
+  for (const path of paths) {
+    let existing: Record<string, unknown> | undefined;
+    try {
+      existing = readMcpServers(path);
+    } catch {
+      continue; // The global file is checked again below; an unreadable project file is skipped by pi too.
+    }
+    const clash = namespaceClash(Object.keys(existing ?? {}), name);
+    if (clash) {
+      throw new Error(
+        `An MCP server named "${clash}" already exists in ${path}, and pi treats "-" and "_" in names as the same`,
+      );
+    }
+  }
+  const path = mcpConfigPath(location, "global");
   editMcpServers(path, (servers, parsed) => {
     const target = servers ?? {};
     if (Object.hasOwn(target, name)) {
@@ -133,7 +191,17 @@ export function setMcpServerEnabled(
   });
 }
 
+/** An earlier name, other than `name` itself, that shares `name`'s namespace. */
+function namespaceClash(names: readonly string[], name: string): string | undefined {
+  return names.find((other) => other !== name && mcpNamespace(other) === mcpNamespace(name));
+}
+
 function newServerConfig(server: NewMcpServer): Record<string, unknown> {
+  const description = server.description?.trim();
+  return description ? { ...transportConfig(server), description } : transportConfig(server);
+}
+
+function transportConfig(server: NewMcpServer): Record<string, unknown> {
   if ("url" in server) {
     const url = server.url.trim();
     let parsed: URL;
@@ -161,6 +229,15 @@ function summarizeServer(
   if (!isRecord(value)) return undefined;
   const enabled = value.enabled !== false;
   const hasHiddenSettings = HIDDEN_FIELDS.some((field) => hasContent(value[field]));
+  const description =
+    typeof value.description === "string" && value.description.trim()
+      ? { description: value.description.trim() }
+      : {};
+  // pi treats a server with both as http, so the url wins here too.
+  if (typeof value.url === "string" && value.url) {
+    const url = redactUrl(value.url);
+    return { name, scope, transport: "http", url, ...description, enabled, hasHiddenSettings };
+  }
   if (typeof value.command === "string" && value.command) {
     const args = Array.isArray(value.args)
       ? redactArgs(value.args.filter((arg): arg is string => typeof arg === "string"))
@@ -171,18 +248,15 @@ function summarizeServer(
       transport: "stdio",
       command: value.command,
       args,
+      ...description,
       enabled,
       hasHiddenSettings,
     };
   }
-  if (typeof value.url === "string" && value.url) {
-    const url = redactUrl(value.url);
-    return { name, scope, transport: "http", url, enabled, hasHiddenSettings };
-  }
   return undefined;
 }
 
-const HIDDEN_FIELDS = ["env", "headers", "oauth"] as const;
+const HIDDEN_FIELDS = ["env", "headers", "oauth", "auth"] as const;
 
 /** Names that usually hold a credential, in a flag (`--api-key`) or a `NAME=value` pair. */
 const SECRET_NAME = /token|key|secret|password|passwd|auth|credential|bearer/i;

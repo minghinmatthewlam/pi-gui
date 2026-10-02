@@ -7,6 +7,8 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PiSdkDriver } from "../dist/pi-sdk-driver.js";
 import { RuntimeSupervisor } from "../dist/runtime-supervisor.js";
+import { createAgentSessionRuntimeWithNpmFallback } from "../dist/npm-package-fallback.js";
+import type { AgentSessionRuntime } from "@earendil-works/pi-coding-agent";
 
 const MCP_SERVER_FIXTURE = fileURLToPath(
   new URL("./fixtures/mcp-stdio-server.mjs", import.meta.url),
@@ -171,3 +173,27 @@ await test(
     );
   },
 );
+
+await test("switching code mode Always on reaches an open thread when it reloads", async (t) => {
+  const { agentDir, workspace } = await setup(t);
+  let runtime!: AgentSessionRuntime;
+  const driver = new PiSdkDriver({
+    agentDir,
+    catalogFilePath: join(agentDir, "catalogs.json"),
+    createAgentSessionRuntimeImpl: async (options) => {
+      runtime = await createAgentSessionRuntimeWithNpmFallback(options);
+      return runtime;
+    },
+  });
+  const { ref } = await driver.createSession(workspace);
+  t.after(() => driver.closeSession(ref));
+  assert.equal(runtime.session.getActiveToolNames().includes("codemode"), false);
+
+  await new RuntimeSupervisor({ agentDir }).setCodemodeAlwaysOn(workspace, true);
+  assert.equal(await driver.reloadSessionWhenIdle(ref), "reloaded");
+  assert.equal(
+    runtime.session.getActiveToolNames().includes("codemode"),
+    true,
+    "pi's reload turns on a tool newly added to defaultTools",
+  );
+});
