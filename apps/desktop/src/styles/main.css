@@ -135,10 +135,15 @@
   font-weight: 600;
   width: 100%;
   margin-bottom: 16px;
+  overflow-wrap: anywhere;
 }
 
+/* Capped like a queued message, so an error echoing a huge token never pushes the input off
+   screen. */
 .composer__error {
   margin-bottom: 12px;
+  max-height: min(160px, 20vh);
+  overflow-y: auto;
 }
 
 /* Diff review panel */
