@@ -25,6 +25,8 @@ import {
 
 export interface RunMetrics {
   readonly startedAt: string;
+  /** The run these counts belong to; a Stop settles a run without runCompleted. */
+  readonly runId?: string;
   toolCount: number;
   searchCount: number;
   fileCount: number;
@@ -192,14 +194,18 @@ export function applyTimelineEvent(
       );
       break;
     case "sessionUpdated":
+      // A Stop publishes only idle, so a new run id (not a missing start) begins a new run.
       if (
         event.snapshot.status === "running" &&
         event.snapshot.runningRunId &&
-        !state.runningSinceBySession.has(key)
+        (!state.runningSinceBySession.has(key) ||
+          (currentMetrics?.runId !== undefined &&
+            currentMetrics.runId !== event.snapshot.runningRunId))
       ) {
         state.runningSinceBySession.set(key, event.timestamp);
         state.runMetricsBySession.set(key, {
           startedAt: event.timestamp,
+          runId: event.snapshot.runningRunId,
           toolCount: 0,
           searchCount: 0,
           fileCount: 0,

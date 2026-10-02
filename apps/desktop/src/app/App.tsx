@@ -1171,6 +1171,7 @@ export default function App() {
                   <ConversationTimeline
                     key={selectedSessionKey}
                     transcript={pins.timeline}
+                    running={selectedSessionRunning}
                     isTranscriptLoading={isTranscriptLoading}
                     transcriptFailed={transcriptFailed}
                     onRetryTranscript={desktop.retry}

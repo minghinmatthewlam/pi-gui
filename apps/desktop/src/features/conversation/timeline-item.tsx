@@ -494,7 +494,7 @@ function TimelineTurnMarkerItem({ item }: { readonly item: TimelineTurnMarker })
 function TimelineWorkingItem({ item }: { readonly item: TimelineWorkingIndicator }) {
   const label = useRunningLabel(item.startedAt);
   return (
-    <div className="timeline-working" data-testid="timeline-working" role="status">
+    <div className="timeline-working" data-testid="timeline-working">
       <span className="timeline-working__label">{label}</span>
     </div>
   );

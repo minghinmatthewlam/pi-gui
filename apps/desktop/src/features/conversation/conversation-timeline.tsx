@@ -38,6 +38,8 @@ interface ThreadSearchModel {
 }
 interface ConversationTimelineProps {
   readonly transcript: readonly TimelineTranscriptItem[];
+  /** A run with nothing in the transcript yet still shows its Working line, not the empty state. */
+  readonly running: boolean;
   readonly isTranscriptLoading: boolean;
   readonly transcriptFailed?: { readonly retrying: boolean } | null;
   readonly onRetryTranscript?: () => void;
@@ -57,6 +59,7 @@ interface ConversationTimelineProps {
 const NO_MARKERS: readonly AnnotationMarker[] = [];
 export function ConversationTimeline({
   transcript,
+  running,
   isTranscriptLoading,
   transcriptFailed = null,
   onRetryTranscript,
@@ -151,7 +154,7 @@ export function ConversationTimeline({
               <div className="timeline" data-testid="transcript">
                 <TranscriptSkeleton />
               </div>
-            ) : transcript.length === 0 ? (
+            ) : transcript.length === 0 && !running ? (
               <div className="timeline" data-testid="transcript">
                 <TranscriptEmptyState />
               </div>
