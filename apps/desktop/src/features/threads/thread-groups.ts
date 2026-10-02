@@ -204,21 +204,26 @@ export interface VisibleThreadShortcutOptions {
   readonly model: ThreadSidebarModel;
   readonly expandedHistory?: ReadonlySet<string>;
   readonly archivedOpen?: boolean;
+  /** Folder groups folded shut in the sidebar; their rows are not on screen. */
+  readonly collapsedWorkspaceIds?: readonly string[];
 }
 
 export function visibleThreadShortcutOrder(
   options: VisibleThreadShortcutOptions,
 ): readonly ThreadListEntry[] {
   const expandedHistory = options.expandedHistory ?? EMPTY_EXPANDED_HISTORY;
+  const collapsedWorkspaceIds = new Set(options.collapsedWorkspaceIds ?? []);
   const unpinned =
     options.grouping === "workspace"
-      ? options.model.workspaceGroups.flatMap(
-          (group) =>
-            threadHistoryPreview(
-              group.threads,
-              expandedHistory.has(workspaceHistoryExpansionKey(group.workspace.id)),
-            ).visible,
-        )
+      ? options.model.workspaceGroups
+          .filter((group) => !collapsedWorkspaceIds.has(group.workspace.id))
+          .flatMap(
+            (group) =>
+              threadHistoryPreview(
+                group.threads,
+                expandedHistory.has(workspaceHistoryExpansionKey(group.workspace.id)),
+              ).visible,
+          )
       : options.model.recencySections.flatMap(
           (section) =>
             threadHistoryPreview(

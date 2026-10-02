@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   determineRunOutcome,
   messageText,
+  persistedToolOutput,
   shouldPersistSnapshotForAgentEvent,
   transcriptFromMessages,
 } from "../dist/session-supervisor-utils.js";
@@ -86,6 +87,23 @@ await test("the persist policy exempts streaming partials and keeps every discre
   ]) {
     assert.equal(shouldPersistSnapshotForAgentEvent(eventType), true, eventType);
   }
+});
+
+await test("persistedToolOutput keeps only the content and details Pi saves", () => {
+  const content = [{ type: "text", text: "ok" }];
+  const details = { exitCode: 0 };
+  assert.deepEqual(
+    persistedToolOutput({
+      content,
+      details,
+      // Pi 0.99 bash results also carry up to 1 MiB of output here; Pi never saves it.
+      structuredContent: { output: "ok", exit_code: 0 },
+      isError: false,
+    }),
+    { content, details },
+  );
+  assert.deepEqual(persistedToolOutput({ content }), { content });
+  assert.deepEqual(persistedToolOutput(undefined), {});
 });
 
 await test("transcriptFromMessages shows displayed custom messages the way terminal pi does", () => {

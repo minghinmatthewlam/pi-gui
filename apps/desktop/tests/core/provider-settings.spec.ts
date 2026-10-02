@@ -43,7 +43,9 @@ test("settings lets the user save an API key for a built-in provider", async () 
     const openAiRow = availableProviders.locator(".settings-row", {
       has: window.locator(".settings-row__title", { hasText: OPENAI_CATALOG_TITLE }),
     });
-    await expect(openAiRow).toContainText("API key");
+    // Pi 0.99 added ChatGPT sign-in to OpenAI; the row offers it beside the API key.
+    await expect(openAiRow).toContainText("OAuth or API key");
+    await expect(openAiRow.getByRole("button", { name: "Login" })).toBeVisible();
     await openAiRow.getByRole("button", { name: "Set API key" }).click();
 
     const dialog = window.getByTestId("provider-api-key-dialog");
@@ -107,7 +109,7 @@ test("settings shows environment-configured providers as managed externally", as
       has: window.locator(".settings-row__title", { hasText: OPENAI_CATALOG_TITLE }),
     });
     await expect(openAiRow).toContainText("Environment variable");
-    await expect(openAiRow.locator(".settings-row__control")).toHaveCount(0);
+    await expect(openAiRow.getByRole("button")).toHaveCount(0);
   } finally {
     await harness.close();
   }
@@ -161,7 +163,7 @@ test("settings keeps models.json provider overrides in the external-config state
       has: window.locator(".settings-row__title", { hasText: OPENAI_CATALOG_TITLE }),
     });
     await expect(openAiRow).toContainText("Configured externally");
-    await expect(openAiRow.locator(".settings-row__control")).toHaveCount(0);
+    await expect(openAiRow.getByRole("button")).toHaveCount(0);
 
     const customEndpoints = window.locator(".settings-section", {
       has: window.locator(".settings-section__title", { hasText: "Custom endpoints" }),

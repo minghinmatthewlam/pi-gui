@@ -31,7 +31,9 @@ import {
   type ExtensionViewTheme,
 } from "../features/extensions/extension-view-panel";
 import { useExtensionViews } from "../features/extensions/use-extension-views";
+import { useExtensionCardActions } from "../features/extensions/use-extension-card-actions";
 import { useExtensionHostActions } from "../features/extensions/use-extension-host-actions";
+import { useExtensionToolLabels } from "../features/extensions/extension-tool-labels";
 import { useSidePanelTabHintsVisible } from "../features/workbench/side-panel-tab-hints";
 import { Workbench } from "../features/workbench/workbench";
 import { renderBuiltinToolPanel } from "../features/workbench/builtin-tools";
@@ -79,7 +81,9 @@ import {
   buildExtensionDockModel,
   ExtensionDialog,
   hasExtensionDockContent,
+  useDismissibleExtensionDock,
 } from "../features/extensions/extension-session-ui";
+import { PinnedCards, usePinnedCards } from "../features/extensions/pinned-cards";
 import { TreeModal } from "../features/conversation/tree-modal";
 import { ForkModal } from "../features/conversation/fork-modal";
 import { getEffectiveModelRuntime } from "../features/settings/model-settings";
@@ -175,6 +179,7 @@ export default function App() {
   const selectedRuntime = selectedWorkspace
     ? snapshot?.runtimeByWorkspace[selectedWorkspace.id]
     : undefined;
+  const extensionToolLabels = useExtensionToolLabels(selectedRuntime);
   const selectedModelRuntime = snapshot
     ? getEffectiveModelRuntime(snapshot, selectedWorkspace)
     : undefined;
@@ -254,6 +259,7 @@ export default function App() {
       ? selectedTranscript
       : null;
   const activeTranscript = selectedTranscriptForSession?.transcript ?? [];
+  const pins = usePinnedCards(selectedSessionKey, activeTranscript);
   const scheduledOrigins = useMemo(() => {
     if (!snapshot || !selectedWorkspace || !selectedSession) {
       return new Map();
@@ -262,9 +268,9 @@ export default function App() {
       snapshot.scheduledTasks,
       selectedWorkspace.id,
       selectedSession.id,
-      activeTranscript,
+      pins.timeline,
     );
-  }, [activeTranscript, selectedSession, selectedWorkspace, snapshot]);
+  }, [pins.timeline, selectedSession, selectedWorkspace, snapshot]);
   const scheduledBinding = selectedSession
     ? nonCompletedBindingForSession(snapshot?.scheduledTasks ?? [], selectedSession.id)
     : undefined;
@@ -281,11 +287,11 @@ export default function App() {
   });
   const timelineRows = useMemo(
     () =>
-      buildDisplayTimelineItems(activeTranscript, {
+      buildDisplayTimelineItems(pins.timeline, {
         lastTurnRunning: selectedSessionRunning,
         turnChanges: turnChanges.turns,
       }),
-    [activeTranscript, selectedSessionRunning, turnChanges.turns],
+    [pins.timeline, selectedSessionRunning, turnChanges.turns],
   );
   const viewport = useTimelineViewport({
     sessionKey: selectedSessionKey,
@@ -333,6 +339,11 @@ export default function App() {
   const selectedExtensionDock = useMemo(
     () => buildExtensionDockModel(selectedExtensionUi),
     [selectedExtensionUi],
+  );
+  const shownExtensionDock = useDismissibleExtensionDock(
+    selectedSessionKey,
+    selectedExtensionUi,
+    selectedExtensionDock,
   );
   const displayedSessionTitle = selectedExtensionUi?.title ?? selectedSession?.title ?? "";
   const activeExtensionDialog = selectedExtensionUi?.pendingDialogs[0];
@@ -424,6 +435,14 @@ export default function App() {
     },
     [api],
   );
+  const runExtensionCardAction = useExtensionCardActions({
+    api,
+    target: workbenchTarget,
+    openWorkspaceFileLine: handleOpenWorkspaceFileLine,
+    composerDraftRef,
+    setComposerDraft,
+    focusComposer,
+  });
 
   const dismissSchemaSkewNotice = useCallback((sessionKey: string) => {
     setDismissedSchemaSkewSessionKeys((current) => {
@@ -955,6 +974,7 @@ export default function App() {
           threadSidebarModel={threadSidebarModel ?? buildThreadSidebarModel(snapshot)}
           threadShortcutOrderRef={threadShortcutOrderRef}
           threadGrouping={snapshot.threadGrouping}
+          collapsedWorkspaceIds={snapshot.collapsedWorkspaceIds}
           linkedWorktreeByWorkspaceId={linkedWorktreeByWorkspaceId}
           wsMenu={wsMenu}
           threadMenu={threadMenu}
@@ -1149,7 +1169,7 @@ export default function App() {
 
                   <ConversationTimeline
                     key={selectedSessionKey}
-                    transcript={activeTranscript}
+                    transcript={pins.timeline}
                     isTranscriptLoading={isTranscriptLoading}
                     transcriptFailed={transcriptFailed}
                     onRetryTranscript={desktop.retry}
@@ -1158,6 +1178,8 @@ export default function App() {
                     onViewFileInDiff={handleViewFileInDiff}
                     onOpenTurnChange={turnChanges.openTurnChange}
                     onOpenWorkspaceFileLine={handleOpenWorkspaceFileLine}
+                    onExtensionAction={runExtensionCardAction}
+                    extensionToolLabels={extensionToolLabels}
                     workspacePath={selectedWorkspace.path}
                     onForkFromMessage={
                       selectedSession.status === "running" ? undefined : openForkModal
@@ -1235,9 +1257,19 @@ export default function App() {
                 selectedMentionIndex={mentionMenu.selectedIndex}
                 onSelectMention={mentionMenu.insertMention}
                 onEnableMentionExtension={mentionMenu.enableMentionExtension}
-                extensionDock={selectedExtensionDock}
+                pinnedCards={
+                  <PinnedCards
+                    pins={pins.visiblePins}
+                    collapsedPinIds={pins.collapsedPinIds}
+                    onToggle={pins.togglePin}
+                    onDismiss={pins.dismissPin}
+                    onAction={runExtensionCardAction}
+                  />
+                }
+                extensionDock={shownExtensionDock.dock}
                 extensionDockExpanded={isSelectedExtensionDockExpanded}
                 onToggleExtensionDock={handleToggleExtensionDock}
+                onDismissExtensionDock={shownExtensionDock.dismiss}
                 extensionNotices={selectedExtensionUi?.notices}
                 annotations={transcriptAnnotations}
               />

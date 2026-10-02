@@ -1,10 +1,15 @@
 import { basename } from "node:path";
 import {
   sessionEntryToContextMessages,
+  type CustomEntry,
+  type SessionEntry,
   type SessionInfo,
   type SessionManager,
 } from "@earendil-works/pi-coding-agent";
 import type {
+  ExtensionAction,
+  ExtensionCard,
+  ExtensionCardRow,
   SessionAttachment,
   SessionConfig,
   SessionErrorInfo,
@@ -12,10 +17,17 @@ import type {
   SessionSnapshot,
   SessionStatus,
   SessionTranscriptAttachment,
+  SessionTranscriptCard,
   SessionTranscriptCustomMessage,
   SessionTranscriptItem,
+  SessionTranscriptPin,
   SessionUsageSnapshot,
   WorkspaceRef,
+} from "@pi-gui/session-driver";
+import {
+  EXTENSION_CARD_CUSTOM_TYPE,
+  EXTENSION_PIN_CUSTOM_TYPE,
+  parseExtensionAction,
 } from "@pi-gui/session-driver";
 import type { SessionQueuedMessage } from "@pi-gui/session-driver/types";
 
@@ -255,14 +267,60 @@ export function injectFileAttachmentPreamble(
   return text ? `${block}\n${text}` : block;
 }
 
+/** One thing the transcript draws: a context message, or a custom entry pi itself projects to nothing. */
+type DisplaySource =
+  | { readonly kind: "message"; readonly message: unknown }
+  | {
+      readonly kind: "card";
+      readonly item: SessionTranscriptCard | SessionTranscriptCustomMessage;
+    };
+
 export function transcriptFromMessages(
   messages: readonly unknown[],
   fallbackTimestamp = nowIso(),
 ): SessionTranscriptItem[] {
+  return transcriptFromSources(
+    messages.map((message) => ({ kind: "message", message })),
+    fallbackTimestamp,
+  );
+}
+
+/**
+ * The visible transcript of the session's active branch, including extension cards, then the
+ * branch's pins. Pins read the whole branch, so a compaction never unpins one.
+ */
+export function transcriptFromSession(
+  sessionManager: Pick<SessionManager, "buildContextEntries" | "getBranch">,
+  fallbackTimestamp = nowIso(),
+): SessionTranscriptItem[] {
+  return [
+    ...transcriptFromSources(displaySourcesFromSession(sessionManager), fallbackTimestamp),
+    ...pinsFromBranch(sessionManager.getBranch()),
+  ];
+}
+
+function transcriptFromSources(
+  sources: readonly DisplaySource[],
+  fallbackTimestamp: string,
+): SessionTranscriptItem[] {
   const transcript: SessionTranscriptItem[] = [];
   const toolIndexByCallId = new Map<string, number>();
+  const cardIndexById = new Map<string, number>();
 
-  for (const [index, message] of messages.entries()) {
+  for (const [index, source] of sources.entries()) {
+    if (source.kind === "card") {
+      const { item } = source;
+      // A keyed card (or a pin's error row) stays where it first appeared and shows its latest write.
+      const existing = cardIndexById.get(item.id);
+      if (existing === undefined) {
+        cardIndexById.set(item.id, transcript.length);
+        transcript.push(item);
+      } else {
+        transcript[existing] = item;
+      }
+      continue;
+    }
+    const { message } = source;
     if (!isRecord(message)) {
       continue;
     }
@@ -345,15 +403,174 @@ export function customMessageTranscriptItem(
 export function displayMessagesFromSession(
   sessionManager: Pick<SessionManager, "buildContextEntries">,
 ) {
-  return sessionManager.buildContextEntries().flatMap((entry, index) => {
+  return displaySourcesFromSession(sessionManager).flatMap((source) =>
+    source.kind === "message" ? [source.message] : [],
+  );
+}
+
+/**
+ * The display messages plus extension cards in entry order. pi projects custom entries to no
+ * messages, so cards are read from the entries directly.
+ */
+function displaySourcesFromSession(
+  sessionManager: Pick<SessionManager, "buildContextEntries">,
+): DisplaySource[] {
+  return sessionManager.buildContextEntries().flatMap((entry, index): DisplaySource[] => {
+    if (isExtensionCardEntry(entry)) {
+      return [{ kind: "card", item: transcriptItemFromCardEntry(entry) }];
+    }
+    // A pin is drawn above the composer; only a malformed one leaves a row where it was written.
+    if (isExtensionPinEntry(entry)) {
+      const item = transcriptItemFromPinEntry(entry);
+      return item.kind === "custom" ? [{ kind: "card", item }] : [];
+    }
     // A retained range can contain older compactions. Only the latest one,
     // which Pi places first, contributes a summary (matching Pi's projection).
     if (entry.type === "compaction" && index > 0) return [];
     return sessionEntryToContextMessages(entry).map((message) => ({
-      ...message,
-      id: entry.id,
+      kind: "message",
+      message: { ...message, id: entry.id },
     }));
   });
+}
+
+export function isExtensionCardEntry(entry: { readonly type: string }): entry is CustomEntry {
+  return (
+    entry.type === "custom" &&
+    (entry as Partial<CustomEntry>).customType === EXTENSION_CARD_CUSTOM_TYPE
+  );
+}
+
+export function isExtensionPinEntry(entry: { readonly type: string }): entry is CustomEntry {
+  return (
+    entry.type === "custom" &&
+    (entry as Partial<CustomEntry>).customType === EXTENSION_PIN_CUSTOM_TYPE
+  );
+}
+
+/**
+ * Each pin's latest valid write on the branch, in first-write order. A pin written again after
+ * it was removed counts as written anew. A malformed write leaves the pin as it was.
+ */
+export function pinsFromBranch(entries: readonly SessionEntry[]): SessionTranscriptPin[] {
+  const pins = new Map<string, SessionTranscriptPin>();
+  for (const entry of entries) {
+    if (!isExtensionPinEntry(entry)) continue;
+    const item = transcriptItemFromPinEntry(entry);
+    if (item.kind !== "pin") continue;
+    if (item.card && pins.get(item.id)?.card === null) pins.delete(item.id);
+    pins.set(item.id, item);
+  }
+  return [...pins.values()];
+}
+
+/**
+ * The only place a `pi-gui.pin` entry's data becomes a pin: the card fields with a required key,
+ * or `{ key, remove: true }`. A malformed pin becomes a custom row saying what is wrong, one row
+ * per key so a pin rewritten every step does not flood the transcript.
+ */
+export function transcriptItemFromPinEntry(
+  entry: CustomEntry,
+): SessionTranscriptPin | SessionTranscriptCustomMessage {
+  const key = isRecord(entry.data) && isCardKey(entry.data.key) ? entry.data.key : undefined;
+  const card = parseExtensionPin(entry.data, key);
+  if (typeof card === "string") {
+    return {
+      id: key ? `pin-error:${key}` : entry.id,
+      createdAt: entry.timestamp,
+      kind: "custom",
+      customType: EXTENSION_PIN_CUSTOM_TYPE,
+      text: `This pinned card was not shown: ${card}.`,
+    };
+  }
+  return { id: `pin:${key}`, createdAt: entry.timestamp, kind: "pin", card };
+}
+
+/**
+ * The only place a `pi-gui.card` entry's data becomes a card. Unknown fields are ignored and
+ * malformed rows or actions are skipped. A card without a title is not dropped silently: it
+ * becomes a custom row saying what is wrong, so the extension author sees it.
+ */
+export function transcriptItemFromCardEntry(
+  entry: CustomEntry,
+): SessionTranscriptCard | SessionTranscriptCustomMessage {
+  const card = parseExtensionCard(entry.data);
+  if (typeof card === "string") {
+    return {
+      id: entry.id,
+      createdAt: entry.timestamp,
+      kind: "custom",
+      customType: EXTENSION_CARD_CUSTOM_TYPE,
+      text: `This card was not shown: ${card}.`,
+    };
+  }
+  return {
+    id: card.key ? `card:${card.key}` : entry.id,
+    createdAt: entry.timestamp,
+    kind: "card",
+    card,
+  };
+}
+
+/** Card keys: 1 to 64 letters, digits, dots, dashes, underscores or colons. */
+const CARD_KEY_PATTERN = /^[A-Za-z0-9._:-]{1,64}$/;
+/** More buttons than this on one card are dropped. */
+const MAX_CARD_ACTIONS = 8;
+
+function parseExtensionCard(data: unknown): ExtensionCard | string {
+  if (!isRecord(data)) return "its data must be an object";
+  const title = typeof data.title === "string" ? data.title.trim() : "";
+  if (!title) return "it needs a non-empty string `title`";
+  if (data.key !== undefined && !isCardKey(data.key)) {
+    return "its `key` must be 1 to 64 letters, digits, dots, dashes, underscores or colons";
+  }
+  const key = data.key as string | undefined;
+  const subtitle = typeof data.subtitle === "string" ? data.subtitle.trim() : "";
+  const tone =
+    data.tone === "success" || data.tone === "warning" || data.tone === "error"
+      ? data.tone
+      : "neutral";
+  const rows = Array.isArray(data.rows)
+    ? data.rows.flatMap((row): ExtensionCardRow[] =>
+        isRecord(row) && nonEmptyString(row.label) && isCardValue(row.value)
+          ? [{ label: row.label, value: String(row.value) }]
+          : [],
+      )
+    : [];
+  const actions = Array.isArray(data.actions)
+    ? data.actions
+        .flatMap((action): ExtensionAction[] => {
+          const parsed = parseExtensionAction(action);
+          return parsed ? [parsed] : [];
+        })
+        .slice(0, MAX_CARD_ACTIONS)
+    : [];
+  return { ...(key ? { key } : {}), title, ...(subtitle ? { subtitle } : {}), tone, rows, actions };
+}
+
+/** A pin's card, null for `{ key, remove: true }`, or what is wrong with it. */
+function parseExtensionPin(data: unknown, key: string | undefined): ExtensionCard | null | string {
+  if (!key) {
+    return "it needs a `key` of 1 to 64 letters, digits, dots, dashes, underscores or colons";
+  }
+  if (isRecord(data) && data.remove === true) return null;
+  return parseExtensionCard(data);
+}
+
+function isCardKey(value: unknown): value is string {
+  return typeof value === "string" && CARD_KEY_PATTERN.test(value);
+}
+
+function nonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function isCardValue(value: unknown): value is string | number | boolean {
+  return (
+    typeof value === "string" ||
+    typeof value === "boolean" ||
+    (typeof value === "number" && Number.isFinite(value))
+  );
 }
 
 function messageCreatedAt(message: Record<string, unknown>, fallback: string): string {
@@ -394,6 +611,18 @@ function appendToolCalls(
   }
 }
 
+/** The part of a tool result Pi saves in the session: its content and details. */
+export function persistedToolOutput(result: unknown): Record<string, unknown> {
+  if (typeof result !== "object" || result === null) {
+    return {};
+  }
+  const { content, details } = result as Record<string, unknown>;
+  return {
+    ...(content !== undefined ? { content } : {}),
+    ...(details !== undefined ? { details } : {}),
+  };
+}
+
 function applyToolResult(
   transcript: SessionTranscriptItem[],
   toolIndexByCallId: Map<string, number>,
@@ -406,10 +635,7 @@ function applyToolResult(
   }
 
   const status = message.isError === true ? ("error" as const) : ("success" as const);
-  const output = {
-    ...(message.content !== undefined ? { content: message.content } : {}),
-    ...(message.details !== undefined ? { details: message.details } : {}),
-  };
+  const output = persistedToolOutput(message);
   const index = toolIndexByCallId.get(callId);
   const existing = index !== undefined ? transcript[index] : undefined;
   if (index !== undefined && existing?.kind === "tool") {

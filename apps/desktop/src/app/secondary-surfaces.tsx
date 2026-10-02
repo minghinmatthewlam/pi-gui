@@ -15,6 +15,7 @@ import {
   SETTINGS_SECTIONS,
 } from "../features/settings/settings-sections";
 import { SettingsSelect } from "../features/settings/settings-controls";
+import type { McpSettingsActions } from "../features/settings/settings-mcp-section";
 import { SecondarySurface } from "./secondary-surface";
 
 interface SecondarySurfacesProps {
@@ -232,6 +233,29 @@ export function SecondarySurfaces({
     return state.lastError;
   };
 
+  const updateSettingsWorkspace = async (
+    update: (workspaceId: string) => Promise<DesktopAppState>,
+  ): Promise<string | undefined> => {
+    if (!settingsWorkspace) {
+      return "Select a workspace first.";
+    }
+    const state = await updateSnapshot(setSnapshot, () => update(settingsWorkspace.id));
+    return state.lastError;
+  };
+
+  const mcpActions: McpSettingsActions = {
+    onAddServer: (server) =>
+      updateSettingsWorkspace((workspaceId) => api.addMcpServer(workspaceId, server)),
+    onRemoveServer: (name) =>
+      updateSettingsWorkspace((workspaceId) => api.removeMcpServer(workspaceId, name)),
+    onSetServerEnabled: (scope, name, enabled) =>
+      updateSettingsWorkspace((workspaceId) =>
+        api.setMcpServerEnabled(workspaceId, scope, name, enabled),
+      ),
+    onSetCodemodeAlwaysOn: (alwaysOn) =>
+      updateSettingsWorkspace((workspaceId) => api.setCodemodeAlwaysOn(workspaceId, alwaysOn)),
+  };
+
   const handleToggleSkill = (filePath: string, enabled: boolean) => {
     if (!skillsWorkspace) {
       return;
@@ -413,6 +437,7 @@ export function SecondarySurfaces({
           platform={api.platform}
           headerAccessory={
             settingsSection === "providers" ||
+            settingsSection === "mcp" ||
             (settingsSection === "models" && snapshot.modelSettingsScopeMode === "per-repo")
               ? workspacePicker(settingsWorkspace, onSelectSettingsWorkspace)
               : undefined
@@ -444,6 +469,7 @@ export function SecondarySurfaces({
           onSetThemePresetId={handleSetThemePresetId}
           onSetThinkingLevel={handleSetThinkingLevel}
           onToggleSkillCommands={handleToggleSkillCommands}
+          mcpActions={mcpActions}
           onSetEnableTransparency={(enabled) => {
             void updateSnapshot(setSnapshot, () => api.setEnableTransparency(enabled)).catch(
               (error: unknown) => {

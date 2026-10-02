@@ -38,7 +38,9 @@ import {
   expectCustomProviderProbeInput,
   expectForkThreadInput,
   expectHostUiResponse,
+  expectMcpServerScope,
   expectModelSettingsScopeMode,
+  expectNewMcpServerInput,
   expectNavigateSessionTreeOptions,
   expectNonEmptyString,
   expectNotificationPreferences,
@@ -62,7 +64,9 @@ import {
   expectThreadGrouping,
   expectThinkingLevel,
   expectWorkspaceFileListOptions,
+  expectExtensionActionRequest,
 } from "./request-validation";
+import { runExtensionAction, type AppOperationHost } from "../extensions/app-operations";
 
 type StateOwner = Pick<
   DesktopAppStore,
@@ -71,6 +75,7 @@ type StateOwner = Pick<
   | "setActiveView"
   | "setSidebarCollapsed"
   | "setThreadGrouping"
+  | "setWorkspaceCollapsed"
   | "setThemeMode"
   | "setThemePresetId"
 >;
@@ -86,6 +91,7 @@ type WorkspaceOwner = Pick<
   | "removeWorktree"
   | "syncCurrentWorkspace"
   | "getWorkspacePath"
+  | "getWorkspaceRecords"
 >;
 
 type ConversationOwner = Pick<
@@ -110,6 +116,8 @@ type ConversationOwner = Pick<
   | "updateComposerDraft"
   | "submitComposer"
   | "composerSubmitNeedsSenderView"
+  | "runExtensionCommand"
+  | "reportExtensionActionFailure"
   | "getSessionTree"
   | "navigateSessionTree"
   | "respondToHostUiRequest"
@@ -147,6 +155,11 @@ type SettingsOwner = Pick<
   | "setScopedModelPatterns"
   | "setSkillEnabled"
   | "setExtensionEnabled"
+  | "listMcpServers"
+  | "addMcpServer"
+  | "removeMcpServer"
+  | "setMcpServerEnabled"
+  | "setCodemodeAlwaysOn"
   | "setNotificationPreferences"
   | "setIntegratedTerminalShell"
   | "setEnableTransparency"
@@ -394,6 +407,14 @@ export function registerDesktopIpc({
   ipcMain.handle(desktopIpc.setThreadGrouping, (event, rawGrouping: unknown) =>
     run(event, () => owners.state.setThreadGrouping(expectThreadGrouping(rawGrouping))),
   );
+  ipcMain.handle(
+    desktopIpc.setWorkspaceCollapsed,
+    (event, rawWorkspaceId: unknown, rawCollapsed: unknown) => {
+      const workspaceId = expectNonEmptyString(rawWorkspaceId, "workspaceId");
+      const collapsed = expectBoolean(rawCollapsed, "collapsed");
+      return run(event, () => owners.state.setWorkspaceCollapsed(workspaceId, collapsed));
+    },
+  );
 
   ipcMain.handle(desktopIpc.refreshRuntime, (event, rawWorkspaceId: unknown) =>
     run(event, () =>
@@ -559,6 +580,48 @@ export function registerDesktopIpc({
           expectNonEmptyString(rawWorkspaceId, "workspaceId"),
           expectNonEmptyString(rawFilePath, "filePath"),
           expectBoolean(rawEnabled, "enabled"),
+        ),
+      ),
+  );
+  ipcMain.handle(desktopIpc.listMcpServers, (event, rawWorkspaceId: unknown) => {
+    windows.windowForSender(event.sender);
+    return owners.settings.listMcpServers(expectNonEmptyString(rawWorkspaceId, "workspaceId"));
+  });
+  ipcMain.handle(desktopIpc.addMcpServer, (event, rawWorkspaceId: unknown, rawServer: unknown) =>
+    run(event, () =>
+      owners.settings.addMcpServer(
+        expectNonEmptyString(rawWorkspaceId, "workspaceId"),
+        expectNewMcpServerInput(rawServer),
+      ),
+    ),
+  );
+  ipcMain.handle(desktopIpc.removeMcpServer, (event, rawWorkspaceId: unknown, rawName: unknown) =>
+    run(event, () =>
+      owners.settings.removeMcpServer(
+        expectNonEmptyString(rawWorkspaceId, "workspaceId"),
+        expectNonEmptyString(rawName, "name"),
+      ),
+    ),
+  );
+  ipcMain.handle(
+    desktopIpc.setMcpServerEnabled,
+    (event, rawWorkspaceId: unknown, rawScope: unknown, rawName: unknown, rawEnabled: unknown) =>
+      run(event, () =>
+        owners.settings.setMcpServerEnabled(
+          expectNonEmptyString(rawWorkspaceId, "workspaceId"),
+          expectMcpServerScope(rawScope),
+          expectNonEmptyString(rawName, "name"),
+          expectBoolean(rawEnabled, "enabled"),
+        ),
+      ),
+  );
+  ipcMain.handle(
+    desktopIpc.setCodemodeAlwaysOn,
+    (event, rawWorkspaceId: unknown, rawAlwaysOn: unknown) =>
+      run(event, () =>
+        owners.settings.setCodemodeAlwaysOn(
+          expectNonEmptyString(rawWorkspaceId, "workspaceId"),
+          expectBoolean(rawAlwaysOn, "alwaysOn"),
         ),
       ),
   );
@@ -816,6 +879,53 @@ export function registerDesktopIpc({
       : immediate;
     return dispatch(event, () => owners.conversation.submitComposer(target, text, options));
   });
+  // Card buttons carry extension-authored data, so only the app's own frame may send them.
+  handleMainFrame(
+    desktopIpc.runExtensionAction,
+    expectExtensionActionRequest,
+    async ({ target, action }, { event }) => {
+      // Main may have switched threads before the renderer redrew; never act on another one.
+      const requireCardThread = () => {
+        const selected = windows.targetForSender(event.sender);
+        if (
+          selected?.workspaceId !== target.workspaceId ||
+          selected.sessionId !== target.sessionId
+        ) {
+          throw new Error("Return to the card's thread to use its buttons");
+        }
+      };
+      requireCardThread();
+      const host: AppOperationHost = {
+        workspacePath: (workspaceId) => owners.workspace.getWorkspacePath(workspaceId),
+        openExternal: capabilities.openExternal,
+        // Like a typed extension command, it may change selection, so it keeps the window's queue,
+        // and checks the thread again once its turn in that queue comes.
+        runExtensionCommand: async (sessionRef, command) => {
+          await run(event, async () => {
+            requireCardThread();
+            return owners.conversation.runExtensionCommand(sessionRef, command);
+          });
+        },
+        workspaces: () => owners.workspace.getWorkspaceRecords(),
+        selectThread: async (resolve) => {
+          const state = await run(event, async () => {
+            requireCardThread();
+            return owners.conversation.selectSession(resolve());
+          });
+          if (state.lastError) throw new Error(state.lastError);
+        },
+      };
+      try {
+        return (await runExtensionAction(host, target, action)) ?? null;
+      } catch (error) {
+        await run(event, async () =>
+          owners.conversation.reportExtensionActionFailure(target, error),
+        );
+        return null;
+      }
+    },
+  );
+
   ipcMain.handle(desktopIpc.getSessionTree, (event, rawTarget: unknown) => {
     windows.windowForSender(event.sender);
     return owners.conversation.getSessionTree(expectSessionTarget(rawTarget));

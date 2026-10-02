@@ -15,6 +15,7 @@ import type {
 } from "../../../contracts/ipc";
 import { SettingsAppearanceSection } from "./settings-appearance-section";
 import { SettingsGeneralSection } from "./settings-general-section";
+import { type McpSettingsActions, SettingsMcpSection } from "./settings-mcp-section";
 import { SettingsModelsSection } from "./settings-models-section";
 import { SettingsNotificationsSection } from "./settings-notifications-section";
 import { SettingsProvidersSection } from "./settings-providers-section";
@@ -59,6 +60,7 @@ interface SettingsViewProps {
   readonly onSetThemeMode: (mode: "system" | "light" | "dark") => void;
   readonly onSetThemePresetId: (presetId: ThemePresetId) => void;
   readonly onSetEnableTransparency: (enabled: boolean) => void;
+  readonly mcpActions: McpSettingsActions;
 }
 
 export function SettingsView({
@@ -94,6 +96,7 @@ export function SettingsView({
   onSetThemeMode,
   onSetThemePresetId,
   onSetEnableTransparency,
+  mcpActions,
 }: SettingsViewProps) {
   const definition = settingsSectionDefinition(section);
   const header = (
@@ -178,6 +181,10 @@ export function SettingsView({
               onSetScopedModelPatterns={onSetScopedModelPatterns}
               onSetThinkingLevel={onSetThinkingLevel}
             />
+          ) : null}
+
+          {section === "mcp" && workspace ? (
+            <SettingsMcpSection actions={mcpActions} workspaceId={workspace.id} />
           ) : null}
 
           {section === "notifications" ? (

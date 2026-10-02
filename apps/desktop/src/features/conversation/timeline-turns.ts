@@ -1,13 +1,13 @@
 import type { TurnChangeSummary } from "../../../contracts/review";
 import type {
   DisplayTimelineItem,
+  TimelineTranscriptItem,
   TimelineTurnMarker,
-  TranscriptMessage,
 } from "../../../contracts/timeline-types";
 
 const MIN_WORKED_DURATION_MS = 1_000;
 
-function isUserMessage(item: TranscriptMessage | undefined): boolean {
+function isUserMessage(item: TimelineTranscriptItem | undefined): boolean {
   return item?.kind === "message" && item.role === "user";
 }
 
@@ -28,7 +28,7 @@ function isUserMessage(item: TranscriptMessage | undefined): boolean {
  * message or extension message.
  */
 export function buildDisplayTimelineItems(
-  transcript: readonly TranscriptMessage[],
+  transcript: readonly TimelineTranscriptItem[],
   options: {
     readonly lastTurnRunning?: boolean;
     readonly turnChanges?: readonly TurnChangeSummary[];
@@ -67,9 +67,10 @@ export function buildDisplayTimelineItems(
       if (item.kind === "message" && item.role === "assistant") {
         finalReplyIndex = index;
       }
-      // An extension can post into the thread long after the run settled; a message
-      // steered into the run is already covered by the reply that follows it.
-      if (item.kind === "custom") {
+      // An extension can post into the thread long after the run settled, and a keyed card
+      // carries its latest write's time; a message steered into the run is already covered
+      // by the reply that follows it.
+      if (item.kind === "custom" || item.kind === "card") {
         continue;
       }
       const itemMs = Date.parse(item.createdAt);
@@ -112,7 +113,7 @@ export function buildDisplayTimelineItems(
 }
 
 function turnChangeCardPositions(
-  transcript: readonly TranscriptMessage[],
+  transcript: readonly TimelineTranscriptItem[],
   turnChanges: readonly TurnChangeSummary[],
 ): ReadonlyMap<number, TurnChangeSummary[]> {
   const positions = new Map<number, TurnChangeSummary[]>();
@@ -137,9 +138,9 @@ function turnChangeCardPositions(
   }
   return positions;
 
-  function startsAnotherTurn(item: TranscriptMessage | undefined, turn: TurnChangeSummary) {
-    // A later extension message is not part of the turn's work, so the card stays above it.
-    if (item?.kind === "custom") return true;
+  function startsAnotherTurn(item: TimelineTranscriptItem | undefined, turn: TurnChangeSummary) {
+    // A later extension message or card is not part of the turn's work, so the card stays above it.
+    if (item?.kind === "custom" || item?.kind === "card") return true;
     if (item?.kind !== "message") return false;
     const owner = turnByEntry.get(item.sourceMessageId ?? item.id);
     return item.role === "user" || (owner !== undefined && owner !== turn);

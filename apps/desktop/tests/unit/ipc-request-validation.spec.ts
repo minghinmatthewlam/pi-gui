@@ -5,7 +5,9 @@ import {
   expectCustomProviderConfig,
   expectForkThreadInput,
   expectHostUiResponse,
+  expectMcpServerScope,
   expectModelSettingsScopeMode,
+  expectNewMcpServerInput,
   expectNotificationPreferences,
   expectOptionalDeliverOptions,
   expectSessionTarget,
@@ -228,4 +230,40 @@ test("IPC request validation passes new-thread extension flags through as boolea
   expect(() => expectStartThreadInput({ ...base, extensionFlags: { " ": true } })).toThrow(
     "flag names must be non-empty",
   );
+});
+
+test("IPC request validation accepts one MCP server shape and a known scope", () => {
+  expect(expectNewMcpServerInput({ name: " docs ", command: "npx", args: ["-y", "a b"] })).toEqual({
+    name: "docs",
+    command: "npx",
+    args: ["-y", "a b"],
+  });
+  expect(expectNewMcpServerInput({ name: "docs", command: "npx" })).toEqual({
+    name: "docs",
+    command: "npx",
+    args: [],
+  });
+  expect(expectNewMcpServerInput({ name: "docs", url: "https://example.com/mcp" })).toEqual({
+    name: "docs",
+    url: "https://example.com/mcp",
+  });
+  expect(() =>
+    expectNewMcpServerInput({ name: "docs", url: "https://example.com/mcp", command: "npx" }),
+  ).toThrow("either a url or a command");
+  expect(() => expectNewMcpServerInput({ name: "", command: "npx" })).toThrow(
+    "server.name must not be empty",
+  );
+  expect(() => expectNewMcpServerInput({ name: "docs", command: "npx", args: [1] })).toThrow(
+    "server.args must be an array of strings",
+  );
+  for (const name of ["my docs", "docs.v2", "docs/api", "dócs"]) {
+    expect(() => expectNewMcpServerInput({ name, command: "npx" })).toThrow(
+      'server.name may only use letters, digits, "_" and "-"',
+    );
+  }
+  expect(expectNewMcpServerInput({ name: "Docs_v2-beta", command: "npx" }).name).toBe(
+    "Docs_v2-beta",
+  );
+  expect(expectMcpServerScope("project")).toBe("project");
+  expect(() => expectMcpServerScope("extension")).toThrow("scope must be global or project");
 });

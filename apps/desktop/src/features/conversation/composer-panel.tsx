@@ -3,6 +3,7 @@ import {
   type Dispatch,
   type DragEvent,
   type KeyboardEvent,
+  type ReactNode,
   type RefObject,
   type SetStateAction,
 } from "react";
@@ -87,9 +88,11 @@ interface ComposerPanelProps {
   readonly onEnableMentionExtension: (
     option: Extract<MentionOption, { kind: "extension" }>,
   ) => void;
+  readonly pinnedCards?: ReactNode;
   readonly extensionDock?: ExtensionDockModel;
   readonly extensionDockExpanded: boolean;
   readonly onToggleExtensionDock: () => void;
+  readonly onDismissExtensionDock: () => void;
   readonly extensionNotices?: readonly SessionExtensionNoticeRecord[];
   readonly annotations: TranscriptAnnotations;
 }
@@ -142,9 +145,11 @@ export function ComposerPanel({
   selectedMentionIndex,
   onSelectMention,
   onEnableMentionExtension,
+  pinnedCards,
   extensionDock,
   extensionDockExpanded,
   onToggleExtensionDock,
+  onDismissExtensionDock,
   extensionNotices,
   annotations,
 }: ComposerPanelProps) {
@@ -198,9 +203,11 @@ export function ComposerPanel({
           textareaLabel="Composer"
           textareaTestId="composer"
           textareaPlaceholder="Ask pi to inspect the repo, run a fix, or continue the current thread..."
+          pinnedCards={pinnedCards}
           extensionDock={extensionDock}
           extensionDockExpanded={extensionDockExpanded}
           onToggleExtensionDock={onToggleExtensionDock}
+          onDismissExtensionDock={onDismissExtensionDock}
           annotationChip={
             <AnnotationChip annotations={annotations.list} onRemove={annotations.remove} />
           }

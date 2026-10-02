@@ -1073,13 +1073,20 @@
   margin-bottom: 10px;
 }
 
+/* Capped like the pinned cards, so a long queue or one huge message never pushes the input off
+   screen. */
 .queued-composer-messages {
   display: grid;
   gap: 10px;
   margin-bottom: 10px;
+  max-height: min(40vh, 360px);
+  overflow-y: auto;
 }
 
 .queued-composer-messages__editing {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1144,6 +1151,9 @@
   font-size: 14px;
   line-height: 1.45;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: min(160px, 20vh);
+  overflow-y: auto;
 }
 
 .queued-composer-message__attachments {
@@ -2041,6 +2051,7 @@
 .settings-row__actions {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   justify-content: flex-end;
   gap: 8px;
 }
@@ -2694,22 +2705,42 @@
   border-bottom: 1px solid var(--line);
 }
 
+.extension-dock__bar {
+  display: flex;
+  align-items: center;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--line);
+  background: var(--surface-muted);
+}
+
 .extension-dock__toggle {
-  width: 100%;
-  min-height: 34px;
+  min-width: 0;
+  flex: 1 1 auto;
+  min-height: 32px;
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 7px 10px;
-  border-radius: var(--radius-xl);
-  border: 1px solid var(--line);
-  background: var(--surface-muted);
+  border-radius: inherit;
   color: var(--muted-strong);
   text-align: left;
 }
 
 .extension-dock__toggle:hover {
   background: var(--overlay-hover);
+}
+
+.extension-dock__dismiss {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  margin-right: 4px;
+  color: var(--muted-soft);
+}
+
+.extension-dock__dismiss svg {
+  width: 14px;
+  height: 14px;
 }
 
 .extension-dock__summary {
@@ -2746,6 +2777,61 @@
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+/* Pinned extension cards: the transcript card shell, tighter. Each body and the whole stack are
+   capped so a long plan, or three of them, never push the composer off screen. */
+.pinned-cards {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 10px;
+  max-height: min(40vh, 360px);
+  overflow-y: auto;
+}
+
+.pinned-cards .turn-changes {
+  border-radius: var(--radius-xl);
+}
+
+.pinned-cards .turn-changes__header {
+  gap: 10px;
+  padding: 8px 8px 8px 10px;
+}
+
+.pinned-cards .turn-changes__header:last-child {
+  border-bottom: 0;
+}
+
+.pinned-cards .turn-changes__glyph {
+  width: 28px;
+  height: 28px;
+}
+
+.pinned-cards .turn-changes__glyph svg {
+  width: 16px;
+  height: 16px;
+}
+
+.pinned-cards .turn-changes__files {
+  max-height: min(180px, 24vh);
+  overflow-y: auto;
+}
+
+.pinned-card__controls {
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: 2px;
+}
+
+.pinned-card__control {
+  width: 24px;
+  height: 24px;
+  color: var(--muted-soft);
+}
+
+.pinned-card__control svg {
+  width: 14px;
+  height: 14px;
 }
 
 /* Floats over the transcript so a toast never moves the composer. */

@@ -5,10 +5,13 @@ commands, tools, saved session entries, and optional desktop view share that
 extension instance. A view is custom browser code, connected to the extension's
 service through Chord. It does not require a new app-specific IPC operation.
 
-| Example                            | Backend operation                                                                           | Desktop interaction                                                   | Terminal fallback                                                                  |
-| ---------------------------------- | ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| [PR Review](./pr-review/README.md) | Ask Pi to review a real GitHub PR at a captured commit and record structured local findings | Refresh PR, review, open a finding's file, prepare an unsent fix task | `/pr-review`                                                                       |
-| [Test Runs](./test-runs/README.md) | Execute fixed demonstration test suites, stream bounded output, stop or time out a process  | Choose a suite, run, inspect output, stop                             | `/tests passing`, `/tests failing`, `/tests slow`, `/tests timeout`, `/tests stop` |
+| Example                            | Backend operation                                                                                                                  | Desktop interaction                                                                    | Terminal fallback                                                                  |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| [PR Review](./pr-review/README.md) | Ask Pi to review a real GitHub PR at a captured commit and record structured local findings                                        | Refresh PR, review, open a finding's file, prepare an unsent fix task                  | `/pr-review`                                                                       |
+| [Test Runs](./test-runs/README.md) | Execute fixed demonstration test suites, stream bounded output, stop or time out a process                                         | Choose a suite, run, inspect output, stop                                              | `/tests passing`, `/tests failing`, `/tests slow`, `/tests timeout`, `/tests stop` |
+| [GitHub](./github/README.md)       | Read the folder's PRs and issues through `gh`; give the model a `github_read` tool for one issue or PR                             | Browse PRs and issues, open one on GitHub, prepare an unsent fix task                  | `/github`                                                                          |
+| [Usage](./usage/README.md)         | Total token use and cost across the folder's saved threads; write a card after each reply with its time, cost and context used     | Compare threads, see what fills context, open a thread; read the card under each reply | `/usage`                                                                           |
+| [Trace](./trace/README.md)         | Listen to pi's agent events (turns, model calls, tools, compaction) and record each reply as spans with the context each call sent | Watch a live waterfall of the reply, pick an earlier reply, inspect a call or tool     | `/trace`                                                                           |
 
 The test suites are actual `node:test` fixtures, including an intentional failure;
 they are not pi-gui's repository checks. PR Review needs a configured Pi model,
@@ -30,6 +33,9 @@ From the pi-gui repository root, after the normal repository dependency setup:
 pnpm --filter @pi-gui/extension-ui build
 node examples/desktop-extensions/pr-review/build.mjs
 node examples/desktop-extensions/test-runs/build.mjs
+node examples/desktop-extensions/github/build.mjs
+node examples/desktop-extensions/usage/build.mjs
+node examples/desktop-extensions/trace/build.mjs
 ```
 
 Add the absolute paths to the existing `extensions` array in the target project's
@@ -57,7 +63,7 @@ discovery and inspect diagnostics, then **Back to app**. This path also works
 before a model is configured. In a task with a configured model, `/reload` is
 another way to reload the idle runtime after changing extension configuration.
 Open the side panel, click **Add tab (+)**, and choose
-**PR Review** or **Test Runs** under **Extension views**. **Refresh views** refreshes
+**PR Review**, **Test Runs**, **GitHub**, **Usage** or **Trace** under **Extension views**. **Refresh views** refreshes
 that list. The existing Extensions screen manages Pi extensions; it is not a
 separate desktop-view installer.
 
@@ -97,9 +103,9 @@ pnpm add \
   "$extension_tarballs/pi-gui-extension-ui-0.0.0.tgz" \
   "$extension_tarballs/pi-gui-example-pr-review-0.0.0.tgz" \
   "$extension_tarballs/pi-gui-example-test-runs-0.0.0.tgz" \
-  @earendil-works/chord@0.87.0 \
-  @earendil-works/pi-ai@0.87.0 \
-  @earendil-works/pi-coding-agent@0.87.0
+  @earendil-works/chord@0.99.1 \
+  @earendil-works/pi-ai@0.99.1 \
+  @earendil-works/pi-coding-agent@0.99.1
 ```
 
 Then add the installed **package directories** to the existing Pi `extensions`
@@ -149,7 +155,8 @@ request.
 The browser exports `mount(root, host)` and returns a disposer. Wait for the scoped
 service binding's `ready()` before reading state or subscribing. Observe
 `host.signal` so a closed view does not reuse stale capabilities. The host supplies
-theme colors and scoped `openFile` / `prepareTaskDraft` actions; a prepared draft
+theme colors and scoped `openFile` / `prepareTaskDraft` / `openUrl` / `openThread`
+actions; a prepared draft
 is editable and is never sent automatically. Create backend replicated state
 with `env.replicatedState` so it belongs to the host's Chord instance.
 
@@ -182,7 +189,7 @@ GitHub metadata is a fixture executable and the model has an unauthenticated
 fixture provider: it makes no GitHub or provider requests. It proves the real
 admission failure path, not review quality.
 
-Pi 0.87's public `sendUserMessage` returns `void`. A successful service response
+Pi's public `sendUserMessage` returns `void`. A successful service response
 therefore means **Requested**, not that model execution began. Only the matching
 `before_agent_start` makes this review **Running**. Authentication or other
 preflight failures appear in Pi's extension runtime diagnostics and can leave

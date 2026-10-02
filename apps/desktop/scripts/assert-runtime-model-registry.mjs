@@ -22,6 +22,14 @@ const modelChecks = [
       requireMaxThinking: true,
     })),
   ),
+  ...["openai", "openai-codex"].map((provider) => ({
+    provider,
+    id: "gpt-6.1-sol",
+    reason: "Pi 0.99.1 GPT-6.1 Sol support",
+    requireReasoning: true,
+    requireImageInput: true,
+    requireMaxThinking: true,
+  })),
   ...["luna", "sol", "terra"].map((variant) => ({
     provider: "openai-codex",
     id: `gpt-5.6-${variant}`,

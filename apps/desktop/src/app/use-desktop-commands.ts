@@ -182,6 +182,7 @@ export function useDesktopCommands(input: DesktopCommandsInput) {
         ? visibleThreadShortcutOrder({
             grouping: snapshot?.threadGrouping ?? "time",
             model: threadSidebarModel,
+            collapsedWorkspaceIds: snapshot?.collapsedWorkspaceIds ?? [],
           })
         : []);
     const thread = threads[index];

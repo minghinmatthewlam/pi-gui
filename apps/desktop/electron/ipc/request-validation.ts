@@ -1,4 +1,9 @@
-import type { ExtensionFlagValues, HostUiResponse } from "@pi-gui/session-driver";
+import {
+  parseExtensionAction,
+  type ExtensionFlagValues,
+  type HostUiResponse,
+} from "@pi-gui/session-driver";
+import type { ExtensionActionRequest } from "../../contracts/extension-actions";
 import type { NavigateSessionTreeOptions } from "@pi-gui/session-driver/types";
 import type { RuntimeSettingsSnapshot } from "@pi-gui/session-driver/runtime-types";
 import {
@@ -24,6 +29,8 @@ import {
 import type {
   CustomProviderConfig,
   CustomProviderProbeInput,
+  McpServerScope,
+  NewMcpServerInput,
   TerminalSize,
 } from "../../contracts/ipc";
 import {
@@ -351,6 +358,36 @@ export function expectCustomProviderConfig(value: unknown): CustomProviderConfig
   };
 }
 
+export function expectMcpServerScope(value: unknown): McpServerScope {
+  if (value !== "global" && value !== "project") {
+    throw new TypeError("scope must be global or project");
+  }
+  return value;
+}
+
+/** pi's rule for MCP server names (`validateMcpServerConfig` in pi's `core/mcp-servers.js`). */
+const MCP_SERVER_NAME = /^[A-Za-z0-9_-]+$/;
+
+/** Main re-validates in the driver (URL scheme, empty command); this checks the IPC shape. */
+export function expectNewMcpServerInput(value: unknown): NewMcpServerInput {
+  const record = expectRecord(value, "server");
+  const name = expectNonEmptyString(record.name, "server.name");
+  if (!MCP_SERVER_NAME.test(name)) {
+    throw new TypeError('server.name may only use letters, digits, "_" and "-"');
+  }
+  if (record.url !== undefined) {
+    if (record.command !== undefined || record.args !== undefined) {
+      throw new TypeError("server needs either a url or a command, not both");
+    }
+    return { name, url: expectNonEmptyString(record.url, "server.url") };
+  }
+  return {
+    name,
+    command: expectNonEmptyString(record.command, "server.command"),
+    args: record.args === undefined ? [] : [...expectStringArray(record.args, "server.args")],
+  };
+}
+
 export function expectCustomProviderProbeInput(value: unknown): CustomProviderProbeInput {
   const record = expectRecord(value, "input");
   return {
@@ -498,4 +535,12 @@ export function expectUpdateScheduledTaskInput(value: unknown): UpdateScheduledT
       : { target: assertScheduledTaskTarget(record.target, "patch.target") }),
     ...(status ? { status } : {}),
   };
+}
+
+/** A card button's click. The action is extension-authored data, parsed by its one parser. */
+export function expectExtensionActionRequest(raw: unknown): ExtensionActionRequest {
+  const input = expectRecord(raw, "extension action request");
+  const action = parseExtensionAction(input.action);
+  if (!action) throw new Error("pi-gui does not support this button's action");
+  return { target: expectSessionTarget(input.target), action };
 }

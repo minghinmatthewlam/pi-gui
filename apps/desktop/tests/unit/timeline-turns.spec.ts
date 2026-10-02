@@ -84,7 +84,7 @@ test("turns shorter than a second get no marker", () => {
   expect(ids([message("u1", "user", 0), message("a1", "assistant", 0.5)])).toEqual(["u1", "a1"]);
 });
 
-test("an extension message posted after the run neither stretches the marker nor moves it", () => {
+test("an extension message or card posted after the run neither stretches the marker nor moves it", () => {
   const custom = (id: string, seconds: number): TranscriptMessage => ({
     kind: "custom",
     id,
@@ -98,6 +98,12 @@ test("an extension message posted after the run neither stretches the marker nor
     custom("steered", 3),
     message("a2", "assistant", 6),
     custom("late-ci-report", 600),
+    {
+      kind: "card",
+      id: "late-ci-card",
+      createdAt: at(900),
+      card: { title: "CI passed", tone: "success", rows: [], actions: [] },
+    },
   ];
   expect(ids(transcript)).toEqual([
     "u1",
@@ -106,7 +112,24 @@ test("an extension message posted after the run neither stretches the marker nor
     "turn-marker:u1",
     "a2",
     "late-ci-report",
+    "late-ci-card",
   ]);
   const marker = buildDisplayTimelineItems(transcript).find((item) => item.kind === "turn-marker");
   expect(marker?.durationMs).toBe(6_000);
+});
+
+test("a keyed card updated long after its turn does not stretch that turn's marker", () => {
+  const transcript: TranscriptMessage[] = [
+    message("u1", "user", 0),
+    {
+      kind: "card",
+      id: "card:ci",
+      // The card's latest write, an hour and a half after the turn ended.
+      createdAt: at(5_400),
+      card: { key: "ci", title: "CI passed", tone: "success", rows: [], actions: [] },
+    },
+    message("a1", "assistant", 60),
+  ];
+  const marker = buildDisplayTimelineItems(transcript).find((item) => item.kind === "turn-marker");
+  expect(marker?.durationMs).toBe(60_000);
 });

@@ -105,7 +105,7 @@ const notificationHelperPath =
     : undefined;
 const pnpmBinary = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 const piCodingAgentPackageName = "@earendil-works/pi-coding-agent";
-const requiredPiCodingAgentVersion = "0.87.1";
+const requiredPiCodingAgentVersion = "0.99.1";
 const modelChecks = [
   ...["openai", "openai-codex", "github-copilot"].flatMap((provider) =>
     ["sol", "luna"].map((variant) => ({
@@ -117,6 +117,14 @@ const modelChecks = [
       requireMaxThinking: true,
     })),
   ),
+  ...["openai", "openai-codex"].map((provider) => ({
+    provider,
+    id: "gpt-6.1-sol",
+    reason: "Pi 0.99.1 GPT-6.1 Sol support",
+    requireReasoning: true,
+    requireImageInput: true,
+    requireMaxThinking: true,
+  })),
   ...["luna", "sol", "terra"].map((variant) => ({
     provider: "openai-codex",
     id: `gpt-5.6-${variant}`,
@@ -148,6 +156,9 @@ const packagedRuntimeImportChecks = [
   ["@earendil-works", "pi-ai", "dist", "api", "anthropic-messages.js"],
   ["@earendil-works", "pi-ai", "dist", "api", "openai-responses.js"],
   ["@earendil-works", "pi-ai", "dist", "bedrock-provider.js"],
+  // pi loads its MCP client and code mode executor only when a session needs them.
+  ["@earendil-works", "pi-coding-agent", "dist", "extensions", "mcp", "runtime.js"],
+  ["@earendil-works", "pi-coding-agent", "dist", "extensions", "codemode", "execute.js"],
   ["proxy-agent", "dist", "index.js"],
 ];
 

@@ -2,9 +2,10 @@ import { JsonCatalogStore } from "@pi-gui/catalogs/node";
 import { sessionKey } from "@pi-gui/session-driver";
 import type { ExtensionFlagValues, SessionSchemaInfo } from "@pi-gui/session-driver";
 import type { BrowserWindow } from "electron";
+import { randomUUID } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import { homedir, hostname } from "node:os";
-import { join, resolve } from "node:path";
+import { join, resolve, sep } from "node:path";
 import {
   applyHostUiRequestToExtensionUiState,
   type GenerateThreadTitleOptions,
@@ -55,12 +56,14 @@ import {
   type SendChildThreadFollowUpInput,
   type SetChildSupervisionLoopInput,
   type SelectedTranscriptRecord,
+  type SessionExtensionNoticeRecord,
   type StartThreadInput,
   type StartupDiagnostic,
   type ThemeMode,
   type ThemePresetId,
   type ThreadGrouping,
   type TranscriptMessage,
+  type WorkspaceRecord,
   type WorkspaceSessionTarget,
   isThemeMode,
   isThemePresetId,
@@ -107,10 +110,16 @@ import {
   toSessionQueuedMessages,
   toSessionRef,
 } from "./app-store-utils";
-import type { CustomProviderConfig } from "../../contracts/ipc";
+import type {
+  CustomProviderConfig,
+  McpServerScope,
+  McpServersSnapshot,
+  NewMcpServerInput,
+} from "../../contracts/ipc";
 import { resolveRepoWorkspaceId } from "../../contracts/workspace-roots";
 import { decodeTaskWorkbenchTemplate, type TaskWorkbenchTemplate } from "../../contracts/workbench";
 import { composerImageSavedSkipMessage } from "../../contracts/composer-attachments";
+import { extensionToolLabels } from "../../contracts/tool-labels";
 import { quarantinePersistedComposerAttachments } from "../ipc/composer-attachment-pixels";
 import { SessionStateMap, type QueuedComposerEditState } from "../conversation/session-state-map";
 import {
@@ -172,7 +181,11 @@ export interface DesktopAppStoreOptions {
   readonly shouldKeepSessionDialogs?: (sessionRef: SessionRef) => boolean;
   readonly driverOptions?: Pick<
     PiSdkDriverConfig,
-    "builtinExtensions" | "desktopExtensions" | "onTurnCaptureBoundary" | "turnCaptureTimeoutMs"
+    | "builtinExtensions"
+    | "desktopExtensions"
+    | "onTurnCaptureBoundary"
+    | "openUrl"
+    | "turnCaptureTimeoutMs"
   >;
   readonly generateThreadTitleOverride?: (
     workspace: WorkspaceRef,
@@ -350,7 +363,7 @@ export class DesktopAppStore {
           revision: this.state.revision + 1,
         };
       },
-      finishLocalComposerCommand: (sessionRef, update) => {
+      applyLocalSessionUpdate: (sessionRef, update) => {
         this.state = {
           ...this.state,
           workspaces: this.state.workspaces.map((workspaceEntry) =>
@@ -370,11 +383,6 @@ export class DesktopAppStore {
                 }
               : workspaceEntry,
           ),
-          composerAttachments:
-            this.state.selectedWorkspaceId === sessionRef.workspaceId &&
-            this.state.selectedSessionId === sessionRef.sessionId
-              ? []
-              : this.state.composerAttachments,
           lastError: undefined,
           revision: this.state.revision + 1,
         };
@@ -862,6 +870,11 @@ export class DesktopAppStore {
     return this.state.workspaces.find((w) => w.id === workspaceId)?.path;
   }
 
+  /** The current folders and their threads, for checks that must not wait on a state copy. */
+  getWorkspaceRecords(): readonly WorkspaceRecord[] {
+    return this.state.workspaces;
+  }
+
   getSkillFilePath(workspaceId: string, filePath: string): string | undefined {
     return this.runtimeByWorkspace.get(workspaceId)?.skills.find((s) => s.filePath === filePath)
       ?.filePath;
@@ -1100,6 +1113,26 @@ export class DesktopAppStore {
     return this.conversationOwner.composerSubmitNeedsSenderView(sessionRef, textInput);
   }
 
+  async runExtensionCommand(sessionRef: SessionRef, command: string): Promise<DesktopAppState> {
+    return this.conversationOwner.runExtensionCommand(sessionRef, command);
+  }
+
+  /** Shows why a card button did nothing, as the same toast an extension's notify uses. */
+  reportExtensionActionFailure(sessionRef: SessionRef, error: unknown): DesktopAppState {
+    const message = error instanceof Error ? error.message : String(error);
+    this.addExtensionNotice(sessionRef, {
+      id: `action-failure:${randomUUID()}`,
+      level: "error",
+      message: `Couldn't run that button: ${message}`,
+      createdAt: new Date().toISOString(),
+    });
+    this.state = this.syncDerivedSessionState(
+      { ...this.state, revision: this.state.revision + 1 },
+      sessionRef,
+    );
+    return this.emit();
+  }
+
   async editQueuedComposerMessage(
     sessionRef: SessionRef | undefined,
     messageId: string,
@@ -1318,6 +1351,24 @@ export class DesktopAppStore {
     return this.emit();
   }
 
+  async setWorkspaceCollapsed(workspaceId: string, collapsed: boolean): Promise<DesktopAppState> {
+    await this.initialize();
+    const collapsedWorkspaceIds = new Set(this.state.collapsedWorkspaceIds);
+    if (collapsedWorkspaceIds.has(workspaceId) === collapsed) {
+      return structuredClone(this.state);
+    }
+    if (collapsed) collapsedWorkspaceIds.add(workspaceId);
+    else collapsedWorkspaceIds.delete(workspaceId);
+    this.state = {
+      ...this.state,
+      collapsedWorkspaceIds: [...collapsedWorkspaceIds],
+      lastError: undefined,
+      revision: this.state.revision + 1,
+    };
+    await this.persistUiState();
+    return this.emit();
+  }
+
   async setNotificationPreferences(
     preferences: Partial<NotificationPreferences>,
   ): Promise<DesktopAppState> {
@@ -1435,10 +1486,14 @@ export class DesktopAppStore {
     return this.withErrorHandling(async () => {
       const snapshot = await this.driver.runtimeSupervisor.refreshRuntime(ws);
       this.runtimeByWorkspace.set(ws.workspaceId, snapshot);
-      this.clearExtensionUiForWorkspace(ws.workspaceId);
-      await this.reloadSessionsForWorkspace(ws.workspaceId);
+      const reloaded = await this.reloadOpenSessions([ws.workspaceId]);
       await this.refreshSessionCommandsForWorkspace(ws.workspaceId);
-      return this.refreshState({ clearLastError: true });
+      const state = await this.refreshState({ clearLastError: true });
+      return reloaded
+        ? state
+        : this.withError(
+            "Some open threads could not reload; they pick up the change when reopened.",
+          );
     });
   }
 
@@ -1694,10 +1749,13 @@ export class DesktopAppStore {
     if (builtinName) {
       return this.setBuiltinExtensionEnabled(workspaceId, builtinName, enabled);
     }
+    // pi's own add-ons (`builtin:mcp` …) are switched in pi's global settings, so every
+    // workspace's runtime and threads pick the change up.
+    const global = filePath.startsWith("builtin:");
     return this.withRuntimeUpdate(
       workspaceId,
       (ws) => this.driver.runtimeSupervisor.setExtensionEnabled(ws, filePath, enabled),
-      { reloadSessions: true },
+      { reloadSessions: true, refreshAllWorkspaces: global },
     );
   }
 
@@ -1729,23 +1787,122 @@ export class DesktopAppStore {
     return this.withErrorHandling(async () => {
       const snapshot = await this.driver.runtimeSupervisor.refreshRuntime(ws);
       await this.refreshRuntimeForAllWorkspaces(workspaceId, snapshot);
-      // One workspace failing to reload must not keep the others, or Settings, on the old tools.
-      const reloads = await Promise.allSettled(
-        this.state.workspaces.map((workspace) => {
-          this.clearExtensionUiForWorkspace(workspace.id);
-          return this.reloadSessionsForWorkspace(workspace.id);
-        }),
+      const reloaded = await this.reloadOpenSessions(
+        this.state.workspaces.map((workspace) => workspace.id),
       );
       await this.refreshSessionCommandsForAllWorkspaces();
-      const failed = reloads.filter((result) => result.status === "rejected");
-      for (const result of failed) {
-        console.error("[app-store] reload after pi-gui tool switch failed", result.reason);
-      }
       const state = await this.refreshState({ clearLastError: true });
-      return failed.length === 0
+      return reloaded
         ? state
         : this.withError(
             "Some open threads could not reload; they pick up the pi-gui tools change when reopened.",
+          );
+    });
+  }
+
+  /**
+   * Reloads open threads so they re-read their config; one failing does not stop the others. A
+   * thread in the middle of a turn or compaction reloads when that ends, so its tools and MCP
+   * connections are not torn down under it.
+   */
+  private async reloadOpenSessions(workspaceIds: readonly string[]): Promise<boolean> {
+    const reloads = await Promise.allSettled(
+      workspaceIds
+        .flatMap((workspaceId) => this.sessionRefsForWorkspace(workspaceId))
+        // The driver resets the thread's extension UI as it reloads (a "reset" host UI
+        // request, before the extensions start again), whether now or after the turn.
+        .map((sessionRef) => this.driver.reloadSessionWhenIdle(sessionRef)),
+    );
+    const failed = reloads.filter((result) => result.status === "rejected");
+    for (const result of failed) {
+      console.error("[app-store] reloading open threads failed", result.reason);
+    }
+    return failed.length === 0;
+  }
+
+  /* ── MCP servers (pi's mcp.json) and code mode ─────────── */
+
+  async listMcpServers(workspaceId: string): Promise<McpServersSnapshot> {
+    await this.initialize();
+    const ws = this.workspaceRefFromState(workspaceId);
+    if (!ws) {
+      throw new Error(`Unknown workspace: ${workspaceId}`);
+    }
+    const listing = this.driver.runtimeSupervisor.listMcpServers(ws);
+    return {
+      globalConfigPath: withHomeAsTilde(listing.globalConfigPath),
+      servers: listing.servers.map((server) => ({ ...server })),
+      errors: [...listing.errors],
+      codemodeAlwaysOn: await this.driver.runtimeSupervisor.getCodemodeAlwaysOn(ws),
+    };
+  }
+
+  async addMcpServer(workspaceId: string, server: NewMcpServerInput): Promise<DesktopAppState> {
+    return this.withMcpConfigChange(workspaceId, "global", () =>
+      this.driver.runtimeSupervisor.addMcpServer(server),
+    );
+  }
+
+  async removeMcpServer(workspaceId: string, name: string): Promise<DesktopAppState> {
+    return this.withMcpConfigChange(workspaceId, "global", () =>
+      this.driver.runtimeSupervisor.removeMcpServer(name),
+    );
+  }
+
+  async setMcpServerEnabled(
+    workspaceId: string,
+    scope: McpServerScope,
+    name: string,
+    enabled: boolean,
+  ): Promise<DesktopAppState> {
+    return this.withMcpConfigChange(workspaceId, scope, (ws) =>
+      this.driver.runtimeSupervisor.setMcpServerEnabled(ws, scope, name, enabled),
+    );
+  }
+
+  /**
+   * pi reads `defaultTools` only when it creates a thread, and a reload keeps the active tools,
+   * so this applies to new threads; open ones are left alone.
+   */
+  async setCodemodeAlwaysOn(workspaceId: string, alwaysOn: boolean): Promise<DesktopAppState> {
+    await this.initialize();
+    const ws = this.workspaceRefFromState(workspaceId);
+    if (!ws) {
+      return this.withError(`Unknown workspace: ${workspaceId}`);
+    }
+    return this.withErrorHandling(async () => {
+      await this.driver.runtimeSupervisor.setCodemodeAlwaysOn(ws, alwaysOn);
+      await this.recordSettingsSelfWrite();
+      return this.refreshState({ clearLastError: true });
+    });
+  }
+
+  /**
+   * pi reads mcp.json when a thread starts, so open threads reload to pick up a change
+   * (restarting their MCP servers): every workspace's for the global file, else only the
+   * workspace whose `.pi/mcp.json` changed. Threads mid-turn reload when the turn ends.
+   */
+  private async withMcpConfigChange(
+    workspaceId: string,
+    scope: McpServerScope,
+    change: (ws: WorkspaceRef) => void | Promise<void>,
+  ): Promise<DesktopAppState> {
+    await this.initialize();
+    const ws = this.workspaceRefFromState(workspaceId);
+    if (!ws) {
+      return this.withError(`Unknown workspace: ${workspaceId}`);
+    }
+    return this.withErrorHandling(async () => {
+      await change(ws);
+      const workspaceIds =
+        scope === "global" ? this.state.workspaces.map((workspace) => workspace.id) : [workspaceId];
+      const reloaded = await this.reloadOpenSessions(workspaceIds);
+      await Promise.all(workspaceIds.map((id) => this.refreshSessionCommandsForWorkspace(id)));
+      const state = await this.refreshState({ clearLastError: true });
+      return reloaded
+        ? state
+        : this.withError(
+            "Some open threads could not reload; they pick up the MCP change when reopened.",
           );
     });
   }
@@ -1774,16 +1931,24 @@ export class DesktopAppStore {
       } else {
         this.runtimeByWorkspace.set(workspaceId, snapshot);
       }
-      if (options?.reloadSessions) {
-        this.clearExtensionUiForWorkspace(workspaceId);
-        await this.reloadSessionsForWorkspace(workspaceId);
-      }
+      const reloaded = options?.reloadSessions
+        ? await this.reloadOpenSessions(
+            options.refreshAllWorkspaces
+              ? this.state.workspaces.map((workspace) => workspace.id)
+              : [workspaceId],
+          )
+        : true;
       if (options?.refreshAllWorkspaces) {
         await this.refreshSessionCommandsForAllWorkspaces();
       } else {
         await this.refreshSessionCommandsForWorkspace(workspaceId);
       }
-      return this.refreshState({ clearLastError: true });
+      const state = await this.refreshState({ clearLastError: true });
+      return reloaded
+        ? state
+        : this.withError(
+            "Some open threads could not reload; they pick up the change when reopened.",
+          );
     });
   }
 
@@ -2048,6 +2213,7 @@ export class DesktopAppStore {
       themePresetId: persisted.themePresetId ?? this.state.themePresetId,
       sidebarCollapsed: persisted.sidebarCollapsed ?? this.state.sidebarCollapsed,
       threadGrouping: persisted.threadGrouping ?? "time",
+      collapsedWorkspaceIds: persisted.collapsedWorkspaceIds ?? [],
       enableTransparency: persisted.enableTransparency ?? this.state.enableTransparency,
       orchestrationChildren: persisted.orchestrationChildren ?? [],
     };
@@ -2351,6 +2517,9 @@ export class DesktopAppStore {
         pinnedAtBySession: mapToRecord(this.sessionState.pinnedAtBySession),
         pinnedSessionOrder,
         workspaceOrder: this.state.workspaceOrder,
+        collapsedWorkspaceIds: this.state.collapsedWorkspaceIds.filter((id) =>
+          liveWorkspaceIds.has(id),
+        ),
         modelSettingsScopeMode: this.state.modelSettingsScopeMode,
         globalModelSettings,
         composerDraft: this.resolveComposerDraft(
@@ -2479,7 +2648,10 @@ export class DesktopAppStore {
       return;
     }
 
-    const transcript = timelineFromDriverTranscript(await this.driver.getTranscript(sessionRef));
+    const transcript = timelineFromDriverTranscript(
+      await this.driver.getTranscript(sessionRef),
+      extensionToolLabels(this.runtimeByWorkspace.get(sessionRef.workspaceId)),
+    );
     this.sessionState.loadedTranscriptKeys.add(key);
     this.sessionState.transcriptCache.set(key, transcript);
     await this.recordSelectedTranscriptFileStat(sessionRef);
@@ -2487,7 +2659,10 @@ export class DesktopAppStore {
 
   async reloadTranscriptFromDriver(sessionRef: SessionRef): Promise<void> {
     const key = sessionKey(sessionRef);
-    const transcript = timelineFromDriverTranscript(await this.driver.getTranscript(sessionRef));
+    const transcript = timelineFromDriverTranscript(
+      await this.driver.getTranscript(sessionRef),
+      extensionToolLabels(this.runtimeByWorkspace.get(sessionRef.workspaceId)),
+    );
     this.sessionState.loadedTranscriptKeys.add(key);
     this.sessionState.transcriptCache.set(key, transcript);
     await this.recordSelectedTranscriptFileStat(sessionRef);
@@ -2525,7 +2700,7 @@ export class DesktopAppStore {
 
   private async reconcileWorkspaceFromDisk(workspaceId: string): Promise<void> {
     // Re-scan the pi session dir into the catalog so a CLI-created session appears.
-    // We deliberately do NOT call reloadSessionsForWorkspace here: reloadSession
+    // We deliberately do NOT call reloadOpenSessions here: reloadSession
     // resets a session's live extension UI (dropping pending dialogs, including
     // ones shared across windows). The catalog resync updates the session list,
     // and the selected session's transcript is refreshed non-destructively below.
@@ -2985,17 +3160,6 @@ export class DesktopAppStore {
     await Promise.all(sessionRefs.map((sessionRef) => this.refreshSessionCommands(sessionRef)));
   }
 
-  private async reloadSessionsForWorkspace(workspaceId: string): Promise<void> {
-    const sessionRefs = this.sessionRefsForWorkspace(workspaceId);
-    await Promise.all(sessionRefs.map((sessionRef) => this.driver.reloadSession(sessionRef)));
-  }
-
-  private clearExtensionUiForWorkspace(workspaceId: string): void {
-    for (const sessionRef of this.sessionRefsForWorkspace(workspaceId)) {
-      this.clearExtensionUiForSession(sessionRef);
-    }
-  }
-
   private reportExtensionCompatibilityIssue(
     sessionRef: SessionRef,
     issue: Extract<SessionDriverEvent, { type: "extensionCompatibilityIssue" }>["issue"],
@@ -3074,6 +3238,11 @@ export class DesktopAppStore {
       this.sessionState.extensionUiBySession.delete(key);
       return;
     }
+    if (event.request.kind === "dismiss") {
+      this.clearExtensionDialogTimeout(event.sessionRef, event.request.requestId);
+      this.removePendingExtensionDialog(event.sessionRef, event.request.requestId);
+      return;
+    }
 
     const uiState = this.getOrCreateExtensionUiState(event.sessionRef);
     applyHostUiRequestToExtensionUiState(uiState, event.request);
@@ -3086,15 +3255,12 @@ export class DesktopAppStore {
           "extension-editor-text",
         );
         break;
-      case "notify": {
-        const notice = extensionNoticeFromRequest(event.request, event.timestamp);
-        const dropped = appendExtensionNotice(uiState, notice);
-        for (const entry of dropped) {
-          this.clearExtensionDialogTimeout(event.sessionRef, extensionNoticeTimerId(entry.id));
-        }
-        this.scheduleExtensionNoticeExpiry(event.sessionRef, notice.id);
+      case "notify":
+        this.addExtensionNotice(
+          event.sessionRef,
+          extensionNoticeFromRequest(event.request, event.timestamp),
+        );
         break;
-      }
       default:
         if (isExtensionUiDialogRequest(event.request)) {
           const dialog = event.request;
@@ -3159,6 +3325,14 @@ export class DesktopAppStore {
   }
 
   /** Notices share the dialog timer map, so session reset and close clear both. */
+  private addExtensionNotice(sessionRef: SessionRef, notice: SessionExtensionNoticeRecord): void {
+    const dropped = appendExtensionNotice(this.getOrCreateExtensionUiState(sessionRef), notice);
+    for (const entry of dropped) {
+      this.clearExtensionDialogTimeout(sessionRef, extensionNoticeTimerId(entry.id));
+    }
+    this.scheduleExtensionNoticeExpiry(sessionRef, notice.id);
+  }
+
   private scheduleExtensionNoticeExpiry(sessionRef: SessionRef, noticeId: string): void {
     const timerId = extensionNoticeTimerId(noticeId);
     this.clearExtensionDialogTimeout(sessionRef, timerId);
@@ -3315,6 +3489,8 @@ export class DesktopAppStore {
         activeAssistantMessageBySession: this.sessionState.activeAssistantMessageBySession,
         pendingAssistantMessageBySession: this.sessionState.pendingAssistantMessageBySession,
         activeWorkingActivityBySession: this.sessionState.activeWorkingActivityBySession,
+        extensionToolLabels: (ref) =>
+          extensionToolLabels(this.runtimeByWorkspace.get(ref.workspaceId)),
       });
       this.state = applySessionEventState(
         this.state,
@@ -3810,6 +3986,8 @@ export class DesktopAppStore {
       themePresetId: this.state.themePresetId,
       sidebarCollapsed: this.state.sidebarCollapsed || undefined,
       threadGrouping: this.state.threadGrouping,
+      collapsedWorkspaceIds:
+        this.state.collapsedWorkspaceIds.length > 0 ? this.state.collapsedWorkspaceIds : undefined,
       enableTransparency: this.state.enableTransparency,
       orchestrationChildren: orchestration.toPersistedOrchestrationChildren(
         this.state.orchestrationChildren,
@@ -4618,6 +4796,12 @@ async function statMtimeMs(path: string): Promise<number | undefined> {
   } catch {
     return undefined;
   }
+}
+
+/** Shows a path under the home directory as `~/…`, the way pi's docs and terminal name it. */
+function withHomeAsTilde(path: string): string {
+  const home = homedir();
+  return path.startsWith(`${home}${sep}`) ? `~${path.slice(home.length)}` : path;
 }
 
 function resolveGlobalSettingsPath(): string {

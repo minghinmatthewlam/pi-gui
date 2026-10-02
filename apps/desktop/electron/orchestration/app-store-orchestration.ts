@@ -2082,23 +2082,34 @@ function toChildTranscript(
 function recentTranscriptItems(
   transcript: readonly TranscriptMessage[],
 ): readonly TranscriptMessage[] {
-  return transcript.slice(-MAX_CHILD_TRANSCRIPT_MESSAGES);
+  // Pins sit at the end of a transcript but are never child messages, so they take no slots.
+  return transcript.filter((item) => item.kind !== "pin").slice(-MAX_CHILD_TRANSCRIPT_MESSAGES);
 }
 
 function transcriptText(message: TranscriptMessage): string {
-  if (message.kind === "message") {
-    return message.text;
+  switch (message.kind) {
+    case "message":
+      return message.text;
+    case "custom":
+      return `[${message.customType}] ${message.text}`;
+    case "card": {
+      const { title, subtitle } = message.card;
+      return subtitle ? `${title}: ${subtitle}` : title;
+    }
+    case "activity":
+    case "tool":
+      return message.detail ? `${message.label}: ${message.detail}` : message.label;
+    case "summary":
+      return message.metadata ? `${message.label}: ${message.metadata}` : message.label;
+    // A pin is extension state above the composer, not something the thread said.
+    case "pin":
+      return "";
+    default: {
+      const unhandled: never = message;
+      void unhandled;
+      return "";
+    }
   }
-  if (message.kind === "activity") {
-    return message.detail ? `${message.label}: ${message.detail}` : message.label;
-  }
-  if (message.kind === "tool") {
-    return message.detail ? `${message.label}: ${message.detail}` : message.label;
-  }
-  if (message.kind === "custom") {
-    return `[${message.customType}] ${message.text}`;
-  }
-  return message.metadata ? `${message.label}: ${message.metadata}` : message.label;
 }
 
 function transcriptRole(message: TranscriptMessage): OrchestrationChildTranscriptMessage["role"] {

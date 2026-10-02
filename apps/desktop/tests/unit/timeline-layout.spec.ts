@@ -79,3 +79,22 @@ test("anchor correction preserves pending native motion and does not apply brows
   expect(compensateAnchorShift(500, 900, 400, 500)).toBe(400);
   expect(compensateAnchorShift(460, 500, 500, 1000)).toBe(460);
 });
+test("an extension card re-estimates when its rows change and keeps its estimate otherwise", () => {
+  const card = (rows: number): DisplayTimelineItem => ({
+    kind: "card",
+    id: "card-entry",
+    createdAt: "2026-09-30T00:00:00Z",
+    card: {
+      title: "CI failed on main",
+      tone: "error",
+      rows: Array.from({ length: rows }, (_, i) => ({ label: `Row ${i}`, value: "value" })),
+      actions: [],
+    },
+  });
+  const estimates = new Map<string, RowEstimate>();
+  const oneRow = layoutRows([card(1)], new Map(), 700, estimates)[0]!.height;
+  expect(layoutRows([card(1)], new Map(), 700, estimates)[0]!.height).toBe(oneRow);
+  const threeRows = layoutRows([card(3)], new Map(), 700, estimates)[0]!.height;
+  expect(threeRows).toBeGreaterThan(oneRow);
+  expect(estimates.get("card-entry")?.height).toBe(threeRows);
+});

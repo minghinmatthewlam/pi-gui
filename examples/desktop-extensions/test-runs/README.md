@@ -2,7 +2,7 @@
 
 This is a normal file-based Pi extension with an optional custom browser view.
 The command, agent tool and desktop buttons share one backend run owner. It uses
-the released Pi 0.87 `createLocalBashOperations` API for live process output,
+Pi's `createLocalBashOperations` API for live process output,
 timeout and cancellation. The optional desktop declaration uses Pi-gui's local
 private `@pi-gui/extension-ui` package. This helper is implemented in this repository;
 it is not published to npm or provided by upstream Pi.
@@ -29,8 +29,8 @@ scoped service connection. No app-specific Test Runs API is needed.
 
 The `--check` command builds in memory and compares the result with the checked-in
 browser bundle. It fails for a missing or stale bundle and never writes `dist`.
-`tsconfig.lint.json` covers the TypeScript source and test files, excluding the
-generated browser bundle.
+Typed lint uses the shared `../tsconfig.lint.json`, which covers every example's source
+and test files, excluding generated browser bundles.
 
 Terminal use remains `/tests passing`, `/tests failing`, `/tests slow`,
 `/tests timeout` and `/tests stop`; the agent tool is `run_tests({suiteId})`.

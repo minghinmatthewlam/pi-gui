@@ -1,3 +1,6 @@
+import { existsSync } from "node:fs";
+import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { desktopIpc } from "../../contracts/ipc";
 import { expect, test } from "@playwright/test";
 import type {
@@ -17,7 +20,10 @@ import {
   makeUserDataDir,
   makeWorkspace,
   pasteTinyPng,
+  seedAgentDir,
   selectSession,
+  waitForWorkspaceByPath,
+  writeProjectExtension,
 } from "../helpers/electron-app";
 
 async function selectedSessionContext(window: Parameters<typeof getDesktopState>[0]): Promise<{
@@ -173,18 +179,82 @@ test("shows queued messages while running and preserves attachments through inli
   }
 });
 
+// A model that never answers: the reply stays running until the app closes, as the queue needs.
+const OPEN_REPLY_PROVIDER = "open-reply";
+const openReplyProvider = (calledFile: string) => String.raw`
+import { writeFileSync } from "node:fs";
+import { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
+
+export default function openReplyProvider(pi) {
+  pi.registerProvider("${OPEN_REPLY_PROVIDER}", {
+    baseUrl: "http://127.0.0.1:9/never-contact",
+    apiKey: "LOCAL_TEST_CANARY",
+    api: "${OPEN_REPLY_PROVIDER}",
+    models: [{
+      id: "open",
+      name: "Open reply",
+      reasoning: false,
+      input: ["text"],
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+      contextWindow: 200000,
+      maxTokens: 4096,
+    }],
+    streamSimple(model, _context, options) {
+      const stream = createAssistantMessageEventStream();
+      writeFileSync(${JSON.stringify(calledFile)}, "called");
+      options?.signal?.addEventListener("abort", () => {
+        const aborted = {
+          role: "assistant", content: [], api: model.api, provider: model.provider, model: model.id,
+          usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0,
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+          stopReason: "aborted", timestamp: Date.now(),
+        };
+        stream.push({ type: "error", reason: "aborted", error: aborted });
+      });
+      return stream;
+    },
+  });
+}
+`;
+
 test("delineates queued follow-ups and submitted steers in the timeline", async () => {
   test.setTimeout(60_000);
   const userDataDir = await makeUserDataDir();
+  const agentDir = join(userDataDir, "agent");
   const workspacePath = await makeWorkspace("queued-messages-timeline");
+  const called = join(userDataDir, "model-called");
+  await seedAgentDir(agentDir, { withOpenAiAuth: false, withDefaultModel: false });
+  await writeFile(
+    join(agentDir, "settings.json"),
+    JSON.stringify({
+      defaultProvider: OPEN_REPLY_PROVIDER,
+      defaultModel: "open",
+      enabledModels: [`${OPEN_REPLY_PROVIDER}/open`],
+      packages: [],
+      cacheWarming: "off",
+      compaction: { enabled: false },
+    }),
+  );
+  await writeProjectExtension(workspacePath, "open-reply.ts", openReplyProvider(called));
   const harness = await launchDesktop(userDataDir, {
+    agentDir,
     initialWorkspaces: [workspacePath],
+    scrubProviderEnv: true,
     testMode: "background",
   });
 
   try {
     const window = await harness.firstWindow();
-    await createNamedThread(window, "Queued timeline messages");
+    await waitForWorkspaceByPath(window, workspacePath);
+    // The queue belongs to a reply that is really running: with pi idle, the app would start
+    // the first queued message as the next reply instead.
+    await window
+      .getByRole("complementary")
+      .getByRole("button", { name: "New thread", exact: true })
+      .click();
+    await window.getByLabel("New thread prompt", { exact: true }).fill("Start a long reply");
+    await window.getByRole("button", { name: "Start thread", exact: true }).click();
+    await expect.poll(() => existsSync(called)).toBe(true);
 
     const queuedSteer: SessionQueuedMessage = {
       id: "queued-steer-1",
@@ -247,6 +317,7 @@ test("delineates queued follow-ups and submitted steers in the timeline", async 
     await expect
       .poll(async () => transcriptMessages(window))
       .toEqual([
+        "user:Start a long reply",
         `user:${queuedSteer.text}`,
         "user:Steer the current run now",
         `user:${queuedFollowUp.text}`,
@@ -421,6 +492,60 @@ test("an unsaved keystroke does not overwrite a queued edit or its cancel", asyn
     await expect(window.getByTestId("queued-composer-editing")).toHaveCount(0);
     await expect(composer).toHaveValue("local scratch draft");
     expect((await getDesktopState(window)).composerDraft).toBe("local scratch draft");
+  } finally {
+    await harness.close();
+  }
+});
+
+test("keeps a queued message with a huge unbroken token wrapped and the composer usable", async () => {
+  test.setTimeout(60_000);
+  const userDataDir = await makeUserDataDir();
+  const workspacePath = await makeWorkspace("queued-messages-long-token");
+  const harness = await launchDesktop(userDataDir, {
+    initialWorkspaces: [workspacePath],
+    testMode: "background",
+  });
+
+  try {
+    const window = await harness.firstWindow();
+    await createNamedThread(window, "Queued long token");
+
+    const token = `eyJhbGciOiJIUzI1NiJ9.${"eyJzdWIiOiJxdWV1ZWQtdG9rZW4ifQ".repeat(300)}.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c`;
+    const now = new Date().toISOString();
+    await emitRunningSnapshot(harness, window, [
+      {
+        id: "queued-long-token",
+        mode: "followUp",
+        text: `Bearer ${token}`,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+
+    const queuedCard = window.getByTestId("queued-composer-message");
+    await expect(queuedCard).toContainText(token);
+    // Wrapped, the token is far taller than the window, so the queue must cap its height and keep
+    // the queued actions, the input and the run control on screen.
+    for (const control of [
+      queuedCard.locator(".queued-composer-message__actions"),
+      window.getByTestId("composer"),
+      window.getByTestId("send"),
+    ]) {
+      await expect(control).toBeInViewport({ ratio: 1 });
+    }
+
+    // The token itself must wrap: fitting the card alone would still let it paint over the actions.
+    const layout = await queuedCard.evaluate((card) => {
+      const text = card.querySelector<HTMLElement>(".queued-composer-message__text");
+      const actions = card.querySelector<HTMLElement>(".queued-composer-message__actions");
+      if (!text || !actions) throw new Error("Expected queued text and actions");
+      return {
+        textFitsItsBox: text.scrollWidth <= text.clientWidth + 1,
+        textClearsActions:
+          text.getBoundingClientRect().right <= actions.getBoundingClientRect().left + 1,
+      };
+    });
+    expect(layout).toEqual({ textFitsItsBox: true, textClearsActions: true });
   } finally {
     await harness.close();
   }

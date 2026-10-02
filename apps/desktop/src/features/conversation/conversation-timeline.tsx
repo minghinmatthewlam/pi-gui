@@ -7,15 +7,21 @@ import {
   useState,
   type RefObject,
 } from "react";
-import type { TranscriptMessage } from "../../../contracts/desktop-state";
-import type { DisplayTimelineItem } from "../../../contracts/timeline-types";
+import type {
+  DisplayTimelineItem,
+  TimelineTranscriptItem,
+} from "../../../contracts/timeline-types";
 import type { ScheduledTaskOrigin } from "../../../contracts/scheduled-tasks";
+import type { ExtensionToolLabels } from "../../../contracts/tool-labels";
+import { ExtensionToolLabelsContext } from "../extensions/extension-tool-labels";
 import type { TimelineViewport } from "./hooks/use-timeline-viewport";
 import type { AnnotationMarker, OpenAnnotation } from "./annotations/annotation-markers";
 import { useAnnotationSelection } from "./annotations/annotation-selection";
 import type { TranscriptAnnotations } from "./annotations/use-transcript-annotations";
 import { ThreadSearchBar } from "./thread-search";
+import type { RunExtensionAction } from "./extension-card";
 import { TimelineItem } from "./timeline-item";
+import { sameRowContent, type TimelineRow } from "./timeline-layout";
 import type { OpenTurnChange } from "./turn-changes-card";
 import type { WorkspaceFileLine } from "./workspace-file-line";
 import { SparkIcon } from "../../ui/icons";
@@ -31,7 +37,7 @@ interface ThreadSearchModel {
   readonly close: () => void;
 }
 interface ConversationTimelineProps {
-  readonly transcript: readonly TranscriptMessage[];
+  readonly transcript: readonly TimelineTranscriptItem[];
   readonly isTranscriptLoading: boolean;
   readonly transcriptFailed?: { readonly retrying: boolean } | null;
   readonly onRetryTranscript?: () => void;
@@ -41,6 +47,8 @@ interface ConversationTimelineProps {
   readonly onOpenTurnChange?: OpenTurnChange;
   readonly onForkFromMessage?: (messageIndex: number, preview?: string) => void;
   readonly onOpenWorkspaceFileLine?: (target: WorkspaceFileLine) => void;
+  readonly onExtensionAction?: RunExtensionAction;
+  readonly extensionToolLabels: ExtensionToolLabels;
   readonly scheduledOrigins?: ReadonlyMap<string, ScheduledTaskOrigin>;
   readonly workspacePath?: string;
   readonly annotations?: TranscriptAnnotations;
@@ -58,6 +66,8 @@ export function ConversationTimeline({
   onOpenTurnChange,
   onForkFromMessage,
   onOpenWorkspaceFileLine,
+  onExtensionAction,
+  extensionToolLabels,
   scheduledOrigins,
   workspacePath,
   annotations,
@@ -109,92 +119,96 @@ export function ConversationTimeline({
     return indices;
   }, [transcript]);
   return (
-    <div className="timeline-surface" ref={surfaceRef}>
-      <div className="timeline-column">
-        {threadSearch.isOpen ? (
-          <ThreadSearchBar
-            query={threadSearch.query}
-            matchCount={threadSearch.matchCount}
-            activeIndex={threadSearch.activeIndex}
-            inputRef={threadSearch.inputRef}
-            onSearch={threadSearch.search}
-            onNext={() => threadSearch.goToMatch(1)}
-            onPrev={() => threadSearch.goToMatch(-1)}
-            onClose={threadSearch.close}
-          />
-        ) : null}
-        <div
-          className="timeline-pane timeline-pane--thread"
-          data-testid="timeline-pane"
-          ref={viewport.attachPane}
-          tabIndex={0}
-        >
-          {transcriptFailed ? (
-            <div className="timeline" data-testid="transcript">
-              <TranscriptHydrateError
-                retrying={transcriptFailed.retrying}
-                onRetry={onRetryTranscript}
-              />
-            </div>
-          ) : isTranscriptLoading ? (
-            <div className="timeline" data-testid="transcript">
-              <TranscriptSkeleton />
-            </div>
-          ) : transcript.length === 0 ? (
-            <div className="timeline" data-testid="transcript">
-              <TranscriptEmptyState />
-            </div>
-          ) : (
-            <div
-              className="timeline timeline--virtualized"
-              data-testid="transcript"
-              style={{ height: viewport.totalHeight }}
-            >
-              {viewport.visibleRows.map(({ item, top }) => (
-                <MeasuredTimelineItem
-                  key={item.id}
-                  item={item}
-                  top={top}
-                  className="timeline__virtual-row"
-                  onHeightChange={viewport.measureRow}
-                  generation={viewport.layoutGeneration}
-                  expandedToolCallIds={expandedToolCallIds}
-                  onToggleToolCall={toggleToolCall}
-                  onViewFileInDiff={onViewFileInDiff}
-                  onOpenTurnChange={onOpenTurnChange}
-                  sourceMessageIndex={renderedMessageIndexById.get(item.id)}
-                  onForkFromMessage={onForkFromMessage}
-                  onOpenWorkspaceFileLine={onOpenWorkspaceFileLine}
-                  workspacePath={workspacePath}
-                  annotationMarkers={
-                    markersByMessage.get(item.id) ??
-                    (item.kind === "message" && item.sourceMessageId
-                      ? markersByMessage.get(item.sourceMessageId)
-                      : undefined) ??
-                    NO_MARKERS
-                  }
-                  onOpenAnnotation={annotationSelection.openAnnotation}
-                  scheduledOrigin={
-                    item.kind === "message" ? scheduledOrigins?.get(item.id) : undefined
-                  }
-                />
-              ))}
-            </div>
-          )}
-          {!transcriptFailed && viewport.showJumpToLatest ? (
-            <button
-              className="timeline-jump"
-              data-testid="timeline-jump"
-              type="button"
-              onClick={viewport.jumpToLatest}
-            >
-              New activity below
-            </button>
+    <ExtensionToolLabelsContext.Provider value={extensionToolLabels}>
+      <div className="timeline-surface" ref={surfaceRef}>
+        <div className="timeline-column">
+          {threadSearch.isOpen ? (
+            <ThreadSearchBar
+              query={threadSearch.query}
+              matchCount={threadSearch.matchCount}
+              activeIndex={threadSearch.activeIndex}
+              inputRef={threadSearch.inputRef}
+              onSearch={threadSearch.search}
+              onNext={() => threadSearch.goToMatch(1)}
+              onPrev={() => threadSearch.goToMatch(-1)}
+              onClose={threadSearch.close}
+            />
           ) : null}
+          <div
+            className="timeline-pane timeline-pane--thread"
+            data-testid="timeline-pane"
+            ref={viewport.attachPane}
+            tabIndex={0}
+          >
+            {transcriptFailed ? (
+              <div className="timeline" data-testid="transcript">
+                <TranscriptHydrateError
+                  retrying={transcriptFailed.retrying}
+                  onRetry={onRetryTranscript}
+                />
+              </div>
+            ) : isTranscriptLoading ? (
+              <div className="timeline" data-testid="transcript">
+                <TranscriptSkeleton />
+              </div>
+            ) : transcript.length === 0 ? (
+              <div className="timeline" data-testid="transcript">
+                <TranscriptEmptyState />
+              </div>
+            ) : (
+              <div
+                className="timeline timeline--virtualized"
+                data-testid="transcript"
+                style={{ height: viewport.totalHeight }}
+              >
+                {viewport.visibleRows.map(({ item, top, height }, index, rows) => (
+                  <MeasuredTimelineItem
+                    key={item.id}
+                    item={item}
+                    offset={top - rowBottom(rows[index - 1])}
+                    height={height}
+                    className="timeline__virtual-row"
+                    onHeightChange={viewport.measureRow}
+                    generation={viewport.layoutGeneration}
+                    expandedToolCallIds={expandedToolCallIds}
+                    onToggleToolCall={toggleToolCall}
+                    onViewFileInDiff={onViewFileInDiff}
+                    onOpenTurnChange={onOpenTurnChange}
+                    sourceMessageIndex={renderedMessageIndexById.get(item.id)}
+                    onForkFromMessage={onForkFromMessage}
+                    onOpenWorkspaceFileLine={onOpenWorkspaceFileLine}
+                    onExtensionAction={onExtensionAction}
+                    workspacePath={workspacePath}
+                    annotationMarkers={
+                      markersByMessage.get(item.id) ??
+                      (item.kind === "message" && item.sourceMessageId
+                        ? markersByMessage.get(item.sourceMessageId)
+                        : undefined) ??
+                      NO_MARKERS
+                    }
+                    onOpenAnnotation={annotationSelection.openAnnotation}
+                    scheduledOrigin={
+                      item.kind === "message" ? scheduledOrigins?.get(item.id) : undefined
+                    }
+                  />
+                ))}
+              </div>
+            )}
+            {!transcriptFailed && viewport.showJumpToLatest ? (
+              <button
+                className="timeline-jump"
+                data-testid="timeline-jump"
+                type="button"
+                onClick={viewport.jumpToLatest}
+              >
+                New activity below
+              </button>
+            ) : null}
+          </div>
         </div>
+        {annotationSelection.layer}
       </div>
-      {annotationSelection.layer}
-    </div>
+    </ExtensionToolLabelsContext.Provider>
   );
 }
 
@@ -262,7 +276,9 @@ function TranscriptEmptyState() {
 interface MeasuredTimelineItemProps {
   readonly item: DisplayTimelineItem;
   readonly className?: string;
-  readonly top?: number;
+  /** Space above the row: its layout top less the previous row's bottom. */
+  readonly offset: number;
+  readonly height: number;
   readonly onHeightChange: (id: string, height: number, generation: number) => void;
   readonly generation: number;
   readonly expandedToolCallIds: ReadonlySet<string>;
@@ -272,6 +288,7 @@ interface MeasuredTimelineItemProps {
   readonly sourceMessageIndex?: number;
   readonly onForkFromMessage?: (messageIndex: number, preview?: string) => void;
   readonly onOpenWorkspaceFileLine?: (target: WorkspaceFileLine) => void;
+  readonly onExtensionAction?: RunExtensionAction;
   readonly scheduledOrigin?: ScheduledTaskOrigin;
   readonly workspacePath?: string;
   readonly annotationMarkers: readonly AnnotationMarker[];
@@ -281,7 +298,8 @@ interface MeasuredTimelineItemProps {
 function MeasuredTimelineItemBase({
   item,
   className,
-  top,
+  offset,
+  height,
   onHeightChange,
   generation,
   expandedToolCallIds,
@@ -291,6 +309,7 @@ function MeasuredTimelineItemBase({
   sourceMessageIndex,
   onForkFromMessage,
   onOpenWorkspaceFileLine,
+  onExtensionAction,
   scheduledOrigin,
   workspacePath,
   annotationMarkers,
@@ -319,28 +338,32 @@ function MeasuredTimelineItemBase({
     };
   }, [item, onHeightChange, generation]);
 
+  // The row keeps its laid-out height in normal flow (see timeline.css); the content inside
+  // is what gets measured, and may outgrow the row until its new height is laid out.
   return (
     <div
       className={className}
-      ref={rowRef}
       data-message-id={item.id}
       data-source-message-id={item.kind === "message" ? item.sourceMessageId : undefined}
-      style={top == null ? undefined : { transform: `translateY(${top}px)` }}
+      style={{ marginTop: offset, height }}
     >
-      <TimelineItem
-        item={item}
-        expandedToolCallIds={expandedToolCallIds}
-        onToggleToolCall={onToggleToolCall}
-        onViewFileInDiff={onViewFileInDiff}
-        onOpenTurnChange={onOpenTurnChange}
-        sourceMessageIndex={sourceMessageIndex}
-        onForkFromMessage={onForkFromMessage}
-        onOpenWorkspaceFileLine={onOpenWorkspaceFileLine}
-        scheduledOrigin={scheduledOrigin}
-        workspacePath={workspacePath}
-        annotationMarkers={annotationMarkers}
-        onOpenAnnotation={onOpenAnnotation}
-      />
+      <div className="timeline__virtual-row-content" ref={rowRef}>
+        <TimelineItem
+          item={item}
+          expandedToolCallIds={expandedToolCallIds}
+          onToggleToolCall={onToggleToolCall}
+          onViewFileInDiff={onViewFileInDiff}
+          onOpenTurnChange={onOpenTurnChange}
+          sourceMessageIndex={sourceMessageIndex}
+          onForkFromMessage={onForkFromMessage}
+          onOpenWorkspaceFileLine={onOpenWorkspaceFileLine}
+          onExtensionAction={onExtensionAction}
+          scheduledOrigin={scheduledOrigin}
+          workspacePath={workspacePath}
+          annotationMarkers={annotationMarkers}
+          onOpenAnnotation={onOpenAnnotation}
+        />
+      </div>
     </div>
   );
 }
@@ -393,10 +416,14 @@ function isSameDisplayItem(a: DisplayTimelineItem, b: DisplayTimelineItem): bool
     // A card's id is its checkpoint, and a captured turn's files never change.
     return true;
   }
-  if (a.kind === "custom" && b.kind === "custom") {
-    return a.customType === b.customType && a.text === b.text;
+  if ((a.kind === "card" || a.kind === "custom") && a.kind === b.kind) {
+    return sameRowContent(a, b);
   }
   return false;
+}
+
+function rowBottom(row: TimelineRow | undefined): number {
+  return row ? row.top + row.height : 0;
 }
 
 function areMeasuredTimelineItemPropsEqual(
@@ -406,7 +433,8 @@ function areMeasuredTimelineItemPropsEqual(
   return (
     isSameDisplayItem(prev.item, next.item) &&
     prev.className === next.className &&
-    prev.top === next.top &&
+    prev.offset === next.offset &&
+    prev.height === next.height &&
     prev.generation === next.generation &&
     prev.onHeightChange === next.onHeightChange &&
     prev.expandedToolCallIds === next.expandedToolCallIds &&
@@ -416,6 +444,7 @@ function areMeasuredTimelineItemPropsEqual(
     prev.sourceMessageIndex === next.sourceMessageIndex &&
     prev.onForkFromMessage === next.onForkFromMessage &&
     prev.onOpenWorkspaceFileLine === next.onOpenWorkspaceFileLine &&
+    prev.onExtensionAction === next.onExtensionAction &&
     prev.workspacePath === next.workspacePath &&
     prev.annotationMarkers === next.annotationMarkers &&
     prev.onOpenAnnotation === next.onOpenAnnotation &&

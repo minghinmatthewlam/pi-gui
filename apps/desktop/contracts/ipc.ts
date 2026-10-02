@@ -7,6 +7,7 @@ import type {
   ExtensionViewCatalogChange,
 } from "./extension-views";
 import type { RuntimeSettingsSnapshot } from "@pi-gui/session-driver/runtime-types";
+import type { ExtensionActionEffect, ExtensionActionRequest } from "./extension-actions";
 import type {
   NavigateSessionTreeOptions,
   NavigateSessionTreeResult,
@@ -72,12 +73,42 @@ export type CustomProviderProbeResult =
   | { readonly ok: true; readonly models: readonly string[] }
   | { readonly ok: false; readonly error: string };
 
+export type McpServerScope = "global" | "project";
+
+/** An `mcp.json` server as Settings shows it; `env`, `headers` and `oauth` never leave main. */
+export interface McpServerRecord {
+  readonly name: string;
+  readonly scope: McpServerScope;
+  readonly transport: "stdio" | "http";
+  readonly command?: string;
+  readonly args?: readonly string[];
+  readonly url?: string;
+  readonly enabled: boolean;
+  /** Environment variables, headers or sign-in config are set; their values never leave main. */
+  readonly hasHiddenSettings: boolean;
+}
+
+export interface McpServersSnapshot {
+  /** The global mcp.json new servers are saved to, with the home directory shown as `~`. */
+  readonly globalConfigPath: string;
+  readonly servers: readonly McpServerRecord[];
+  /** mcp.json files that could not be read. */
+  readonly errors: readonly string[];
+  /** Whether pi's global `defaultTools` switches code mode on in new threads. */
+  readonly codemodeAlwaysOn: boolean;
+}
+
+export type NewMcpServerInput =
+  | { readonly name: string; readonly command: string; readonly args: readonly string[] }
+  | { readonly name: string; readonly url: string };
+
 export const desktopIpc = {
   extensionViewOpenFile: "pi-gui:extension-view-open-file",
   listExtensionViews: "pi-gui:list-extension-views",
   openExtensionView: "pi-gui:open-extension-view",
   sendExtensionViewMessage: "pi-gui:send-extension-view-message",
   closeExtensionView: "pi-gui:close-extension-view",
+  runExtensionAction: "pi-gui:run-extension-action",
   extensionViewMessage: "pi-gui:extension-view-message",
   extensionViewCatalogChanged: "pi-gui:extension-view-catalog-changed",
   stateRequest: "pi-gui:state-request",
@@ -121,6 +152,7 @@ export const desktopIpc = {
   setActiveView: "pi-gui:set-active-view",
   setSidebarCollapsed: "pi-gui:set-sidebar-collapsed",
   setThreadGrouping: "pi-gui:set-thread-grouping",
+  setWorkspaceCollapsed: "pi-gui:set-workspace-collapsed",
   refreshRuntime: "pi-gui:refresh-runtime",
   setModelSettingsScopeMode: "pi-gui:set-model-settings-scope-mode",
   setDefaultModel: "pi-gui:set-default-model",
@@ -138,6 +170,11 @@ export const desktopIpc = {
   setScopedModelPatterns: "pi-gui:set-scoped-model-patterns",
   setSkillEnabled: "pi-gui:set-skill-enabled",
   setExtensionEnabled: "pi-gui:set-extension-enabled",
+  listMcpServers: "pi-gui:list-mcp-servers",
+  addMcpServer: "pi-gui:add-mcp-server",
+  removeMcpServer: "pi-gui:remove-mcp-server",
+  setMcpServerEnabled: "pi-gui:set-mcp-server-enabled",
+  setCodemodeAlwaysOn: "pi-gui:set-codemode-always-on",
   respondToHostUiRequest: "pi-gui:respond-to-host-ui-request",
   setNotificationPreferences: "pi-gui:set-notification-preferences",
   setIntegratedTerminalShell: "pi-gui:set-integrated-terminal-shell",
@@ -697,6 +734,7 @@ export interface PiDesktopApi {
   setActiveView(view: AppView): Promise<DesktopAppState>;
   setSidebarCollapsed(collapsed: boolean): Promise<DesktopAppState>;
   setThreadGrouping(grouping: ThreadGrouping): Promise<DesktopAppState>;
+  setWorkspaceCollapsed(workspaceId: string, collapsed: boolean): Promise<DesktopAppState>;
   refreshRuntime(workspaceId?: string): Promise<DesktopAppState>;
   setModelSettingsScopeMode(mode: ModelSettingsScopeMode): Promise<DesktopAppState>;
   setDefaultModel(workspaceId: string, provider: string, modelId: string): Promise<DesktopAppState>;
@@ -741,6 +779,16 @@ export interface PiDesktopApi {
     filePath: string,
     enabled: boolean,
   ): Promise<DesktopAppState>;
+  listMcpServers(workspaceId: string): Promise<McpServersSnapshot>;
+  addMcpServer(workspaceId: string, server: NewMcpServerInput): Promise<DesktopAppState>;
+  removeMcpServer(workspaceId: string, name: string): Promise<DesktopAppState>;
+  setMcpServerEnabled(
+    workspaceId: string,
+    scope: McpServerScope,
+    name: string,
+    enabled: boolean,
+  ): Promise<DesktopAppState>;
+  setCodemodeAlwaysOn(workspaceId: string, alwaysOn: boolean): Promise<DesktopAppState>;
   respondToHostUiRequest(
     workspaceId: string,
     sessionId: string,
@@ -828,6 +876,8 @@ export interface PiDesktopApi {
   getFileDiff(workspaceId: string, filePath: string): Promise<string>;
   stageFile(workspaceId: string, filePath: string, stagingSourcePath?: string): Promise<void>;
   onExtensionViewOpenFile(listener: (event: ExtensionViewOpenFile) => void): () => void;
+  /** Runs a card button's action for its thread, which must be the window's selected one. */
+  runExtensionAction(request: ExtensionActionRequest): Promise<ExtensionActionEffect | null>;
   listExtensionViews(target: SessionRef): Promise<readonly DesktopExtensionViewInfo[]>;
   openExtensionView(input: OpenExtensionViewInput): Promise<ExtensionViewConnection>;
   sendExtensionViewMessage(input: ExtensionViewMessage): Promise<void>;

@@ -1,5 +1,9 @@
 import type { SessionUsageSnapshot } from "./usage.js";
-import type { SessionTranscriptCustomMessage } from "./transcript.js";
+import type {
+  SessionTranscriptCard,
+  SessionTranscriptCustomMessage,
+  SessionTranscriptPin,
+} from "./transcript.js";
 
 export type WorkspaceId = string;
 export type SessionId = string;
@@ -124,6 +128,11 @@ export interface SessionMessageInput {
   readonly text: string;
   readonly attachments?: readonly SessionAttachment[];
   readonly deliverAs?: SessionMessageDeliveryMode;
+  /**
+   * Refuse the message unless it runs a command an extension registered. Set for commands
+   * that come from an extension's button, so a button can never start a model turn.
+   */
+  readonly extensionCommandOnly?: boolean;
 }
 
 export interface CreateSessionOptions {
@@ -199,12 +208,12 @@ export interface AssistantMessagePersistedEvent extends SessionEventBase {
 }
 
 /**
- * A persisted transcript item that arrives outside the assistant stream, such as an
- * extension's custom message. `item.id` is the pi entry id, matching a later reload.
+ * A persisted transcript item that arrives outside the assistant stream: an extension's custom
+ * message, card or pin. `item.id` matches the item a later reload projects.
  */
 export interface TranscriptItemAppendedEvent extends SessionEventBase {
   readonly type: "transcriptItemAppended";
-  readonly item: SessionTranscriptCustomMessage;
+  readonly item: SessionTranscriptCustomMessage | SessionTranscriptCard | SessionTranscriptPin;
 }
 
 export interface QueuedMessageStartedEvent extends SessionEventBase {
@@ -333,6 +342,11 @@ export type HostUiRequest =
     }
   | {
       readonly kind: "reset";
+      readonly requestId: string;
+    }
+  | {
+      /** pi closed the dialog with this `requestId` itself, such as a sign-in that finished. */
+      readonly kind: "dismiss";
       readonly requestId: string;
     };
 

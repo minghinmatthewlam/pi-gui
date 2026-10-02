@@ -1,7 +1,13 @@
-import { sessionKey } from "@pi-gui/session-driver";
-import type { SessionTranscriptItem } from "@pi-gui/session-driver";
+import { isCardEntryItem, sessionKey } from "@pi-gui/session-driver";
+import type { SessionTranscriptItem, SessionTranscriptPin } from "@pi-gui/session-driver";
 import type { SessionDriverEvent, SessionQueuedMessage, SessionRef } from "@pi-gui/session-driver";
 import type { TranscriptMessage } from "../../contracts/desktop-state";
+import {
+  extensionToolRowLabel,
+  toolInputSummary,
+  truncate,
+  type ExtensionToolLabels,
+} from "../../contracts/tool-labels";
 import {
   formatElapsedDuration,
   makeActivityItem,
@@ -30,22 +36,28 @@ interface TimelineRuntimeState {
   readonly activeAssistantMessageBySession: Map<string, string>;
   readonly pendingAssistantMessageBySession: Map<string, string>;
   readonly activeWorkingActivityBySession: Map<string, string>;
+  /** Labels of the tools the session's folder extensions registered. */
+  readonly extensionToolLabels: (sessionRef: SessionRef) => ExtensionToolLabels;
 }
 
 export function timelineFromDriverTranscript(
   items: readonly SessionTranscriptItem[],
+  extensionToolLabels: ExtensionToolLabels,
 ): TranscriptMessage[] {
   return items.map((item) => {
     if (item.kind !== "tool") {
       return item;
     }
     const detail = detailFromOutput(item.output);
+    const extensionLabel = extensionToolLabels.get(item.toolName);
     return {
       ...makeToolItem(
         item.callId,
         item.toolName,
         item.status,
-        toolLabel(item.toolName, item.input),
+        extensionLabel === undefined
+          ? toolLabel(item.toolName, item.input)
+          : extensionToolRowLabel(extensionLabel, item.input),
         {
           ...(detail !== undefined ? { detail } : {}),
           ...(item.input !== undefined ? { input: item.input } : {}),
@@ -174,13 +186,6 @@ export function applyTimelineEvent(
       transcript[index] = { ...ended, sourceMessageId: event.sourceMessageId };
       break;
     }
-    case "transcriptItemAppended":
-      // Lands between assistant messages like a tool row: the reply above keeps its row and
-      // later text starts a new one below.
-      clearActiveAssistantMessage(state.activeAssistantMessageBySession, event.sessionRef);
-      if (transcript.some((item) => item.id === event.item.id)) return;
-      transcript.push(event.item);
-      break;
     case "sessionOpened":
       state.pendingAssistantMessageBySession.delete(key);
       transcript.push(
@@ -219,10 +224,12 @@ export function applyTimelineEvent(
         fileCount: 0,
       };
       metrics.toolCount += 1;
-      if (looksLikeSearch(event.toolName, event.input)) {
+      const extensionLabel = state.extensionToolLabels(event.sessionRef).get(event.toolName);
+      // An extension's tool is counted as a tool: its name says nothing about files or searches.
+      if (extensionLabel === undefined && looksLikeSearch(event.toolName, event.input)) {
         metrics.searchCount += 1;
       }
-      if (looksLikeFileExplore(event.toolName, event.input)) {
+      if (extensionLabel === undefined && looksLikeFileExplore(event.toolName, event.input)) {
         metrics.fileCount += 1;
       }
       state.runMetricsBySession.set(key, metrics);
@@ -231,7 +238,9 @@ export function applyTimelineEvent(
         event.callId,
         event.toolName,
         "running",
-        toolLabel(event.toolName, event.input),
+        extensionLabel === undefined
+          ? toolLabel(event.toolName, event.input)
+          : extensionToolRowLabel(extensionLabel, event.input),
         undefined,
         event.input,
       );
@@ -300,6 +309,38 @@ export function applyTimelineEvent(
       clearRunState(transcript, key, event.sessionRef, state);
       transcript.push(makeActivityItem("Stopped", { metadata: relativeDetail(event.timestamp) }));
       break;
+    case "transcriptItemAppended": {
+      // A pin shows above the composer, so it never ends or moves a streaming reply.
+      if (event.item.kind === "pin") {
+        upsertPin(transcript, event.item);
+        break;
+      }
+      // Same id as the persisted entry, so a transcript reload replaces rather than duplicates it.
+      // A keyed card (or a pin's error row) that is already shown updates where it is, as the
+      // session file projects it.
+      const existingIndex = transcript.findIndex((item) => item.id === event.item.id);
+      if (existingIndex >= 0) {
+        if (!isCardEntryItem(event.item)) return;
+        transcript[existingIndex] = event.item;
+        break;
+      }
+      // pi saves a streaming reply only when it ends, so a card (or its error row) appended
+      // mid-reply comes before that reply in the session file. Place it there now so a reload never moves it.
+      const streamingId = state.activeAssistantMessageBySession.get(key);
+      const streamingIndex =
+        isCardEntryItem(event.item) && streamingId
+          ? transcript.findIndex((item) => item.id === streamingId)
+          : -1;
+      if (streamingIndex >= 0) {
+        transcript.splice(streamingIndex, 0, event.item);
+        break;
+      }
+      // Otherwise it lands between assistant messages like a tool row: the reply above keeps
+      // its row and later text starts a new one below.
+      clearActiveAssistantMessage(state.activeAssistantMessageBySession, event.sessionRef);
+      transcript.push(event.item);
+      break;
+    }
     case "hostUiRequest":
       // Notices show as toasts; only errors also stay in the transcript.
       if (event.request.kind === "notify" && event.request.level === "error") {
@@ -316,6 +357,18 @@ export function applyTimelineEvent(
   }
 
   transcriptCache.set(key, transcript);
+}
+
+/** Replaces a pin's earlier write, as the projection does; a pin written after removal is new. */
+function upsertPin(transcript: TranscriptMessage[], pin: SessionTranscriptPin): void {
+  const index = transcript.findIndex((item) => item.id === pin.id);
+  const existing = transcript[index];
+  if (existing?.kind === "pin" && (existing.card || !pin.card)) {
+    transcript[index] = pin;
+    return;
+  }
+  if (index >= 0) transcript.splice(index, 1);
+  transcript.push(pin);
 }
 
 function upsertToolRow(
@@ -383,7 +436,7 @@ function clearRunState(
 }
 
 function toolLabel(toolName: string, input: unknown): string {
-  const detail = inputLabel(input);
+  const detail = toolInputSummary(input);
   if (toolName === createChildThreadToolName) {
     return detail ? `Started child thread: ${detail}` : "Started child thread";
   }
@@ -484,46 +537,8 @@ function relativeDetail(timestamp: string): string {
   return new Date(timestamp).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
 
-function truncate(value: string, limit = 160): string {
-  const normalized = value.replace(/\s+/g, " ").trim();
-  if (normalized.length <= limit) {
-    return normalized;
-  }
-  return `${normalized.slice(0, limit - 1)}…`;
-}
-
 function summarizeToolDetail(value: string): string {
   return truncate(value);
-}
-
-function inputLabel(input: unknown): string | undefined {
-  if (typeof input === "string") {
-    return truncate(input, 80);
-  }
-  if (!isRecord(input)) {
-    return undefined;
-  }
-
-  const candidates = [
-    "path",
-    "filePath",
-    "query",
-    "q",
-    "url",
-    "command",
-    "text",
-    "prompt",
-    "title",
-    "app",
-  ];
-  for (const key of candidates) {
-    const value = input[key];
-    if (typeof value === "string" && value.trim()) {
-      return truncate(value, 80);
-    }
-  }
-
-  return undefined;
 }
 
 function latestErrorToolDetail(

@@ -54,7 +54,7 @@ export function mount(root: HTMLElement, host: DesktopViewContext): () => void {
 }
 ```
 
-[`@pi-gui/extension-ui`](../packages/extension-ui/README.md) is a private workspace package. `registerDesktopView` reports availability and returns a disposer; terminal Pi can report no desktop host while the extension's commands/tools continue to work. Availability acknowledges discovery, not successful source validation or backend activation. `DesktopViewContext` supplies a scoped Chord service source, theme values, an abort signal and `openFile` / `prepareTaskDraft` actions. Service tokens and domain schemas live with the extension and are shared by its entries. Backend state uses `env.replicatedState` so it belongs to the host's Chord instance. Browser dependencies are bundled separately; the author cannot assume the app's React or Node modules are available.
+[`@pi-gui/extension-ui`](../packages/extension-ui/README.md) is a private workspace package. `registerDesktopView` reports availability and returns a disposer; terminal Pi can report no desktop host while the extension's commands/tools continue to work. Availability acknowledges discovery, not successful source validation or backend activation. `DesktopViewContext` supplies a scoped Chord service source, theme values, an abort signal and `openFile` / `prepareTaskDraft` / `openUrl` / `openThread` actions. Service tokens and domain schemas live with the extension and are shared by its entries. Backend state uses `env.replicatedState` so it belongs to the host's Chord instance. Browser dependencies are bundled separately; the author cannot assume the app's React or Node modules are available.
 
 ## Owners and flow
 
@@ -75,7 +75,7 @@ The small EventBus adapter is **discovery only**. It transports a declaration in
 
 After Pi finishes loading, the host matches the declaration's source real path against the final loaded extension catalog, rejecting missing/ambiguous origins and duplicate IDs. It assigns task, extension, view and runtime-generation identity. Each validated view has one backend facet host per task runtime generation; multiple windows receive separate connections to that host. Replaying discovery does not reactivate the same declaration. Because existing Pi extensions are trusted Node code, source matching prevents accidental misrouting; it is not authentication against a hostile installed backend.
 
-Opening a tab requests a connection bound by main to that task/view and initiating window. The frame sends validated JSON messages over its dedicated port; preload and main route only that connection. The adapter constructs a Chord endpoint and per-subscription state codecs rather than implementing another replication system. Main validates the registered main-frame sender and live connection, and exposes only the view's advertised services. File navigation and draft preparation are separate narrow host actions.
+Opening a tab requests a connection bound by main to that task/view and initiating window. The frame sends validated JSON messages over its dedicated port; preload and main route only that connection. The adapter constructs a Chord endpoint and per-subscription state codecs rather than implementing another replication system. Main validates the registered main-frame sender and live connection, and exposes only the view's advertised services. File navigation, draft preparation, https links and opening a thread in the same folder are separate narrow host actions.
 
 ## Custom frontend boundary
 

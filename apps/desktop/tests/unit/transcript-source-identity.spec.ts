@@ -17,6 +17,7 @@ function fixture() {
     activeAssistantMessageBySession: new Map(),
     pendingAssistantMessageBySession: new Map(),
     activeWorkingActivityBySession: new Map(),
+    extensionToolLabels: () => new Map(),
     runningSinceBySession: new Map(),
     runMetricsBySession: new Map(),
   };
@@ -121,4 +122,96 @@ test("an extension's custom message lands as its own row between replies, once",
   expect(
     h.transcript.get(key)!.map((row) => (row.kind === "message" ? row.text : row.kind)),
   ).toEqual(["First reply", "custom", "Second reply"]);
+});
+
+test("a card or its error row appended mid-reply goes above the streaming reply, which keeps one row", () => {
+  const h = fixture();
+  h.append("Checking CI.");
+  const card = {
+    kind: "card" as const,
+    id: "entry-card",
+    createdAt: timestamp,
+    card: { title: "CI failed", tone: "error" as const, rows: [], actions: [] },
+  };
+  const broken = {
+    kind: "custom" as const,
+    id: "entry-broken",
+    createdAt: timestamp,
+    customType: "pi-gui.card",
+    text: "This card was not shown: it needs a non-empty string `title`.",
+  };
+  h.send({ type: "transcriptItemAppended", sessionRef, timestamp, item: card });
+  h.send({ type: "transcriptItemAppended", sessionRef, timestamp, item: broken });
+  h.append(" Done.");
+  expect(h.transcript.get(key)!.map((row) => (row.kind === "message" ? row.text : row.id))).toEqual(
+    ["entry-card", "entry-broken", "Checking CI. Done."],
+  );
+});
+
+test("a keyed card's later write updates it where it is, even mid-reply, without splitting the reply", () => {
+  const h = fixture();
+  const keyed = (title: string) => ({
+    kind: "card" as const,
+    id: "card:ci",
+    createdAt: timestamp,
+    card: { key: "ci", title, tone: "neutral" as const, rows: [], actions: [] },
+  });
+  h.send({ type: "transcriptItemAppended", sessionRef, timestamp, item: keyed("CI running") });
+  h.append("Rerunning.");
+  h.send({ type: "transcriptItemAppended", sessionRef, timestamp, item: keyed("CI passed") });
+  h.append(" All green.");
+  const rows = h.transcript.get(key)!;
+  expect(rows.map((row) => (row.kind === "message" ? row.text : row.id))).toEqual([
+    "card:ci",
+    "Rerunning. All green.",
+  ]);
+  expect(rows[0]?.kind === "card" && rows[0].card.title).toBe("CI passed");
+});
+
+test("a pin appended mid-reply never splits the streaming reply, and later writes replace it", () => {
+  const h = fixture();
+  const pin = (title: string | null, createdAt = timestamp) => ({
+    kind: "pin" as const,
+    id: "pin:todo",
+    createdAt,
+    card: title ? { key: "todo", title, tone: "neutral" as const, rows: [], actions: [] } : null,
+  });
+  const other = { ...pin("CI"), id: "pin:ci" };
+  h.append("Planning.");
+  h.send({ type: "transcriptItemAppended", sessionRef, timestamp, item: pin("Plan: 0 done") });
+  h.append(" Step one.");
+  h.send({ type: "transcriptItemAppended", sessionRef, timestamp, item: other });
+  h.send({ type: "transcriptItemAppended", sessionRef, timestamp, item: pin("Plan: 1 done") });
+  h.append(" Step two.");
+  const rows = () =>
+    h.transcript
+      .get(key)!
+      .map((row) =>
+        row.kind === "message" ? row.text : row.kind === "pin" ? (row.card?.title ?? row.id) : "",
+      );
+  expect(rows()).toEqual(["Planning. Step one. Step two.", "Plan: 1 done", "CI"]);
+
+  // A removal keeps the row so a later write replaces it; a write after removal is a new pin.
+  h.send({ type: "transcriptItemAppended", sessionRef, timestamp, item: pin(null) });
+  expect(rows()).toEqual(["Planning. Step one. Step two.", "pin:todo", "CI"]);
+  h.send({ type: "transcriptItemAppended", sessionRef, timestamp, item: pin("New plan") });
+  expect(rows()).toEqual(["Planning. Step one. Step two.", "CI", "New plan"]);
+});
+
+test("a malformed pin's error row goes above the streaming reply and updates in place", () => {
+  const h = fixture();
+  const broken = (text: string) => ({
+    kind: "custom" as const,
+    id: "pin-error:todo",
+    createdAt: timestamp,
+    customType: "pi-gui.pin",
+    text,
+  });
+  h.append("Working.");
+  h.send({ type: "transcriptItemAppended", sessionRef, timestamp, item: broken("first") });
+  h.send({ type: "transcriptItemAppended", sessionRef, timestamp, item: broken("second") });
+  h.append(" Done.");
+  expect(
+    h.transcript.get(key)!.map((row) => (row.kind === "custom" ? row.text : row.kind)),
+  ).toEqual(["second", "message"]);
 });

@@ -15,6 +15,9 @@ import {
   type CustomProviderConfig,
   type CustomProviderProbeInput,
   type CustomProviderProbeResult,
+  type McpServerScope,
+  type McpServersSnapshot,
+  type NewMcpServerInput,
   type ChangedFilesResult,
   type DesktopNotificationPermissionStatus,
   type WorkspaceFilePreview,
@@ -25,6 +28,7 @@ import {
   type TerminalPanelSnapshot,
   type TerminalSize,
 } from "../contracts/ipc";
+import type { ExtensionActionEffect, ExtensionActionRequest } from "../contracts/extension-actions";
 import type { ClipboardImageRead } from "../contracts/composer-attachments";
 import type { SaveTaskWorkbenchTemplateInput, TaskWorkbenchTemplate } from "../contracts/workbench";
 import type {
@@ -136,6 +140,11 @@ contextBridge.exposeInMainWorld("piApp", {
     subscribeIpc(desktopIpc.extensionViewCatalogChanged, listener),
   onExtensionViewOpenFile: (listener: (event: ExtensionViewOpenFile) => void) =>
     subscribeIpc(desktopIpc.extensionViewOpenFile, listener),
+  runExtensionAction: (request: ExtensionActionRequest) =>
+    ipcRenderer.invoke(
+      desktopIpc.runExtensionAction,
+      request,
+    ) as Promise<ExtensionActionEffect | null>,
   getTurnChanges: (input: TurnChangesInput) =>
     ipcRenderer.invoke(desktopIpc.getTurnChanges, input) as Promise<TurnChangesResult>,
   getReview: (input: GetReviewInput) =>
@@ -267,6 +276,12 @@ contextBridge.exposeInMainWorld("piApp", {
     ipcRenderer.invoke(desktopIpc.setSidebarCollapsed, collapsed) as Promise<DesktopAppState>,
   setThreadGrouping: (grouping: ThreadGrouping) =>
     ipcRenderer.invoke(desktopIpc.setThreadGrouping, grouping) as Promise<DesktopAppState>,
+  setWorkspaceCollapsed: (workspaceId: string, collapsed: boolean) =>
+    ipcRenderer.invoke(
+      desktopIpc.setWorkspaceCollapsed,
+      workspaceId,
+      collapsed,
+    ) as Promise<DesktopAppState>,
   refreshRuntime: (workspaceId?: string) =>
     ipcRenderer.invoke(desktopIpc.refreshRuntime, workspaceId) as Promise<DesktopAppState>,
   setModelSettingsScopeMode: (mode: "app-global" | "per-repo") =>
@@ -369,6 +384,31 @@ contextBridge.exposeInMainWorld("piApp", {
       workspaceId,
       filePath,
       enabled,
+    ) as Promise<DesktopAppState>,
+  listMcpServers: (workspaceId: string) =>
+    ipcRenderer.invoke(desktopIpc.listMcpServers, workspaceId) as Promise<McpServersSnapshot>,
+  addMcpServer: (workspaceId: string, server: NewMcpServerInput) =>
+    ipcRenderer.invoke(desktopIpc.addMcpServer, workspaceId, server) as Promise<DesktopAppState>,
+  removeMcpServer: (workspaceId: string, name: string) =>
+    ipcRenderer.invoke(desktopIpc.removeMcpServer, workspaceId, name) as Promise<DesktopAppState>,
+  setMcpServerEnabled: (
+    workspaceId: string,
+    scope: McpServerScope,
+    name: string,
+    enabled: boolean,
+  ) =>
+    ipcRenderer.invoke(
+      desktopIpc.setMcpServerEnabled,
+      workspaceId,
+      scope,
+      name,
+      enabled,
+    ) as Promise<DesktopAppState>,
+  setCodemodeAlwaysOn: (workspaceId: string, alwaysOn: boolean) =>
+    ipcRenderer.invoke(
+      desktopIpc.setCodemodeAlwaysOn,
+      workspaceId,
+      alwaysOn,
     ) as Promise<DesktopAppState>,
   respondToHostUiRequest: (workspaceId: string, sessionId: string, response: HostUiResponse) =>
     ipcRenderer.invoke(
