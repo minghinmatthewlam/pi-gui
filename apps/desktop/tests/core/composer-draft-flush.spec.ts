@@ -59,34 +59,44 @@ async function keepRealClock(window: Page): Promise<void> {
   });
 }
 
+const rendererBusy = "pi-gui test: renderer busy";
+
 /**
- * Blocks the renderer for a second in a task that starts as soon as this returns, so main's
- * flush request queues behind it. With `draftAtEnd`, the task ends by calling the composer's
- * change handler outside any DOM event, which React commits in a later task: the text is in
- * the composer but not yet in a pending write when the flush request runs.
+ * Blocks the renderer for a second and returns once that task has started, so main's flush
+ * request queues behind it. (Waiting only for the task to be posted is not enough: Chromium
+ * may run the flush request first.) With `draftAtEnd`, the task ends by calling the
+ * composer's change handler outside any DOM event, which React commits in a later task: the
+ * text is in the composer but not yet in a pending write when the flush request runs.
  */
 async function holdRendererBusy(window: Page, draftAtEnd?: string): Promise<void> {
-  await window.evaluate((nextDraft) => {
-    const channel = new MessageChannel();
-    channel.port1.onmessage = () => {
-      const realNow = (globalThis as { realNow?: () => number }).realNow;
-      if (!realNow) throw new Error("real clock unavailable");
-      const until = realNow() + 1_000;
-      while (realNow() < until) {
-        // Busy on purpose.
-      }
-      if (nextDraft === null) return;
-      const composer = document.querySelector("[data-testid='composer']");
-      const propsKey =
-        composer && Object.keys(composer).find((key) => key.startsWith("__reactProps$"));
-      if (!composer || !propsKey) throw new Error("composer change handler unavailable");
-      const props = (composer as unknown as Record<string, { onChange(event: unknown): void }>)[
-        propsKey
-      ];
-      props.onChange({ target: { value: nextDraft } });
-    };
-    channel.port2.postMessage(null);
-  }, draftAtEnd ?? null);
+  const started = window.waitForEvent("console", (message) => message.text() === rendererBusy);
+  await window.evaluate(
+    ({ nextDraft, busyMessage }) => {
+      const channel = new MessageChannel();
+      channel.port1.onmessage = () => {
+        // DevTools delivers this while the loop below still holds the renderer.
+        console.log(busyMessage);
+        const realNow = (globalThis as { realNow?: () => number }).realNow;
+        if (!realNow) throw new Error("real clock unavailable");
+        const until = realNow() + 1_000;
+        while (realNow() < until) {
+          // Busy on purpose.
+        }
+        if (nextDraft === null) return;
+        const composer = document.querySelector("[data-testid='composer']");
+        const propsKey =
+          composer && Object.keys(composer).find((key) => key.startsWith("__reactProps$"));
+        if (!composer || !propsKey) throw new Error("composer change handler unavailable");
+        const props = (composer as unknown as Record<string, { onChange(event: unknown): void }>)[
+          propsKey
+        ];
+        props.onChange({ target: { value: nextDraft } });
+      };
+      channel.port2.postMessage(null);
+    },
+    { nextDraft: draftAtEnd ?? null, busyMessage: rendererBusy },
+  );
+  await started;
 }
 
 function launcher(name: string): () => Promise<DesktopHarness> {
