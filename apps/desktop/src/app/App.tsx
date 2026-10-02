@@ -289,9 +289,10 @@ export default function App() {
     () =>
       buildDisplayTimelineItems(pins.timeline, {
         lastTurnRunning: selectedSessionRunning,
+        runningSince: selectedSessionRunning ? selectedSession?.runningSince : undefined,
         turnChanges: turnChanges.turns,
       }),
-    [pins.timeline, selectedSessionRunning, turnChanges.turns],
+    [pins.timeline, selectedSessionRunning, selectedSession?.runningSince, turnChanges.turns],
   );
   const viewport = useTimelineViewport({
     sessionKey: selectedSessionKey,
@@ -1170,6 +1171,7 @@ export default function App() {
                   <ConversationTimeline
                     key={selectedSessionKey}
                     transcript={pins.timeline}
+                    running={selectedSessionRunning}
                     isTranscriptLoading={isTranscriptLoading}
                     transcriptFailed={transcriptFailed}
                     onRetryTranscript={desktop.retry}

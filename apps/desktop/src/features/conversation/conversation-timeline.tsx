@@ -38,6 +38,8 @@ interface ThreadSearchModel {
 }
 interface ConversationTimelineProps {
   readonly transcript: readonly TimelineTranscriptItem[];
+  /** A run with nothing in the transcript yet still shows its Working line, not the empty state. */
+  readonly running: boolean;
   readonly isTranscriptLoading: boolean;
   readonly transcriptFailed?: { readonly retrying: boolean } | null;
   readonly onRetryTranscript?: () => void;
@@ -57,6 +59,7 @@ interface ConversationTimelineProps {
 const NO_MARKERS: readonly AnnotationMarker[] = [];
 export function ConversationTimeline({
   transcript,
+  running,
   isTranscriptLoading,
   transcriptFailed = null,
   onRetryTranscript,
@@ -151,7 +154,7 @@ export function ConversationTimeline({
               <div className="timeline" data-testid="transcript">
                 <TranscriptSkeleton />
               </div>
-            ) : transcript.length === 0 ? (
+            ) : transcript.length === 0 && !running ? (
               <div className="timeline" data-testid="transcript">
                 <TranscriptEmptyState />
               </div>
@@ -411,6 +414,10 @@ function isSameDisplayItem(a: DisplayTimelineItem, b: DisplayTimelineItem): bool
   }
   if (a.kind === "turn-marker" && b.kind === "turn-marker") {
     return a.durationMs === b.durationMs;
+  }
+  if (a.kind === "working" && b.kind === "working") {
+    // The line ticks its own elapsed time, so only a new run start redraws it.
+    return a.startedAt === b.startedAt;
   }
   if (a.kind === "turn-changes" && b.kind === "turn-changes") {
     // A card's id is its checkpoint, and a captured turn's files never change.

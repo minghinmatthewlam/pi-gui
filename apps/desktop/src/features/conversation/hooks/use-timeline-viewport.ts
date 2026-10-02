@@ -284,8 +284,10 @@ export function useTimelineViewport({
     }
     markLayout(pane, measured && !current.frame ? "settled" : "settling");
     if (current.key) saved.current.set(current.key, destination(current.state));
-    const last = rows.at(-1);
-    const marker = `${rows.length}:${last?.id ?? ""}:${last?.kind === "message" ? last.text.length : last?.kind === "tool" ? last.status : ""}`;
+    // The Working line is always last while a run goes; new activity is the content above it.
+    const contentCount = rows.at(-1)?.kind === "working" ? rows.length - 1 : rows.length;
+    const last = rows[contentCount - 1];
+    const marker = `${contentCount}:${last?.id ?? ""}:${last?.kind === "message" ? last.text.length : last?.kind === "tool" ? last.status : ""}`;
     if (destination(current.state).kind === "following") current.newActivity = false;
     else if (current.activityMarker && marker !== current.activityMarker)
       current.newActivity = true;

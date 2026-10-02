@@ -37,7 +37,6 @@ test("a failed tool that returned only images names them in its detail", () => {
   const state: Parameters<typeof applyTimelineEvent>[2] = {
     activeAssistantMessageBySession: new Map(),
     pendingAssistantMessageBySession: new Map(),
-    activeWorkingActivityBySession: new Map(),
     extensionToolLabels: () => new Map(),
     runningSinceBySession: new Map(),
     runMetricsBySession: new Map(),

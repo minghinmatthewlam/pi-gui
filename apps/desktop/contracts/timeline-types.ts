@@ -79,4 +79,15 @@ export interface TimelineTurnChanges {
   readonly turn: TurnChangeSummary;
 }
 
-export type DisplayTimelineItem = TimelineTranscriptItem | TimelineTurnMarker | TimelineTurnChanges;
+/**
+ * A derived, view-only "Working" line kept at the bottom of the turn that is still running, so
+ * it stays under the latest tool row or reply text. `startedAt` is when the run began.
+ */
+export interface TimelineWorkingIndicator {
+  readonly kind: "working";
+  readonly id: "working-indicator";
+  readonly startedAt?: string;
+}
+
+export type DisplayTimelineItem =
+  TimelineTranscriptItem | TimelineTurnMarker | TimelineTurnChanges | TimelineWorkingIndicator;
