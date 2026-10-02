@@ -1053,6 +1053,7 @@ export class SessionSupervisor {
         if (!session.isStreaming) throw finished();
         // Added to pi's queue as it is, in a queue step so it can't interleave with a change.
         const entry = queuedMessageFromInput(input, record.updatedAt);
+        let queued = false;
         await this.queueStep(record, async (current) => {
           if (!current.isStreaming) throw finished();
           record.queuedMessages = [...record.queuedMessages, entry];
@@ -1062,10 +1063,21 @@ export class SessionSupervisor {
             record.queuedMessages = record.queuedMessages.filter((message) => message !== entry);
             throw error;
           }
+          queued = true;
         });
+        // The step is skipped when the session closed while it waited.
+        if (!queued) throw finished();
         record.updatedAt = nowIso();
-        await this.persistSnapshot(record);
-        await this.emit(record, sessionUpdatedEvent(record));
+        // The message is queued now, so a failure to save or announce it is not a failed send.
+        try {
+          await this.persistSnapshot(record);
+          await this.emit(record, sessionUpdatedEvent(record));
+        } catch (error) {
+          console.warn(
+            `[pi-sdk-driver] could not save a queued message for ${sessionKey(record.ref)}:`,
+            error,
+          );
+        }
       } else if (isExtensionCommand) {
         await session.prompt(promptText, {
           ...(images && images.length > 0 ? { images } : {}),
@@ -1104,7 +1116,12 @@ export class SessionSupervisor {
         // A prompt that failed before a run started has no turn end to run the reload.
         this.whenIdle(record);
       }
-      record.status = isQueuedMessage ? "running" : isExtensionCommand ? "idle" : "failed";
+      if (isQueuedMessage) {
+        // The run may have settled while the message waited to be queued.
+        if (record.session?.isStreaming || isRecordBusy(record)) record.status = "running";
+      } else {
+        record.status = isExtensionCommand ? "idle" : "failed";
+      }
       record.updatedAt = nowIso();
       record.preview = error instanceof Error ? error.message : String(error);
       await this.persistSnapshot(record);
