@@ -107,7 +107,7 @@ const features = [
 const installs = [
   {
     platform: "macOS",
-    detail: "Apple Silicon. Signed and notarized.",
+    detail: "Signed and notarized.",
     steps:
       "Download the .dmg from GitHub Releases and drag pi-gui into Applications, or install with Homebrew:",
     command: BREW_INSTALL,

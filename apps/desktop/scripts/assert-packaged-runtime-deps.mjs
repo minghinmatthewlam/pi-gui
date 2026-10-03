@@ -96,7 +96,7 @@ const notificationHelperPath =
   packagePlatform === "darwin"
     ? path.join(
         releaseDir,
-        "mac-arm64",
+        "mac-universal",
         "pi-gui.app",
         "Contents",
         "MacOS",
@@ -208,7 +208,7 @@ console.log(`Verified packaged runtime dependencies in ${asarPath}`);
 
 function resolveAsarPath(releaseDir, packagePlatform) {
   if (packagePlatform === "darwin") {
-    return path.join(releaseDir, "mac-arm64", "pi-gui.app", "Contents", "Resources", "app.asar");
+    return path.join(releaseDir, "mac-universal", "pi-gui.app", "Contents", "Resources", "app.asar");
   }
 
   if (packagePlatform === "linux") {

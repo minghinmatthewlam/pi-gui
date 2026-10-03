@@ -54,7 +54,7 @@ async function packageDmg(version, outputDir) {
     },
   );
 
-  return path.join(outputDir, `pi-gui-${version}-arm64.dmg`);
+  return path.join(outputDir, `pi-gui-${version}-universal.dmg`);
 }
 
 async function plistVersion(appPath) {

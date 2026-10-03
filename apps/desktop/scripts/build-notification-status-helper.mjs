@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdir } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -22,8 +22,17 @@ if (process.platform !== "darwin") {
 
 await mkdir(outputDir, { recursive: true });
 for (const helper of helpers) {
-  await execFileAsync("xcrun", ["swiftc", helper.sourcePath, "-O", "-o", helper.outputPath], {
-    cwd: desktopDir,
-  });
+  const slices = [];
+  for (const arch of ["arm64", "x86_64"]) {
+    const slicePath = `${helper.outputPath}-${arch}`;
+    slices.push(slicePath);
+    await execFileAsync(
+      "xcrun",
+      ["swiftc", helper.sourcePath, "-O", "-target", `${arch}-apple-macosx12.0`, "-o", slicePath],
+      { cwd: desktopDir },
+    );
+  }
+  await execFileAsync("lipo", ["-create", ...slices, "-o", helper.outputPath], { cwd: desktopDir });
+  await Promise.all(slices.map((slicePath) => rm(slicePath, { force: true })));
   console.log(`Built native helper at ${helper.outputPath}`);
 }
