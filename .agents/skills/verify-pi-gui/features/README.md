@@ -32,6 +32,7 @@ Packaged-app launch, native dialogs/clipboard, model/account onboarding, attachm
 
 These user-facing surfaces have no feature file and no `prove.sh` checkpoint yet; a lane passing says nothing about them:
 
+- Open in editor split button beside the sidebar toggle, `apps/desktop/src/features/threads/open-in-editor-button.tsx`; core `open-in-editor.spec.ts`. Main detects installed editors per host, so the spec asserts the menu shape and the IPC rejection path rather than a fixed editor list.
 - Review panel (Cmd/Ctrl+R: diff beside a file tree, scope menu, Staged/Unstaged, quiet refresh on window focus), `apps/desktop/src/features/workbench/`; core `review-layout`, `review-scopes`, `review-auto-refresh` specs.
 - Side panel tabs on Control+1–9 (macOS) or Alt+1–9 elsewhere, `apps/desktop/src/features/workbench/side-panel-tab-hints.ts`; core `side-panel-tab-shortcuts.spec.ts`.
 - Context ring beside the model picker, `apps/desktop/src/features/conversation/context-meter.tsx`.

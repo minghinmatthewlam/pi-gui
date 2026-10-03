@@ -30,6 +30,7 @@ import {
 } from "../contracts/ipc";
 import type { ExtensionActionEffect, ExtensionActionRequest } from "../contracts/extension-actions";
 import type { ClipboardImageRead } from "../contracts/composer-attachments";
+import type { DesktopEditorList } from "../contracts/editors";
 import type { SaveTaskWorkbenchTemplateInput, TaskWorkbenchTemplate } from "../contracts/workbench";
 import type {
   TurnChangesInput,
@@ -228,6 +229,15 @@ contextBridge.exposeInMainWorld("piApp", {
     ) as Promise<DesktopAppState>,
   openWorkspaceInFinder: (workspaceId: string) =>
     ipcRenderer.invoke(desktopIpc.openWorkspaceInFinder, workspaceId) as Promise<void>,
+  listEditors: () => ipcRenderer.invoke(desktopIpc.listEditors) as Promise<DesktopEditorList>,
+  setPreferredEditor: (editorId: string) =>
+    ipcRenderer.invoke(desktopIpc.setPreferredEditor, editorId) as Promise<DesktopEditorList>,
+  openWorkspaceInEditor: (workspaceId: string, editorId: string) =>
+    ipcRenderer.invoke(
+      desktopIpc.openWorkspaceInEditor,
+      workspaceId,
+      editorId,
+    ) as Promise<DesktopEditorList>,
   createWorktree: (input: CreateWorktreeInput) =>
     ipcRenderer.invoke(desktopIpc.createWorktree, input) as Promise<DesktopAppState>,
   removeWorktree: (input: RemoveWorktreeInput) =>

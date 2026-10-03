@@ -151,6 +151,150 @@
   background: var(--surface-overlay-muted);
 }
 
+/* Split "open in editor" control in the topbar actions: the detected editor's
+ * name plus a thin chevron trigger listing every editor main found. */
+.open-in-editor {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  height: 32px;
+  border-radius: var(--radius-md);
+  color: var(--muted-soft);
+  background: var(--surface-overlay-muted);
+}
+
+.open-in-editor__main,
+.open-in-editor__trigger {
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  transition:
+    background var(--motion-base) var(--ease-out),
+    color var(--motion-base) var(--ease-out);
+}
+
+.open-in-editor__main {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  max-width: 180px;
+  padding: 0 9px;
+  border-radius: var(--radius-md) 0 0 var(--radius-md);
+}
+
+.open-in-editor__label {
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 520;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.open-in-editor__trigger {
+  width: 16px;
+  border-left: 1px solid var(--line);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+}
+
+.open-in-editor__main:hover:not(:disabled),
+.open-in-editor__trigger:hover:not(:disabled) {
+  color: var(--text-strong);
+  background: var(--overlay-hover);
+}
+
+.open-in-editor__main:disabled {
+  opacity: 0.55;
+}
+
+.open-in-editor svg {
+  width: 16px;
+  height: 16px;
+}
+
+.open-in-editor__menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 90;
+  min-width: 200px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-2xl);
+  background: var(--surface);
+  box-shadow: var(--shadow-xl);
+  display: grid;
+  gap: 2px;
+}
+
+.open-in-editor__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 9px 11px;
+  border-radius: var(--radius-lg);
+  color: var(--text-strong);
+  background: transparent;
+  font-size: 13px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.open-in-editor__item-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.open-in-editor__item-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  color: var(--muted-soft);
+}
+
+.open-in-editor__item:hover .open-in-editor__item-icon {
+  color: var(--text-strong);
+}
+
+.open-in-editor__item:hover {
+  background: var(--surface-muted);
+}
+
+.open-in-editor__item-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.open-in-editor__item-check {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--accent);
+}
+
+.open-in-editor__empty,
+.open-in-editor__error {
+  margin: 0;
+  padding: 8px 11px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: normal;
+}
+
+.open-in-editor__error {
+  color: var(--error);
+}
+
 .shell--sidebar-collapsed .topbar {
   margin-left: var(--titlebar-collapsed-main-padding-left);
   padding-left: 0;
