@@ -3,11 +3,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 import {
-  decodeScheduledTasksFile,
   readScheduledTasksFile,
   writeScheduledTasksFile,
 } from "../../electron/scheduled-tasks/scheduled-task-store";
 import type { ScheduledTaskRecord } from "../../contracts/scheduled-tasks";
+import type { RpcPeer } from "../../rpc/rpc-peer";
+import { startTestCore, stopTestCoresAfterEach } from "./rust-core-process";
+
+stopTestCoresAfterEach();
 
 const validTask: ScheduledTaskRecord = {
   id: "task-1",
@@ -22,8 +25,10 @@ const validTask: ScheduledTaskRecord = {
   runs: [],
 };
 
-async function tempPath(): Promise<string> {
-  return join(await mkdtemp(join(tmpdir(), "scheduled-tasks-")), "scheduled-tasks.json");
+/** A fresh profile folder served by the Rust core, and its scheduled-tasks path. */
+async function profile(): Promise<{ path: string; core: RpcPeer }> {
+  const dir = await mkdtemp(join(tmpdir(), "scheduled-tasks-"));
+  return { path: join(dir, "scheduled-tasks.json"), core: await startTestCore(dir) };
 }
 
 for (const invalid of [
@@ -34,26 +39,26 @@ for (const invalid of [
   { version: 1, tasks: [{ ...validTask, status: "active", nextRunAt: undefined }] },
 ]) {
   test(`refuses invalid scheduled-tasks payload ${JSON.stringify(invalid)}`, async () => {
-    const path = await tempPath();
+    const { path, core } = await profile();
     const original = `${JSON.stringify(invalid)}\n`;
     await writeFile(path, original);
-    await expect(readScheduledTasksFile(path)).rejects.toThrow(/Invalid scheduled-tasks/);
-    await expect(writeScheduledTasksFile(path, [validTask])).rejects.toThrow();
+    await expect(readScheduledTasksFile(core)).rejects.toThrow(/Invalid scheduled-tasks/);
+    await expect(writeScheduledTasksFile(core, [validTask])).rejects.toThrow();
     expect(await readFile(path, "utf8")).toBe(original);
   });
 }
 
-test("active tasks without nextRunAt fail decode", () => {
-  expect(() =>
-    decodeScheduledTasksFile({
-      version: 1,
-      tasks: [{ ...validTask, nextRunAt: undefined }],
-    }),
-  ).toThrow(/nextRunAt/);
+test("active tasks without nextRunAt fail decode", async () => {
+  const { path, core } = await profile();
+  await writeFile(
+    path,
+    JSON.stringify({ version: 1, tasks: [{ ...validTask, nextRunAt: undefined }] }),
+  );
+  await expect(readScheduledTasksFile(core)).rejects.toThrow(/nextRunAt/);
 });
 
 test("invalid IANA time zones fail decode and do not overwrite the file", async () => {
-  const path = await tempPath();
+  const { path, core } = await profile();
   const invalid = {
     version: 1,
     tasks: [
@@ -65,14 +70,14 @@ test("invalid IANA time zones fail decode and do not overwrite the file", async 
   };
   const original = `${JSON.stringify(invalid)}\n`;
   await writeFile(path, original);
-  await expect(readScheduledTasksFile(path)).rejects.toThrow(/Invalid scheduled-tasks/);
+  await expect(readScheduledTasksFile(core)).rejects.toThrow(/Invalid scheduled-tasks/);
   expect(await readFile(path, "utf8")).toBe(original);
 });
 
 test("round-trips a valid scheduled-tasks file", async () => {
-  const path = await tempPath();
-  await writeScheduledTasksFile(path, [validTask]);
-  const loaded = await readScheduledTasksFile(path);
+  const { path, core } = await profile();
+  await writeScheduledTasksFile(core, [validTask]);
+  const loaded = await readScheduledTasksFile(core);
   expect(loaded.tasks).toEqual([validTask]);
   expect(loaded.recovered).toBe(false);
 });

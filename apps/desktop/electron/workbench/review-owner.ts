@@ -28,7 +28,7 @@ import {
   type GitReviewScope,
   type GitReviewSnapshot,
 } from "../platform/files/git-review";
-import { ReviewedStore } from "./reviewed-store";
+import type { ReviewedMarks } from "./reviewed-store";
 
 export interface ReviewCheckpoint {
   readonly state: "available";
@@ -56,7 +56,8 @@ export interface ListedTurn extends ReviewCheckpoint {
 }
 
 export interface ReviewOwnerOptions {
-  readonly userDataDir: string;
+  /** Saved review marks; the app's are kept by the Rust core. */
+  readonly reviewed: ReviewedMarks;
   readonly resolveCheckoutPath: (checkoutId: string) => string | undefined;
   readonly validateTask: (target: SessionRef) => boolean;
   readonly checkpoints?: ReviewCheckpointSource;
@@ -77,12 +78,12 @@ const MAX_CACHED_TURN_SUMMARIES = 500;
 /** Main owns comparison identities and reviewed state; the Git adapter owns Git semantics. */
 export class ReviewOwner {
   private readonly reviews = new Map<string, OwnedReview>();
-  private readonly reviewed: ReviewedStore;
+  private readonly reviewed: ReviewedMarks;
   private readonly mutations = new Map<string, Promise<void>>();
   private readonly turnFiles = new Map<string, Promise<readonly TurnChangedFile[]>>();
 
   constructor(private readonly options: ReviewOwnerOptions) {
-    this.reviewed = new ReviewedStore(options.userDataDir);
+    this.reviewed = options.reviewed;
   }
 
   async getTurnChanges(input: TurnChangesInput): Promise<TurnChangesResult> {

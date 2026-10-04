@@ -4,11 +4,14 @@ import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 import { toolRefId, type TaskWorkbenchTemplate } from "../../contracts/workbench";
 import {
-  decodePersistedUiState,
   readPersistedUiState,
   writePersistedUiState,
 } from "../../electron/persistence/app-store-persistence";
 import { writeFileAtomicQueued } from "../../electron/persistence/atomic-file-write";
+import { decodePersistedUiState } from "./saved-data-oracle/app-store-persistence";
+import { startTestCore, stopTestCoresAfterEach } from "./rust-core-process";
+
+stopTestCoresAfterEach();
 
 function workbenchTemplate(): TaskWorkbenchTemplate {
   return {
@@ -36,6 +39,7 @@ function workbenchTemplate(): TaskWorkbenchTemplate {
 test("concurrent v19 saves retain exactly one immutable copy of the original v17 bytes", async () => {
   const dir = await mkdtemp(join(tmpdir(), "workbench-migration-"));
   const path = join(dir, "ui-state.json");
+  const core = await startTestCore(dir);
   const original =
     '\t{\r\n  "version" : 17,\r\n  "composerDraft" : "keep café",\r\n  "threadGrouping" : "workspace"\r\n}\r\n';
   await writeFile(path, original);
@@ -46,9 +50,9 @@ test("concurrent v19 saves retain exactly one immutable copy of the original v17
     taskWorkbenchTemplatesBySession: { "workspace-one:task-one": workbenchTemplate() },
   };
   await Promise.all([
-    writePersistedUiState(path, { ...retained, sidebarCollapsed: false }),
-    writePersistedUiState(path, { ...retained, sidebarCollapsed: true }),
-    writePersistedUiState(path, { ...retained, themeMode: "dark" }),
+    writePersistedUiState(core, { ...retained, sidebarCollapsed: false }),
+    writePersistedUiState(core, { ...retained, sidebarCollapsed: true }),
+    writePersistedUiState(core, { ...retained, themeMode: "dark" }),
   ]);
 
   const migrationCopies = (await readdir(dir)).filter((name) =>
@@ -58,19 +62,19 @@ test("concurrent v19 saves retain exactly one immutable copy of the original v17
   const migrationPath = join(dir, migrationCopies[0]!);
   expect(await readFile(migrationPath)).toEqual(Buffer.from(original));
 
-  const saved = await readPersistedUiState(path);
+  const saved = await readPersistedUiState(core);
   expect(saved.version).toBe(19);
   expect(saved.composerDraft).toBe(retained.composerDraft);
   expect(saved.threadGrouping).toBe(retained.threadGrouping);
   expect(saved.taskWorkbenchTemplatesBySession).toEqual(retained.taskWorkbenchTemplatesBySession);
   expect(saved.themeMode).toBe("dark");
 
-  await writePersistedUiState(path, { ...retained, composerDraft: "newer draft" });
+  await writePersistedUiState(core, { ...retained, composerDraft: "newer draft" });
   expect(await readFile(migrationPath)).toEqual(Buffer.from(original));
   expect((await readdir(dir)).filter((name) => name.includes(".pre-workbench-"))).toEqual(
     migrationCopies,
   );
-  expect(decodePersistedUiState(JSON.parse(await readFile(`${path}.bak`, "utf8"))).version).toBe(
+  expect((JSON.parse(await readFile(`${path}.bak`, "utf8")) as { version: number }).version).toBe(
     19,
   );
 });
@@ -78,14 +82,15 @@ test("concurrent v19 saves retain exactly one immutable copy of the original v17
 test("migrating recovered v17 state keeps its original bytes and the damaged primary", async () => {
   const dir = await mkdtemp(join(tmpdir(), "workbench-recovery-"));
   const path = join(dir, "ui-state.json");
+  const core = await startTestCore(dir);
   const good = '{ "version": 17, "composerDraft": "recovered draft" }\n\n';
   const damaged = "{damaged primary\n";
   await writeFile(`${path}.bak`, good);
   await writeFile(path, damaged);
 
-  const recovered = await readPersistedUiState(path);
+  const recovered = await readPersistedUiState(core);
   expect(recovered.composerDraft).toBe("recovered draft");
-  await writePersistedUiState(path, {
+  await writePersistedUiState(core, {
     composerDraft: recovered.composerDraft,
     taskWorkbenchTemplatesBySession: { "workspace-one:task-one": workbenchTemplate() },
   });
@@ -100,12 +105,13 @@ test("migrating recovered v17 state keeps its original bytes and the damaged pri
   const corruptCopies = names.filter((name) => name.startsWith("ui-state.json.corrupt."));
   expect(corruptCopies).toHaveLength(1);
   expect(await readFile(join(dir, corruptCopies[0]!))).toEqual(Buffer.from(damaged));
-  expect((await readPersistedUiState(path)).version).toBe(19);
+  expect((await readPersistedUiState(core)).version).toBe(19);
 });
 
 test("v18 layouts default to Uncommitted and retain their exact original bytes across v19 scope saves", async () => {
   const dir = await mkdtemp(join(tmpdir(), "workbench-scope-migration-"));
   const path = join(dir, "ui-state.json");
+  const core = await startTestCore(dir);
   const template = workbenchTemplate();
   const original = `${JSON.stringify(
     {
@@ -126,13 +132,13 @@ test("v18 layouts default to Uncommitted and retain their exact original bytes a
   )}\n\n`;
   await writeFile(path, original);
 
-  const restored = await readPersistedUiState(path);
+  const restored = await readPersistedUiState(core);
   const restoredTemplate = restored.taskWorkbenchTemplatesBySession?.["workspace-one:task-one"];
   expect(restoredTemplate).toEqual(template);
   expect(await readFile(path, "utf8")).toBe(original);
   if (!restoredTemplate) throw new Error("Expected restored v18 workbench template");
 
-  await writePersistedUiState(path, {
+  await writePersistedUiState(core, {
     ...restored,
     taskWorkbenchTemplatesBySession: {
       "workspace-one:task-one": {
@@ -150,7 +156,7 @@ test("v18 layouts default to Uncommitted and retain their exact original bytes a
   expect(migrationCopies).toHaveLength(1);
   const migrationPath = join(dir, migrationCopies[0]!);
   expect(await readFile(migrationPath, "utf8")).toBe(original);
-  const saved = await readPersistedUiState(path);
+  const saved = await readPersistedUiState(core);
   expect(saved.version).toBe(19);
   expect(saved.composerDraft).toBe("retain this draft");
   expect(saved.taskWorkbenchTemplatesBySession?.["workspace-one:task-one"]?.changes).toEqual({
@@ -158,7 +164,7 @@ test("v18 layouts default to Uncommitted and retain their exact original bytes a
     scope: { kind: "branch", baseRef: "origin/trunk" },
   });
 
-  await writePersistedUiState(path, {
+  await writePersistedUiState(core, {
     ...saved,
     taskWorkbenchTemplatesBySession: {
       "workspace-one:task-one": {
@@ -171,7 +177,7 @@ test("v18 layouts default to Uncommitted and retain their exact original bytes a
     },
   });
   expect(
-    (await readPersistedUiState(path)).taskWorkbenchTemplatesBySession?.["workspace-one:task-one"]
+    (await readPersistedUiState(core)).taskWorkbenchTemplatesBySession?.["workspace-one:task-one"]
       ?.changes.scope,
   ).toEqual({ kind: "turn", checkpointId: "exact-turn" });
   expect(await readFile(migrationPath, "utf8")).toBe(original);
@@ -269,6 +275,7 @@ for (const { name, value } of invalidLayouts) {
   test(`drops a ${name} and keeps the rest of saved UI state`, async () => {
     const dir = await mkdtemp(join(tmpdir(), "workbench-invalid-layout-"));
     const path = join(dir, "ui-state.json");
+    const core = await startTestCore(dir);
     await writeFile(
       path,
       JSON.stringify({
@@ -281,13 +288,13 @@ for (const { name, value } of invalidLayouts) {
       }),
     );
 
-    const restored = await readPersistedUiState(path);
+    const restored = await readPersistedUiState(core);
     expect(restored.composerDraft).toBe("must survive");
     expect(restored.taskWorkbenchTemplatesBySession).toEqual({
       "workspace-one:task-two": workbenchTemplate(),
     });
-    await writePersistedUiState(path, { ...restored, composerDraft: "replacement" });
-    const saved = await readPersistedUiState(path);
+    await writePersistedUiState(core, { ...restored, composerDraft: "replacement" });
+    const saved = await readPersistedUiState(core);
     expect(saved.composerDraft).toBe("replacement");
     expect(Object.keys(saved.taskWorkbenchTemplatesBySession ?? {})).toEqual([
       "workspace-one:task-two",
@@ -295,12 +302,17 @@ for (const { name, value } of invalidLayouts) {
   });
 }
 
-test("a malformed layout map is dropped without blocking saved UI state", () => {
-  const restored = decodePersistedUiState({
-    version: 19,
-    composerDraft: "must survive",
-    taskWorkbenchTemplatesBySession: ["not", "a", "map"],
-  });
+test("a malformed layout map is dropped without blocking saved UI state", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "workbench-malformed-map-"));
+  await writeFile(
+    join(dir, "ui-state.json"),
+    JSON.stringify({
+      version: 19,
+      composerDraft: "must survive",
+      taskWorkbenchTemplatesBySession: ["not", "a", "map"],
+    }),
+  );
+  const restored = await readPersistedUiState(await startTestCore(dir));
   expect(restored.composerDraft).toBe("must survive");
   expect(restored.taskWorkbenchTemplatesBySession).toEqual({});
 });

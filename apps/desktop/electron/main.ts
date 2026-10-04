@@ -41,6 +41,7 @@ import {
 } from "../pi-host/protocol";
 import { performExtensionViewHostAction } from "./extensions/extension-view-actions";
 import { ReviewOwner } from "./workbench/review-owner";
+import { ReviewedStore } from "./workbench/reviewed-store";
 import { registerDesktopIpc } from "./ipc/register-desktop-ipc";
 import {
   createOrchestrationRuntimeTools,
@@ -1133,6 +1134,7 @@ app
         windowOwner?.isSessionVisibleInAnotherWindow(sessionRef) ?? false,
       piHost: hostPeer,
       catalogStorage: remoteCatalogStorage(core.peer, coreMethods.catalogCall),
+      core: core.peer,
       generateThreadTitleOverride: async (workspace, options) =>
         generateThreadTitleOverride?.(workspace, options),
     });
@@ -1247,7 +1249,7 @@ app
         extensionViews,
         review: new ReviewOwner({
           checkpoints,
-          userDataDir: app.getPath("userData"),
+          reviewed: new ReviewedStore(core.peer),
           resolveCheckoutPath: (checkoutId) => store.getWorkspacePath(checkoutId),
           validateTask: (target) =>
             store

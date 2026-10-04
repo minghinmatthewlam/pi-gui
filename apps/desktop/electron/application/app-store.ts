@@ -184,6 +184,8 @@ export interface DesktopAppStoreOptions {
   readonly piHost: RpcPeer;
   /** Folders, threads and worktrees; owned by the Rust core. */
   readonly catalogStorage: SessionFileCatalogStorage;
+  /** The Rust core, which reads and writes ui-state, attachments and scheduled tasks. */
+  readonly core: RpcPeer;
   readonly generateThreadTitleOverride?: (
     workspace: WorkspaceRef,
     options: GenerateThreadTitleOptions,
@@ -241,8 +243,7 @@ export class DesktopAppStore {
   private readonly worktreeManager: GitWorktreeManager;
   private readonly worktreeRoot: string;
   private readonly isAppWorktreePath: (path: string) => Promise<boolean>;
-  private readonly uiStateFilePath: string;
-  private readonly scheduledTasksFilePath: string;
+  private readonly core: RpcPeer;
   private scheduledTasksWritable = false;
   private readonly attachmentStore: AttachmentStore;
   private readonly sessionState = new SessionStateMap();
@@ -298,9 +299,8 @@ export class DesktopAppStore {
       catalogStorage: this.catalogStore,
       isAppWorktreePath: this.isAppWorktreePath,
     });
-    this.uiStateFilePath = join(options.userDataDir, "ui-state.json");
-    this.scheduledTasksFilePath = join(options.userDataDir, "scheduled-tasks.json");
-    this.attachmentStore = new AttachmentStore(options.userDataDir);
+    this.core = options.core;
+    this.attachmentStore = new AttachmentStore(options.core);
     this.initialWorkspacePaths = options.initialWorkspacePaths;
     this.getWindow = options.getWindow ?? (() => null);
     this.shouldKeepSessionDialogs = options.shouldKeepSessionDialogs ?? (() => false);
@@ -807,7 +807,7 @@ export class DesktopAppStore {
     if (!this.scheduledTasksWritable) {
       return;
     }
-    await writeScheduledTasksFile(this.scheduledTasksFilePath, this.state.scheduledTasks);
+    await writeScheduledTasksFile(this.core, this.state.scheduledTasks);
   }
 
   private async runOrchestrationSupervisionTick(): Promise<void> {
@@ -2108,7 +2108,7 @@ export class DesktopAppStore {
     this.persistenceReadiness = "ready";
 
     try {
-      const loadedTasks = await readScheduledTasksFile(this.scheduledTasksFilePath);
+      const loadedTasks = await readScheduledTasksFile(this.core);
       this.state = {
         ...this.state,
         scheduledTasks: [...loadedTasks.tasks],
@@ -3978,7 +3978,7 @@ export class DesktopAppStore {
   }
 
   private async readUiState(): Promise<LegacyPersistedUiState> {
-    return readPersistedUiState(this.uiStateFilePath);
+    return readPersistedUiState(this.core);
   }
 
   async persistUiState(): Promise<void> {
@@ -4031,7 +4031,7 @@ export class DesktopAppStore {
       ),
     };
 
-    await writePersistedUiState(this.uiStateFilePath, payload);
+    await writePersistedUiState(this.core, payload);
   }
 
   async persistComposerAttachments(
