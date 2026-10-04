@@ -64,9 +64,9 @@ impl Core {
     }
 
     /// Calls whose answer is ready at once. They run the moment they arrive, so a change is
-    /// visible to every call after it.
-    fn call_now(&self, method: &str, params: Value) -> Option<CoreResult<Value>> {
-        Some(match method {
+    /// visible to every call after it. Hands `params` back for any other method.
+    fn call_now(&self, method: &str, params: Value) -> Result<CoreResult<Value>, Value> {
+        Ok(match method {
             methods::INITIALIZE => (|| {
                 let params: InitializeParams = parse(params)?;
                 let parts = Parts {
@@ -86,17 +86,25 @@ impl Core {
             methods::CATALOG_CALL => self.parts().and_then(|parts| {
                 persistence::catalog_calls::call(&mut parts.catalog.borrow_mut(), parse(params)?)
             }),
-            _ => return None,
+            _ => return Err(params),
         })
     }
 }
 
 impl Service for Core {
     fn call(self: Rc<Self>, method: String, params: Value) -> LocalFuture<CoreResult<Value>> {
-        let result = self
-            .call_now(&method, params)
-            .unwrap_or_else(|| Err(CoreError::new(format!("Unknown RPC method: {method}"))));
-        Box::pin(std::future::ready(result))
+        let _params = match self.call_now(&method, params) {
+            Ok(result) => return Box::pin(std::future::ready(result)),
+            Err(params) => params,
+        };
+        // Calls that wait (git, files, processes) go to their part by method prefix, for
+        // example `Some(("git", _)) => Box::pin(git::call(self, method, params))`.
+        #[allow(clippy::match_single_binding)]
+        match method.split_once('.') {
+            _ => Box::pin(std::future::ready(Err(CoreError::new(format!(
+                "Unknown RPC method: {method}"
+            ))))),
+        }
     }
 
     fn notification(self: Rc<Self>, method: String, _params: Value) {
