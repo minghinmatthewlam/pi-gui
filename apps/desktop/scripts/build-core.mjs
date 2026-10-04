@@ -22,7 +22,8 @@ await mkdir(outputDir, { recursive: true });
 // failing the build. Windows still refuses to replace a running .exe.
 const outputPath = path.join(outputDir, binaryName);
 try {
-  await copyFile(path.join(repoRoot, "target", "release", binaryName), `${outputPath}.tmp`);
+  const targetDir = path.resolve(repoRoot, process.env.CARGO_TARGET_DIR ?? "target");
+  await copyFile(path.join(targetDir, "release", binaryName), `${outputPath}.tmp`);
   await rename(`${outputPath}.tmp`, outputPath);
 } catch (error) {
   await rm(`${outputPath}.tmp`, { force: true });
