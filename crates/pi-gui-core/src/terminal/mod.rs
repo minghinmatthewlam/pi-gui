@@ -6,6 +6,7 @@
 mod pty;
 
 use crate::error::{CoreError, CoreResult};
+use crate::js;
 use crate::methods;
 use crate::parse;
 use crate::rpc::Peer;
@@ -190,7 +191,7 @@ impl Terminals {
                 let params: SessionParams = parse(params)?;
                 let mut state = self.state.borrow_mut();
                 let session = state.owned_session_mut(params.owner_id, &params.terminal_id)?;
-                let title = js_trim(params.title.as_deref().unwrap_or_default());
+                let title = js::trim(params.title.as_deref().unwrap_or_default());
                 session.title = if title.is_empty() {
                     default_title(&session.id)
                 } else {
@@ -261,7 +262,7 @@ impl Terminals {
     }
 
     fn ensure_root(&self, params: &PanelParams) -> CoreResult<String> {
-        let scope_id = js_trim(&params.terminal_scope_id);
+        let scope_id = js::trim(&params.terminal_scope_id);
         if scope_id.is_empty() {
             return Err(CoreError::new("Terminal scope is required"));
         }
@@ -714,11 +715,6 @@ fn default_title(id: &str) -> String {
         .to_owned()
 }
 
-/// `String.prototype.trim`: Unicode white space and the byte order mark.
-fn js_trim(text: &str) -> &str {
-    text.trim_matches(|character: char| character.is_whitespace() || character == '\u{FEFF}')
-}
-
 /// The first `limit` UTF-16 code units, as `slice(0, limit)`, never splitting a character.
 fn take_utf16(text: &str, limit: usize) -> String {
     let mut units = 0;
@@ -772,7 +768,7 @@ fn ensure_directory(directory: &str) -> CoreResult<()> {
 /// absolute path to an executable file.
 fn resolve_shell(configured: Option<&str>) -> CoreResult<String> {
     let shell = configured
-        .map(js_trim)
+        .map(js::trim)
         .filter(|shell| !shell.is_empty())
         .map(str::to_owned)
         .or_else(|| {

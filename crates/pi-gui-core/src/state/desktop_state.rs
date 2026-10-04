@@ -9,8 +9,8 @@ use super::driver::{
     RuntimeSnapshot, SessionConfig, SessionSchemaInfo, SessionStatus, SessionUsageSnapshot,
     WidgetPlacement,
 };
-use super::js::JsNumber;
 use super::timeline_types::TranscriptMessage;
+use crate::js::JsNumber;
 
 pub use crate::persistence::catalog::WorktreeStatus;
 

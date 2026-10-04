@@ -6,8 +6,8 @@ use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
-use super::js::JsNumber;
 use super::present;
+use crate::js::JsNumber;
 
 pub use crate::persistence::catalog::{SessionRef, SessionStatus};
 

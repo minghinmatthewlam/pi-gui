@@ -7,16 +7,13 @@ license.workspace = true
 publish = false
 
 [dependencies]
-chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
-chrono-tz = { version = "0.10.4", features = ["case-insensitive"] }
 dunce = "1"
 icu_collator = "2"
-iana-time-zone = "0.1.65"
 ignore = "0.4"
 indexmap = { version = "2", features = ["serde"] }
-jiff = "0.2"
+# The bundled time zone database, so zones read the same on every computer.
+jiff = { version = "0.2", default-features = false, features = ["std", "tz-system", "tz-fat", "tzdb-bundle-always", "perf-inline"] }
 portable-pty = "0.9"
-ryu = "1.0.23"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 sha2 = "0.10"

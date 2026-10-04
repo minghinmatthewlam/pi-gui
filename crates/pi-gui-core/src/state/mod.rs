@@ -10,7 +10,6 @@ pub mod desktop_state;
 pub mod driver;
 pub mod env;
 pub mod extension_command_compatibility;
-pub mod js;
 pub mod scheduled_task_schedule;
 pub mod session_state;
 pub mod session_state_map;

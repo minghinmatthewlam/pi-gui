@@ -7,7 +7,7 @@ use crate::error::{CoreError, CoreResult};
 
 use super::desktop_state::ScheduledTaskSchedule;
 use super::env::StateEnv;
-use super::js;
+use crate::js;
 
 struct ZonedParts {
     year: i64,
@@ -20,8 +20,9 @@ struct ZonedParts {
 }
 
 fn time_zone(name: &str) -> CoreResult<jiff::tz::TimeZone> {
-    jiff::tz::TimeZone::get(name)
-        .map_err(|_| CoreError::named("RangeError", format!("Invalid time zone specified: {name}")))
+    crate::time_zone::get(name).ok_or_else(|| {
+        CoreError::named("RangeError", format!("Invalid time zone specified: {name}"))
+    })
 }
 
 fn invalid_time() -> CoreError {

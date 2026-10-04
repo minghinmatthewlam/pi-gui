@@ -8,6 +8,7 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 
 use indexmap::IndexMap;
+use pi_gui_core::js::{self, stringify};
 use pi_gui_core::persistence::catalog::{SessionEntry, WorkspaceEntry, WorktreeEntry};
 use pi_gui_core::state::app_store_utils::{
     build_workspace_records, build_worktree_records, clone_composer_attachments,
@@ -29,7 +30,6 @@ use pi_gui_core::state::extension_command_compatibility::{
     record_learned_command_compatibility, restore_compatibility_by_workspace,
     serialize_compatibility_by_workspace,
 };
-use pi_gui_core::state::js::{self, json_stringify};
 use pi_gui_core::state::scheduled_task_schedule::{
     earliest_scheduled_wake_at, next_run_at, ScheduledWake,
 };
@@ -71,7 +71,7 @@ fn canonical(value: &Value) -> Value {
         Value::Array(items) => Value::Array(items.iter().map(canonical).collect()),
         Value::Object(map) => {
             let mut keys: Vec<&String> = map.keys().collect();
-            keys.sort_by(|left, right| js::js_string_cmp(left, right));
+            keys.sort_by(|left, right| js::compare_strings(left, right));
             Value::Object(
                 keys.into_iter()
                     .map(|key| (key.clone(), canonical(&map[key])))
@@ -84,7 +84,7 @@ fn canonical(value: &Value) -> Value {
 
 /// The fixture writer's `normalize`: canonical JSON text with UUIDs numbered in order.
 fn normalize(value: &Value) -> Value {
-    let text = json_stringify(&canonical(value));
+    let text = stringify(&canonical(value));
     let mut ids: IndexMap<String, String> = IndexMap::new();
     let mut out = String::with_capacity(text.len());
     let mut rest = text.as_str();

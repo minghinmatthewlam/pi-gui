@@ -7,7 +7,7 @@ use super::git::{git, strip_line};
 use super::metadata::{self, Capture, Coverage, Outcome, Record, Target};
 use super::sync::{running, AbortSignal, Settled};
 use crate::error::{CoreError, CoreResult};
-use crate::persistence::backup_json::{read_json_with_backup, write_with_backup};
+use crate::persistence::backup_json::{read_json_with_backup, write_with_backup, FileQueue};
 use indexmap::IndexMap;
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -125,8 +125,11 @@ pub struct TurnCheckpoints {
     checkout_queues: RefCell<HashMap<String, Settled>>,
     /// The latest boundary of each task, so its lookups never return an older turn.
     task_boundaries: RefCell<HashMap<TaskKey, Settled>>,
-    /// Writes run one at a time; a write covers every change made before it started.
+    /// One `persist` at a time; a write covers every change made before it started.
     writing: Mutex<()>,
+    /// Runs the `checkpoints.json` file work, which keeps its turn until the work has finished
+    /// even when the call that started it is dropped, so two writes never overlap.
+    files: FileQueue,
     writes_wanted: Cell<u64>,
     writes_done: Cell<u64>,
     /// Last successful inventory per checkout root; cleared whenever objects may be pruned.
@@ -188,6 +191,7 @@ impl TurnCheckpoints {
             checkout_queues: RefCell::new(HashMap::new()),
             task_boundaries: RefCell::new(HashMap::new()),
             writing: Mutex::new(()),
+            files: FileQueue::default(),
             writes_wanted: Cell::new(0),
             writes_done: Cell::new(0),
             inventories: RefCell::new(IndexMap::new()),
@@ -707,7 +711,10 @@ impl TurnCheckpoints {
         }
         let result = async {
             let path = self.metadata_path.clone();
-            let read = blocking(move || read_json_with_backup(&path)).await?;
+            let read = self
+                .files
+                .run(&self.metadata_path, move || read_json_with_backup(&path))
+                .await?;
             if read.corrupted && !read.recovered {
                 return Err(CoreError::new(
                     "Invalid checkpoint metadata; original data retained.",
@@ -758,12 +765,13 @@ impl TurnCheckpoints {
         let covers = self.writes_wanted.get();
         let text = metadata::encode(self.records.borrow().values())?;
         let path = self.metadata_path.clone();
-        blocking(move || {
-            write_with_backup(&path, &text, |existing| {
-                metadata::decode(existing).map(|_| ())
+        self.files
+            .run(&self.metadata_path, move || {
+                write_with_backup(&path, &text, |existing| {
+                    metadata::decode(existing).map(|_| ())
+                })
             })
-        })
-        .await?;
+            .await?;
         self.writes_done.set(covers);
         Ok(())
     }
@@ -1022,13 +1030,4 @@ fn unix_ms() -> f64 {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|since| since.as_millis() as f64)
         .unwrap_or_default()
-}
-
-/// Runs file work that blocks off the core's thread.
-async fn blocking<T: Send + 'static>(
-    work: impl FnOnce() -> CoreResult<T> + Send + 'static,
-) -> CoreResult<T> {
-    tokio::task::spawn_blocking(work)
-        .await
-        .map_err(|error| CoreError::new(format!("Checkpoint file work stopped: {error}")))?
 }
