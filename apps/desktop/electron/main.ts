@@ -395,10 +395,12 @@ const windowsClosingAfterDraftFlush = new WeakSet<BrowserWindow>();
 
 function getTerminalService(): TerminalService {
   if (!terminalService) {
+    if (!core) throw new Error("pi-gui core is not running");
+    // Created once: it registers the core's terminal notifications.
     terminalService = new TerminalService({
+      core: core.peer,
       getWorkspacePath: (workspaceId) => store.getWorkspacePath(workspaceId),
       getIntegratedTerminalShell: () => integratedTerminalShell,
-      isPackaged: app.isPackaged,
     });
   }
   return terminalService;
@@ -794,7 +796,6 @@ function createAppWindow(sourceView?: DesktopAppViewState): BrowserWindow {
       });
     if (windowOwner.size() === 0) {
       terminalService?.dispose();
-      terminalService = undefined;
     }
   });
 
@@ -1370,7 +1371,6 @@ app.on("window-all-closed", () => {
     stopPruningTerminals?.();
     stopPruningTerminals = undefined;
     terminalService?.dispose();
-    terminalService = undefined;
     app.quit();
   }
 });
@@ -1386,7 +1386,6 @@ app.on("before-quit", (event) => {
   stopPruningTerminals?.();
   stopPruningTerminals = undefined;
   terminalService?.dispose();
-  terminalService = undefined;
   if (quitFlush === "done" || !store) {
     return;
   }

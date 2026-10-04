@@ -998,7 +998,7 @@ function registerTerminalIpc(windows: WindowOwner, capabilities: DesktopIpcCapab
         ),
   );
   ipcMain.handle(desktopIpc.terminalWrite, (event, rawTerminalId: unknown, rawData: unknown) => {
-    capabilities
+    return capabilities
       .optionalTerminal()
       ?.write(
         windows.windowForSender(event.sender).webContents,
@@ -1007,7 +1007,7 @@ function registerTerminalIpc(windows: WindowOwner, capabilities: DesktopIpcCapab
       );
   });
   ipcMain.handle(desktopIpc.terminalResize, (event, rawTerminalId: unknown, rawSize: unknown) => {
-    capabilities
+    return capabilities
       .optionalTerminal()
       ?.resize(
         windows.windowForSender(event.sender).webContents,
@@ -1037,7 +1037,7 @@ function registerTerminalIpc(windows: WindowOwner, capabilities: DesktopIpcCapab
   ipcMain.handle(
     desktopIpc.terminalSetTitle,
     (event, rawTerminalId: unknown, rawTitle: unknown) => {
-      capabilities
+      return capabilities
         .optionalTerminal()
         ?.setTitle(
           windows.windowForSender(event.sender).webContents,

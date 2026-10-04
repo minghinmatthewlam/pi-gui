@@ -205,10 +205,7 @@ verify_deb_archive() {
   assert_contents "$contents" '\./opt/pi-gui/resources/apparmor-profile$' "AppArmor profile"
   assert_contents "$contents" '\./usr/share/applications/pi-gui\.desktop$' "desktop entry"
   assert_contents "$contents" '\./usr/share/icons/hicolor/[0-9]+x[0-9]+/apps/pi-gui\.png$' "desktop icon"
-  assert_contents \
-    "$contents" \
-    '\./opt/pi-gui/resources/app\.asar\.unpacked/node_modules/(\.pnpm/[^/]+/node_modules/)?node-pty/(build/Release|prebuilds/linux-x64)/pty\.node$' \
-    "native node-pty module"
+  assert_contents "$contents" '\./opt/pi-gui/resources/pi-gui-core$' "Rust core process"
 
   local control_dir="$temporary_root/control"
   mkdir -p "$control_dir"
@@ -239,27 +236,8 @@ verify_deb_archive() {
   readelf -h "$extracted/opt/pi-gui/pi-gui" | tee "$proof_dir/deb-app-elf-header.txt"
   grep -F "Advanced Micro Devices X86-64" "$proof_dir/deb-app-elf-header.txt"
 
-  mapfile -t native_modules < <(
-    find -L "$extracted/opt/pi-gui/resources/app.asar.unpacked/node_modules" \
-      -type f \
-      \( \
-        -path '*/node-pty/build/Release/pty.node' -o \
-        -path '*/node-pty/prebuilds/linux-x64/pty.node' \
-      \) \
-      -print
-  )
-  if [[ "${#native_modules[@]}" -eq 0 ]]; then
-    echo "Extracted Debian package has no node-pty native module." >&2
-    exit 1
-  fi
-  : >"$proof_dir/native-node-pty-files.txt"
-  for native_module in "${native_modules[@]}"; do
-    file "$native_module" | tee -a "$proof_dir/native-node-pty-files.txt"
-    readelf -h "$native_module" | grep -F "Advanced Micro Devices X86-64" \
-      | tee -a "$proof_dir/native-node-pty-files.txt"
-  done
-
-  # node-pty builds spawn-helper only on macOS; the installed Linux runtime smoke exercises pty.node.
+  readelf -h "$extracted/opt/pi-gui/resources/pi-gui-core" | tee "$proof_dir/deb-core-elf-header.txt"
+  grep -F "Advanced Micro Devices X86-64" "$proof_dir/deb-core-elf-header.txt"
 }
 
 verify_install_upgrade_launch_remove() {
@@ -318,32 +296,51 @@ verify_install_upgrade_launch_remove() {
       ;;
   esac
 
-  local installed_node_pty
-  installed_node_pty="$(
-    find -L /opt/pi-gui/resources/app.asar.unpacked/node_modules \
-      -type d -path '*/node-pty' -print -quit
-  )"
-  if [[ -z "$installed_node_pty" ]]; then
-    echo "Installed Debian package is missing the node-pty module directory." >&2
-    exit 1
-  fi
+  # The integrated terminal runs in the Rust core: open a shell through it and read its output.
+  local core_profile="$temporary_root/core-profile"
+  mkdir -p "$core_profile"
   ELECTRON_RUN_AS_NODE=1 /opt/pi-gui/pi-gui -e '
-    const nodePty = require(process.argv[1]);
-    const terminal = nodePty.spawn("/bin/sh", ["-c", "printf pi-gui-node-pty-ok"], {
-      name: "xterm-color",
-      cols: 80,
-      rows: 24,
-      cwd: "/tmp",
-      env: process.env,
+    const { spawn } = require("node:child_process");
+    const core = spawn(process.argv[1], [], { stdio: ["pipe", "pipe", "inherit"] });
+    const timer = setTimeout(() => {
+      core.kill();
+      process.exit(2);
+    }, 10000);
+    const send = (message) => core.stdin.write(`${JSON.stringify(message)}\n`);
+    let lines = "";
+    let output = "";
+    core.stdout.setEncoding("utf8");
+    core.stdout.on("data", (chunk) => {
+      lines += chunk;
+      for (let end = lines.indexOf("\n"); end >= 0; end = lines.indexOf("\n")) {
+        const message = JSON.parse(lines.slice(0, end));
+        lines = lines.slice(end + 1);
+        if (message.error) throw new Error(message.error.message);
+        if (message.id === 2) {
+          const terminalId = message.result.sessions[0].id;
+          const data = "printf pi-gui-%s-ok core-terminal\n";
+          send({ id: 3, method: "terminal.write", params: { ownerId: 1, terminalId, data } });
+        } else if (message.method === "terminal.data") {
+          output += message.params.data;
+          process.stdout.write(message.params.data);
+          if (output.includes("pi-gui-core-terminal-ok")) {
+            clearTimeout(timer);
+            send({ id: 4, method: "core.shutdown" });
+            core.stdin.end();
+          }
+        }
+      }
     });
-    const timer = setTimeout(() => process.exit(2), 5000);
-    terminal.onData((data) => process.stdout.write(data));
-    terminal.onExit(({ exitCode }) => {
-      clearTimeout(timer);
-      process.exit(exitCode);
+    core.on("close", (code) => process.exit(code ?? 1));
+    send({ id: 1, method: "core.initialize", params: { userDataDir: process.argv[2] } });
+    const panel = { workspaceId: "smoke", workspacePath: "/tmp", terminalScopeId: "smoke" };
+    send({
+      id: 2,
+      method: "terminal.ensurePanel",
+      params: { ownerId: 1, ...panel, shell: "/bin/sh" },
     });
-  ' "$installed_node_pty" | tee "$proof_dir/native-node-pty-runtime.txt"
-  grep -F "pi-gui-node-pty-ok" "$proof_dir/native-node-pty-runtime.txt"
+  ' /opt/pi-gui/resources/pi-gui-core "$core_profile" | tee "$proof_dir/core-terminal-runtime.txt"
+  grep -F "pi-gui-core-terminal-ok" "$proof_dir/core-terminal-runtime.txt"
 
   local smoke_home="$temporary_root/smoke-home"
   mkdir -p "$smoke_home/.config" "$smoke_home/.cache"

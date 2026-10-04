@@ -139,7 +139,6 @@
     "lru-cache": "^11.1.0",
     "mime-types": "^3.0.2",
     "minimatch": "^10.2.6",
-    "node-pty": "^1.1.0",
     "openai": "6.40.0",
     "parse5": "^5.1.1",
     "parse5-htmlparser2-tree-adapter": "^6.0.1",
