@@ -20,6 +20,9 @@ pub const DEFAULT_MAX_BUFFER: usize = 1024 * 1024;
 
 /// Tests point this at a stand-in to see the exact arguments the core passes.
 const GIT_PROGRAM_OVERRIDE: &str = "PI_GUI_CORE_GIT_PROGRAM";
+/// A first argument for the stand-in, such as the script when the program is `node`; Windows
+/// cannot start a script by itself.
+const GIT_PROGRAM_SCRIPT: &str = "PI_GUI_CORE_GIT_PROGRAM_SCRIPT";
 
 pub struct GitCommand<'a> {
     args: Vec<&'a OsStr>,
@@ -85,6 +88,9 @@ impl<'a> GitCommand<'a> {
     pub async fn output(self) -> Result<GitOutput, CoreError> {
         let program = std::env::var_os(GIT_PROGRAM_OVERRIDE).unwrap_or_else(|| "git".into());
         let mut command = tokio::process::Command::new(&program);
+        if let Some(script) = std::env::var_os(GIT_PROGRAM_SCRIPT) {
+            command.arg(script);
+        }
         command
             .args(&self.args)
             .stdin(Stdio::null())

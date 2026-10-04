@@ -1,14 +1,5 @@
 import { execFile } from "node:child_process";
-import {
-  chmod,
-  mkdtemp,
-  readFile,
-  realpath,
-  rename,
-  rm,
-  unlink,
-  writeFile,
-} from "node:fs/promises";
+import { mkdtemp, readFile, realpath, rename, rm, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -79,11 +70,10 @@ async function fakeGit(responses: readonly GitCommandResult[]): Promise<FakeGit>
     JSON.stringify(responses.map((r) => ({ stdout: r.stdout, code: r.error ? 1 : 0 }))),
   );
   await writeFile(log, "[]");
-  const program = join(folder, "git");
+  const script = join(folder, "git.js");
   await writeFile(
-    program,
-    `#!${process.execPath}
-const fs = require("node:fs");
+    script,
+    `const fs = require("node:fs");
 const queue = JSON.parse(fs.readFileSync(${JSON.stringify(queue)}, "utf8"));
 const calls = JSON.parse(fs.readFileSync(${JSON.stringify(log)}, "utf8"));
 calls.push({ args: process.argv.slice(2), cwd: process.cwd() });
@@ -95,10 +85,13 @@ process.stdout.write(next.stdout);
 process.exitCode = next.code;
 `,
   );
-  await chmod(program, 0o755);
   return {
     workspace,
-    client: await startCoreFor({ PI_GUI_CORE_GIT_PROGRAM: program }),
+    // Run through Node, since Windows cannot start a script by itself.
+    client: await startCoreFor({
+      PI_GUI_CORE_GIT_PROGRAM: process.execPath,
+      PI_GUI_CORE_GIT_PROGRAM_SCRIPT: script,
+    }),
     calls: async () => JSON.parse(await readFile(log, "utf8")) as { args: string[]; cwd: string }[],
   };
 }
