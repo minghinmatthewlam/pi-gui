@@ -6,12 +6,14 @@
 //! `RefCell`s, and a call runs until its first `.await`.
 
 pub mod error;
+pub mod js;
 pub mod json_text;
 pub mod persistence;
 pub mod rpc;
 
 use error::{CoreError, CoreResult};
 use persistence::catalog::CatalogStore;
+use persistence::saved_data::SavedData;
 use rpc::{LocalFuture, Peer, Service};
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
@@ -26,6 +28,16 @@ pub mod methods {
     pub const INITIALIZE: &str = "core.initialize";
     pub const SHUTDOWN: &str = "core.shutdown";
     pub const CATALOG_CALL: &str = "catalog.call";
+    pub const UI_STATE_READ: &str = "uiState.read";
+    pub const UI_STATE_WRITE: &str = "uiState.write";
+    pub const ATTACHMENTS_READ: &str = "attachments.read";
+    pub const ATTACHMENTS_WRITE: &str = "attachments.write";
+    pub const ATTACHMENTS_LIST_KEYS: &str = "attachments.listKeys";
+    pub const ATTACHMENTS_REMOVE: &str = "attachments.remove";
+    pub const SCHEDULED_TASKS_READ: &str = "scheduledTasks.read";
+    pub const SCHEDULED_TASKS_WRITE: &str = "scheduledTasks.write";
+    pub const REVIEWED_SNAPSHOT: &str = "reviewed.snapshot";
+    pub const REVIEWED_SET: &str = "reviewed.set";
 }
 
 #[derive(Deserialize)]
@@ -38,6 +50,7 @@ struct InitializeParams {
 /// Parts that exist once the app has said where its profile folder is.
 struct Parts {
     catalog: RefCell<CatalogStore>,
+    saved: SavedData,
 }
 
 pub struct Core {
@@ -73,6 +86,7 @@ impl Core {
                     catalog: RefCell::new(CatalogStore::new(
                         params.user_data_dir.join("catalogs.json"),
                     )),
+                    saved: SavedData::new(&params.user_data_dir),
                 };
                 self.parts
                     .set(parts)
@@ -93,14 +107,18 @@ impl Core {
 
 impl Service for Core {
     fn call(self: Rc<Self>, method: String, params: Value) -> LocalFuture<CoreResult<Value>> {
-        let _params = match self.call_now(&method, params) {
+        let params = match self.call_now(&method, params) {
             Ok(result) => return Box::pin(std::future::ready(result)),
             Err(params) => params,
         };
-        // Calls that wait (git, files, processes) go to their part by method prefix, for
-        // example `Some(("git", _)) => Box::pin(git::call(self, method, params))`.
-        #[allow(clippy::match_single_binding)]
+        // Calls that wait (git, files, processes) go to their part by method prefix.
         match method.split_once('.') {
+            Some(("uiState" | "attachments" | "scheduledTasks" | "reviewed", _)) => {
+                Box::pin(async move {
+                    let parts = self.parts()?;
+                    persistence::saved_data::call(&parts.saved, &method, params).await
+                })
+            }
             _ => Box::pin(std::future::ready(Err(CoreError::new(format!(
                 "Unknown RPC method: {method}"
             ))))),
