@@ -9,6 +9,7 @@ pub mod error;
 pub mod json_text;
 pub mod persistence;
 pub mod rpc;
+pub mod terminal;
 
 use error::{CoreError, CoreResult};
 use persistence::catalog::CatalogStore;
@@ -19,6 +20,7 @@ use serde_json::Value;
 use std::cell::{Cell, OnceCell, RefCell};
 use std::path::PathBuf;
 use std::rc::Rc;
+use terminal::Terminals;
 
 /// Every method the app can call. Kept in step with `apps/desktop/core-process/protocol.ts`;
 /// a unit test there checks the two lists match.
@@ -26,6 +28,17 @@ pub mod methods {
     pub const INITIALIZE: &str = "core.initialize";
     pub const SHUTDOWN: &str = "core.shutdown";
     pub const CATALOG_CALL: &str = "catalog.call";
+    pub const TERMINAL_ENSURE_PANEL: &str = "terminal.ensurePanel";
+    pub const TERMINAL_CREATE_SESSION: &str = "terminal.createSession";
+    pub const TERMINAL_SET_ACTIVE_SESSION: &str = "terminal.setActiveSession";
+    pub const TERMINAL_WRITE: &str = "terminal.write";
+    pub const TERMINAL_RESIZE: &str = "terminal.resize";
+    pub const TERMINAL_RESTART: &str = "terminal.restart";
+    pub const TERMINAL_CLOSE: &str = "terminal.close";
+    pub const TERMINAL_SET_TITLE: &str = "terminal.setTitle";
+    pub const TERMINAL_RETAIN_WORKSPACE_PATHS: &str = "terminal.retainWorkspacePaths";
+    pub const TERMINAL_DISPOSE_OWNER: &str = "terminal.disposeOwner";
+    pub const TERMINAL_DISPOSE_ALL: &str = "terminal.disposeAll";
 }
 
 #[derive(Deserialize)]
@@ -45,12 +58,14 @@ pub struct Core {
     #[allow(dead_code)]
     peer: Peer,
     parts: OnceCell<Parts>,
+    terminals: Rc<Terminals>,
     stopping: Cell<bool>,
 }
 
 impl Core {
     pub fn new(peer: Peer) -> Rc<Self> {
         Rc::new(Self {
+            terminals: Terminals::new(peer.clone()),
             peer,
             parts: OnceCell::new(),
             stopping: Cell::new(false),
@@ -81,11 +96,13 @@ impl Core {
             })(),
             methods::SHUTDOWN => {
                 self.stopping.set(true);
+                self.terminals.dispose_all();
                 Ok(Value::Null)
             }
             methods::CATALOG_CALL => self.parts().and_then(|parts| {
                 persistence::catalog_calls::call(&mut parts.catalog.borrow_mut(), parse(params)?)
             }),
+            _ if method.starts_with("terminal.") => self.terminals.call(method, params),
             _ => return Err(params),
         })
     }
