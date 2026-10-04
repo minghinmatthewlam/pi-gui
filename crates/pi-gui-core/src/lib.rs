@@ -3,6 +3,7 @@
 //! called in process. Parts move over from Electron main one at a time.
 
 pub mod error;
+pub mod json_text;
 pub mod persistence;
 pub mod rpc;
 

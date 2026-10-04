@@ -25,12 +25,28 @@ pub fn serve(core: &mut Core, input: impl BufRead, mut output: impl Write) -> st
         if line.is_empty() {
             continue;
         }
-        let Ok(message) = serde_json::from_str::<Incoming>(line) else {
-            eprintln!(
-                "[pi-gui-core] ignored a line that is not a message: {}",
-                line.chars().take(200).collect::<String>()
-            );
-            continue;
+        let message = match serde_json::from_str::<Incoming>(
+            &crate::json_text::replace_lone_surrogates(line),
+        ) {
+            Ok(message) => message,
+            Err(error) => {
+                // A call the core cannot read still gets an answer, or its caller would wait
+                // forever. The app always writes `id` first.
+                if let Some(id) = leading_id(line) {
+                    let reply = json!({
+                        "id": id,
+                        "error": CoreError::new(format!("Could not read the call: {error}")),
+                    });
+                    writeln!(output, "{reply}")?;
+                    output.flush()?;
+                } else {
+                    eprintln!(
+                        "[pi-gui-core] ignored a line that is not a message: {}",
+                        line.chars().take(200).collect::<String>()
+                    );
+                }
+                continue;
+            }
         };
         let (Some(id), Some(method)) = (message.id, message.method) else {
             // Notifications (such as `$/cancel`) and stray replies need no answer: calls run
@@ -55,6 +71,12 @@ pub fn serve(core: &mut Core, input: impl BufRead, mut output: impl Write) -> st
         }
     }
     Ok(())
+}
+
+fn leading_id(line: &str) -> Option<u64> {
+    let rest = line.strip_prefix("{\"id\":")?;
+    let end = rest.find(|c: char| !c.is_ascii_digit())?;
+    rest[..end].parse().ok()
 }
 
 #[cfg(test)]
@@ -94,6 +116,16 @@ mod tests {
         assert_eq!(replies[2]["error"]["message"], "Unknown RPC method: nope");
         assert_eq!(replies[3], json!({ "id": 4, "result": null }));
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn a_call_that_cannot_be_read_still_gets_an_error_reply() {
+        let replies = run("{\"id\":7,\"method\":\"catalog.call\",\"params\":{\"bad\n");
+        assert_eq!(replies[0]["id"], 7);
+        assert!(replies[0]["error"]["message"]
+            .as_str()
+            .unwrap()
+            .starts_with("Could not read the call"));
     }
 
     #[test]

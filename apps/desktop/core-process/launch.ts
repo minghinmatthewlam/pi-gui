@@ -44,13 +44,16 @@ export async function startCore(options: StartCoreOptions): Promise<CoreProcess>
   child.stdin.on("error", () => undefined);
 
   let stopping = false;
+  // Until it has started, a failure is a startup error for the caller, not a crash.
+  let started = false;
   const exited = new Promise<void>((resolve) => {
     const finish = (detail: string) => {
       peer.close(detail);
-      if (!stopping) options.onUnexpectedExit(detail);
+      if (started && !stopping) options.onUnexpectedExit(detail);
       resolve();
     };
-    child.once("exit", (code, signal) =>
+    // `close` waits for stdout to drain, so replies the core already sent are still read.
+    child.once("close", (code, signal) =>
       finish(signal ? `signal ${signal}` : `exit code ${code ?? "unknown"}`),
     );
     child.once("error", (error) => finish(error.message));
@@ -62,8 +65,13 @@ export async function startCore(options: StartCoreOptions): Promise<CoreProcess>
     stopping = true;
     child.kill();
     await exited;
-    throw error;
+    throw new Error(
+      `pi-gui could not start its core process at ${options.binaryPath}: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
   }
+  started = true;
 
   return {
     peer,

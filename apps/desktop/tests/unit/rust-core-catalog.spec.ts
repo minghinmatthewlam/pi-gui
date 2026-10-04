@@ -77,7 +77,7 @@ function random(seed: number) {
 const WORKSPACES = ["w1", "w2", "w3"];
 const SESSIONS = ["s1", "s2", "s3", "s4"];
 const TIMES = ["2026-01-01T00:00:00.000Z", "2026-02-01T00:00:00.000Z", "2026-03-01T00:00:00.000Z"];
-const NAMES = ["alpha", "Alpha", "beta", "Beta", "gamma"];
+const NAMES = ["alpha", "Alpha", "beta", "Beta", "b_x", "b-x", "b1", "éa", "fa"];
 
 function operations(seed: number, count: number) {
   const { next, pick } = random(seed);
@@ -228,6 +228,61 @@ test("both catalogs refuse an invalid file the same way and leave it alone", asy
     }),
   ).rejects.toThrow(/Invalid catalog file contents/);
   expect(await readFile(files[1], "utf8")).toBe(original);
+});
+
+test("half an emoji cut off by a length limit loads, and saves as a replacement character", async () => {
+  const halfEmoji = "cut \ud83d";
+  const seed = JSON.stringify({
+    version: 2,
+    workspaces: [],
+    sessions: [
+      {
+        sessionRef: { workspaceId: "w", sessionId: "s" },
+        workspaceId: "w",
+        title: halfEmoji,
+        updatedAt: TIMES[0],
+        status: "idle",
+      },
+    ],
+    worktrees: [],
+    sessionFiles: {},
+  });
+  const { typescript, rust } = await stores(seed);
+  const wellFormed = (text: string) =>
+    text.replace(
+      /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/g,
+      "\ufffd",
+    );
+  const [fromTypescript] = (await typescript.sessions.listSessions()).sessions;
+  const [fromRust] = (await rust.sessions.listSessions()).sessions;
+  expect(fromRust?.title).toBe(wellFormed(fromTypescript!.title));
+  // A new half emoji sent by pi is saved instead of leaving the call unanswered.
+  await rust.sessions.upsertSession({ ...fromTypescript!, previewSnippet: "more \ude00" });
+  expect(
+    (await rust.sessions.getSession({ workspaceId: "w", sessionId: "s" }))?.previewSnippet,
+  ).toBe("more \ufffd");
+});
+
+test("an explicit null in an optional field is refused like before", async () => {
+  const original = JSON.stringify({
+    version: 2,
+    workspaces: [],
+    sessions: [
+      {
+        sessionRef: { workspaceId: "w", sessionId: "s" },
+        workspaceId: "w",
+        title: "t",
+        updatedAt: TIMES[0],
+        archivedAt: null,
+        status: "idle",
+      },
+    ],
+    worktrees: [],
+    sessionFiles: {},
+  });
+  const { typescript, rust } = await stores(original);
+  await expect(typescript.sessions.listSessions()).rejects.toThrow(/Invalid catalog file contents/);
+  await expect(rust.sessions.listSessions()).rejects.toThrow(/Invalid catalog file contents/);
 });
 
 test("the app's method list matches the Rust core's", async () => {

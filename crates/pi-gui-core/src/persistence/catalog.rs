@@ -10,6 +10,10 @@ use std::cmp::Ordering;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
+
+use icu_collator::options::CollatorOptions;
+use icu_collator::{Collator, CollatorBorrowed};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -20,18 +24,24 @@ pub struct WorkspaceEntry {
     pub last_opened_at: String,
     /// Kept as written so `0` stays `0` rather than becoming `0.0`.
     pub sort_order: Number,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        deserialize_with = "present",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub pinned: Option<bool>,
     /// Fields this version does not know, kept so a newer app's data survives.
     #[serde(flatten)]
     pub extra: Map<String, Value>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionRef {
     pub workspace_id: String,
     pub session_id: String,
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
 }
 
 impl SessionRef {
@@ -56,11 +66,23 @@ pub struct SessionEntry {
     pub workspace_id: String,
     pub title: String,
     pub updated_at: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        deserialize_with = "present",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub archived_at: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        deserialize_with = "present",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub preview_snippet: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        deserialize_with = "present",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub session_file_path: Option<String>,
     pub status: SessionStatus,
     #[serde(flatten)]
@@ -91,11 +113,23 @@ pub struct WorktreeEntry {
     pub display_name: String,
     pub kind: WorktreeKind,
     pub status: WorktreeStatus,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        deserialize_with = "present",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub branch_name: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        deserialize_with = "present",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub head_sha: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        deserialize_with = "present",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub pinned: Option<bool>,
     pub created_at: String,
     pub updated_at: String,
@@ -131,7 +165,7 @@ impl CatalogState {
     /// Same checks and messages as `parseState`. A bad file is reported, never repaired by
     /// dropping entries: the app uses the catalog to decide which attachments are still in use.
     pub fn parse(raw: &str, path: &Path) -> CoreResult<Self> {
-        let parsed: Value = serde_json::from_str(raw)
+        let parsed: Value = serde_json::from_str(&crate::json_text::replace_lone_surrogates(raw))
             .map_err(|error| CoreError::named("SyntaxError", error.to_string()))?;
         let unsupported = || {
             CoreError::new(format!(
@@ -181,6 +215,15 @@ impl CatalogState {
             session_files,
         })
     }
+}
+
+/// For optional fields: absent is `None`, but an explicit `null` is invalid, as in `parseState`.
+fn present<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    T::deserialize(deserializer).map(Some)
 }
 
 fn entries<T: for<'de> Deserialize<'de>>(value: Value) -> Option<Vec<T>> {
@@ -522,17 +565,21 @@ fn pinned_first(left: Option<bool>, right: Option<bool>) -> Ordering {
     rank(left).cmp(&rank(right))
 }
 
-/// Close to JavaScript's `localeCompare` for names: case is ignored first, then lowercase
-/// sorts before uppercase. Full Unicode collation is not needed for worktree names.
+/// JavaScript's `localeCompare`: the same ICU root collation V8 uses.
 fn compare_display_names(left: &str, right: &str) -> Ordering {
-    left.to_lowercase()
-        .cmp(&right.to_lowercase())
-        .then_with(|| right.cmp(left))
+    static COLLATOR: OnceLock<CollatorBorrowed<'static>> = OnceLock::new();
+    COLLATOR
+        .get_or_init(|| {
+            Collator::try_new(Default::default(), CollatorOptions::default())
+                .expect("the root collation is compiled in")
+        })
+        .compare(left, right)
 }
 
 /// The fields `areSessionEntriesEqual` compares.
 fn same_session(left: &SessionEntry, right: &SessionEntry) -> bool {
-    left.session_ref == right.session_ref
+    left.session_ref.workspace_id == right.session_ref.workspace_id
+        && left.session_ref.session_id == right.session_ref.session_id
         && left.workspace_id == right.workspace_id
         && left.title == right.title
         && left.updated_at == right.updated_at
@@ -668,6 +715,7 @@ mod tests {
                 &SessionRef {
                     workspace_id: "w".into(),
                     session_id: "s".into(),
+                    extra: Map::new(),
                 },
                 "/x.jsonl".into(),
             )
