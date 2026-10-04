@@ -15,6 +15,7 @@ import type {
   ComposerFileAttachment,
   ComposerImageAttachment,
 } from "../../../contracts/desktop-state";
+import { filePathFor } from "../../platform/file-paths";
 
 export function handleClipboardImageShortcut(
   event: KeyboardEvent<HTMLTextAreaElement>,
@@ -207,7 +208,7 @@ function readImageDimensions(
 }
 
 function readFileAttachmentFromFile(file: FileWithPath): ComposerFileAttachment | null {
-  const fsPath = resolveFilePath(file);
+  const fsPath = filePathFor(file);
   if (!fsPath) {
     return null;
   }
@@ -220,16 +221,6 @@ function readFileAttachmentFromFile(file: FileWithPath): ComposerFileAttachment 
     fsPath,
     ...(typeof file.size === "number" ? { sizeBytes: file.size } : {}),
   };
-}
-
-function resolveFilePath(file: FileWithPath): string | null {
-  const directPath = file.path?.trim();
-  if (directPath) {
-    return directPath;
-  }
-
-  const bridgePath = window.piApp?.getPathForFile?.(file)?.trim();
-  return bridgePath || null;
 }
 
 function fileNameFromPath(filePath: string): string {
