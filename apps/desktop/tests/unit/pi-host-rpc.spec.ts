@@ -99,3 +99,29 @@ test("optional arguments and undefined results survive the JSON trip", () => {
   expect(decodeResult(JSON.parse(JSON.stringify(encodeResult(undefined))))).toBeUndefined();
   expect(decodeResult(JSON.parse(JSON.stringify(encodeResult(null))))).toBeNull();
 });
+
+test("a reply JSON cannot encode still settles the call as an error", async () => {
+  const { a, b } = connectedPeers();
+  b.handle("cyclic", () => {
+    const value: Record<string, unknown> = {};
+    value.self = value;
+    return value;
+  });
+  b.handle("bigint", () => ({ tokens: 12n, failure: new Error("tool failed") }));
+  await expect(a.request("cyclic")).rejects.toThrow(/circular/i);
+  await expect(a.request("bigint")).resolves.toEqual({
+    tokens: "12",
+    failure: { name: "Error", message: "tool failed" },
+  });
+});
+
+test("a message split across many chunks arrives once, whole", () => {
+  const received: unknown[] = [];
+  const peer = new RpcPeer({ transport: { send: () => undefined, close: () => undefined } });
+  peer.onNotification("event", (params) => received.push(params));
+  const line = JSON.stringify({ method: "event", params: { text: "x".repeat(10_000) } });
+  for (let index = 0; index < line.length; index += 7)
+    peer.receiveChunk(line.slice(index, index + 7));
+  peer.receiveChunk('\n{"method":"event","params":2}\n');
+  expect(received).toEqual([{ text: "x".repeat(10_000) }, 2]);
+});

@@ -295,7 +295,12 @@ function toolCallerContext(caller: ToolCaller): ExtensionContext {
 /** pi runs in its own process; without it no thread can run, so offer a relaunch. */
 function handlePiHostExit(detail: string): void {
   console.error(`pi-gui: the pi host process stopped unexpectedly (${detail})`);
-  if (appTestMode || quitFlush !== "idle") return;
+  if (quitFlush !== "idle") return;
+  // The store is unset when the host fails before startup finished.
+  (store as DesktopAppStore | undefined)
+    ?.withError(new Error("pi stopped unexpectedly. Restart pi-gui to keep working."))
+    .catch(() => undefined);
+  if (appTestMode) return;
   void dialog
     .showMessageBox({
       type: "error",
@@ -1047,7 +1052,7 @@ app
     const orchestrationRuntimeBridge = createStoreBackedOrchestrationRuntimeBridge();
     const scheduledTaskRuntimeBridge = createStoreBackedScheduledTaskRuntimeBridge();
     const checkpoints = new TurnCheckpointStore(configuredUserDataDir);
-    piHost = startPiHost({
+    piHost = await startPiHost({
       execPath: process.execPath,
       scriptPath: path.join(__dirname, "pi-host.js"),
       env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },

@@ -70,7 +70,7 @@ export class RpcPeer {
   private readonly handlers = new Map<string, RpcHandler>();
   private readonly notificationHandlers = new Map<string, (params: unknown) => void>();
   private closedReason: string | undefined;
-  private buffered = "";
+  private buffered: string[] = [];
 
   constructor(private readonly options: RpcPeerOptions) {}
 
@@ -120,14 +120,17 @@ export class RpcPeer {
 
   /** Feeds raw bytes read from the other side. Partial lines are buffered. */
   receiveChunk(chunk: string): void {
-    this.buffered += chunk;
-    let newline = this.buffered.indexOf("\n");
+    // Only the new chunk is searched, so a large reply arriving in many chunks stays linear.
+    let start = 0;
+    let newline = chunk.indexOf("\n");
     while (newline >= 0) {
-      const line = this.buffered.slice(0, newline).trim();
-      this.buffered = this.buffered.slice(newline + 1);
+      const line = (this.buffered.join("") + chunk.slice(start, newline)).trim();
+      this.buffered = [];
       if (line) this.receiveLine(line);
-      newline = this.buffered.indexOf("\n");
+      start = newline + 1;
+      newline = chunk.indexOf("\n", start);
     }
+    if (start < chunk.length) this.buffered.push(chunk.slice(start));
   }
 
   close(reason: string): void {
@@ -214,8 +217,37 @@ export class RpcPeer {
 
   private write(message: WireMessage): void {
     if (this.closedReason !== undefined) return;
-    this.options.transport.send(JSON.stringify(message));
+    let line: string;
+    try {
+      line = JSON.stringify(message, wireValue);
+    } catch (error) {
+      // A cycle in an extension's data. Replies still settle; other messages drop the cycle.
+      if ("id" in message && ("result" in message || "error" in message)) {
+        line = JSON.stringify({ id: message.id, error: toWireError(error) });
+      } else {
+        line = JSON.stringify(message, acyclicWireValue());
+      }
+    }
+    this.options.transport.send(line);
   }
+}
+
+/** Keeps values JSON would lose or reject: errors as their name and message, big integers as text. */
+function wireValue(_key: string, value: unknown): unknown {
+  if (typeof value === "bigint") return value.toString();
+  if (value instanceof Error) return { name: value.name, message: value.message };
+  return value;
+}
+
+function acyclicWireValue(): (key: string, value: unknown) => unknown {
+  const seen = new WeakSet<object>();
+  return function (this: unknown, key: string, value: unknown) {
+    const wire = wireValue(key, value);
+    if (typeof wire !== "object" || wire === null) return wire;
+    if (seen.has(wire)) return "[Circular]";
+    seen.add(wire);
+    return wire;
+  };
 }
 
 function toWireError(error: unknown): WireError {

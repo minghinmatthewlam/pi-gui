@@ -1,7 +1,10 @@
 /**
  * The pi host process: runs pi, its extensions and extension view backends, and nothing else.
- * It speaks the message pipe in `protocol.ts` over stdin/stdout and holds no app state.
+ * It speaks the message pipe in `protocol.ts` over a local socket the app opened, and holds no
+ * app state.
  */
+import { hostSocketPath, hostToken } from "./host-env";
+import { connect } from "node:net";
 import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -44,27 +47,36 @@ import { remoteCatalogStorage } from "./remote-catalog";
 import { RpcPeer } from "./rpc-peer";
 import type { SessionRef } from "@pi-gui/session-driver";
 
-// Our stdout carries the message pipe. Anything else pi or an extension prints goes to stderr.
-const writeProtocol = process.stdout.write.bind(process.stdout);
-process.stdout.write = process.stderr.write.bind(process.stderr) as typeof process.stdout.write;
-console.log = console.error;
-console.info = console.error;
-console.debug = console.error;
+if (!hostSocketPath || !hostToken) {
+  console.error("[pi-host] started without a pipe address; only pi-gui starts this process");
+  process.exit(2);
+}
 
+// A stray error in one extension must not end pi for every thread. Electron's main process,
+// where pi used to run, kept going after these too.
+process.on("uncaughtException", (error) => console.error("[pi-host] uncaught exception", error));
+process.on("unhandledRejection", (reason) =>
+  console.error("[pi-host] unhandled rejection", reason),
+);
+
+const socket = connect(hostSocketPath);
+socket.setEncoding("utf8");
 const peer = new RpcPeer({
   transport: {
     send: (line) => {
-      writeProtocol(`${line}\n`);
+      socket.write(`${line}\n`);
     },
     close: () => {
-      process.stdin.pause();
+      socket.end();
     },
   },
   onDiagnostic: (message) => console.error(`[pi-host] ${message}`),
 });
-process.stdin.setEncoding("utf8");
-process.stdin.on("data", (chunk: string) => peer.receiveChunk(chunk));
-process.stdin.on("end", () => {
+// The first line proves to the app that this is the process it started.
+socket.write(`${hostToken}\n`);
+socket.on("data", (chunk: string) => peer.receiveChunk(chunk));
+socket.on("error", (error) => console.error("[pi-host] pipe error", error));
+socket.on("close", () => {
   // The app is gone; nothing else can talk to us.
   peer.close("app closed the pipe");
   process.exit(0);

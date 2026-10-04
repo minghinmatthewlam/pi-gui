@@ -88,13 +88,12 @@ export class RemoteExtensionViews {
       this.senders.delete(clientToken);
       throw error;
     }
-    // A connection closed before the reply arrived stays closed.
-    if (this.senders.has(clientToken)) {
-      this.connections.set(result.connection.connectionId, {
-        context: result.connection,
-        clientToken,
-      });
-    }
+    // The host closed it before its reply arrived, for example because pi reloaded.
+    if (!this.senders.has(clientToken)) throw new Error("Desktop extension view is unavailable");
+    this.connections.set(result.connection.connectionId, {
+      context: result.connection,
+      clientToken,
+    });
     return { connectionId: result.connection.connectionId, frameUrl: result.frameUrl };
   }
 
