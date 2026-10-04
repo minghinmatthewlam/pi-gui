@@ -210,33 +210,7 @@ pub(crate) fn parse<T: DeserializeOwned>(params: Value) -> CoreResult<T> {
 
 /// A random version 4 UUID, for unique file and ref names like `crypto.randomUUID()`.
 pub(crate) fn random_id() -> String {
-    use std::hash::{BuildHasher, Hasher};
-    use std::sync::atomic::{AtomicU64, Ordering};
-    static COUNTER: AtomicU64 = AtomicU64::new(0);
-    // Each `RandomState` is seeded from the operating system's random source.
-    let random = || {
-        let mut hasher = std::collections::hash_map::RandomState::new().build_hasher();
-        hasher.write_u64(COUNTER.fetch_add(1, Ordering::Relaxed));
-        hasher.write_u128(
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|since| since.as_nanos())
-                .unwrap_or_default(),
-        );
-        hasher.finish()
-    };
-    let bits = (u128::from(random()) << 64 | u128::from(random())) & !(0xf << 76) & !(0x3 << 62)
-        | (0x4 << 76)
-        | (0x2 << 62);
-    let hex = format!("{bits:032x}");
-    format!(
-        "{}-{}-{}-{}-{}",
-        &hex[..8],
-        &hex[8..12],
-        &hex[12..16],
-        &hex[16..20],
-        &hex[20..]
-    )
+    uuid::Uuid::new_v4().to_string()
 }
 
 /// Runs the core over a pair of streams until the input closes or the app asks it to stop.
