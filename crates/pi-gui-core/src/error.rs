@@ -1,16 +1,22 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use std::fmt;
 use std::io;
 
 /// An error as the app sees it: the same `name`, `message` and extra fields (such as an
 /// `ENOENT` code) a JavaScript error would carry, so callers keep their existing checks.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CoreError {
+    #[serde(default = "default_name")]
     pub name: String,
+    #[serde(default)]
     pub message: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub data: Option<Map<String, Value>>,
+}
+
+fn default_name() -> String {
+    "Error".into()
 }
 
 impl CoreError {
