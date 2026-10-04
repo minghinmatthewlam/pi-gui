@@ -44,6 +44,9 @@ impl CoreError {
             io::ErrorKind::AlreadyExists => "EEXIST",
             io::ErrorKind::IsADirectory => "EISDIR",
             io::ErrorKind::NotADirectory => "ENOTDIR",
+            io::ErrorKind::DirectoryNotEmpty => "ENOTEMPTY",
+            io::ErrorKind::StorageFull => "ENOSPC",
+            io::ErrorKind::ReadOnlyFilesystem => "EROFS",
             _ => "EIO",
         };
         let mut data = Map::new();
