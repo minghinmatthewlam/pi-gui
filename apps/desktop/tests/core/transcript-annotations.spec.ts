@@ -1,6 +1,5 @@
-import { resolve } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import type { PiSdkDriver } from "@pi-gui/pi-sdk-driver";
+import type { PiDriverPort } from "../../pi-host/protocol";
 import type { SessionMessageInput } from "@pi-gui/session-driver";
 import {
   createNamedThread,
@@ -93,29 +92,28 @@ test("adds transcript selections to chat with comments and sends them before the
     await expect(sent.locator("details")).not.toHaveAttribute("open");
 
     // Record what reaches pi without a provider.
-    await harness.electronApp.evaluate(
-      (_electron, input) => {
-        const { createRequire } = process.getBuiltinModule("module");
-        const load = createRequire(input.entry);
-        const { PiSdkDriver: Driver } = load("@pi-gui/pi-sdk-driver") as {
-          PiSdkDriver: typeof PiSdkDriver;
-        };
-        const sent: SessionMessageInput[] = [];
-        const hooks = globalThis as {
-          __annotationSends?: SessionMessageInput[];
-          __failNextAnnotationSend?: boolean;
-        };
-        hooks.__annotationSends = sent;
-        Driver.prototype.sendUserMessage = async function (_ref, message) {
-          if (hooks.__failNextAnnotationSend) {
-            hooks.__failNextAnnotationSend = false;
-            throw new Error("Simulated send failure");
-          }
-          sent.push(message);
-        };
-      },
-      { entry: resolve("apps/desktop/out/main/main.js") },
-    );
+    await harness.electronApp.evaluate(() => {
+      const driver = (
+        globalThis as {
+          __PI_APP_TEST_HOOKS?: {
+            piDriver(): { -readonly [K in keyof PiDriverPort]: PiDriverPort[K] };
+          };
+        }
+      ).__PI_APP_TEST_HOOKS!.piDriver();
+      const sent: SessionMessageInput[] = [];
+      const hooks = globalThis as {
+        __annotationSends?: SessionMessageInput[];
+        __failNextAnnotationSend?: boolean;
+      };
+      hooks.__annotationSends = sent;
+      driver.sendUserMessage = async (_ref, message) => {
+        if (hooks.__failNextAnnotationSend) {
+          hooks.__failNextAnnotationSend = false;
+          throw new Error("Simulated send failure");
+        }
+        sent.push(message);
+      };
+    });
 
     // Select, then add with the shortcut; the comment box opens on a numbered marker.
     await dragSelect(page, "hold up the reply");

@@ -1,6 +1,6 @@
 import { parseDesktopHostAction } from "@pi-gui/extension-ui/browser";
 import { desktopIpc } from "../../contracts/ipc";
-import type { DesktopExtensionViewOwner } from "../extensions/extension-view-owner";
+import type { RemoteExtensionViews } from "../../pi-host/remote-extension-views";
 import type { WindowOwner } from "../windows/window-owner";
 import type { MainFrameHandler } from "./main-frame-ipc";
 import { expectNonEmptyString, expectRecord, expectSessionTarget } from "./request-validation";
@@ -25,7 +25,7 @@ function decodeMessageRequest(raw: unknown) {
 export function registerExtensionViewRequests(
   handle: MainFrameHandler,
   windows: Pick<WindowOwner, "targetForSender">,
-  owner: DesktopExtensionViewOwner,
+  owner: RemoteExtensionViews,
 ): void {
   const senders = new Map<number, Electron.WebContents>();
   const pendingActions = new Map<string, Set<string>>();
@@ -43,8 +43,7 @@ export function registerExtensionViewRequests(
     }
     return contents;
   };
-  owner.subscribe((target) => {
-    const views = owner.listViews(target);
+  owner.subscribe((target, views) => {
     for (const contents of senders.values()) {
       if (!contents.isDestroyed())
         contents.send(desktopIpc.extensionViewCatalogChanged, { target, views });

@@ -6,7 +6,7 @@ import { expect, test } from "@playwright/test";
 import {
   resolveDesktopExtensionAsset,
   validateDesktopExtensionSource,
-} from "../../electron/extensions/extension-view-source";
+} from "../../pi-host/extension-views/extension-view-source";
 
 test("desktop assets belong to one loaded extension and its browser build", async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "pi-desktop-source-"));

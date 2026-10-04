@@ -13,7 +13,6 @@ import {
   type MessageBoxOptions,
 } from "electron";
 import { isValidHttpBaseUrl } from "@pi-gui/pi-sdk-driver";
-import { createRequire } from "node:module";
 import { randomUUID } from "node:crypto";
 import type {
   AgentToolResult,
@@ -28,21 +27,23 @@ import { DesktopAppStore } from "./application/app-store";
 import { WindowOwner } from "./windows/window-owner";
 import { PendingComposerDraftFlusher } from "./windows/pending-draft-flush";
 import { TurnCheckpointStore } from "./workbench/checkpoint-store";
+import { RemoteExtensionViews, DESKTOP_EXTENSION_SCHEME } from "../pi-host/remote-extension-views";
+import { startPiHost, type PiHostProcess } from "../pi-host/launch";
 import {
-  DesktopExtensionViewOwner,
-  DESKTOP_EXTENSION_SCHEME,
-} from "./extensions/extension-view-owner";
+  appMethods,
+  appNotifications,
+  type CaptureBoundaryParams,
+  type ToolCallParams,
+  type ToolCaller,
+} from "../pi-host/protocol";
 import { performExtensionViewHostAction } from "./extensions/extension-view-actions";
-import { extensionFrameDocument } from "./extensions/extension-frame-document";
 import { ReviewOwner } from "./workbench/review-owner";
 import { registerDesktopIpc } from "./ipc/register-desktop-ipc";
 import {
-  createOrchestrationRuntimeExtension,
   createOrchestrationRuntimeTools,
   type OrchestrationRuntimeBridge,
 } from "./orchestration/orchestration-runtime";
 import {
-  createScheduledTaskRuntimeExtension,
   createScheduledTaskRuntimeTools,
   type ScheduledTaskRuntimeBridge,
 } from "./scheduled-tasks/scheduled-task-runtime";
@@ -96,8 +97,10 @@ const appTestMode = resolveAppTestMode(process.env.PI_APP_TEST_MODE);
 const windowTestMode = appTestMode ?? "foreground";
 const devReloadMarkersEnabled = process.env.PI_APP_DEV_RELOAD_MARKERS === "1";
 const TURN_CAPTURE_BACKSTOP_MS = 10_000;
+const PI_HOST_STOP_TIMEOUT_MS = 2_000;
 let store: DesktopAppStore;
-let extensionViewOwner: DesktopExtensionViewOwner | undefined;
+let extensionViewOwner: RemoteExtensionViews | undefined;
+let piHost: PiHostProcess | undefined;
 let windowOwner: WindowOwner;
 const themeManager = new ThemeManager();
 let mainWindow: BrowserWindow | null = null;
@@ -232,6 +235,80 @@ async function runOrchestrationRuntimeToolForTest(
     undefined,
     createTestExtensionContext(input.sessionRef),
   );
+}
+
+/** Runs a pi-gui tool body for a tool call that started in the pi host. */
+async function runPiGuiTool(
+  orchestration: OrchestrationRuntimeBridge,
+  scheduled: ScheduledTaskRuntimeBridge,
+  { tool, caller, input }: ToolCallParams,
+): Promise<unknown> {
+  const ctx = toolCallerContext(caller);
+  switch (tool) {
+    case "orchestration.createChildThread":
+      return orchestration.createChildThread(
+        ctx,
+        input as Parameters<OrchestrationRuntimeBridge["createChildThread"]>[1],
+      );
+    case "orchestration.listThreads":
+      return orchestration.listThreads(ctx);
+    case "orchestration.readThread":
+      return orchestration.readThread(ctx, input as string);
+    case "orchestration.sendMessageToThread":
+      return orchestration.sendMessageToThread(
+        ctx,
+        input as Parameters<OrchestrationRuntimeBridge["sendMessageToThread"]>[1],
+      );
+    case "scheduled.createScheduledTask":
+      return scheduled.createScheduledTask(
+        ctx,
+        input as Parameters<ScheduledTaskRuntimeBridge["createScheduledTask"]>[1],
+      );
+    case "scheduled.listScheduledTasks":
+      return scheduled.listScheduledTasks(ctx);
+    case "scheduled.updateScheduledTask":
+      return scheduled.updateScheduledTask(
+        ctx,
+        input as Parameters<ScheduledTaskRuntimeBridge["updateScheduledTask"]>[1],
+      );
+    case "scheduled.fallbackWorkspaceId":
+      await store.initialize();
+      try {
+        return sessionRefFromExtensionContext(ctx).workspaceId;
+      } catch {
+        return null;
+      }
+  }
+}
+
+/** The part of pi's tool context the pi-gui tool bodies read: which session called. */
+function toolCallerContext(caller: ToolCaller): ExtensionContext {
+  return {
+    cwd: caller.cwd,
+    sessionManager: {
+      getSessionId: () => caller.sessionId,
+      getCwd: () => caller.cwd,
+    } as ExtensionContext["sessionManager"],
+  } as ExtensionContext;
+}
+
+/** pi runs in its own process; without it no thread can run, so offer a relaunch. */
+function handlePiHostExit(detail: string): void {
+  console.error(`pi-gui: the pi host process stopped unexpectedly (${detail})`);
+  if (appTestMode || quitFlush !== "idle") return;
+  void dialog
+    .showMessageBox({
+      type: "error",
+      message: "pi stopped unexpectedly",
+      detail: "Threads cannot run until pi-gui restarts. Your threads and drafts are saved.",
+      buttons: ["Restart pi-gui", "Later"],
+      defaultId: 0,
+      cancelId: 1,
+    })
+    .then(({ response }) => {
+      if (response === 0) requestApplicationRelaunch();
+    })
+    .catch((error: unknown) => console.error("pi-gui: pi host exit dialog failed", error));
 }
 
 function createTestExtensionContext(sessionRef: SessionRef): ExtensionToolContext {
@@ -970,78 +1047,58 @@ app
     const orchestrationRuntimeBridge = createStoreBackedOrchestrationRuntimeBridge();
     const scheduledTaskRuntimeBridge = createStoreBackedScheduledTaskRuntimeBridge();
     const checkpoints = new TurnCheckpointStore(configuredUserDataDir);
-    const extensionViews: DesktopExtensionViewOwner = new DesktopExtensionViewOwner({
-      frameDocument: extensionFrameDocument,
-      hostAssets: {
-        "frame-bridge.js": {
-          body: await readFile(
-            createRequire(__filename).resolve("@pi-gui/extension-ui/frame-bridge"),
-            "utf8",
-          ),
-          contentType: "text/javascript; charset=utf-8",
-        },
-      },
-      onHostAction: (context) =>
-        performExtensionViewHostAction(
-          {
-            store,
-            windows: windowOwner,
-            views: extensionViews,
-            openExternal: openExternalLink,
-            saveComposerDraft: (window) => composerDraftFlusher.flush([window]),
-          },
-          context,
-        ),
-      onDiagnostic: (target, source, message) =>
-        console.error("[extension-view]", target.sessionId, source, message),
+    piHost = startPiHost({
+      execPath: process.execPath,
+      scriptPath: path.join(__dirname, "pi-host.js"),
+      env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
+      onUnexpectedExit: handlePiHostExit,
     });
+    const hostPeer = piHost.peer;
+    const extensionViews: RemoteExtensionViews = new RemoteExtensionViews(hostPeer, (context) =>
+      performExtensionViewHostAction(
+        {
+          store,
+          windows: windowOwner,
+          views: extensionViews,
+          openExternal: openExternalLink,
+          saveComposerDraft: (window) => composerDraftFlusher.flush([window]),
+        },
+        context,
+      ),
+    );
     extensionViewOwner = extensionViews;
     protocol.handle(DESKTOP_EXTENSION_SCHEME, (request) =>
       extensionViews.assetResponse(request.url),
     );
-    const driverOptions: NonNullable<
-      ConstructorParameters<typeof DesktopAppStore>[0]["driverOptions"]
-    > = {
-      onTurnCaptureBoundary: (boundary, signal) => checkpoints.recordBoundary(boundary, signal),
-      // The store bounds each capture from when it starts; this only stops a stuck boundary,
-      // including one waiting behind another run's capture in the same checkout.
-      turnCaptureTimeoutMs: TURN_CAPTURE_BACKSTOP_MS,
-      desktopExtensions: {
-        onChanged: (runtime) => extensionViews.replaceRuntime(runtime),
-        onInvalidated: ({ target, generation }) =>
-          extensionViews.invalidateRuntime(target, generation),
-      },
-      openUrl: openMcpSignInUrl,
-      builtinExtensions: [
-        {
-          name: "pi-gui-thread-orchestration",
-          displayName: "Thread orchestration",
-          description: "Lets pi start, read and message other pi-gui threads",
-          factory: createOrchestrationRuntimeExtension(orchestrationRuntimeBridge),
-        },
-        {
-          name: "pi-gui-scheduled-tasks",
-          displayName: "Scheduled tasks",
-          description: "Lets pi create and update local pi-gui scheduled tasks",
-          factory: createScheduledTaskRuntimeExtension(scheduledTaskRuntimeBridge, (ctx) => {
-            try {
-              return sessionRefFromExtensionContext(ctx).workspaceId;
-            } catch {
-              return undefined;
-            }
-          }),
-        },
-      ],
-    };
+    hostPeer.handle(appMethods.captureBoundary, async (params, { signal }) => {
+      await checkpoints.recordBoundary((params as CaptureBoundaryParams).boundary, signal);
+      return null;
+    });
+    hostPeer.onNotification(appNotifications.openUrl, (params) =>
+      openMcpSignInUrl((params as { url: string }).url),
+    );
+    hostPeer.handle(appMethods.tool, (params) =>
+      runPiGuiTool(
+        orchestrationRuntimeBridge,
+        scheduledTaskRuntimeBridge,
+        params as ToolCallParams,
+      ),
+    );
     store = new DesktopAppStore({
       userDataDir: configuredUserDataDir,
       initialWorkspacePaths: resolveInitialWorkspacePaths(),
       getWindow: () => mainWindow,
       shouldKeepSessionDialogs: (sessionRef) =>
         windowOwner?.isSessionVisibleInAnotherWindow(sessionRef) ?? false,
-      driverOptions,
+      piHost: hostPeer,
       generateThreadTitleOverride: async (workspace, options) =>
         generateThreadTitleOverride?.(workspace, options),
+    });
+    await piHost.initialize({
+      config: { disabledBuiltinExtensions: [], extensionFlags: {} },
+      // The store bounds each capture from when it starts; this only stops a stuck boundary,
+      // including one waiting behind another run's capture in the same checkout.
+      turnCaptureTimeoutMs: TURN_CAPTURE_BACKSTOP_MS,
     });
     windowOwner = new WindowOwner(store, {
       onActiveWindowChanged: (window) => {
@@ -1073,6 +1130,9 @@ app
       Object.assign(globalThis, {
         __PI_APP_TEST_HOOKS: {
           emitSessionEvent: (event: SessionDriverEvent) => store.emitTestSessionEvent(event),
+          // pi runs in the pi host; tests replace calls on the app's side of the pipe.
+          piDriver: () => store.piDriverForTests(),
+          piHostPid: () => piHost?.pid,
           handleWindowActivation: () => {
             if (mainWindow) {
               windowOwner.activate(mainWindow);
@@ -1296,7 +1356,8 @@ app.on("before-quit", (event) => {
   // Renderers send their debounced drafts first so the store flush below includes them.
   const flush = composerDraftFlusher
     .flush(windowOwner.allWindows())
-    .then(() => Promise.all([quittingStore.flushPersistence(), extensionViewOwner?.dispose()]))
+    .then(() => quittingStore.flushPersistence())
+    .then(() => piHost?.stop(PI_HOST_STOP_TIMEOUT_MS))
     .catch((error: unknown) => {
       console.error("pi-gui: persistence flush failed during quit:", error);
     });

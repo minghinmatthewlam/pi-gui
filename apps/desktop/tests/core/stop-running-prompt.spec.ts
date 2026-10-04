@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
-import { resolve } from "node:path";
-import type { PiSdkDriver } from "@pi-gui/pi-sdk-driver";
+
+import type { PiDriverPort } from "../../pi-host/protocol";
 import type { SessionDriverEvent, SessionRef } from "@pi-gui/session-driver";
 import { desktopIpc } from "../../contracts/ipc";
 import {
@@ -56,11 +56,13 @@ for (const { finish, prompt } of pendingPrompts) {
             submission = Promise.resolve(submit(...args));
             return submission;
           });
-          const { createRequire } = process.getBuiltinModule("module");
-          const load = createRequire(input.entry);
-          const { PiSdkDriver: Driver } = load("@pi-gui/pi-sdk-driver") as {
-            PiSdkDriver: typeof PiSdkDriver;
-          };
+          const driver = (
+            globalThis as {
+              __PI_APP_TEST_HOOKS?: {
+                piDriver(): { -readonly [K in keyof PiDriverPort]: PiDriverPort[K] };
+              };
+            }
+          ).__PI_APP_TEST_HOOKS!.piDriver();
           const hooks = (
             globalThis as {
               __PI_APP_TEST_HOOKS?: { emitSessionEvent(event: SessionDriverEvent): Promise<void> };
@@ -81,7 +83,7 @@ for (const { finish, prompt } of pendingPrompts) {
                 updatedAt: new Date().toISOString(),
               },
             });
-          Driver.prototype.sendUserMessage = async function (ref) {
+          driver.sendUserMessage = async (ref) => {
             const pending = new Promise<void>((resolvePrompt) => {
               release = resolvePrompt;
             });
@@ -98,7 +100,7 @@ for (const { finish, prompt } of pendingPrompts) {
           (
             globalThis as { __completePendingTestPrompt?: () => Promise<void> }
           ).__completePendingTestPrompt = completePrompt;
-          Driver.prototype.cancelCurrentRun = async function (ref) {
+          driver.cancelCurrentRun = async (ref) => {
             if (
               ref.workspaceId !== input.target.workspaceId ||
               ref.sessionId !== input.target.sessionId
@@ -110,7 +112,6 @@ for (const { finish, prompt } of pendingPrompts) {
           };
         },
         {
-          entry: resolve("apps/desktop/out/main/main.js"),
           target,
           workspacePath,
           submitChannel: desktopIpc.submitComposer,

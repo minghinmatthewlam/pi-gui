@@ -10,10 +10,12 @@ import {
   applyHostUiRequestToExtensionUiState,
   type GenerateThreadTitleOptions,
   isExtensionUiDialogRequest,
-  PiSdkDriver,
-  type PiSdkDriverConfig,
   SessionLeasedError,
 } from "@pi-gui/pi-sdk-driver";
+import type { PiDriverPort, PiHostConfig } from "../../pi-host/protocol";
+import { serveCatalogToPiHost } from "../../pi-host/remote-catalog";
+import { createRemotePiDriver } from "../../pi-host/remote-driver";
+import type { RpcPeer } from "../../pi-host/rpc-peer";
 import type { SessionCatalogEntry } from "@pi-gui/catalogs";
 import type {
   NavigateSessionTreeOptions,
@@ -179,14 +181,8 @@ export interface DesktopAppStoreOptions {
   readonly initialWorkspacePaths: readonly string[];
   readonly getWindow?: () => BrowserWindow | null;
   readonly shouldKeepSessionDialogs?: (sessionRef: SessionRef) => boolean;
-  readonly driverOptions?: Pick<
-    PiSdkDriverConfig,
-    | "builtinExtensions"
-    | "desktopExtensions"
-    | "onTurnCaptureBoundary"
-    | "openUrl"
-    | "turnCaptureTimeoutMs"
-  >;
+  /** The message pipe to the pi host process, which runs pi for this store. */
+  readonly piHost: RpcPeer;
   readonly generateThreadTitleOverride?: (
     workspace: WorkspaceRef,
     options: GenerateThreadTitleOptions,
@@ -239,7 +235,7 @@ export class DesktopAppStore {
   /** Cached session schema info (version-skew flag) projected onto the transcript payload. */
   private readonly sessionSchemaInfoCache = new Map<string, SessionSchemaInfo>();
   private readonly sessionSchemaInfoInFlight = new Set<string>();
-  private readonly driver: PiSdkDriver;
+  private readonly driver: PiDriverPort;
   private readonly catalogStore: JsonCatalogStore;
   private readonly worktreeManager: GitWorktreeManager;
   private readonly worktreeRoot: string;
@@ -288,18 +284,14 @@ export class DesktopAppStore {
   constructor(options: DesktopAppStoreOptions) {
     const catalogFilePath = join(options.userDataDir, "catalogs.json");
     this.catalogStore = new JsonCatalogStore({ catalogFilePath });
-    const driverOptions: PiSdkDriverConfig = {
-      catalogStorage: this.catalogStore,
-      ...(options.driverOptions ?? {}),
-      isBuiltinExtensionEnabled: (name) => !this.disabledBuiltinExtensions.has(name),
-      extensionFlagValuesForSession: (sessionRef) =>
-        this.sessionState.extensionFlagsBySession.get(sessionKey(sessionRef)),
+    serveCatalogToPiHost(options.piHost, this.catalogStore);
+    this.driver = createRemotePiDriver({
+      peer: options.piHost,
+      config: () => this.piHostConfig(),
       ...(options.generateThreadTitleOverride
         ? { generateThreadTitleOverride: options.generateThreadTitleOverride }
         : {}),
-    };
-
-    this.driver = new PiSdkDriver(driverOptions);
+    });
     this.worktreeRoot = join(options.userDataDir, "worktrees");
     this.isAppWorktreePath = appWorktreeRootMatcher(this.worktreeRoot);
     this.worktreeManager = new GitWorktreeManager({
@@ -1745,7 +1737,7 @@ export class DesktopAppStore {
     filePath: string,
     enabled: boolean,
   ): Promise<DesktopAppState> {
-    const builtinName = this.driver.runtimeSupervisor.builtinExtensionName(filePath);
+    const builtinName = await this.driver.runtimeSupervisor.builtinExtensionName(filePath);
     if (builtinName) {
       return this.setBuiltinExtensionEnabled(workspaceId, builtinName, enabled);
     }
@@ -1828,7 +1820,7 @@ export class DesktopAppStore {
     if (!ws) {
       throw new Error(`Unknown workspace: ${workspaceId}`);
     }
-    const listing = this.driver.runtimeSupervisor.listMcpServers(ws);
+    const listing = await this.driver.runtimeSupervisor.listMcpServers(ws);
     return {
       globalConfigPath: withHomeAsTilde(listing.globalConfigPath),
       servers: listing.servers.map((server) => ({ ...server })),
@@ -2915,10 +2907,38 @@ export class DesktopAppStore {
       return;
     }
 
-    const unsubscribe = this.driver.subscribe(sessionRef, (event) => {
-      this.enqueueSessionEvent(event, key);
-    });
-    this.sessionState.sessionSubscriptions.set(key, unsubscribe);
+    // Claim the key before awaiting the host, so a concurrent call does not subscribe twice.
+    let unsubscribe: (() => void) | undefined;
+    let cancelled = false;
+    const release = () => {
+      cancelled = true;
+      unsubscribe?.();
+    };
+    this.sessionState.sessionSubscriptions.set(key, release);
+    try {
+      unsubscribe = await this.driver.subscribe(sessionRef, (event) => {
+        this.enqueueSessionEvent(event, key);
+      });
+    } catch (error) {
+      if (this.sessionState.sessionSubscriptions.get(key) === release) {
+        this.sessionState.sessionSubscriptions.delete(key);
+      }
+      throw error;
+    }
+    if (cancelled) unsubscribe();
+  }
+
+  /** Test mode only: the app's side of the pi host pipe, so specs can stub a call. */
+  piDriverForTests(): PiDriverPort {
+    return this.driver;
+  }
+
+  /** What pi reads synchronously while it builds a session: switched-off tools and flags. */
+  private piHostConfig(): PiHostConfig {
+    return {
+      disabledBuiltinExtensions: [...this.disabledBuiltinExtensions].sort(),
+      extensionFlags: Object.fromEntries(this.sessionState.extensionFlagsBySession),
+    };
   }
 
   /**

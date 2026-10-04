@@ -11,13 +11,13 @@ import { createJiti } from "jiti";
 const jiti = createJiti(__filename);
 let defineFacet: typeof import("@earendil-works/chord").defineFacet;
 let defineService: typeof import("@earendil-works/chord").defineService;
-let DesktopExtensionViewOwner: typeof import("../../electron/extensions/extension-view-owner").DesktopExtensionViewOwner;
+let DesktopExtensionViewOwner: typeof import("../../pi-host/extension-views/extension-view-owner").DesktopExtensionViewOwner;
 test.beforeAll(async () => {
   ({ defineFacet, defineService } =
     await jiti.import<typeof import("@earendil-works/chord")>("@earendil-works/chord"));
   ({ DesktopExtensionViewOwner } = await jiti.import<
-    typeof import("../../electron/extensions/extension-view-owner")
-  >("../../electron/extensions/extension-view-owner.ts"));
+    typeof import("../../pi-host/extension-views/extension-view-owner")
+  >("../../pi-host/extension-views/extension-view-owner.ts"));
 });
 
 const target = { workspaceId: "workspace-a", sessionId: "session-a" };

@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { expect, test } from "@playwright/test";
-import type { PiSdkDriver } from "@pi-gui/pi-sdk-driver";
+import type { PiDriverPort } from "../../pi-host/protocol";
 import type { SessionDriverEvent, SessionRef } from "@pi-gui/session-driver";
 import { desktopIpc } from "../../contracts/ipc";
 import {
@@ -87,11 +87,13 @@ export default function extension(pi) {
           await draftGate;
           return persist(...args);
         });
-        const { createRequire } = process.getBuiltinModule("module");
-        const load = createRequire(input.entry);
-        const { PiSdkDriver: Driver } = load("@pi-gui/pi-sdk-driver") as {
-          PiSdkDriver: typeof PiSdkDriver;
-        };
+        const driver = (
+          globalThis as {
+            __PI_APP_TEST_HOOKS?: {
+              piDriver(): { -readonly [K in keyof PiDriverPort]: PiDriverPort[K] };
+            };
+          }
+        ).__PI_APP_TEST_HOOKS!.piDriver();
         const hooks = (
           globalThis as {
             __PI_APP_TEST_HOOKS?: { emitSessionEvent(event: SessionDriverEvent): Promise<void> };
@@ -112,14 +114,14 @@ export default function extension(pi) {
               updatedAt: new Date().toISOString(),
             },
           });
-        Driver.prototype.sendUserMessage = async function (ref) {
+        driver.sendUserMessage = async (ref) => {
           const runGate = new Promise<void>((resolveRun) => {
             releaseRun = resolveRun;
           });
           await emit(ref, "running");
           await runGate;
         };
-        Driver.prototype.cancelCurrentRun = async function (ref) {
+        driver.cancelCurrentRun = async (ref) => {
           if (
             ref.workspaceId !== input.target.workspaceId ||
             ref.sessionId !== input.target.sessionId
@@ -141,7 +143,6 @@ export default function extension(pi) {
         };
       },
       {
-        entry: resolve("apps/desktop/out/main/main.js"),
         workspacePath,
         target,
         persistChannel: desktopIpc.persistComposerDraft,

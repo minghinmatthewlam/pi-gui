@@ -1,5 +1,5 @@
 import { sessionKey } from "@pi-gui/session-driver";
-import type { PiSdkDriver } from "@pi-gui/pi-sdk-driver";
+import type { PiDriverPort } from "../../pi-host/protocol";
 import type { JsonCatalogStore } from "@pi-gui/catalogs/node";
 import type {
   CreateSessionOptions,
@@ -35,7 +35,7 @@ export interface WorkspaceStateView {
 }
 
 type WorkspaceDriver = Pick<
-  PiSdkDriver,
+  PiDriverPort,
   | "archiveSession"
   | "createSession"
   | "forkSession"

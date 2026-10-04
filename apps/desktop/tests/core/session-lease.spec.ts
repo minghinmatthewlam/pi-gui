@@ -23,6 +23,14 @@ async function leaseHolderPid(leasePath: string): Promise<number | undefined> {
   }
 }
 
+function piHostPid(harness: DesktopHarness): Promise<number | undefined> {
+  return harness.electronApp.evaluate(() =>
+    (
+      globalThis as { __PI_APP_TEST_HOOKS?: { piHostPid(): number | undefined } }
+    ).__PI_APP_TEST_HOOKS!.piHostPid(),
+  );
+}
+
 /**
  * Two pi-gui processes (separate user-data dirs, so the single-instance lock
  * does not stop the second) share one pi agent dir. The first holds a thread
@@ -59,15 +67,16 @@ test("a second pi-gui process cannot open a thread the first one holds", async (
     );
 
     const [leasePath] = await findLeaseFiles(agentDir);
-    const firstPid = first.electronApp.process().pid;
-    expect(await leaseHolderPid(leasePath)).toBe(firstPid);
+    // pi runs in each app's pi host process, so that process holds the lease.
+    expect(await leaseHolderPid(leasePath)).toBe(await piHostPid(first));
 
     // Once the holder quits its lease is dead, so the thread opens here and
     // this process takes the lease over.
     await first.close();
     await selectSession(secondWindow, title);
     await expect(secondWindow.getByTestId("composer-error-banner")).toHaveCount(0);
-    await expect.poll(() => leaseHolderPid(leasePath)).toBe(second.electronApp.process().pid);
+    const secondHostPid = await piHostPid(second);
+    await expect.poll(() => leaseHolderPid(leasePath)).toBe(secondHostPid);
   } finally {
     await second?.close();
     await first.close().catch(() => {});
