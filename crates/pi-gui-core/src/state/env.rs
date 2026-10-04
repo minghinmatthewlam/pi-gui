@@ -33,7 +33,7 @@ pub struct SystemEnv {
 impl SystemEnv {
     pub fn new() -> Self {
         Self {
-            time_zone: jiff::tz::TimeZone::system(),
+            time_zone: crate::time_zone::host(),
         }
     }
 }

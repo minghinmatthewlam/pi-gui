@@ -16,6 +16,7 @@ pub mod persistence;
 pub mod rpc;
 pub mod state;
 pub mod terminal;
+pub mod time_zone;
 
 use error::{CoreError, CoreResult};
 use persistence::catalog::CatalogStore;

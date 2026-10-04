@@ -5,6 +5,7 @@
 use super::backup_json::{read_json_with_backup, write_with_backup};
 use crate::error::{CoreError, CoreResult};
 use crate::js;
+use crate::time_zone::{self, host_time_zone, is_time_zone};
 use serde_json::{json, Map, Value};
 use std::path::Path;
 
@@ -227,7 +228,7 @@ fn schedule(value: &Value) -> Option<Value> {
     match record.get("kind").and_then(Value::as_str)? {
         "once" => {
             let at = js::trim(record.get("at").and_then(Value::as_str).unwrap_or(""));
-            let local = jiff::tz::TimeZone::system();
+            let local = time_zone::host();
             let at = js::date_parse(at, &local).and_then(js::to_iso_string)?;
             Some(json!({ "kind": "once", "at": at }))
         }
@@ -306,139 +307,6 @@ fn target(value: &Value) -> Option<Value> {
     }
 }
 
-/// Whether `Intl.DateTimeFormat` accepts `name` as a time zone: an IANA name or link in any
-/// letter case, one of the older ids ICU still knows, or a fixed offset such as `+05:30`.
-pub fn is_time_zone(name: &str) -> bool {
-    chrono_tz::Tz::from_str_insensitive(name).is_ok()
-        || ICU_ONLY_ZONES
-            .iter()
-            .any(|zone| zone.eq_ignore_ascii_case(name))
-        || is_offset_zone(name)
-}
-
-/// Ids ICU (and so V8) accepts that the IANA database no longer lists.
-const ICU_ONLY_ZONES: [&str; 40] = [
-    "ACT",
-    "AET",
-    "AGT",
-    "ART",
-    "AST",
-    "BET",
-    "BST",
-    "CAT",
-    "CNT",
-    "CST",
-    "CTT",
-    "EAT",
-    "ECT",
-    "IET",
-    "IST",
-    "JST",
-    "MIT",
-    "NET",
-    "NST",
-    "PLT",
-    "PNT",
-    "PRT",
-    "PST",
-    "SST",
-    "VST",
-    "SystemV/AST4",
-    "SystemV/AST4ADT",
-    "SystemV/CST6",
-    "SystemV/CST6CDT",
-    "SystemV/EST5",
-    "SystemV/EST5EDT",
-    "SystemV/HST10",
-    "SystemV/MST7",
-    "SystemV/MST7MDT",
-    "SystemV/PST8",
-    "SystemV/PST8PDT",
-    "SystemV/YST9",
-    "SystemV/YST9YDT",
-    "Canada/East-Saskatchewan",
-    "US/Pacific-New",
-];
-
-/// `+05`, `+0530`, `+05:30` or `−05:30` (with a minus sign), up to 23:59 either way.
-fn is_offset_zone(name: &str) -> bool {
-    let Some(rest) = ["+", "-", "\u{2212}"]
-        .iter()
-        .find_map(|sign| name.strip_prefix(sign))
-    else {
-        return false;
-    };
-    let digits: Vec<u8> = rest.bytes().collect();
-    let two = |at: usize, max: u8| {
-        digits.get(at..at + 2).is_some_and(|pair| {
-            pair.iter().all(u8::is_ascii_digit) && (pair[0] - b'0') * 10 + (pair[1] - b'0') <= max
-        })
-    };
-    match digits.len() {
-        2 => two(0, 23),
-        4 => two(0, 23) && two(2, 59),
-        5 => two(0, 23) && digits[2] == b':' && two(3, 59),
-        _ => false,
-    }
-}
-
-/// `hostTimeZone()`: the computer's zone (from `TZ` or the system setting), else UTC, spelled
-/// the way Intl reports it: ICU still prefers some older names (`Asia/Calcutta` for
-/// `Asia/Kolkata`). A system zone set through an alias such as `US/Eastern` keeps that name.
-fn host_time_zone() -> String {
-    let zone = std::env::var("TZ")
-        .ok()
-        .map(|zone| zone.trim_start_matches(':').to_owned())
-        .filter(|zone| chrono_tz::Tz::from_str_insensitive(zone).is_ok())
-        .or_else(|| iana_time_zone::get_timezone().ok())
-        .filter(|zone| is_time_zone(zone))
-        .unwrap_or_else(|| "UTC".into());
-    ICU_PREFERRED_NAMES
-        .iter()
-        .find(|(name, _)| *name == zone)
-        .map_or(zone, |(_, preferred)| (*preferred).to_owned())
-}
-
-/// IANA zones whose name ICU reports differently.
-const ICU_PREFERRED_NAMES: [(&str, &str); 36] = [
-    ("Africa/Asmara", "Africa/Asmera"),
-    ("America/Argentina/Buenos_Aires", "America/Buenos_Aires"),
-    ("America/Argentina/Catamarca", "America/Catamarca"),
-    ("America/Argentina/Cordoba", "America/Cordoba"),
-    ("America/Argentina/Jujuy", "America/Jujuy"),
-    ("America/Argentina/Mendoza", "America/Mendoza"),
-    ("America/Atikokan", "America/Coral_Harbour"),
-    ("America/Indiana/Indianapolis", "America/Indianapolis"),
-    ("America/Kentucky/Louisville", "America/Louisville"),
-    ("America/Nuuk", "America/Godthab"),
-    ("Asia/Ho_Chi_Minh", "Asia/Saigon"),
-    ("Asia/Kathmandu", "Asia/Katmandu"),
-    ("Asia/Kolkata", "Asia/Calcutta"),
-    ("Asia/Yangon", "Asia/Rangoon"),
-    ("Atlantic/Faroe", "Atlantic/Faeroe"),
-    ("CET", "Europe/Brussels"),
-    ("CST6CDT", "America/Chicago"),
-    ("EET", "Europe/Athens"),
-    ("EST", "America/Panama"),
-    ("EST5EDT", "America/New_York"),
-    ("Etc/GMT", "UTC"),
-    ("Etc/Greenwich", "UTC"),
-    ("Etc/UCT", "UTC"),
-    ("Etc/UTC", "UTC"),
-    ("Etc/Universal", "UTC"),
-    ("Etc/Zulu", "UTC"),
-    ("Europe/Kyiv", "Europe/Kiev"),
-    ("HST", "Pacific/Honolulu"),
-    ("MET", "Europe/Brussels"),
-    ("MST", "America/Phoenix"),
-    ("MST7MDT", "America/Denver"),
-    ("PST8PDT", "America/Los_Angeles"),
-    ("Pacific/Chuuk", "Pacific/Truk"),
-    ("Pacific/Kanton", "Pacific/Enderbury"),
-    ("Pacific/Pohnpei", "Pacific/Ponape"),
-    ("WET", "Europe/Lisbon"),
-];
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -485,31 +353,5 @@ mod tests {
         assert!(error
             .message
             .contains("scheduled-tasks.x (unsupported field)"));
-    }
-
-    #[test]
-    fn accepts_the_time_zones_intl_does() {
-        for zone in [
-            "UTC",
-            "utc",
-            "Etc/GMT+5",
-            "US/Eastern",
-            "Asia/Calcutta",
-            "PST",
-            "+05:30",
-        ] {
-            assert!(is_time_zone(zone), "{zone}");
-        }
-        for zone in [
-            "Not/A_Zone",
-            "GMT+5",
-            "Etc/GMT+13",
-            "+24:00",
-            "+5:00",
-            "",
-            "Factory",
-        ] {
-            assert!(!is_time_zone(zone), "{zone}");
-        }
     }
 }
