@@ -134,7 +134,6 @@ import {
   extensionNoticeTimerId,
   removeExtensionNotice,
 } from "../extensions/extension-notices";
-import { appWorktreeRootMatcher } from "../platform/worktrees/app-worktree-roots";
 import { GitWorktreeManager } from "../platform/worktrees/worktree-manager";
 import { createWorkspaceOwner, type WorkspaceOwner } from "../workspace/app-store-workspace";
 import { resolveExtensionFlags, type ResolvedExtensionFlags } from "../workspace/extension-flags";
@@ -184,6 +183,8 @@ export interface DesktopAppStoreOptions {
   readonly piHost: RpcPeer;
   /** Folders, threads and worktrees; owned by the Rust core. */
   readonly catalogStorage: SessionFileCatalogStorage;
+  /** The pipe to the Rust core, which runs the app's worktree Git commands. */
+  readonly core: RpcPeer;
   readonly generateThreadTitleOverride?: (
     workspace: WorkspaceRef,
     options: GenerateThreadTitleOptions,
@@ -293,11 +294,8 @@ export class DesktopAppStore {
         : {}),
     });
     this.worktreeRoot = join(options.userDataDir, "worktrees");
-    this.isAppWorktreePath = appWorktreeRootMatcher(this.worktreeRoot);
-    this.worktreeManager = new GitWorktreeManager({
-      catalogStorage: this.catalogStore,
-      isAppWorktreePath: this.isAppWorktreePath,
-    });
+    this.worktreeManager = new GitWorktreeManager(options.core);
+    this.isAppWorktreePath = (path) => this.worktreeManager.isAppWorktreePath(path);
     this.uiStateFilePath = join(options.userDataDir, "ui-state.json");
     this.scheduledTasksFilePath = join(options.userDataDir, "scheduled-tasks.json");
     this.attachmentStore = new AttachmentStore(options.userDataDir);

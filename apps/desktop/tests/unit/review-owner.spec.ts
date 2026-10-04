@@ -14,10 +14,23 @@ import {
   type AvailableReview,
   type ReviewResult,
 } from "../../contracts/review";
+import type { CoreProcess } from "../../core-process/launch";
+import { gitReviewClient } from "../../electron/platform/files/git-review";
 import { ReviewOwner, type ReviewCheckpointSource } from "../../electron/workbench/review-owner";
 import { ReviewedStore } from "../../electron/workbench/reviewed-store";
+import { startTestCore } from "../helpers/rust-core";
 
 const execFileAsync = promisify(execFile);
+
+let core: CoreProcess;
+
+test.beforeAll(async () => {
+  core = await startTestCore(await mkdtemp(join(tmpdir(), "pi-gui-test-core-")));
+});
+
+test.afterAll(async () => {
+  await core.stop(1_000);
+});
 const firstTask = { workspaceId: "workspace", sessionId: "first" };
 const secondTask = { workspaceId: "workspace", sessionId: "second" };
 
@@ -37,6 +50,7 @@ async function fixture() {
   await writeFile(join(checkoutPath, "example.txt"), "after\n");
   const options = {
     userDataDir,
+    git: gitReviewClient(core.peer),
     resolveCheckoutPath: (id: string) => (id === "checkout" ? checkoutPath : undefined),
     validateTask: (target: typeof firstTask) => target.workspaceId === "workspace",
   };

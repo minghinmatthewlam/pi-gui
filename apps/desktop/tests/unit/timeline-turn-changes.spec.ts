@@ -6,10 +6,25 @@ import { promisify } from "node:util";
 import { expect, test } from "@playwright/test";
 import type { TurnChangeSummary } from "../../contracts/review";
 import type { TranscriptMessage } from "../../contracts/timeline-types";
-import { summarizeGitTreeChanges } from "../../electron/platform/files/git-review";
+import type { CoreProcess } from "../../core-process/launch";
+import { gitReviewClient } from "../../electron/platform/files/git-review";
 import { buildDisplayTimelineItems } from "../../src/features/conversation/timeline-turns";
+import { startTestCore } from "../helpers/rust-core";
 
 const run = promisify(execFile);
+
+let core: CoreProcess;
+
+test.beforeAll(async () => {
+  core = await startTestCore(await mkdtemp(join(tmpdir(), "pi-gui-test-core-")));
+});
+
+test.afterAll(async () => {
+  await core.stop(1_000);
+});
+
+const summarizeGitTreeChanges = (repositoryPath: string, before: string, after: string) =>
+  gitReviewClient(core.peer).summarizeGitTreeChanges(repositoryPath, before, after);
 
 const message = (id: string, role: "user" | "assistant"): TranscriptMessage => ({
   kind: "message",

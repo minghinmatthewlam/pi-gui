@@ -3,7 +3,25 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
-import { listWorkspaceFiles } from "../../electron/platform/files/app-store-files";
+import type { CoreProcess } from "../../core-process/launch";
+import {
+  workspaceFilesClient,
+  type ListWorkspaceFilesOptions,
+} from "../../electron/platform/files/workspace-files";
+import { startTestCore } from "../helpers/rust-core";
+
+let core: CoreProcess;
+
+test.beforeAll(async () => {
+  core = await startTestCore(await mkdtemp(join(tmpdir(), "pi-gui-test-core-")));
+});
+
+test.afterAll(async () => {
+  await core.stop(1_000);
+});
+
+const listWorkspaceFiles = (workspacePath: string, options?: ListWorkspaceFilesOptions) =>
+  workspaceFilesClient(core.peer).listWorkspaceFiles(workspacePath, options);
 
 async function makeFolder(name: string): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), "pi-gui-workspace-files-"));
