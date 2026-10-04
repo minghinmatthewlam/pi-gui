@@ -10,6 +10,7 @@ pub mod error;
 pub mod json_text;
 pub mod persistence;
 pub mod rpc;
+pub mod state;
 pub mod terminal;
 
 use error::{CoreError, CoreResult};
