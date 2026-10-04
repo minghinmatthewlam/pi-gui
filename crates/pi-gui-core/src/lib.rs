@@ -6,7 +6,10 @@
 //! `RefCell`s, and a call runs until its first `.await`.
 
 pub mod error;
+pub mod git;
 pub mod json_text;
+pub mod locale;
+pub mod paths;
 pub mod persistence;
 pub mod rpc;
 
@@ -26,6 +29,24 @@ pub mod methods {
     pub const INITIALIZE: &str = "core.initialize";
     pub const SHUTDOWN: &str = "core.shutdown";
     pub const CATALOG_CALL: &str = "catalog.call";
+    pub const WORKTREES_LIST: &str = "worktrees.list";
+    pub const WORKTREES_REFRESH: &str = "worktrees.refresh";
+    pub const WORKTREES_INSPECT: &str = "worktrees.inspect";
+    pub const WORKTREES_CREATE: &str = "worktrees.create";
+    pub const WORKTREES_REMOVE: &str = "worktrees.remove";
+    pub const WORKTREES_DESTROY: &str = "worktrees.destroy";
+    pub const WORKTREES_PRUNE: &str = "worktrees.prune";
+    pub const WORKTREES_IS_APP_PATH: &str = "worktrees.isAppPath";
+    pub const REVIEW_CREATE: &str = "review.create";
+    pub const REVIEW_CHECK_FILE: &str = "review.checkFile";
+    pub const REVIEW_READ_FILE: &str = "review.readFile";
+    pub const REVIEW_CHANGE_STAGE: &str = "review.changeStage";
+    pub const REVIEW_TREE_CHANGES: &str = "review.treeChanges";
+    pub const WORKSPACE_FILES_LIST: &str = "workspaceFiles.list";
+    pub const WORKSPACE_FILES_READ: &str = "workspaceFiles.read";
+    pub const WORKSPACE_FILES_CHANGED: &str = "workspaceFiles.changed";
+    pub const WORKSPACE_FILES_DIFF: &str = "workspaceFiles.diff";
+    pub const WORKSPACE_FILES_STAGE: &str = "workspaceFiles.stage";
 }
 
 #[derive(Deserialize)]
@@ -38,6 +59,11 @@ struct InitializeParams {
 /// Parts that exist once the app has said where its profile folder is.
 struct Parts {
     catalog: RefCell<CatalogStore>,
+    /// `<userData>/worktrees`, where the app creates thread worktrees.
+    worktree_root: PathBuf,
+    /// Worktree refreshes run one at a time so two folders never claim the same worktree.
+    worktree_refresh: tokio::sync::Mutex<()>,
+    file_lists: git::workspace_files::FileListCache,
 }
 
 pub struct Core {
@@ -73,6 +99,9 @@ impl Core {
                     catalog: RefCell::new(CatalogStore::new(
                         params.user_data_dir.join("catalogs.json"),
                     )),
+                    worktree_root: params.user_data_dir.join("worktrees"),
+                    worktree_refresh: tokio::sync::Mutex::new(()),
+                    file_lists: Default::default(),
                 };
                 self.parts
                     .set(parts)
@@ -93,14 +122,17 @@ impl Core {
 
 impl Service for Core {
     fn call(self: Rc<Self>, method: String, params: Value) -> LocalFuture<CoreResult<Value>> {
-        let _params = match self.call_now(&method, params) {
+        let params = match self.call_now(&method, params) {
             Ok(result) => return Box::pin(std::future::ready(result)),
             Err(params) => params,
         };
-        // Calls that wait (git, files, processes) go to their part by method prefix, for
-        // example `Some(("git", _)) => Box::pin(git::call(self, method, params))`.
-        #[allow(clippy::match_single_binding)]
+        // Calls that wait (git, files, processes) go to their part by method prefix.
         match method.split_once('.') {
+            Some(("worktrees", _)) => Box::pin(git::worktrees::call(self, method, params)),
+            Some(("review", _)) => Box::pin(git::review::call(self, method, params)),
+            Some(("workspaceFiles", _)) => {
+                Box::pin(git::workspace_files::call(self, method, params))
+            }
             _ => Box::pin(std::future::ready(Err(CoreError::new(format!(
                 "Unknown RPC method: {method}"
             ))))),
