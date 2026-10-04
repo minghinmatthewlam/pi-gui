@@ -73,6 +73,14 @@ async function addTool(window: Page, name: ToolName): Promise<void> {
   await expect(chooser).toBeVisible();
   await chooser.getByRole("button", { name, exact: true }).click();
   await expectActiveTool(window, name);
+  if (name === "Terminal") {
+    // The shell view mounts once its pty has started, which can be well after
+    // the tab is selected, and then takes focus. Wait for that so later focus
+    // and shortcuts are not stolen by it; off macOS the terminal keeps Ctrl chords.
+    await expect(
+      window.getByTestId("integrated-terminal").locator(".xterm-helper-textarea"),
+    ).toBeFocused();
+  }
 }
 
 async function openSecondWindow(harness: DesktopHarness): Promise<Page> {
