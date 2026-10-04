@@ -19,9 +19,8 @@ use super::timeline_types::{
     TimelineActivity, TimelineSummary, TimelineSummaryPresentation, TimelineTone, TimelineToolCall,
     TimelineToolStatus, TranscriptMessage,
 };
-use crate::persistence::catalog::{
-    compare_display_names, SessionEntry, WorkspaceEntry, WorktreeEntry, WorktreeKind,
-};
+use crate::locale::compare as compare_display_names;
+use crate::persistence::catalog::{SessionEntry, WorkspaceEntry, WorktreeEntry, WorktreeKind};
 
 pub const LEGACY_TRANSCRIPT_HISTORY_LIMIT: usize = 180;
 

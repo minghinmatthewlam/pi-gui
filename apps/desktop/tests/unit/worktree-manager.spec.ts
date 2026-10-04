@@ -4,57 +4,26 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import { expect, test } from "@playwright/test";
-import type { CatalogStorage, WorktreeCatalogEntry } from "@pi-gui/catalogs";
 import type { WorkspaceRef } from "@pi-gui/session-driver";
-import { appWorktreeRootMatcher } from "../../electron/platform/worktrees/app-worktree-roots";
+import type { CoreProcess } from "../../core-process/launch";
 import { GitWorktreeManager } from "../../electron/platform/worktrees/worktree-manager";
+import { startTestCore } from "../helpers/rust-core";
 
 const execFileAsync = promisify(execFile);
 
 /**
  * Direct unit coverage for the destructive worktree lifecycle logic — the
  * transactional-create rollback, the branch cleanup on removal, and the startup
- * GC prune. Runs in Node (no Electron surface); every git command targets a
- * throwaway repo, never pi-gui itself.
+ * GC prune. Runs the Rust core (no Electron surface) with its catalog in the test
+ * folder; every git command targets a throwaway repo, never pi-gui itself.
  */
 
-class FakeCatalog {
-  private readonly byWorkspace = new Map<string, WorktreeCatalogEntry[]>();
+/** Cores started by a test; each runs with its own profile folder. */
+const cores: CoreProcess[] = [];
 
-  readonly worktrees = {
-    listWorktrees: async (workspaceId?: string) => {
-      const entries = workspaceId
-        ? (this.byWorkspace.get(workspaceId) ?? [])
-        : [...this.byWorkspace.values()].flat();
-      return { worktrees: entries.map((entry) => ({ ...entry })) };
-    },
-    getWorktree: async (worktreeId: string) =>
-      [...this.byWorkspace.values()].flat().find((entry) => entry.worktreeId === worktreeId),
-    upsertWorktree: async (entry: WorktreeCatalogEntry) => {
-      const bucket = this.byWorkspace.get(entry.workspaceId) ?? [];
-      const next = bucket.filter((existing) => existing.worktreeId !== entry.worktreeId);
-      next.push({ ...entry });
-      this.byWorkspace.set(entry.workspaceId, next);
-    },
-    deleteWorktree: async (worktreeId: string) => {
-      for (const [workspaceId, bucket] of this.byWorkspace) {
-        this.byWorkspace.set(
-          workspaceId,
-          bucket.filter((entry) => entry.worktreeId !== worktreeId),
-        );
-      }
-    },
-    replaceWorkspaceWorktrees: async (
-      workspaceId: string,
-      entries: readonly WorktreeCatalogEntry[],
-    ) => {
-      this.byWorkspace.set(
-        workspaceId,
-        entries.map((entry) => ({ ...entry })),
-      );
-    },
-  };
-}
+test.afterEach(async () => {
+  await Promise.all(cores.splice(0).map((core) => core.stop(1_000)));
+});
 
 async function git(cwd: string, ...args: string[]): Promise<string> {
   const { stdout } = await execFileAsync("git", ["-C", cwd, ...args]);
@@ -87,16 +56,19 @@ async function branchExists(repo: string, branch: string): Promise<boolean> {
   return output.includes(branch);
 }
 
-function makeManager(appWorktreeRoot?: string): {
-  manager: GitWorktreeManager;
-  catalog: FakeCatalog;
-} {
-  const catalog = new FakeCatalog();
-  const manager = new GitWorktreeManager({
-    catalogStorage: catalog as unknown as CatalogStorage,
-    ...(appWorktreeRoot ? { isAppWorktreePath: appWorktreeRootMatcher(appWorktreeRoot) } : {}),
-  });
-  return { manager, catalog };
+/** A manager whose app worktree folder is `<profileFolder>/worktrees`, as in the app. */
+async function makeManager(profileFolder: string): Promise<{ manager: GitWorktreeManager }> {
+  const core = await startTestCore(profileFolder);
+  cores.push(core);
+  return { manager: new GitWorktreeManager(core.peer) };
+}
+
+/** `isAppWorktreePath` for a profile whose worktree folder is `worktreeRoot`. */
+async function appWorktreeRootMatcher(
+  worktreeRoot: string,
+): Promise<(path: string) => Promise<boolean>> {
+  const { manager } = await makeManager(dirname(worktreeRoot));
+  return (path) => manager.isAppWorktreePath(path);
 }
 
 test("rolls back a just-created worktree and its branch on failed thread creation", async () => {
@@ -104,7 +76,7 @@ test("rolls back a just-created worktree and its branch on failed thread creatio
   try {
     const repo = await makeRepo(root);
     const workspace: WorkspaceRef = { workspaceId: "ws", path: repo, displayName: "repo" };
-    const { manager } = makeManager();
+    const { manager } = await makeManager(root);
 
     const worktreePath = join(root, "worktrees", "repo", "roll-abc123");
     const branchName = "pi/roll-abc123";
@@ -136,7 +108,7 @@ test("removeWorktree deletes the merged pi/* branch but keeps unmerged work", as
   try {
     const repo = await makeRepo(root);
     const workspace: WorkspaceRef = { workspaceId: "ws", path: repo, displayName: "repo" };
-    const { manager } = makeManager();
+    const { manager } = await makeManager(root);
 
     const mergedPath = join(root, "worktrees", "repo", "merged-1");
     const merged = await manager.createWorktree(workspace, {
@@ -171,7 +143,7 @@ test("pruneOrphanedWorktrees removes clean merged orphans and fails closed for p
   try {
     const repo = await makeRepo(root);
     const workspace: WorkspaceRef = { workspaceId: "ws", path: repo, displayName: "repo" };
-    const { manager } = makeManager();
+    const { manager } = await makeManager(root);
     const worktreeRoot = join(root, "worktrees");
 
     const referenced = await manager.createWorktree(workspace, {
@@ -239,7 +211,7 @@ test("pruneOrphanedWorktrees removes clean merged orphans and fails closed for p
 test("app worktree paths are matched inside the profile root only, even before it exists", async () => {
   const root = await mkdtemp(join(tmpdir(), "wt-roots-"));
   try {
-    const isAppWorktreePath = appWorktreeRootMatcher(join(root, "worktrees"));
+    const isAppWorktreePath = await appWorktreeRootMatcher(join(root, "worktrees"));
     expect(await isAppWorktreePath(join(root, "worktrees", "repo", "task-1"))).toBe(true);
     expect(await isAppWorktreePath(join(root, "worktrees"))).toBe(false);
     expect(await isAppWorktreePath(join(root, "worktrees-old", "repo", "task-1"))).toBe(false);
@@ -247,7 +219,7 @@ test("app worktree paths are matched inside the profile root only, even before i
     // Git reports resolved paths; a root reached through a symlink must still match.
     await mkdir(join(root, "real", "worktrees", "repo", "task-2"), { recursive: true });
     await symlink(join(root, "real"), join(root, "linked"));
-    const throughLink = appWorktreeRootMatcher(join(root, "linked", "worktrees"));
+    const throughLink = await appWorktreeRootMatcher(join(root, "linked", "worktrees"));
     expect(
       await throughLink(await realpath(join(root, "real", "worktrees", "repo", "task-2"))),
     ).toBe(true);
@@ -269,7 +241,7 @@ test("folders list only the app worktrees they own and never remove the user's o
       path: await realpath(userCheckout),
       displayName: "feature",
     };
-    const { manager } = makeManager(join(root, "worktrees"));
+    const { manager } = await makeManager(root);
 
     const created = await manager.createWorktree(mine, {
       path: join(root, "worktrees", "repo", "task-1"),
@@ -304,7 +276,7 @@ test("a user's checkout inside the app worktree folder still cannot be removed",
   try {
     const repo = await makeRepo(root);
     const main: WorkspaceRef = { workspaceId: "main", path: repo, displayName: "repo" };
-    const { manager } = makeManager(join(root, "worktrees"));
+    const { manager } = await makeManager(root);
     const manual = join(root, "worktrees", "repo", "manual");
     await mkdir(join(root, "worktrees", "repo"), { recursive: true });
     await git(repo, "worktree", "add", "-b", "feature/manual", manual, "HEAD");
@@ -329,7 +301,7 @@ test("the folder that creates a worktree keeps it even if another folder listed 
       displayName: "other",
     };
     await git(repo, "worktree", "add", "-b", "feature/other", other.path, "HEAD");
-    const { manager } = makeManager(join(root, "worktrees"));
+    const { manager } = await makeManager(root);
     const created = join(root, "worktrees", "repo", "task-1");
     await mkdir(dirname(created), { recursive: true });
     await git(repo, "worktree", "add", "-b", "pi/task-1", created, "HEAD");

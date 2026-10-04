@@ -50,8 +50,8 @@ import {
   createScheduledTaskRuntimeTools,
   type ScheduledTaskRuntimeBridge,
 } from "./scheduled-tasks/scheduled-task-runtime";
-import { getChangedFiles, getFileDiff, stageFile } from "./platform/files/app-store-diff";
-import { listWorkspaceFiles, readWorkspaceFile } from "./platform/files/app-store-files";
+import { gitReviewClient } from "./platform/files/git-review";
+import { workspaceFilesClient } from "./platform/files/workspace-files";
 import { resolveExistingWorkspacePath } from "./platform/files/workspace-paths";
 import { MAIN_DEV_RELOAD_MARKER } from "./dev-reload-main-probe";
 import { NotificationManager } from "./platform/notification-manager";
@@ -1134,6 +1134,7 @@ app
         windowOwner?.isSessionVisibleInAnotherWindow(sessionRef) ?? false,
       piHost: hostPeer,
       catalogStorage: remoteCatalogStorage(core.peer, coreMethods.catalogCall),
+      core: core.peer,
       generateThreadTitleOverride: async (workspace, options) =>
         generateThreadTitleOverride?.(workspace, options),
     });
@@ -1248,6 +1249,7 @@ app
         extensionViews,
         review: new ReviewOwner({
           checkpoints,
+          git: gitReviewClient(core.peer),
           userDataDir: app.getPath("userData"),
           resolveCheckoutPath: (checkoutId) => store.getWorkspacePath(checkoutId),
           validateTask: (target) =>
@@ -1322,15 +1324,11 @@ app
         readClipboardImage: readClipboardImageAttachment,
         validateComposerAttachments: (attachments) =>
           attachments.flatMap(validateComposerAttachmentPayload),
-        listWorkspaceFiles,
-        readWorkspaceFile,
+        ...workspaceFilesClient(core.peer),
         revealWorkspaceFile: async (workspacePath, filePath) => {
           const resolved = await resolveExistingWorkspacePath(workspacePath, filePath);
           shell.showItemInFolder(resolved);
         },
-        getChangedFiles,
-        getFileDiff,
-        stageFile,
         relaunchApplication: requestApplicationRelaunch,
       },
     });

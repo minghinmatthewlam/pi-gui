@@ -5,7 +5,7 @@ use indexmap::IndexMap;
 
 use super::desktop_state::ExtensionCommandCompatibilityRecord;
 use super::driver::{RuntimeCommandRecord, RuntimeSnapshot};
-use crate::persistence::catalog::compare_display_names;
+use crate::locale::compare as compare_display_names;
 
 /// Records by workspace id, then by `createCompatibilityKey`.
 pub type CompatibilityByWorkspace =

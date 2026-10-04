@@ -7,7 +7,10 @@
 
 pub mod checkpoints;
 pub mod error;
+pub mod git;
 pub mod json_text;
+pub mod locale;
+pub mod paths;
 pub mod persistence;
 pub mod rpc;
 pub mod state;
@@ -51,6 +54,24 @@ pub mod methods {
     pub const TERMINAL_RETAIN_WORKSPACE_PATHS: &str = "terminal.retainWorkspacePaths";
     pub const TERMINAL_DISPOSE_OWNER: &str = "terminal.disposeOwner";
     pub const TERMINAL_DISPOSE_ALL: &str = "terminal.disposeAll";
+    pub const WORKTREES_LIST: &str = "worktrees.list";
+    pub const WORKTREES_REFRESH: &str = "worktrees.refresh";
+    pub const WORKTREES_INSPECT: &str = "worktrees.inspect";
+    pub const WORKTREES_CREATE: &str = "worktrees.create";
+    pub const WORKTREES_REMOVE: &str = "worktrees.remove";
+    pub const WORKTREES_DESTROY: &str = "worktrees.destroy";
+    pub const WORKTREES_PRUNE: &str = "worktrees.prune";
+    pub const WORKTREES_IS_APP_PATH: &str = "worktrees.isAppPath";
+    pub const REVIEW_CREATE: &str = "review.create";
+    pub const REVIEW_CHECK_FILE: &str = "review.checkFile";
+    pub const REVIEW_READ_FILE: &str = "review.readFile";
+    pub const REVIEW_CHANGE_STAGE: &str = "review.changeStage";
+    pub const REVIEW_TREE_CHANGES: &str = "review.treeChanges";
+    pub const WORKSPACE_FILES_LIST: &str = "workspaceFiles.list";
+    pub const WORKSPACE_FILES_READ: &str = "workspaceFiles.read";
+    pub const WORKSPACE_FILES_CHANGED: &str = "workspaceFiles.changed";
+    pub const WORKSPACE_FILES_DIFF: &str = "workspaceFiles.diff";
+    pub const WORKSPACE_FILES_STAGE: &str = "workspaceFiles.stage";
 }
 
 #[derive(Deserialize)]
@@ -67,6 +88,11 @@ struct InitializeParams {
 struct Parts {
     catalog: RefCell<CatalogStore>,
     checkpoints: Rc<checkpoints::store::TurnCheckpoints>,
+    /// `<userData>/worktrees`, where the app creates thread worktrees.
+    worktree_root: PathBuf,
+    /// Worktree refreshes run one at a time so two folders never claim the same worktree.
+    worktree_refresh: tokio::sync::Mutex<()>,
+    file_lists: git::workspace_files::FileListCache,
 }
 
 pub struct Core {
@@ -105,6 +131,9 @@ impl Core {
                         params.user_data_dir.join("catalogs.json"),
                     )),
                     checkpoints: checkpoints::open(&params.user_data_dir, params.turn_checkpoints)?,
+                    worktree_root: params.user_data_dir.join("worktrees"),
+                    worktree_refresh: tokio::sync::Mutex::new(()),
+                    file_lists: Default::default(),
                 };
                 self.parts
                     .set(parts)
@@ -134,6 +163,11 @@ impl Service for Core {
         // Calls that wait (git, files, processes) go to their part by method prefix.
         match method.split_once('.') {
             Some(("checkpoints", _)) => Box::pin(checkpoints::call(self, method, params)),
+            Some(("worktrees", _)) => Box::pin(git::worktrees::call(self, method, params)),
+            Some(("review", _)) => Box::pin(git::review::call(self, method, params)),
+            Some(("workspaceFiles", _)) => {
+                Box::pin(git::workspace_files::call(self, method, params))
+            }
             _ => Box::pin(std::future::ready(Err(CoreError::new(format!(
                 "Unknown RPC method: {method}"
             ))))),

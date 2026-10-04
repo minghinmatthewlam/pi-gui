@@ -1014,7 +1014,7 @@ fn unavailable_review(code: &str, message: &str) -> Value {
 }
 
 fn locale_compare(left: &str, right: &str) -> std::cmp::Ordering {
-    crate::persistence::catalog::compare_display_names(left, right)
+    crate::locale::compare(left, right)
 }
 
 fn unix_ms() -> f64 {

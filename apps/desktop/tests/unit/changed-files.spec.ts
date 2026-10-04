@@ -1,19 +1,115 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, rename, rm, unlink, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdtemp,
+  readFile,
+  realpath,
+  rename,
+  rm,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { expect, test } from "@playwright/test";
-import {
-  getChangedFiles,
-  getFileDiff,
-  parseGitStatusPorcelainV1Z,
-  stageFile,
-  type GitCommandExecutor,
-  type GitCommandResult,
-} from "../../electron/platform/files/app-store-diff";
+import type { CoreProcess } from "../../core-process/launch";
+import { workspaceFilesClient } from "../../electron/platform/files/workspace-files";
+import { startTestCore } from "../helpers/rust-core";
 
 const execFileAsync = promisify(execFile);
+
+/**
+ * The Rust core runs these Git commands. The first tests point it at a stand-in `git` that
+ * records each call's arguments and folder and answers from a queue, so the exact argv the
+ * core passes is checked without a repository.
+ */
+const cores: CoreProcess[] = [];
+
+test.afterEach(async () => {
+  await Promise.all(cores.splice(0).map((core) => core.stop(1_000)));
+});
+
+async function startCoreFor(env: Record<string, string> = {}) {
+  const core = await startTestCore(
+    await mkdtemp(join(tmpdir(), "pi-gui-changed-files-core-")),
+    env,
+  );
+  cores.push(core);
+  return workspaceFilesClient(core.peer);
+}
+
+// The real-repository tests share one core that runs the system Git.
+let shared: CoreProcess;
+
+test.beforeAll(async () => {
+  shared = await startTestCore(await mkdtemp(join(tmpdir(), "pi-gui-changed-files-core-")));
+});
+
+test.afterAll(async () => {
+  await shared.stop(1_000);
+});
+
+const getChangedFiles = (workspacePath: string) =>
+  workspaceFilesClient(shared.peer).getChangedFiles(workspacePath);
+const getFileDiff = (workspacePath: string, filePath: string) =>
+  workspaceFilesClient(shared.peer).getFileDiff(workspacePath, filePath);
+const stageFile = (workspacePath: string, filePath: string, options?: { sourcePath?: string }) =>
+  workspaceFilesClient(shared.peer).stageFile(workspacePath, filePath, options);
+
+interface GitCommandResult {
+  readonly error: Error | null;
+  readonly stdout: string;
+}
+
+interface FakeGit {
+  readonly workspace: string;
+  readonly client: ReturnType<typeof workspaceFilesClient>;
+  calls(): Promise<{ args: string[]; cwd: string }[]>;
+}
+
+/** A stand-in `git` answering `responses` in order: exit 1 for a result with an error. */
+async function fakeGit(responses: readonly GitCommandResult[]): Promise<FakeGit> {
+  const folder = await realpath(await mkdtemp(join(tmpdir(), "pi-gui-fake-git-")));
+  const workspace = await realpath(await mkdtemp(join(tmpdir(), "pi-gui-fake-workspace-")));
+  const queue = join(folder, "queue.json");
+  const log = join(folder, "calls.json");
+  await writeFile(
+    queue,
+    JSON.stringify(responses.map((r) => ({ stdout: r.stdout, code: r.error ? 1 : 0 }))),
+  );
+  await writeFile(log, "[]");
+  const program = join(folder, "git");
+  await writeFile(
+    program,
+    `#!${process.execPath}
+const fs = require("node:fs");
+const queue = JSON.parse(fs.readFileSync(${JSON.stringify(queue)}, "utf8"));
+const calls = JSON.parse(fs.readFileSync(${JSON.stringify(log)}, "utf8"));
+calls.push({ args: process.argv.slice(2), cwd: process.cwd() });
+fs.writeFileSync(${JSON.stringify(log)}, JSON.stringify(calls));
+const next = queue.shift();
+fs.writeFileSync(${JSON.stringify(queue)}, JSON.stringify(queue));
+if (!next) { process.stderr.write("Unexpected Git command"); process.exit(2); }
+process.stdout.write(next.stdout);
+process.exitCode = next.code;
+`,
+  );
+  await chmod(program, 0o755);
+  return {
+    workspace,
+    client: await startCoreFor({ PI_GUI_CORE_GIT_PROGRAM: program }),
+    calls: async () => JSON.parse(await readFile(log, "utf8")) as { args: string[]; cwd: string }[],
+  };
+}
+
+/** Parses status text the way the app does, by running it through the core. */
+async function parseGitStatusPorcelainV1Z(output: string) {
+  const git = await fakeGit([gitResult(output)]);
+  const result = await git.client.getChangedFiles(git.workspace);
+  if (result.state !== "available") throw new Error(result.error.message);
+  return result.files;
+}
 
 function pathologicalPath(label: string): string {
   return ` ${label} with space\t"quoted"\nsource -> destination `;
@@ -23,7 +119,7 @@ function gitResult(stdout = "", error: Error | null = null): GitCommandResult {
   return { error, stdout };
 }
 
-test("parses NUL-delimited status records without changing path bytes represented by UTF-8", () => {
+test("parses NUL-delimited status records without changing path bytes represented by UTF-8", async () => {
   const modifiedPath = pathologicalPath("modified");
   const stagedPath = pathologicalPath("staged");
   const addedPath = pathologicalPath("added");
@@ -50,7 +146,7 @@ test("parses NUL-delimited status records without changing path bytes represente
     "",
   ].join("\0");
 
-  expect(parseGitStatusPorcelainV1Z(porcelain)).toEqual([
+  expect(await parseGitStatusPorcelainV1Z(porcelain)).toEqual([
     { path: modifiedPath, status: "modified", staged: false },
     { path: stagedPath, status: "modified", staged: true },
     { path: addedPath, status: "added", staged: true },
@@ -79,13 +175,12 @@ test("parses NUL-delimited status records without changing path bytes represente
 });
 
 test("uses machine-safe status arguments and returns typed failures", async () => {
-  const calls: { args: readonly string[]; cwd: string; maxBuffer?: number }[] = [];
-  const executeGit: GitCommandExecutor = async (args, options) => {
-    calls.push({ args, ...options });
-    return gitResult(`?? ${pathologicalPath("status")}\0`);
-  };
-
-  const available = await getChangedFiles("/workspace", executeGit);
+  const git = await fakeGit([
+    gitResult(`?? ${pathologicalPath("status")}\0`),
+    gitResult("", new Error("injected Git failure")),
+    gitResult("?? not NUL terminated"),
+  ]);
+  const available = await git.client.getChangedFiles(git.workspace);
   expect(available).toEqual({
     state: "available",
     files: [
@@ -96,17 +191,15 @@ test("uses machine-safe status arguments and returns typed failures", async () =
       },
     ],
   });
-  expect(calls).toEqual([
+  // The 2 MiB output limit is the core's (`STATUS_MAX_BUFFER`); a stand-in cannot observe it.
+  expect(await git.calls()).toEqual([
     {
       args: ["status", "--porcelain=v1", "-z"],
-      cwd: "/workspace",
-      maxBuffer: 2 * 1024 * 1024,
+      cwd: git.workspace,
     },
   ]);
 
-  const executionFailure = await getChangedFiles("/workspace", async () =>
-    gitResult("", new Error("injected Git failure")),
-  );
+  const executionFailure = await git.client.getChangedFiles(git.workspace);
   expect(executionFailure).toEqual({
     state: "unavailable",
     error: {
@@ -115,9 +208,7 @@ test("uses machine-safe status arguments and returns typed failures", async () =
     },
   });
 
-  const invalidOutput = await getChangedFiles("/workspace", async () =>
-    gitResult("?? not NUL terminated"),
-  );
+  const invalidOutput = await git.client.getChangedFiles(git.workspace);
   expect(invalidOutput).toEqual({
     state: "unavailable",
     error: {
@@ -129,31 +220,23 @@ test("uses machine-safe status arguments and returns typed failures", async () =
 
 test("passes exact paths as isolated argv values for diff and stage", async () => {
   const exactPath = ":(glob)*$(touch should-not-run); old -> new*.txt";
-  const calls: string[][] = [];
-  const responses = [
+  const git = await fakeGit([
     gitResult(),
     gitResult(),
     gitResult("untracked diff", new Error("expected no-index exit 1")),
     gitResult(),
     gitResult(),
-  ];
-  const executeGit: GitCommandExecutor = async (args) => {
-    calls.push([...args]);
-    const response = responses.shift();
-    if (!response) {
-      throw new Error("Unexpected Git command");
-    }
-    return response;
-  };
+  ]);
+  const calls = async () => (await git.calls()).map((call) => call.args);
 
-  await expect(getFileDiff("/workspace", exactPath, executeGit)).resolves.toBe("untracked diff");
+  await expect(git.client.getFileDiff(git.workspace, exactPath)).resolves.toBe("untracked diff");
   const renameDestination = pathologicalPath("rename destination");
   const renameSource = pathologicalPath("rename source");
-  await expect(stageFile("/workspace", exactPath, { executeGit })).resolves.toBeUndefined();
+  await expect(git.client.stageFile(git.workspace, exactPath)).resolves.toBeUndefined();
   await expect(
-    stageFile("/workspace", renameDestination, { sourcePath: renameSource, executeGit }),
+    git.client.stageFile(git.workspace, renameDestination, { sourcePath: renameSource }),
   ).resolves.toBeUndefined();
-  expect(calls).toEqual([
+  expect(await calls()).toEqual([
     ["--literal-pathspecs", "diff", "--", exactPath],
     ["--literal-pathspecs", "diff", "--cached", "--", exactPath],
     ["--literal-pathspecs", "diff", "--no-index", "--", "/dev/null", exactPath],

@@ -10,10 +10,6 @@ use std::cmp::Ordering;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
-
-use icu_collator::options::CollatorOptions;
-use icu_collator::{Collator, CollatorBorrowed};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -548,7 +544,7 @@ fn compare_sessions(left: &SessionEntry, right: &SessionEntry) -> Ordering {
         .then_with(|| right.updated_at.cmp(&left.updated_at))
 }
 
-fn compare_worktrees(left: &WorktreeEntry, right: &WorktreeEntry) -> Ordering {
+pub(crate) fn compare_worktrees(left: &WorktreeEntry, right: &WorktreeEntry) -> Ordering {
     let kind_rank = |kind: WorktreeKind| match kind {
         WorktreeKind::Primary => 0,
         WorktreeKind::Linked => 1,
@@ -557,23 +553,12 @@ fn compare_worktrees(left: &WorktreeEntry, right: &WorktreeEntry) -> Ordering {
         .cmp(&kind_rank(right.kind))
         .then_with(|| pinned_first(left.pinned, right.pinned))
         .then_with(|| right.updated_at.cmp(&left.updated_at))
-        .then_with(|| compare_display_names(&left.display_name, &right.display_name))
+        .then_with(|| crate::locale::compare(&left.display_name, &right.display_name))
 }
 
 fn pinned_first(left: Option<bool>, right: Option<bool>) -> Ordering {
     let rank = |pinned: Option<bool>| if pinned == Some(true) { 0 } else { 1 };
     rank(left).cmp(&rank(right))
-}
-
-/// JavaScript's `localeCompare`: the same ICU root collation V8 uses.
-pub(crate) fn compare_display_names(left: &str, right: &str) -> Ordering {
-    static COLLATOR: OnceLock<CollatorBorrowed<'static>> = OnceLock::new();
-    COLLATOR
-        .get_or_init(|| {
-            Collator::try_new(Default::default(), CollatorOptions::default())
-                .expect("the root collation is compiled in")
-        })
-        .compare(left, right)
 }
 
 /// The fields `areSessionEntriesEqual` compares.
