@@ -1,5 +1,6 @@
 use super::*;
 use crate::test_support::temp_dir;
+use std::path::PathBuf;
 use std::time::Duration;
 
 const OWNER: u64 = 7;

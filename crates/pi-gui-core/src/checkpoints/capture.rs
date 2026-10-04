@@ -789,6 +789,7 @@ async fn make_temp_dir(parent: &Path, prefix: &str) -> io::Result<PathBuf> {
             .take(6)
             .collect();
         let path = parent.join(format!("{prefix}{suffix}"));
+        #[cfg_attr(not(unix), allow(unused_mut))]
         let mut builder = tokio::fs::DirBuilder::new();
         #[cfg(unix)]
         builder.mode(0o700);

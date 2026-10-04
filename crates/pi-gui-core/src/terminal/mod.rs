@@ -14,7 +14,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::rc::{Rc, Weak};
 use std::time::Duration;
 use tokio::sync::mpsc;
@@ -226,6 +226,8 @@ impl Terminals {
         let sessions = {
             let mut state = self.state.borrow_mut();
             state.roots.clear();
+            // A fresh start numbers tabs from 1 again, as a new service did.
+            state.next_session_number = 1;
             std::mem::take(&mut state.sessions)
         };
         drop(sessions);
@@ -749,31 +751,10 @@ fn base36(mut value: u64) -> String {
     String::from_utf8(digits).expect("ASCII digits")
 }
 
-/// The real path of a workspace folder, as `realpathSync.native` gave it, or the absolute
+/// The real path of a workspace folder, as `realpathSync.native` gave it, or the resolved
 /// path when it cannot be resolved.
 fn normalize_root_key(workspace_path: &str) -> String {
-    match std::fs::canonicalize(workspace_path) {
-        Ok(path) => without_verbatim_prefix(path).display().to_string(),
-        Err(_) => std::path::absolute(workspace_path)
-            .unwrap_or_else(|_| PathBuf::from(workspace_path))
-            .display()
-            .to_string(),
-    }
-}
-
-/// Windows `canonicalize` answers `\\?\C:\folder`; Node and the shell expect `C:\folder`.
-fn without_verbatim_prefix(path: PathBuf) -> PathBuf {
-    #[cfg(windows)]
-    {
-        let text = path.display().to_string();
-        if let Some(unc) = text.strip_prefix(r"\\?\UNC\") {
-            return PathBuf::from(format!(r"\\{unc}"));
-        }
-        if let Some(local) = text.strip_prefix(r"\\?\") {
-            return PathBuf::from(local);
-        }
-    }
-    path
+    crate::paths::display(&crate::paths::canonical(workspace_path))
 }
 
 fn ensure_directory(directory: &str) -> CoreResult<()> {
