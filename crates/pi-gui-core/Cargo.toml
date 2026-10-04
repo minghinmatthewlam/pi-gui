@@ -8,6 +8,9 @@ publish = false
 
 [dependencies]
 icu_collator = "2"
+indexmap = { version = "2", features = ["serde"] }
+jiff = "0.2"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
+uuid = { version = "1", features = ["v4"] }
 tokio = { version = "1.53.2", features = ["rt", "macros", "io-util", "io-std", "process", "sync", "time", "fs"] }

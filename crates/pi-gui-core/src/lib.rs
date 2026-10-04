@@ -9,6 +9,7 @@ pub mod error;
 pub mod json_text;
 pub mod persistence;
 pub mod rpc;
+pub mod state;
 
 use error::{CoreError, CoreResult};
 use persistence::catalog::CatalogStore;
