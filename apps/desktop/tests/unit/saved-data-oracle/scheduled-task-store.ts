@@ -9,10 +9,7 @@ import {
   type ScheduledTaskRun,
   type ScheduledTaskStatus,
 } from "../../../contracts/scheduled-tasks";
-import {
-  readJsonWithBackup,
-  writeFileAtomicQueued,
-} from "../../../electron/persistence/atomic-file-write";
+import { readJsonWithBackup, writeFileAtomicQueued } from "./atomic-file-write";
 
 export interface ScheduledTasksFile {
   readonly version: typeof SCHEDULED_TASKS_FILE_VERSION;

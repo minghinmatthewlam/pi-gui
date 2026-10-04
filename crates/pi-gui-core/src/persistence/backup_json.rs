@@ -1,6 +1,6 @@
 //! JSON files kept with a `.bak` copy of the previous good version, read and written the way
-//! `readJsonWithBackup` and `writeFileAtomicQueued` in `electron/persistence/atomic-file-write.ts`
-//! did, so files either side wrote load on the other. Used by turn checkpoints, ui-state,
+//! `readJsonWithBackup` and `writeFileAtomicQueued` in the old `atomic-file-write.ts` (now in
+//! `apps/desktop/tests/unit/saved-data-oracle/`) did, so files either side wrote load on the other. Used by turn checkpoints, ui-state,
 //! attachments, scheduled tasks and review marks (`catalogs.json` has no backup; it uses the
 //! plain write in `atomic.rs`).
 //!

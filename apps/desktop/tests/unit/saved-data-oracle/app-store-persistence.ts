@@ -16,10 +16,7 @@ import type {
 import { isThemeMode, isThemePresetId, isThreadGrouping } from "../../../contracts/desktop-state";
 import type { ExtensionFlagValues } from "@pi-gui/session-driver";
 import type { ModelSettingsSnapshot } from "@pi-gui/session-driver/runtime-types";
-import {
-  readJsonWithBackup,
-  writeFileAtomicQueued,
-} from "../../../electron/persistence/atomic-file-write";
+import { readJsonWithBackup, writeFileAtomicQueued } from "./atomic-file-write";
 import { decodeAttachments } from "./attachment-store";
 import { randomUUID } from "node:crypto";
 import { basename, dirname, join } from "node:path";

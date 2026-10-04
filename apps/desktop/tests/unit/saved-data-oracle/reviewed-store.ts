@@ -1,10 +1,7 @@
 // The TypeScript implementation the Rust core replaced, kept unchanged as the oracle that
 // rust-core-saved-data.spec.ts compares the core with. The app no longer uses it.
 import { join } from "node:path";
-import {
-  readJsonWithBackup,
-  writeFileAtomicQueued,
-} from "../../../electron/persistence/atomic-file-write";
+import { readJsonWithBackup, writeFileAtomicQueued } from "./atomic-file-write";
 
 interface ReviewedState {
   readonly version: 1;

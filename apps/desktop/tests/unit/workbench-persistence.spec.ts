@@ -7,7 +7,7 @@ import {
   readPersistedUiState,
   writePersistedUiState,
 } from "../../electron/persistence/app-store-persistence";
-import { writeFileAtomicQueued } from "../../electron/persistence/atomic-file-write";
+import { writeFileAtomicQueued } from "./saved-data-oracle/atomic-file-write";
 import { decodePersistedUiState } from "./saved-data-oracle/app-store-persistence";
 import { startTestCore, stopTestCoresAfterEach } from "./rust-core-process";
 

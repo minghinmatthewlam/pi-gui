@@ -2,10 +2,7 @@
 // rust-core-saved-data.spec.ts compares the core with. The app no longer uses it.
 import { readdir, unlink } from "node:fs/promises";
 import { join } from "node:path";
-import {
-  readJsonWithBackup,
-  writeFileAtomicQueued,
-} from "../../../electron/persistence/atomic-file-write";
+import { readJsonWithBackup, writeFileAtomicQueued } from "./atomic-file-write";
 import type { ComposerAttachment } from "../../../contracts/desktop-state";
 
 export class AttachmentStore {
