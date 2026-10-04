@@ -61,8 +61,8 @@ export interface ListedTurnCheckpoint extends ResolvedTurnCheckpoint {
 
 /**
  * Turn checkpoints: snapshots of a checkout at each turn boundary, owned by the Rust core
- * (`crates/pi-gui-core/src/checkpoints`). It keeps `turn-checkpoints/checkpoints.json` and the
- * app's bare `turn-checkpoints/objects.git`, and never touches the user's Git state.
+ * (`crates/pi-gui-core/src/checkpoints`). The core keeps the interval file and the app's bare
+ * snapshot repository, and never touches the user's Git state.
  */
 export class TurnCheckpointClient {
   constructor(private readonly peer: RpcPeer) {}
