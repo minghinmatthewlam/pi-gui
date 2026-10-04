@@ -2,7 +2,7 @@
 //! Same format, limit and messages as the old `ReviewedStore`. Marks are kept oldest first;
 //! past the limit the oldest are forgotten.
 
-use super::backed_file::{read_json_with_backup, write_with_backup, FileQueue};
+use super::backup_json::{read_json_with_backup, write_with_backup, FileQueue};
 use crate::error::{CoreError, CoreResult};
 use crate::js;
 use indexmap::IndexSet;
@@ -66,12 +66,7 @@ impl ReviewedMarks {
         let path = self.path.clone();
         queue
             .run(&self.path, move || {
-                write_with_backup(
-                    &path,
-                    contents.as_bytes(),
-                    |existing| decode(&existing),
-                    |_| None,
-                )
+                write_with_backup(&path, &contents, |existing| decode(existing).map(drop))
             })
             .await?;
         self.loaded.replace(Some(next));

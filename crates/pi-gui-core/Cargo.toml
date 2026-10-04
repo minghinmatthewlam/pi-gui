@@ -11,9 +11,11 @@ chrono = { version = "0.4.45", default-features = false, features = ["clock", "s
 chrono-tz = { version = "0.10.4", features = ["case-insensitive"] }
 iana-time-zone = "0.1.65"
 icu_collator = "2"
-indexmap = "2.14.2"
+indexmap = "2"
 ryu = "1.0.23"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 tokio = { version = "1.53.2", features = ["rt", "macros", "io-util", "io-std", "process", "sync", "time", "fs"] }
-uuid = { version = "1.27.0", features = ["v4"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

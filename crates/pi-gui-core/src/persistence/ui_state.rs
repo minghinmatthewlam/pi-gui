@@ -2,7 +2,7 @@
 //! messages and decoded shape as `decodePersistedUiState` in the old
 //! `app-store-persistence.ts`; the app store still keeps the state in memory.
 
-use super::backed_file::{read_json_with_backup, write_with_backup};
+use super::backup_json::{read_json_with_backup, write_with_migration_copy};
 use super::{attachments, workbench_template};
 use crate::error::{CoreError, CoreResult};
 use crate::js;
@@ -48,10 +48,10 @@ pub fn write(path: &Path, state: Map<String, Value>) -> CoreResult<()> {
         .map(|name| name.to_string_lossy().into_owned())
         .unwrap_or_default();
     let stem = stem.strip_suffix(".json").unwrap_or(&stem).to_owned();
-    write_with_backup(
+    write_with_migration_copy(
         path,
-        contents.as_bytes(),
-        |existing| decode(&existing),
+        &contents,
+        decode,
         move |existing: &Value| -> Option<PathBuf> {
             let version = existing.get("version").and_then(Value::as_i64);
             if version == Some(VERSION) {
@@ -60,7 +60,7 @@ pub fn write(path: &Path, state: Map<String, Value>) -> CoreResult<()> {
             let version = version.map_or_else(|| "legacy".to_owned(), |v| v.to_string());
             Some(dir.join(format!(
                 "{stem}.pre-workbench-v{version}.{}.json",
-                uuid::Uuid::new_v4()
+                crate::random_id()
             )))
         },
     )

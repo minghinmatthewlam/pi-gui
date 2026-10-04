@@ -2,7 +2,7 @@
 //! and `reviewed.*` calls. Each file's work runs off the core's thread, one call at a time
 //! per file in arrival order, as the old queued TypeScript writes did.
 
-use super::backed_file::FileQueue;
+use super::backup_json::FileQueue;
 use super::reviewed::ReviewedMarks;
 use super::{attachments, scheduled_tasks, ui_state};
 use crate::error::{CoreError, CoreResult};

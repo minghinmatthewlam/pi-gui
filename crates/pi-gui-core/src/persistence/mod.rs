@@ -2,7 +2,7 @@
 
 pub mod atomic;
 pub mod attachments;
-pub mod backed_file;
+pub mod backup_json;
 pub mod catalog;
 pub mod catalog_calls;
 pub mod reviewed;

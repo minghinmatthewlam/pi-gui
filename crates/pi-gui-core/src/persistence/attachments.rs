@@ -1,7 +1,7 @@
 //! Composer attachments, one file per thread under `attachments/`, named by the URI-encoded
 //! session key. Same format, checks and messages as the old `AttachmentStore`.
 
-use super::backed_file::{read_json_with_backup, remove_if_present, sibling, write_with_backup};
+use super::backup_json::{read_json_with_backup, remove_if_present, sibling, write_with_backup};
 use crate::error::{CoreError, CoreResult};
 use crate::js;
 use serde_json::{json, Map, Value};
@@ -35,12 +35,9 @@ pub fn read(root: &Path, session_key: &str) -> CoreResult<Option<Value>> {
 pub fn write(root: &Path, session_key: &str, attachments: &Value) -> CoreResult<()> {
     decode(attachments)?;
     let contents = format!("{}\n", js::stringify_pretty(attachments));
-    write_with_backup(
-        &file_path(root, session_key),
-        contents.as_bytes(),
-        |existing| decode(&existing),
-        |_| None,
-    )
+    write_with_backup(&file_path(root, session_key), &contents, |existing| {
+        decode(existing).map(drop)
+    })
 }
 
 /// The session keys with saved attachments. A file name that does not decode is skipped,

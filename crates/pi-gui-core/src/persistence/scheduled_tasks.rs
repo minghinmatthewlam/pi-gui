@@ -2,7 +2,7 @@
 //! `scheduled-task-store.ts`, including `assertScheduledTaskSchedule` and
 //! `assertScheduledTaskTarget` from `contracts/scheduled-tasks.ts`.
 
-use super::backed_file::{read_json_with_backup, write_with_backup};
+use super::backup_json::{read_json_with_backup, write_with_backup};
 use crate::error::{CoreError, CoreResult};
 use crate::js;
 use serde_json::{json, Map, Value};
@@ -33,12 +33,7 @@ pub fn write(path: &Path, tasks: Value) -> CoreResult<()> {
     let payload = json!({ "version": FILE_VERSION, "tasks": tasks });
     let contents = format!("{}\n", js::stringify_pretty(&payload));
     decode_file(&payload)?;
-    write_with_backup(
-        path,
-        contents.as_bytes(),
-        |existing| decode_file(&existing),
-        |_| None,
-    )
+    write_with_backup(path, &contents, |existing| decode_file(existing).map(drop))
 }
 
 fn fail<T>(field: &str) -> CoreResult<T> {

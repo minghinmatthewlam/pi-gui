@@ -26,7 +26,7 @@ import { augmentPosixPath } from "../scripts/augment-path.cjs";
 import { DesktopAppStore } from "./application/app-store";
 import { WindowOwner } from "./windows/window-owner";
 import { PendingComposerDraftFlusher } from "./windows/pending-draft-flush";
-import { TurnCheckpointStore } from "./workbench/checkpoint-store";
+import { TurnCheckpointClient } from "./workbench/checkpoint-client";
 import { RemoteExtensionViews, DESKTOP_EXTENSION_SCHEME } from "../pi-host/remote-extension-views";
 import { startPiHost, type PiHostProcess } from "../pi-host/launch";
 import { remoteCatalogStorage } from "../pi-host/remote-catalog";
@@ -1083,12 +1083,12 @@ app
       | undefined;
     const orchestrationRuntimeBridge = createStoreBackedOrchestrationRuntimeBridge();
     const scheduledTaskRuntimeBridge = createStoreBackedScheduledTaskRuntimeBridge();
-    const checkpoints = new TurnCheckpointStore(configuredUserDataDir);
     core = await startCore({
       binaryPath: coreBinaryPath(),
       initialize: { userDataDir: configuredUserDataDir },
       onUnexpectedExit: (detail) => handleChildProcessExit("core", detail),
     });
+    const checkpoints = new TurnCheckpointClient(core.peer);
     piHost = await startPiHost({
       execPath: process.execPath,
       scriptPath: path.join(__dirname, "pi-host.js"),
