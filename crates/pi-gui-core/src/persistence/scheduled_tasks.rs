@@ -227,8 +227,9 @@ fn schedule(value: &Value) -> Option<Value> {
     match record.get("kind").and_then(Value::as_str)? {
         "once" => {
             let at = js::trim(record.get("at").and_then(Value::as_str).unwrap_or(""));
-            let ms = js::date_parse(at).filter(|_| !at.is_empty())?;
-            Some(json!({ "kind": "once", "at": js::to_iso_string(ms) }))
+            let local = jiff::tz::TimeZone::system();
+            let at = js::date_parse(at, &local).and_then(js::to_iso_string)?;
+            Some(json!({ "kind": "once", "at": at }))
         }
         kind @ ("daily" | "weekly") => {
             let time_zone = match record.get("timeZone").and_then(Value::as_str).map(js::trim) {

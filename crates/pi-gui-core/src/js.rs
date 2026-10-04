@@ -1,8 +1,37 @@
-//! JavaScript behaviour the saved files depend on: how `JSON.stringify` writes numbers and
-//! indents, the order `Object.keys` lists keys in, what `String.prototype.trim` removes, string
-//! length in UTF-16 units, `encodeURIComponent`, and the ISO subset of `Date.parse`.
+//! JavaScript behaviour the saved files and the state code depend on, so the Rust twins give
+//! the same strings: `String(number)` and how `JSON.stringify` writes numbers and indents, the
+//! order `Object.keys` lists keys in, `\s` and `String.prototype.trim`, string length, slices
+//! and order in UTF-16 units, `encodeURIComponent`, `Math.round`, and the ISO subset of
+//! `Date.parse` and `toISOString`.
 
-use serde_json::{Map, Number, Value};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde_json::{Map, Value};
+use std::cmp::Ordering;
+
+/// A JavaScript number passed through the app. It serializes whole numbers as integers
+/// (`3`, not `3.0`) so values compare equal to the ones parsed from JavaScript's JSON, and
+/// non-finite ones as `null`. Write the result with [`stringify`] for JavaScript's text
+/// (`1e+21`; serde_json alone writes `1e21`).
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Default)]
+pub struct JsNumber(pub f64);
+
+impl Serialize for JsNumber {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let value = self.0;
+        if value.is_finite() && value.fract() == 0.0 && value.abs() < 9_007_199_254_740_992.0 {
+            // -0 stringifies as 0 in JavaScript.
+            serializer.serialize_i64(value as i64)
+        } else {
+            serializer.serialize_f64(value)
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for JsNumber {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        f64::deserialize(deserializer).map(JsNumber)
+    }
+}
 
 /// `JSON.stringify(value, null, 2)`.
 pub fn stringify_pretty(value: &Value) -> String {
@@ -22,7 +51,10 @@ fn write_value(out: &mut String, value: &Value, indent: Option<usize>) {
     match value {
         Value::Null => out.push_str("null"),
         Value::Bool(flag) => out.push_str(if *flag { "true" } else { "false" }),
-        Value::Number(number) => out.push_str(&number_text(number)),
+        Value::Number(number) => match number.as_f64().filter(|number| number.is_finite()) {
+            Some(number) => out.push_str(&number_to_string(number)),
+            None => out.push_str("null"),
+        },
         Value::String(text) => write_string(out, text),
         Value::Array(items) => {
             if items.is_empty() {
@@ -78,66 +110,42 @@ fn write_string(out: &mut String, text: &str) {
     out.push_str(&serde_json::to_string(text).expect("a string always encodes"));
 }
 
-/// A number as JavaScript prints it: `1e+21`, `5e-7`, `0` for `-0`, no `.0` on whole numbers.
-pub fn number_text(number: &Number) -> String {
-    const SAFE: u64 = (1 << 53) - 1;
-    if let Some(value) = number.as_u64().filter(|value| *value <= SAFE) {
-        return value.to_string();
-    }
-    if let Some(value) = number.as_i64().filter(|value| value.unsigned_abs() <= SAFE) {
-        return value.to_string();
-    }
-    float_text(number.as_f64().unwrap_or(f64::NAN))
-}
-
-fn float_text(value: f64) -> String {
-    if !value.is_finite() {
-        return "null".into();
+/// `String(value)` for a number (ECMAScript Number::toString with radix 10): `1e+21`,
+/// `5e-7`, `0` for `-0`, no `.0` on whole numbers.
+pub fn number_to_string(value: f64) -> String {
+    if value.is_nan() {
+        return "NaN".into();
     }
     if value == 0.0 {
         return "0".into();
     }
-    // Shortest round-trip digits, then laid out with Number.prototype.toString's rules.
-    let mut buffer = ryu::Buffer::new();
-    let shortest = buffer.format_finite(value.abs());
-    let (mantissa, exponent) = match shortest.split_once('e') {
-        Some((mantissa, exponent)) => (mantissa, exponent.parse::<i32>().unwrap_or(0)),
-        None => (shortest, 0),
-    };
-    let (whole, fraction) = mantissa.split_once('.').unwrap_or((mantissa, ""));
-    let joined = format!("{whole}{fraction}");
-    let leading = joined.len() - joined.trim_start_matches('0').len();
-    let digits = joined.trim_start_matches('0').trim_end_matches('0');
-    // The value is 0.digits × 10^point.
-    let point = whole.len() as i32 - leading as i32 + exponent;
-    let count = digits.len() as i32;
-    let mut out = String::new();
+    if value.is_infinite() {
+        return if value > 0.0 { "Infinity" } else { "-Infinity" }.into();
+    }
     if value < 0.0 {
-        out.push('-');
+        return format!("-{}", number_to_string(-value));
     }
-    if count <= point && point <= 21 {
-        out.push_str(digits);
-        out.extend(std::iter::repeat_n('0', (point - count) as usize));
-    } else if 0 < point && point <= 21 {
-        out.push_str(&digits[..point as usize]);
-        out.push('.');
-        out.push_str(&digits[point as usize..]);
-    } else if -6 < point && point <= 0 {
-        out.push_str("0.");
-        out.extend(std::iter::repeat_n('0', (-point) as usize));
-        out.push_str(digits);
+    // `{:e}` gives the shortest digits that round-trip, as JavaScript does.
+    let exponential = format!("{value:e}");
+    let (mantissa, exponent) = exponential.split_once('e').unwrap_or((&exponential, "0"));
+    let digits: String = mantissa.chars().filter(|c| *c != '.').collect();
+    let k = digits.len() as i32;
+    let n = exponent.parse::<i32>().unwrap_or(0) + 1;
+    if k <= n && n <= 21 {
+        format!("{digits}{}", "0".repeat((n - k) as usize))
+    } else if 0 < n && n <= 21 {
+        format!("{}.{}", &digits[..n as usize], &digits[n as usize..])
+    } else if -6 < n && n <= 0 {
+        format!("0.{}{digits}", "0".repeat((-n) as usize))
     } else {
-        out.push_str(&digits[..1]);
-        if count > 1 {
-            out.push('.');
-            out.push_str(&digits[1..]);
+        let e = n - 1;
+        let sign = if e < 0 { '-' } else { '+' };
+        if k == 1 {
+            format!("{digits}e{sign}{}", e.abs())
+        } else {
+            format!("{}.{}e{sign}{}", &digits[..1], &digits[1..], e.abs())
         }
-        let shown = point - 1;
-        out.push('e');
-        out.push(if shown < 0 { '-' } else { '+' });
-        out.push_str(&shown.abs().to_string());
     }
-    out
 }
 
 /// An object's entries in `Object.keys` order: keys that are array indexes first, in
@@ -169,13 +177,9 @@ fn array_index(key: &str) -> Option<u32> {
     key.parse::<u32>().ok().filter(|index| *index != u32::MAX)
 }
 
-/// `String.prototype.trim`: ECMAScript white space and line terminators, which differ from
-/// Rust's `trim` (JavaScript trims U+FEFF but not U+0085).
-pub fn trim(text: &str) -> &str {
-    text.trim_matches(is_js_space)
-}
-
-fn is_js_space(c: char) -> bool {
+/// The characters JavaScript's `\s` and `String.prototype.trim` treat as white space, which
+/// differ from Rust's (JavaScript has U+FEFF but not U+0085).
+pub fn is_space(c: char) -> bool {
     matches!(
         c,
         '\u{9}'..='\u{d}'
@@ -192,9 +196,78 @@ fn is_js_space(c: char) -> bool {
     )
 }
 
-/// A string's `length` in JavaScript.
+/// `String.prototype.trim`.
+pub fn trim(text: &str) -> &str {
+    text.trim_matches(is_space)
+}
+
+/// `text.replace(/\s+/g, " ")`.
+pub fn collapse_whitespace(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut in_space = false;
+    for c in text.chars() {
+        if is_space(c) {
+            if !in_space {
+                out.push(' ');
+            }
+            in_space = true;
+        } else {
+            out.push(c);
+            in_space = false;
+        }
+    }
+    out
+}
+
+/// A string's `length` in JavaScript: UTF-16 code units.
 pub fn length(text: &str) -> usize {
     text.encode_utf16().count()
+}
+
+/// `text.slice(0, end)` in UTF-16 code units. A cut through a surrogate pair leaves half a
+/// character in JavaScript; Rust strings cannot hold that, so it becomes `�`.
+pub fn utf16_prefix(text: &str, end: usize) -> String {
+    let mut out = String::new();
+    let mut units = 0;
+    for c in text.chars() {
+        let width = c.len_utf16();
+        if units + width > end {
+            if units < end {
+                out.push('\u{FFFD}');
+            }
+            break;
+        }
+        out.push(c);
+        units += width;
+    }
+    out
+}
+
+/// `left < right` style comparison of JavaScript strings, which compares UTF-16 code units.
+pub fn compare_strings(left: &str, right: &str) -> Ordering {
+    left.encode_utf16().cmp(right.encode_utf16())
+}
+
+/// `Math.round`: halves round up, toward +∞.
+pub fn round(value: f64) -> f64 {
+    if !value.is_finite() {
+        return value;
+    }
+    let floor = value.floor();
+    if value - floor >= 0.5 {
+        floor + 1.0
+    } else {
+        floor
+    }
+}
+
+/// `Math.max(a, b)`: NaN wins.
+pub fn max(left: f64, right: f64) -> f64 {
+    if left.is_nan() || right.is_nan() {
+        f64::NAN
+    } else {
+        left.max(right)
+    }
 }
 
 /// `encodeURIComponent`.
@@ -231,196 +304,231 @@ pub fn decode_uri_component(text: &str) -> Option<String> {
     String::from_utf8(out).ok()
 }
 
-/// Milliseconds JavaScript dates can reach either side of 1970.
-const MAX_TIME_MS: i64 = 8_640_000_000_000_000;
+const MS_PER_DAY: f64 = 86_400_000.0;
+/// The largest time a JavaScript Date holds, in milliseconds either side of 1970.
+const MAX_TIME_MS: f64 = 8.64e15;
 
-/// `Date.parse` for the ISO forms JavaScript reads (`2026-09-21`, `2026-09-21T12:00Z`,
-/// `+002026-09-21T12:00:00.000+05:30`, ...). Like V8, a day past the month's end rolls over
-/// and a time without an offset is local time. Other date text is not read (`None`), where
-/// V8 would also try its older free-form formats.
-pub fn date_parse(text: &str) -> Option<i64> {
-    let mut cursor = Cursor {
-        text: text.as_bytes(),
-        at: 0,
-    };
-    let year = match cursor.peek() {
-        Some(sign @ (b'+' | b'-')) => {
-            cursor.at += 1;
-            let year = cursor.digits(6)?;
-            if sign == b'-' && year == 0 {
-                return None;
-            }
-            if sign == b'-' {
-                -year
-            } else {
-                year
-            }
-        }
-        _ => cursor.digits(4)?,
-    };
-    let mut month = 1;
-    let mut day = 1;
-    if cursor.eat(b'-') {
-        month = cursor.digits(2)?;
-        if cursor.eat(b'-') {
-            day = cursor.digits(2)?;
-        }
-    }
-    if !(1..=12).contains(&month) || !(1..=31).contains(&day) {
-        return None;
-    }
-    let mut time_ms = 0;
-    let mut offset_ms = Some(0);
-    if matches!(cursor.peek(), Some(b'T' | b't')) {
-        cursor.at += 1;
-        let hour = cursor.digits(2)?;
-        if !cursor.eat(b':') {
-            return None;
-        }
-        let minute = cursor.digits(2)?;
-        let mut second = 0;
-        let mut millis = 0;
-        if cursor.eat(b':') {
-            second = cursor.digits(2)?;
-            if cursor.eat(b'.') {
-                let start = cursor.at;
-                while cursor.peek().is_some_and(|byte| byte.is_ascii_digit()) {
-                    cursor.at += 1;
-                }
-                let fraction = &text[start..cursor.at];
-                if fraction.is_empty() {
-                    return None;
-                }
-                millis = format!("{:0<3}", &fraction[..fraction.len().min(3)])
-                    .parse::<i64>()
-                    .ok()?;
-            }
-        }
-        let valid_clock = hour < 24 && minute < 60 && second < 60;
-        let midnight_end = hour == 24 && minute == 0 && second == 0 && millis == 0;
-        if !valid_clock && !midnight_end {
-            return None;
-        }
-        time_ms = ((hour * 60 + minute) * 60 + second) * 1000 + millis;
-        offset_ms = match cursor.peek() {
-            Some(b'Z' | b'z') => {
-                cursor.at += 1;
-                Some(0)
-            }
-            Some(sign @ (b'+' | b'-')) => {
-                cursor.at += 1;
-                let hours = cursor.digits(2)?;
-                cursor.eat(b':');
-                let minutes = cursor.digits(2)?;
-                if hours > 23 || minutes > 59 {
-                    return None;
-                }
-                let offset = (hours * 60 + minutes) * 60_000;
-                Some(if sign == b'+' { offset } else { -offset })
-            }
-            _ => None,
-        };
-    }
-    if cursor.at != text.len() {
-        return None;
-    }
-    let days = days_from_civil(year, month, 1) + day - 1;
-    let local_ms = days * 86_400_000 + time_ms;
-    let utc_ms = match offset_ms {
-        Some(offset) => local_ms - offset,
-        None => local_ms - local_offset_ms(local_ms)?,
-    };
-    (utc_ms.abs() <= MAX_TIME_MS).then_some(utc_ms)
+/// Days since 1970-01-01 for a proleptic Gregorian date (Howard Hinnant's algorithm). Like
+/// `Date.UTC`, a month or day past its range rolls over into the next year or month.
+pub fn days_from_civil(year: i64, month: i64, day: i64) -> i64 {
+    let year = year + (month - 1).div_euclid(12);
+    let month = (month - 1).rem_euclid(12) + 1;
+    let y = if month <= 2 { year - 1 } else { year };
+    let era = y.div_euclid(400);
+    let yoe = y - era * 400;
+    let mp = (month + 9) % 12;
+    let doy = (153 * mp + 2) / 5;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    era * 146_097 + doe - 719_468 + (day - 1)
 }
 
-/// The local time zone's offset at a local wall-clock time, in milliseconds.
-fn local_offset_ms(local_ms: i64) -> Option<i64> {
-    use chrono::{Local, LocalResult, Offset, TimeZone};
-    let naive = chrono::DateTime::from_timestamp_millis(local_ms)?.naive_utc();
-    let offset = match Local.offset_from_local_datetime(&naive) {
-        LocalResult::Single(offset) | LocalResult::Ambiguous(offset, _) => offset,
-        // A time skipped by a clock change: V8 reads it with the offset from before it.
-        LocalResult::None => Local.offset_from_utc_datetime(&naive),
-    };
-    Some(i64::from(offset.fix().local_minus_utc()) * 1000)
+/// (year, month 1-12, day 1-31) for days since 1970-01-01.
+pub fn civil_from_days(days: i64) -> (i64, i64, i64) {
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = if mp < 10 { mp + 3 } else { mp - 9 };
+    let year = yoe + era * 400 + i64::from(month <= 2);
+    (year, month, day)
 }
 
-/// `new Date(ms).toISOString()`.
-pub fn to_iso_string(ms: i64) -> String {
+/// `Date.UTC(year, month - 1, day, hour, minute)` for whole numbers.
+pub fn date_utc(year: i64, month: i64, day: i64, hour: i64, minute: i64) -> f64 {
+    (days_from_civil(year, month, day) as f64) * MS_PER_DAY
+        + (hour as f64) * 3_600_000.0
+        + (minute as f64) * 60_000.0
+}
+
+/// `new Date(ms).toISOString()`, or `None` where JavaScript throws "Invalid time value".
+pub fn to_iso_string(ms: f64) -> Option<String> {
+    if !ms.is_finite() || ms.abs() > MAX_TIME_MS {
+        return None;
+    }
+    let ms = ms.trunc() as i64;
     let days = ms.div_euclid(86_400_000);
     let in_day = ms.rem_euclid(86_400_000);
     let (year, month, day) = civil_from_days(days);
-    let year_text = if (0..=9999).contains(&year) {
+    let year = if (0..=9999).contains(&year) {
         format!("{year:04}")
     } else if year < 0 {
         format!("-{:06}", -year)
     } else {
         format!("+{year:06}")
     };
-    format!(
-        "{year_text}-{month:02}-{day:02}T{:02}:{:02}:{:02}.{:03}Z",
+    Some(format!(
+        "{year}-{month:02}-{day:02}T{:02}:{:02}:{:02}.{:03}Z",
         in_day / 3_600_000,
         in_day / 60_000 % 60,
         in_day / 1000 % 60,
         in_day % 1000
-    )
+    ))
 }
 
-struct Cursor<'a> {
-    text: &'a [u8],
+/// `Date.parse(text)` for the ISO forms V8 reads: `YYYY[-MM[-DD]]` (or `±YYYYYY`), then
+/// optionally `T` and `HH:mm[:ss[.fff]]`, then `Z`, `±HH:mm`, `±HHmm` or nothing. A space
+/// in place of the `T` reads the same, as V8's fallback parser gives for that shape. Like
+/// V8, a day past the month's end rolls over, a date alone is UTC and a time with no offset
+/// is local time in `local`. V8 also reads many legacy forms ("Jan 2 2026"); those give
+/// `None` (NaN) here.
+pub fn date_parse(text: &str, local: &jiff::tz::TimeZone) -> Option<f64> {
+    let mut parser = IsoParser {
+        bytes: text.as_bytes(),
+        at: 0,
+    };
+    let year = parser.year()?;
+    let mut month = 1;
+    let mut day = 1;
+    if parser.eat(b'-') {
+        month = parser.digits(2)?;
+        if parser.eat(b'-') {
+            day = parser.digits(2)?;
+        }
+    }
+    if !(1..=12).contains(&month) || !(1..=31).contains(&day) {
+        return None;
+    }
+    if parser.done() {
+        let ms = date_utc(year, month, day, 0, 0);
+        return (ms.abs() <= MAX_TIME_MS).then_some(ms);
+    }
+    if !(parser.eat(b'T') || parser.eat(b't') || parser.eat(b' ')) {
+        return None;
+    }
+    let hour = parser.digits(2)?;
+    if !parser.eat(b':') {
+        return None;
+    }
+    let minute = parser.digits(2)?;
+    let mut second = 0;
+    let mut millisecond = 0;
+    if parser.eat(b':') {
+        second = parser.digits(2)?;
+        if parser.eat(b'.') {
+            let start = parser.at;
+            while parser.peek().is_some_and(|byte| byte.is_ascii_digit()) {
+                parser.at += 1;
+            }
+            let fraction = &text[start..parser.at];
+            if fraction.is_empty() {
+                return None;
+            }
+            let padded = format!("{fraction:0<3}");
+            millisecond = padded[..3].parse::<i64>().ok()?;
+        }
+    }
+    let valid_time = (hour < 24 && minute < 60 && second < 60)
+        || (hour == 24 && minute == 0 && second == 0 && millisecond == 0);
+    if !valid_time {
+        return None;
+    }
+    let wall = date_utc(year, month, day, hour, minute) + (second * 1000 + millisecond) as f64;
+    let offset_ms = if parser.eat(b'Z') || parser.eat(b'z') {
+        Some(0.0)
+    } else if let Some(sign) = parser.peek().filter(|byte| *byte == b'+' || *byte == b'-') {
+        parser.at += 1;
+        let hours = parser.digits(2)?;
+        parser.eat(b':');
+        let minutes = parser.digits(2)?;
+        if hours > 23 || minutes > 59 {
+            return None;
+        }
+        let offset = (hours * 60 + minutes) as f64 * 60_000.0;
+        Some(if sign == b'+' { offset } else { -offset })
+    } else {
+        None
+    };
+    if !parser.done() {
+        return None;
+    }
+    let ms = match offset_ms {
+        Some(offset) => wall - offset,
+        None => local_wall_time_ms(wall, local)?,
+    };
+    (ms.abs() <= MAX_TIME_MS).then_some(ms)
+}
+
+/// The instant a wall-clock time in `local` (written as if it were UTC) names. A skipped
+/// time moves forward by the gap and a repeated one takes the earlier instant, as V8 does.
+fn local_wall_time_ms(wall_as_utc_ms: f64, local: &jiff::tz::TimeZone) -> Option<f64> {
+    let wall = jiff::Timestamp::from_millisecond(wall_as_utc_ms as i64)
+        .ok()?
+        .to_zoned(jiff::tz::TimeZone::UTC)
+        .datetime();
+    let zoned = local.to_ambiguous_zoned(wall).compatible().ok()?;
+    Some(zoned.timestamp().as_millisecond() as f64)
+}
+
+struct IsoParser<'a> {
+    bytes: &'a [u8],
     at: usize,
 }
 
-impl Cursor<'_> {
+impl IsoParser<'_> {
     fn peek(&self) -> Option<u8> {
-        self.text.get(self.at).copied()
+        self.bytes.get(self.at).copied()
+    }
+
+    fn done(&self) -> bool {
+        self.at == self.bytes.len()
     }
 
     fn eat(&mut self, byte: u8) -> bool {
-        let found = self.peek() == Some(byte);
-        if found {
+        if self.peek() == Some(byte) {
             self.at += 1;
+            true
+        } else {
+            false
         }
-        found
     }
 
     fn digits(&mut self, count: usize) -> Option<i64> {
-        let slice = self.text.get(self.at..self.at + count)?;
+        let slice = self.bytes.get(self.at..self.at + count)?;
         if !slice.iter().all(u8::is_ascii_digit) {
             return None;
         }
         self.at += count;
         std::str::from_utf8(slice).ok()?.parse().ok()
     }
+
+    fn year(&mut self) -> Option<i64> {
+        match self.peek() {
+            Some(b'+') => {
+                self.at += 1;
+                self.digits(6)
+            }
+            Some(b'-') => {
+                self.at += 1;
+                let year = self.digits(6)?;
+                // "-000000" is not a year.
+                (year != 0).then_some(-year)
+            }
+            _ => self.digits(4),
+        }
+    }
 }
 
-/// Days since 1970-01-01 of a proleptic Gregorian date (Howard Hinnant's algorithm).
-fn days_from_civil(year: i64, month: i64, day: i64) -> i64 {
-    let year = if month <= 2 { year - 1 } else { year };
-    let era = year.div_euclid(400);
-    let year_of_era = year - era * 400;
-    let month_index = (month + 9) % 12;
-    let day_of_year = (153 * month_index + 2) / 5 + day - 1;
-    let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
-    era * 146_097 + day_of_era - 719_468
-}
-
-fn civil_from_days(days: i64) -> (i64, i64, i64) {
-    let days = days + 719_468;
-    let era = days.div_euclid(146_097);
-    let day_of_era = days - era * 146_097;
-    let year_of_era =
-        (day_of_era - day_of_era / 1460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
-    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
-    let month_index = (5 * day_of_year + 2) / 153;
-    let day = day_of_year - (153 * month_index + 2) / 5 + 1;
-    let month = if month_index < 10 {
-        month_index + 3
-    } else {
-        month_index - 9
+/// `new Date(ms).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })` in the
+/// en-US format ("7:05 PM") in `zone`. Other locales are not mirrored.
+pub fn en_us_time_of_day(ms: f64, zone: &jiff::tz::TimeZone) -> String {
+    let Some(zoned) = jiff::Timestamp::from_millisecond(ms as i64)
+        .ok()
+        .filter(|_| ms.is_finite())
+        .map(|timestamp| timestamp.to_zoned(zone.clone()))
+    else {
+        return "Invalid Date".into();
     };
-    let year = year_of_era + era * 400 + i64::from(month <= 2);
-    (year, month, day)
+    let hour = zoned.hour();
+    let (hour12, period) = match hour {
+        0 => (12, "AM"),
+        1..=11 => (hour, "AM"),
+        12 => (12, "PM"),
+        _ => (hour - 12, "PM"),
+    };
+    format!("{hour12}:{:02} {period}", zoned.minute())
 }
 
 #[cfg(test)]
@@ -430,28 +538,38 @@ mod tests {
 
     #[test]
     fn numbers_print_like_javascript() {
+        // node -e 'console.log(JSON.stringify([0, -0, 3, 1.5, 1e21, ...]))'
         let cases = [
             (json!(0), "0"),
             (json!(-0.0), "0"),
             (json!(3.0), "3"),
             (json!(1.5), "1.5"),
+            (json!(0.1 + 0.2), "0.30000000000000004"),
             (json!(1e21), "1e+21"),
             (json!(1e20), "100000000000000000000"),
             (json!(123456789012345680000.0), "123456789012345680000"),
             (json!(5e-7), "5e-7"),
+            (json!(123e-20), "1.23e-18"),
             (json!(0.000001), "0.000001"),
             (json!(-1.25e-10), "-1.25e-10"),
             (json!(1.7976931348623157e308), "1.7976931348623157e+308"),
             (json!(12345678901234567890u64), "12345678901234567000"),
+            (json!(9007199254740994u64), "9007199254740994"),
             (json!(-42), "-42"),
         ];
         for (value, expected) in cases {
             assert_eq!(stringify(&value), expected, "{value}");
         }
+        assert_eq!(number_to_string(f64::NAN), "NaN");
+        assert_eq!(number_to_string(f64::NEG_INFINITY), "-Infinity");
+        let numbers = serde_json::to_value([JsNumber(1e21), JsNumber(3.0), JsNumber(-0.0)])
+            .expect("numbers encode");
+        assert_eq!(numbers, json!([1e21, 3, 0]));
+        assert_eq!(stringify(&numbers), "[1e+21,3,0]");
     }
 
     #[test]
-    fn pretty_output_matches_json_stringify() {
+    fn output_matches_json_stringify() {
         let value = json!({ "b": [1, { "x": [] }], "a": {}, "2": "two", "1": null });
         assert_eq!(
             stringify_pretty(&value),
@@ -461,12 +579,33 @@ mod tests {
             stringify(&json!(["a\u{1}\n", "é"])),
             "[\"a\\u0001\\n\",\"é\"]"
         );
+        let value: Value = serde_json::from_str(r#"{"b":1.0,"2":[true,null],"a":"x\n","1":1e21}"#)
+            .expect("valid JSON");
+        assert_eq!(
+            stringify(&value),
+            r#"{"1":1e+21,"2":[true,null],"b":1,"a":"x\n"}"#
+        );
     }
 
     #[test]
-    fn trims_javascript_white_space() {
+    fn trims_and_collapses_javascript_white_space() {
         assert_eq!(trim("\u{feff} a \u{3000}"), "a");
         assert_eq!(trim("\u{85}a"), "\u{85}a");
+        assert_eq!(collapse_whitespace("a \t\n b\u{a0}c"), "a b c");
+    }
+
+    #[test]
+    fn utf16_prefix_replaces_a_split_surrogate_pair() {
+        assert_eq!(length("a😀"), 3);
+        assert_eq!(utf16_prefix("a😀b", 2), "a\u{FFFD}");
+        assert_eq!(utf16_prefix("a😀b", 3), "a😀");
+    }
+
+    #[test]
+    fn rounds_halves_up() {
+        assert_eq!(round(2.5), 3.0);
+        assert_eq!(round(-2.5), -2.0);
+        assert_eq!(round(0.49999999999999994), 0.0);
     }
 
     #[test]
@@ -480,46 +619,94 @@ mod tests {
     }
 
     #[test]
+    fn months_roll_over_like_date_utc() {
+        // node -e 'console.log(Date.UTC(2026, 13, 1), Date.UTC(2026, -1, 1))'
+        assert_eq!(date_utc(2026, 14, 1, 0, 0), 1_801_440_000_000.0);
+        assert_eq!(date_utc(2026, 0, 1, 0, 0), 1_764_547_200_000.0);
+    }
+
+    #[test]
     fn parses_iso_dates_like_v8() {
-        let utc = [
-            ("2026-02-31T00:00:00Z", Some(1772496000000)),
-            ("2026-01-01", Some(1767225600000)),
-            ("2026-01", Some(1767225600000)),
-            ("2026", Some(1767225600000)),
-            ("+002026-01-01T00:00:00Z", Some(1767225600000)),
-            ("2026-01-01T24:00:00Z", Some(1767312000000)),
+        // TZ=UTC node -e 'console.log(Date.parse(text))' for each text.
+        let utc = jiff::tz::TimeZone::UTC;
+        let cases = [
+            ("2026-02-31T00:00:00Z", Some(1772496000000.0)),
+            ("2026-01-01", Some(1767225600000.0)),
+            ("2026-01", Some(1767225600000.0)),
+            ("2026", Some(1767225600000.0)),
+            ("+002026-01-01T00:00:00Z", Some(1767225600000.0)),
+            ("2026-01-01T24:00:00Z", Some(1767312000000.0)),
             ("2026-01-01T24:00:01Z", None),
-            ("2026-01-01T10:00Z", Some(1767261600000)),
-            ("2026-01-01T10:00:00.1234Z", Some(1767261600123)),
-            ("2026-01-01T10:00:00.1Z", Some(1767261600100)),
-            ("2026-01-01t10:00:00z", Some(1767261600000)),
-            ("2026-01-01T10:00:00+0530", Some(1767241800000)),
-            ("2026-01-01T10:00:00+05:30", Some(1767241800000)),
+            ("2026-01-01T10:00Z", Some(1767261600000.0)),
+            ("2026-01-01T10:00:00.1234Z", Some(1767261600123.0)),
+            ("2026-01-01T10:00:00.1Z", Some(1767261600100.0)),
+            ("2026-01-01t10:00:00z", Some(1767261600000.0)),
+            ("2026-01-01T10:00:00+0530", Some(1767241800000.0)),
+            ("2026-01-01T10:00:00+05:30", Some(1767241800000.0)),
+            ("2026-10-01T19:00:00", Some(1790881200000.0)),
+            ("2026-10-04 12:00", Some(1791115200000.0)),
+            ("2026-10-01 19:00:00Z", Some(1790881200000.0)),
+            ("2026-10-01T19:00:00,5Z", None),
             ("-000000-01-01T00:00:00Z", None),
             ("2026-13-01", None),
             ("2026-01-01T10:00:00.Z", None),
             ("2026-01-01T10Z", None),
             ("275760-09-13T00:00:00Z", None),
-            ("+275760-09-13T00:00:00.000Z", Some(8640000000000000)),
+            ("+275760-09-13T00:00:00.000Z", Some(8640000000000000.0)),
             ("+275760-09-13T00:00:00.001Z", None),
+            ("not a date", None),
+            ("", None),
         ];
-        for (text, expected) in utc {
-            assert_eq!(date_parse(text), expected, "{text}");
+        for (text, expected) in cases {
+            assert_eq!(date_parse(text, &utc), expected, "{text}");
         }
     }
 
     #[test]
+    fn local_times_resolve_like_v8() {
+        // TZ=America/New_York node -e 'console.log(Date.parse(text))': a skipped time moves
+        // forward, a repeated one takes the earlier instant.
+        let new_york = jiff::tz::TimeZone::get("America/New_York").expect("a known zone");
+        assert_eq!(
+            date_parse("2026-03-08T02:30", &new_york),
+            Some(1772955000000.0)
+        );
+        assert_eq!(
+            date_parse("2026-11-01T01:30", &new_york),
+            Some(1793511000000.0)
+        );
+    }
+
+    #[test]
     fn iso_strings_match_to_iso_string() {
-        assert_eq!(to_iso_string(1767261600123), "2026-01-01T10:00:00.123Z");
-        assert_eq!(to_iso_string(0), "1970-01-01T00:00:00.000Z");
-        assert_eq!(to_iso_string(-1), "1969-12-31T23:59:59.999Z");
         assert_eq!(
-            to_iso_string(8640000000000000),
-            "+275760-09-13T00:00:00.000Z"
+            to_iso_string(1767261600123.0).as_deref(),
+            Some("2026-01-01T10:00:00.123Z")
         );
         assert_eq!(
-            to_iso_string(-62198755200000),
-            "-000001-01-01T00:00:00.000Z"
+            to_iso_string(0.0).as_deref(),
+            Some("1970-01-01T00:00:00.000Z")
         );
+        assert_eq!(
+            to_iso_string(-1.0).as_deref(),
+            Some("1969-12-31T23:59:59.999Z")
+        );
+        assert_eq!(
+            to_iso_string(8640000000000000.0).as_deref(),
+            Some("+275760-09-13T00:00:00.000Z")
+        );
+        assert_eq!(
+            to_iso_string(-62198755200000.0).as_deref(),
+            Some("-000001-01-01T00:00:00.000Z")
+        );
+        assert_eq!(to_iso_string(f64::NAN), None);
+    }
+
+    #[test]
+    fn formats_time_of_day_in_en_us() {
+        let utc = jiff::tz::TimeZone::UTC;
+        assert_eq!(en_us_time_of_day(1_790_881_500_000.0, &utc), "7:05 PM");
+        assert_eq!(en_us_time_of_day(1_790_812_800_000.0, &utc), "12:00 AM");
+        assert_eq!(en_us_time_of_day(f64::NAN, &utc), "Invalid Date");
     }
 }

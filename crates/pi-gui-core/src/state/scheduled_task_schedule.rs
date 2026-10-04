@@ -7,7 +7,7 @@ use crate::error::{CoreError, CoreResult};
 
 use super::desktop_state::ScheduledTaskSchedule;
 use super::env::StateEnv;
-use super::js;
+use crate::js;
 
 struct ZonedParts {
     year: i64,

@@ -16,7 +16,6 @@ use super::driver::{
     SessionTranscriptRole,
 };
 use super::env::StateEnv;
-use super::js;
 use super::timeline_types::{
     is_card_entry_item, TimelineSummaryPresentation, TimelineTone, TimelineToolStatus,
     TranscriptMessage,
@@ -24,6 +23,7 @@ use super::timeline_types::{
 use super::tool_labels::{
     extension_tool_row_label, tool_input_summary, truncate_default, ExtensionToolLabels,
 };
+use crate::js;
 
 /// The orchestration tools' names, as in `electron/orchestration/orchestration-runtime.ts`.
 pub const CREATE_CHILD_THREAD_TOOL_NAME: &str = "create_child_thread";
@@ -638,7 +638,7 @@ pub fn tool_label(tool_name: &str, input: Option<&Value>) -> String {
 
 fn progress_label(progress: f64) -> String {
     if progress <= 1.0 {
-        return format!("{}%", js::number_to_string(js::js_round(progress * 100.0)));
+        return format!("{}%", js::number_to_string(js::round(progress * 100.0)));
     }
     js::number_to_string(progress)
 }
@@ -664,7 +664,7 @@ pub fn detail_from_output(output: Option<&Value>) -> Option<String> {
                 })
                 .collect::<Vec<_>>()
                 .join("\n");
-            let text = js::js_trim(&text);
+            let text = js::trim(&text);
             if !text.is_empty() {
                 return Some(truncate_default(text));
             }
@@ -692,7 +692,7 @@ pub fn detail_from_output(output: Option<&Value>) -> Option<String> {
     match output {
         Value::String(text) => Some(truncate_default(text)),
         Value::Null => None,
-        other => Some(truncate_default(&js::json_stringify(other))),
+        other => Some(truncate_default(&js::stringify(other))),
     }
 }
 
@@ -777,7 +777,7 @@ fn clearer_run_failure_label(message: &str, latest_tool_error: Option<String>) -
     let Some(latest_tool_error) = latest_tool_error else {
         return message.to_string();
     };
-    let normalized = js::js_trim(message).to_lowercase();
+    let normalized = js::trim(message).to_lowercase();
     if matches!(
         normalized.as_str(),
         "terminated" | "failed" | "error" | "run failed"
@@ -789,7 +789,7 @@ fn clearer_run_failure_label(message: &str, latest_tool_error: Option<String>) -
 
 fn string_property<'a>(record: &'a serde_json::Map<String, Value>, key: &str) -> Option<&'a str> {
     match record.get(key) {
-        Some(Value::String(text)) if !js::js_trim(text).is_empty() => Some(text),
+        Some(Value::String(text)) if !js::trim(text).is_empty() => Some(text),
         _ => None,
     }
 }

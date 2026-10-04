@@ -4,7 +4,7 @@
 
 use std::cell::Cell;
 
-use super::js;
+use crate::js;
 
 pub trait StateEnv {
     /// `Date.now()`.

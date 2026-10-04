@@ -14,11 +14,11 @@ use super::driver::{
     SessionTranscriptMessage, SessionTranscriptRole,
 };
 use super::env::StateEnv;
-use super::js::{self, JsNumber};
 use super::timeline_types::{
     TimelineActivity, TimelineSummary, TimelineSummaryPresentation, TimelineTone, TimelineToolCall,
     TimelineToolStatus, TranscriptMessage,
 };
+use crate::js::{self, JsNumber};
 use crate::locale::compare as compare_display_names;
 use crate::persistence::catalog::{SessionEntry, WorkspaceEntry, WorktreeEntry, WorktreeKind};
 
@@ -214,7 +214,7 @@ pub fn has_unseen_session_update(
     if status == SessionStatus::Running {
         return false;
     }
-    js::js_string_cmp(
+    js::compare_strings(
         latest_session_activity_at(updated_at, transcript),
         last_viewed_at,
     ) == Ordering::Greater
@@ -228,7 +228,7 @@ pub fn latest_session_activity_at<'a>(
 ) -> &'a str {
     let mut latest = updated_at;
     for item in transcript {
-        if js::js_string_cmp(item.created_at(), latest) == Ordering::Greater {
+        if js::compare_strings(item.created_at(), latest) == Ordering::Greater {
             latest = item.created_at();
         }
     }
@@ -582,8 +582,8 @@ pub fn preview_from_transcript(transcript: &[TranscriptMessage]) -> Option<Strin
 
 /// `formatElapsedDuration`: "42s", "3m" or "3m 5s", at least one second.
 pub fn format_elapsed_duration(env: &dyn StateEnv, started_at: &str, ended_at: &str) -> String {
-    let diff_ms = js::js_max(0.0, env.date_parse(ended_at) - env.date_parse(started_at));
-    let seconds = js::js_max(1.0, js::js_round(diff_ms / 1000.0));
+    let diff_ms = js::max(0.0, env.date_parse(ended_at) - env.date_parse(started_at));
+    let seconds = js::max(1.0, js::round(diff_ms / 1000.0));
     if seconds < 60.0 {
         return format!("{}s", js::number_to_string(seconds));
     }

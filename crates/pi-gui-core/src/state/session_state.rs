@@ -7,9 +7,9 @@ use super::driver::{
     session_key, SessionConfig, SessionDriverEvent, SessionEventKind, SessionSnapshot,
     SessionStatus,
 };
-use super::js::JsNumber;
 use super::timeline::TranscriptCache;
 use super::timeline_types::TranscriptMessage;
+use crate::js::JsNumber;
 
 /// `NEW_THREAD_PLACEHOLDER_TITLE` from `conversation/thread-title-constants.ts`.
 pub const NEW_THREAD_PLACEHOLDER_TITLE: &str = "New thread";
