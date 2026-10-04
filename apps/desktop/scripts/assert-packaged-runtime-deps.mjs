@@ -65,7 +65,6 @@ const requiredPackages = [
   "lru-cache",
   "mime-types",
   "minimatch",
-  "node-pty",
   "openai",
   "parse5",
   "parse5-htmlparser2-tree-adapter",
@@ -183,7 +182,7 @@ try {
   verifyPiDependencyVersions(extractedDir);
   await verifyPackagedPiRuntime(extractedDir);
   await verifyPackagedRuntimeImports(extractedDir);
-  await verifyNativeNodePty(asarPath);
+  await verifyCoreBinary(asarPath);
 } finally {
   try {
     rmSync(extractedDir, {
@@ -346,47 +345,14 @@ async function verifyPackagedRuntimeImports(extractedDir) {
   }
 }
 
-async function verifyNativeNodePty(asarPath) {
-  const unpackedResourcesDir = `${asarPath}.unpacked`;
-  const nodePtyDir = path.join(unpackedResourcesDir, "node_modules", "node-pty");
-  if (!existsSync(nodePtyDir) || !hasFileWithExtension(nodePtyDir, ".node")) {
-    throw new Error(`Packaged app is missing unpacked node-pty native module under ${nodePtyDir}`);
+// The integrated terminal runs in the Rust core, which packaging copies next to app.asar.
+async function verifyCoreBinary(asarPath) {
+  const coreName = packagePlatform === "win32" ? "pi-gui-core.exe" : "pi-gui-core";
+  const corePath = path.join(path.dirname(asarPath), coreName);
+  if (!existsSync(corePath)) {
+    throw new Error(`Packaged app is missing the pi-gui-core binary at ${corePath}`);
   }
-  if (packagePlatform !== "darwin") {
-    return;
+  if (packagePlatform !== "win32") {
+    await access(corePath, constants.X_OK);
   }
-  const helperPath = findFileNamed(nodePtyDir, "spawn-helper");
-  if (!helperPath) {
-    throw new Error(`Packaged app is missing unpacked node-pty spawn-helper under ${nodePtyDir}`);
-  }
-  await access(helperPath, constants.X_OK);
-}
-
-function hasFileWithExtension(directoryPath, extension) {
-  for (const entry of readdirSync(directoryPath, { withFileTypes: true })) {
-    const entryPath = path.join(directoryPath, entry.name);
-    if (entry.isFile() && entry.name.endsWith(extension)) {
-      return true;
-    }
-    if (entry.isDirectory() && hasFileWithExtension(entryPath, extension)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-function findFileNamed(directoryPath, fileName) {
-  for (const entry of readdirSync(directoryPath, { withFileTypes: true })) {
-    const entryPath = path.join(directoryPath, entry.name);
-    if (entry.isFile() && entry.name === fileName) {
-      return entryPath;
-    }
-    if (entry.isDirectory()) {
-      const nestedMatch = findFileNamed(entryPath, fileName);
-      if (nestedMatch) {
-        return nestedMatch;
-      }
-    }
-  }
-  return undefined;
 }
