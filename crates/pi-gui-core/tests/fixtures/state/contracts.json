@@ -1,0 +1,710 @@
+{
+  "desktopStates": [
+    {
+      "workspaces": [],
+      "worktreesByWorkspace": {},
+      "selectedWorkspaceId": "",
+      "selectedSessionId": "",
+      "activeView": "threads",
+      "composerDraft": "",
+      "composerDraftSyncSource": "state",
+      "composerDraftSyncNonce": 0,
+      "composerAttachments": [],
+      "queuedComposerMessages": [],
+      "runtimeByWorkspace": {},
+      "sessionCommandsBySession": {},
+      "sessionUsageBySession": {},
+      "sessionExtensionUiBySession": {},
+      "extensionCommandCompatibilityByWorkspace": {},
+      "extensionFlagsByWorkspace": {},
+      "extensionFlagsBySession": {},
+      "orchestrationChildren": [],
+      "scheduledTasks": [],
+      "notificationPreferences": {
+        "backgroundCompletion": true,
+        "backgroundFailure": true,
+        "attentionNeeded": true
+      },
+      "integratedTerminalShell": "",
+      "lastViewedAtBySession": {},
+      "lastInteractedAtBySession": {},
+      "pinnedAtBySession": {},
+      "pinnedSessionOrder": [],
+      "workspaceOrder": [],
+      "modelSettingsScopeMode": "app-global",
+      "globalModelSettings": { "enabledModelPatterns": [] },
+      "themeMode": "system",
+      "themePresetId": "default",
+      "sidebarCollapsed": false,
+      "threadGrouping": "time",
+      "collapsedWorkspaceIds": [],
+      "enableTransparency": false,
+      "startupDiagnostics": [],
+      "revision": 0
+    },
+    {
+      "workspaces": [
+        {
+          "id": "ws-main",
+          "name": "pi-gui",
+          "path": "/repo/pi-gui",
+          "lastOpenedAt": "2026-10-01T19:00:00.000Z",
+          "kind": "primary",
+          "sessions": [
+            {
+              "id": "s-main",
+              "title": "Fix the timeline",
+              "updatedAt": "2026-10-01T19:08:00.000Z",
+              "preview": "The timeline folds events into rows.",
+              "status": "idle",
+              "hasUnseenUpdate": true,
+              "pinnedAt": "2026-10-01T19:00:00.000Z",
+              "lastInteractedAt": "2026-10-01T19:00:00.000Z",
+              "lastViewedAt": "2026-10-01T19:00:00.000Z",
+              "config": {
+                "provider": "anthropic",
+                "modelId": "claude-sonnet",
+                "thinkingLevel": "high"
+              }
+            },
+            {
+              "id": "s-other",
+              "title": "New thread",
+              "updatedAt": "2026-10-01T19:00:00.000Z",
+              "preview": "New thread",
+              "status": "idle",
+              "hasUnseenUpdate": false,
+              "archivedAt": "2026-10-01T19:00:00.000Z"
+            }
+          ]
+        },
+        {
+          "id": "ws-tree",
+          "name": "pi-gui feature",
+          "path": "/repo/pi-gui-feature",
+          "lastOpenedAt": "2026-10-01T19:00:00.000Z",
+          "kind": "worktree",
+          "rootWorkspaceId": "ws-main",
+          "branchName": "feature",
+          "sessions": [
+            {
+              "id": "s-fresh",
+              "title": "New thread",
+              "updatedAt": "2026-10-01T19:00:00.000Z",
+              "preview": "New thread",
+              "status": "idle",
+              "hasUnseenUpdate": false
+            }
+          ]
+        }
+      ],
+      "worktreesByWorkspace": {
+        "ws-main": [
+          {
+            "id": "wt-new",
+            "rootWorkspaceId": "ws-main",
+            "name": "newest",
+            "path": "/repo/wt-new",
+            "status": "ready",
+            "updatedAt": "2026-10-01T19:08:00.000Z"
+          },
+          {
+            "id": "wt-a",
+            "rootWorkspaceId": "ws-main",
+            "name": "alpha",
+            "path": "/repo/wt-a",
+            "status": "ready",
+            "updatedAt": "2026-10-01T19:05:00.000Z"
+          },
+          {
+            "id": "wt-b",
+            "rootWorkspaceId": "ws-main",
+            "name": "Beta",
+            "path": "/repo/wt-b",
+            "status": "error",
+            "updatedAt": "2026-10-01T19:05:00.000Z"
+          },
+          {
+            "id": "wt-feature",
+            "rootWorkspaceId": "ws-main",
+            "linkedWorkspaceId": "ws-dup",
+            "name": "feature",
+            "path": "/repo/pi-gui-feature",
+            "status": "ready",
+            "branchName": "feature",
+            "updatedAt": "2026-10-01T19:05:00.000Z"
+          }
+        ]
+      },
+      "selectedWorkspaceId": "ws-main",
+      "selectedSessionId": "s-main",
+      "activeView": "new-thread",
+      "composerDraft": "Draft text",
+      "composerDraftSyncSource": "remote-persist",
+      "composerDraftSyncNonce": 3,
+      "composerAttachments": [
+        {
+          "id": "i-1",
+          "kind": "image",
+          "name": "a.png",
+          "mimeType": "image/png",
+          "data": "UE5H"
+        },
+        {
+          "id": "f-1",
+          "kind": "file",
+          "name": "b.txt",
+          "mimeType": "text/plain",
+          "fsPath": "/b.txt",
+          "sizeBytes": 9
+        }
+      ],
+      "queuedComposerMessages": [
+        {
+          "id": "q-1",
+          "mode": "followUp",
+          "text": "next",
+          "attachments": [],
+          "createdAt": "2026-10-01T19:01:00.000Z",
+          "updatedAt": "2026-10-01T19:01:00.000Z"
+        }
+      ],
+      "runtimeByWorkspace": {
+        "ws-main": {
+          "workspace": {
+            "workspaceId": "ws-main",
+            "path": "/repo/ws-main",
+            "displayName": "ws-main"
+          },
+          "providers": [
+            {
+              "id": "anthropic",
+              "name": "Anthropic",
+              "hasAuth": true,
+              "authType": "oauth",
+              "authSource": "oauth",
+              "oauthSupported": true,
+              "apiKeySetupSupported": true
+            }
+          ],
+          "models": [
+            {
+              "providerId": "anthropic",
+              "providerName": "Anthropic",
+              "modelId": "claude-sonnet",
+              "label": "Claude Sonnet",
+              "available": true,
+              "authType": "oauth",
+              "reasoning": true,
+              "supportsImages": true
+            }
+          ],
+          "skills": [
+            {
+              "name": "review",
+              "description": "Review a diff",
+              "filePath": "/skills/review/SKILL.md",
+              "baseDir": "/skills/review",
+              "source": "user",
+              "scope": "user",
+              "enabled": true,
+              "disableModelInvocation": false,
+              "slashCommand": "/skill:review"
+            }
+          ],
+          "extensions": [
+            {
+              "path": "/ext/github.ts",
+              "displayName": "github",
+              "enabled": true,
+              "sourceInfo": {
+                "path": "/ext/github.ts",
+                "source": "github",
+                "scope": "project",
+                "origin": "top-level"
+              },
+              "commands": [],
+              "tools": [
+                {
+                  "name": "github_read",
+                  "label": "Read GitHub issue or PR",
+                  "replacesPiTool": false
+                },
+                { "name": "blank", "label": "  ", "replacesPiTool": false },
+                {
+                  "name": "bash",
+                  "label": "bash (sandboxed)",
+                  "replacesPiTool": true
+                },
+                {
+                  "name": "shared_name",
+                  "label": "From github",
+                  "replacesPiTool": false
+                }
+              ],
+              "flags": [],
+              "flagDetails": [],
+              "shortcuts": [],
+              "diagnostics": []
+            },
+            {
+              "path": "/ext/other.ts",
+              "displayName": "other",
+              "enabled": true,
+              "sourceInfo": {
+                "path": "/ext/other.ts",
+                "source": "other",
+                "scope": "project",
+                "origin": "top-level"
+              },
+              "commands": [],
+              "tools": [
+                {
+                  "name": "shared_name",
+                  "label": "From other",
+                  "replacesPiTool": false
+                }
+              ],
+              "flags": [],
+              "flagDetails": [],
+              "shortcuts": [],
+              "diagnostics": []
+            },
+            {
+              "path": "/ext/builtin.ts",
+              "displayName": "builtin",
+              "enabled": true,
+              "sourceInfo": {
+                "path": "/ext/builtin.ts",
+                "source": "builtin",
+                "scope": "project",
+                "origin": "top-level"
+              },
+              "commands": [],
+              "tools": [
+                {
+                  "name": "create_child_thread",
+                  "label": "Child thread",
+                  "replacesPiTool": false
+                }
+              ],
+              "flags": [],
+              "flagDetails": [],
+              "shortcuts": [],
+              "diagnostics": []
+            },
+            {
+              "path": "/ext/tickets.ts",
+              "displayName": "tickets",
+              "enabled": true,
+              "sourceInfo": {
+                "path": "/ext/tickets.ts",
+                "source": "tickets",
+                "scope": "project",
+                "origin": "top-level"
+              },
+              "commands": ["ticket"],
+              "tools": [
+                {
+                  "name": "ticket_lookup",
+                  "label": "Look up ticket",
+                  "replacesPiTool": false
+                }
+              ],
+              "flags": ["verbose"],
+              "flagDetails": [
+                { "name": "verbose", "type": "boolean", "default": false }
+              ],
+              "shortcuts": [],
+              "diagnostics": [
+                {
+                  "type": "warning",
+                  "message": "Slow to load",
+                  "path": "/ext/tickets.ts"
+                }
+              ]
+            },
+            {
+              "path": "/ext/disabled.ts",
+              "displayName": "disabled",
+              "enabled": false,
+              "sourceInfo": {
+                "path": "/ext/disabled.ts",
+                "source": "disabled",
+                "scope": "project",
+                "origin": "top-level"
+              },
+              "commands": [],
+              "tools": [
+                {
+                  "name": "ticket_lookup",
+                  "label": "Off",
+                  "replacesPiTool": false
+                }
+              ],
+              "flags": [],
+              "flagDetails": [],
+              "shortcuts": [],
+              "diagnostics": []
+            }
+          ],
+          "settings": {
+            "defaultProvider": "anthropic",
+            "defaultModelId": "claude-sonnet",
+            "defaultThinkingLevel": "medium",
+            "enableSkillCommands": true,
+            "enabledModelPatterns": ["claude-*"]
+          }
+        }
+      },
+      "sessionCommandsBySession": {
+        "ws-main:s-main": [
+          {
+            "name": "ticket",
+            "source": "extension",
+            "sourceInfo": {
+              "path": "/ext/tickets.ts",
+              "source": "tickets",
+              "scope": "project",
+              "origin": "top-level"
+            }
+          },
+          {
+            "name": "review",
+            "source": "prompt",
+            "sourceInfo": {
+              "path": "/ext/tickets.ts",
+              "source": "tickets",
+              "scope": "project",
+              "origin": "top-level"
+            },
+            "description": "Review"
+          }
+        ]
+      },
+      "sessionUsageBySession": {
+        "ws-main:s-main": {
+          "context": { "tokens": null, "contextWindow": 200000 },
+          "cache": {},
+          "totals": {
+            "input": 1,
+            "output": 2,
+            "cacheRead": 3,
+            "cacheWrite": 4,
+            "cost": 0.5
+          },
+          "subscription": true
+        }
+      },
+      "sessionExtensionUiBySession": {
+        "ws-main:s-main": {
+          "instanceId": "ui-1",
+          "statuses": [{ "key": "ci", "text": "CI: running" }],
+          "widgets": [
+            { "key": "todo", "lines": ["one"], "placement": "belowComposer" }
+          ],
+          "pendingDialogs": [
+            {
+              "kind": "select",
+              "requestId": "r-1",
+              "title": "Pick",
+              "options": ["a", "b"],
+              "allowMultiple": true
+            },
+            {
+              "kind": "input",
+              "requestId": "r-2",
+              "title": "Name",
+              "placeholder": "name"
+            },
+            {
+              "kind": "editor",
+              "requestId": "r-3",
+              "title": "Edit",
+              "initialValue": "text"
+            },
+            {
+              "kind": "confirm",
+              "requestId": "r-4",
+              "title": "Sure?",
+              "message": "Really?",
+              "defaultValue": true
+            }
+          ],
+          "notices": [
+            {
+              "id": "n-1",
+              "level": "warning",
+              "message": "Careful",
+              "createdAt": "2026-10-01T19:01:00.000Z"
+            }
+          ],
+          "title": "Plan mode",
+          "editorText": "/plan"
+        }
+      },
+      "extensionCommandCompatibilityByWorkspace": {
+        "ws-main": [
+          {
+            "commandName": "a",
+            "extensionPath": "/ext/a.ts",
+            "status": "terminal-only",
+            "message": "a needs a terminal",
+            "capability": "ui.custom",
+            "updatedAt": "2026-10-01T19:01:00.000Z"
+          }
+        ]
+      },
+      "extensionFlagsByWorkspace": {
+        "ws-main": { "verbose": true, "name": "x", "off": false }
+      },
+      "extensionFlagsBySession": { "ws-main:s-main": { "verbose": true } },
+      "orchestrationChildren": [
+        {
+          "id": "child-1",
+          "sourceToolCallId": "call-child",
+          "parentWorkspaceId": "ws-main",
+          "parentSessionId": "s-main",
+          "childWorkspaceId": "ws-tree",
+          "childSessionId": "s-fresh",
+          "title": "Child",
+          "goal": "Do it",
+          "status": "waiting",
+          "latestTranscript": "done?",
+          "transcript": [
+            {
+              "id": "t-1",
+              "role": "parent",
+              "text": "go",
+              "createdAt": "2026-10-01T19:01:00.000Z"
+            }
+          ],
+          "evidence": [
+            {
+              "id": "e-1",
+              "childThreadId": "child-1",
+              "kind": "review_finding",
+              "source": "orchestrator-observed",
+              "status": "passed",
+              "title": "Tests pass",
+              "severity": "P2",
+              "git": {
+                "workspaceId": "ws-main",
+                "branchName": "feature",
+                "headSha": "abc"
+              },
+              "createdAt": "2026-10-01T19:02:00.000Z"
+            }
+          ],
+          "supervisionLoop": {
+            "id": "loop-1",
+            "status": "monitoring",
+            "gate": "continue",
+            "intervalMs": 60000,
+            "iterationCount": 2,
+            "lastCheckedAt": "2026-10-01T19:03:00.000Z",
+            "nextRunAt": "2026-10-01T19:04:00.000Z",
+            "reason": "Waiting for tests",
+            "lastChildStatus": "running"
+          },
+          "createdAt": "2026-10-01T19:01:00.000Z",
+          "updatedAt": "2026-10-01T19:03:00.000Z"
+        }
+      ],
+      "scheduledTasks": [
+        {
+          "id": "task-1",
+          "title": "Daily digest",
+          "instruction": "Summarize",
+          "status": "active",
+          "schedule": {
+            "kind": "weekly",
+            "days": [1, 5],
+            "hour": 9,
+            "minute": 0,
+            "timeZone": "UTC"
+          },
+          "target": {
+            "kind": "existing-thread",
+            "workspaceId": "ws-main",
+            "sessionId": "s-main"
+          },
+          "createdAt": "2026-10-01T19:00:00.000Z",
+          "updatedAt": "2026-10-01T19:00:00.000Z",
+          "nextRunAt": "2026-10-01T19:09:00.000Z",
+          "runs": [
+            {
+              "id": "run-1",
+              "sessionId": "s-main",
+              "workspaceId": "ws-main",
+              "firedAt": "2026-10-01T19:01:00.000Z",
+              "instruction": "Summarize",
+              "outcome": "failed",
+              "error": "offline"
+            }
+          ]
+        },
+        {
+          "id": "task-2",
+          "title": "Once",
+          "instruction": "Ping",
+          "status": "completed",
+          "schedule": { "kind": "interval", "everyMs": 60000 },
+          "target": { "kind": "new-thread", "workspaceId": "ws-main" },
+          "createdAt": "2026-10-01T19:00:00.000Z",
+          "updatedAt": "2026-10-01T19:00:00.000Z",
+          "completedAt": "2026-10-01T19:02:00.000Z",
+          "originSessionId": "s-main",
+          "runs": []
+        }
+      ],
+      "notificationPreferences": {
+        "backgroundCompletion": false,
+        "backgroundFailure": true,
+        "attentionNeeded": false
+      },
+      "integratedTerminalShell": "/bin/zsh",
+      "lastViewedAtBySession": { "ws-main:s-main": "2026-10-01T19:01:00.000Z" },
+      "lastInteractedAtBySession": {
+        "ws-main:s-main": "2026-10-01T19:02:00.000Z"
+      },
+      "pinnedAtBySession": { "ws-main:s-main": "2026-10-01T19:03:00.000Z" },
+      "pinnedSessionOrder": ["ws-main:s-main"],
+      "workspaceOrder": ["ws-main", "ws-tree"],
+      "modelSettingsScopeMode": "per-repo",
+      "globalModelSettings": {
+        "defaultProvider": "anthropic",
+        "defaultThinkingLevel": "xhigh",
+        "enabledModelPatterns": ["*"]
+      },
+      "themeMode": "dark",
+      "themePresetId": "tokyo-night",
+      "sidebarCollapsed": true,
+      "threadGrouping": "workspace",
+      "collapsedWorkspaceIds": ["ws-tree"],
+      "enableTransparency": true,
+      "startupDiagnostics": [
+        {
+          "scope": "workspace",
+          "message": "Folder is missing",
+          "workspacePath": "/repo/gone"
+        },
+        { "scope": "application", "message": "Settings were reset" }
+      ],
+      "revision": 31,
+      "editingQueuedMessageId": "q-1",
+      "lastError": "Something failed"
+    }
+  ],
+  "selectedTranscripts": [
+    {
+      "workspaceId": "ws-main",
+      "sessionId": "s-main",
+      "transcript": [
+        {
+          "kind": "message",
+          "role": "compactionSummary",
+          "text": "Earlier turns were compacted.",
+          "createdAt": "2026-10-01T19:00:00.000Z",
+          "id": "entry-compaction"
+        },
+        {
+          "kind": "message",
+          "role": "user",
+          "text": "Show me the screenshot",
+          "attachments": [
+            {
+              "kind": "image",
+              "mimeType": "image/png",
+              "data": "UE5H",
+              "name": "shot.png"
+            },
+            {
+              "kind": "file",
+              "name": "notes.md",
+              "mimeType": "text/markdown",
+              "fsPath": "/n.md",
+              "sizeBytes": 42
+            }
+          ],
+          "createdAt": "2026-10-01T19:00:10.000Z",
+          "id": "entry-user"
+        },
+        {
+          "kind": "tool",
+          "id": "call-saved",
+          "callId": "call-saved",
+          "toolName": "github_read",
+          "status": "success",
+          "label": "Read GitHub issue or PR: issue 7",
+          "createdAt": "2026-10-01T19:00:20.000Z",
+          "detail": "Issue 7: crash on start",
+          "input": { "kind": "issue", "number": 7 },
+          "output": { "message": "Issue 7: crash on start" }
+        },
+        {
+          "kind": "tool",
+          "id": "call-saved-2",
+          "callId": "call-saved-2",
+          "toolName": "read",
+          "status": "error",
+          "label": "Read a file",
+          "createdAt": "2026-10-01T19:00:30.000Z",
+          "input": null,
+          "output": null
+        },
+        {
+          "kind": "tool",
+          "id": "call-saved-3",
+          "callId": "call-saved-3",
+          "toolName": "ls",
+          "status": "error",
+          "label": "Explored files with ls",
+          "createdAt": "2026-10-01T19:00:40.000Z"
+        },
+        {
+          "kind": "message",
+          "role": "branchSummary",
+          "text": "Branch summary",
+          "createdAt": "2026-10-01T19:00:50.000Z",
+          "id": "entry-branch"
+        },
+        {
+          "kind": "message",
+          "role": "assistant",
+          "text": "Here it is.",
+          "createdAt": "2026-10-01T19:00:55.000Z",
+          "id": "entry-assistant",
+          "sourceMessageId": "entry-assistant"
+        },
+        {
+          "kind": "pin",
+          "id": "pin:plan",
+          "createdAt": "2026-10-01T19:00:56.000Z",
+          "card": {
+            "key": "plan",
+            "title": "Plan",
+            "tone": "neutral",
+            "rows": [],
+            "actions": []
+          }
+        }
+      ],
+      "schemaInfo": {
+        "fileSchemaVersion": 3,
+        "runtimeSchemaVersion": 3,
+        "writtenByNewerRuntime": false
+      }
+    },
+    {
+      "workspaceId": "ws-tree",
+      "sessionId": "s-fresh",
+      "transcript": [],
+      "schemaInfo": {
+        "runtimeSchemaVersion": 3,
+        "writtenByNewerRuntime": false
+      }
+    },
+    { "workspaceId": "ws-main", "sessionId": "s-other", "transcript": [] }
+  ]
+}

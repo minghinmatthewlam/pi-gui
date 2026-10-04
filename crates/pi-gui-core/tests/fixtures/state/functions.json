@@ -1,0 +1,2223 @@
+[
+  {
+    "fn": "extensionToolLabels",
+    "args": {
+      "runtime": {
+        "workspace": {
+          "workspaceId": "ws-main",
+          "path": "/repo/ws-main",
+          "displayName": "ws-main"
+        },
+        "providers": [
+          {
+            "id": "anthropic",
+            "name": "Anthropic",
+            "hasAuth": true,
+            "authType": "oauth",
+            "authSource": "oauth",
+            "oauthSupported": true,
+            "apiKeySetupSupported": true
+          }
+        ],
+        "models": [
+          {
+            "providerId": "anthropic",
+            "providerName": "Anthropic",
+            "modelId": "claude-sonnet",
+            "label": "Claude Sonnet",
+            "available": true,
+            "authType": "oauth",
+            "reasoning": true,
+            "supportsImages": true
+          }
+        ],
+        "skills": [
+          {
+            "name": "review",
+            "description": "Review a diff",
+            "filePath": "/skills/review/SKILL.md",
+            "baseDir": "/skills/review",
+            "source": "user",
+            "scope": "user",
+            "enabled": true,
+            "disableModelInvocation": false,
+            "slashCommand": "/skill:review"
+          }
+        ],
+        "extensions": [
+          {
+            "path": "/ext/github.ts",
+            "displayName": "github",
+            "enabled": true,
+            "sourceInfo": {
+              "path": "/ext/github.ts",
+              "source": "github",
+              "scope": "project",
+              "origin": "top-level"
+            },
+            "commands": [],
+            "tools": [
+              {
+                "name": "github_read",
+                "label": "Read GitHub issue or PR",
+                "replacesPiTool": false
+              },
+              { "name": "blank", "label": "  ", "replacesPiTool": false },
+              {
+                "name": "bash",
+                "label": "bash (sandboxed)",
+                "replacesPiTool": true
+              },
+              {
+                "name": "shared_name",
+                "label": "From github",
+                "replacesPiTool": false
+              }
+            ],
+            "flags": [],
+            "flagDetails": [],
+            "shortcuts": [],
+            "diagnostics": []
+          },
+          {
+            "path": "/ext/other.ts",
+            "displayName": "other",
+            "enabled": true,
+            "sourceInfo": {
+              "path": "/ext/other.ts",
+              "source": "other",
+              "scope": "project",
+              "origin": "top-level"
+            },
+            "commands": [],
+            "tools": [
+              {
+                "name": "shared_name",
+                "label": "From other",
+                "replacesPiTool": false
+              }
+            ],
+            "flags": [],
+            "flagDetails": [],
+            "shortcuts": [],
+            "diagnostics": []
+          },
+          {
+            "path": "/ext/builtin.ts",
+            "displayName": "builtin",
+            "enabled": true,
+            "sourceInfo": {
+              "path": "/ext/builtin.ts",
+              "source": "builtin",
+              "scope": "project",
+              "origin": "top-level"
+            },
+            "commands": [],
+            "tools": [
+              {
+                "name": "create_child_thread",
+                "label": "Child thread",
+                "replacesPiTool": false
+              }
+            ],
+            "flags": [],
+            "flagDetails": [],
+            "shortcuts": [],
+            "diagnostics": []
+          },
+          {
+            "path": "/ext/tickets.ts",
+            "displayName": "tickets",
+            "enabled": true,
+            "sourceInfo": {
+              "path": "/ext/tickets.ts",
+              "source": "tickets",
+              "scope": "project",
+              "origin": "top-level"
+            },
+            "commands": ["ticket"],
+            "tools": [
+              {
+                "name": "ticket_lookup",
+                "label": "Look up ticket",
+                "replacesPiTool": false
+              }
+            ],
+            "flags": ["verbose"],
+            "flagDetails": [
+              { "name": "verbose", "type": "boolean", "default": false }
+            ],
+            "shortcuts": [],
+            "diagnostics": [
+              {
+                "type": "warning",
+                "message": "Slow to load",
+                "path": "/ext/tickets.ts"
+              }
+            ]
+          },
+          {
+            "path": "/ext/disabled.ts",
+            "displayName": "disabled",
+            "enabled": false,
+            "sourceInfo": {
+              "path": "/ext/disabled.ts",
+              "source": "disabled",
+              "scope": "project",
+              "origin": "top-level"
+            },
+            "commands": [],
+            "tools": [
+              {
+                "name": "ticket_lookup",
+                "label": "Off",
+                "replacesPiTool": false
+              }
+            ],
+            "flags": [],
+            "flagDetails": [],
+            "shortcuts": [],
+            "diagnostics": []
+          }
+        ],
+        "settings": {
+          "defaultProvider": "anthropic",
+          "defaultModelId": "claude-sonnet",
+          "defaultThinkingLevel": "medium",
+          "enableSkillCommands": true,
+          "enabledModelPatterns": ["claude-*"]
+        }
+      }
+    },
+    "expected": [
+      ["github_read", "Read GitHub issue or PR"],
+      ["ticket_lookup", "Look up ticket"]
+    ]
+  },
+  { "fn": "extensionToolLabels", "args": { "runtime": null }, "expected": [] },
+  {
+    "fn": "extensionToolRowLabel",
+    "args": { "label": "Fetch page", "input": { "url": "https://pi.dev" } },
+    "expected": "Fetch page: https://pi.dev"
+  },
+  {
+    "fn": "extensionToolRowLabel",
+    "args": {
+      "label": "Read issue",
+      "input": { "2": true, "10": 1.5, "kind": "pr", "empty": "  " }
+    },
+    "expected": "Read issue: true 1.5 pr"
+  },
+  {
+    "fn": "extensionToolRowLabel",
+    "args": { "label": "List todos", "input": {} },
+    "expected": "List todos"
+  },
+  {
+    "fn": "extensionToolRowLabel",
+    "args": { "label": "List todos", "input": "   " },
+    "expected": "List todos"
+  },
+  {
+    "fn": "extensionToolRowLabel",
+    "args": { "label": "List todos" },
+    "expected": "List todos"
+  },
+  {
+    "fn": "extensionToolRowLabel",
+    "args": {
+      "label": "Nested",
+      "input": { "filter": { "done": true }, "list": [1] }
+    },
+    "expected": "Nested"
+  },
+  {
+    "fn": "toolInputSummary",
+    "args": { "input": { "prompt": "  a\n\nlong   prompt  ", "title": "t" } },
+    "expected": "a long prompt"
+  },
+  { "fn": "toolInputSummary", "args": { "input": ["path"] }, "expected": null },
+  { "fn": "toolInputSummary", "args": { "input": 42 }, "expected": null },
+  {
+    "fn": "truncate",
+    "args": {
+      "value": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    "expected": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx…"
+  },
+  {
+    "fn": "truncate",
+    "args": {
+      "value": "﻿  é ﻿  é ﻿  é ﻿  é ﻿  é ﻿  é ﻿  é ﻿  é ﻿  é ﻿  é ﻿  é ﻿  é ﻿  é ﻿  é ﻿  é ﻿  é ﻿  é ﻿  é ﻿  é ﻿  é ﻿  é ﻿  é ﻿  é ﻿  é ﻿  é ﻿  é ﻿  é ﻿  é ﻿  é ﻿  é ",
+      "limit": 20
+    },
+    "expected": "é é é é é é é é é é…"
+  },
+  {
+    "fn": "truncate",
+    "args": { "value": "short", "limit": 1 },
+    "expected": "…"
+  },
+  {
+    "fn": "timelineFromDriverTranscript",
+    "args": {
+      "items": [
+        {
+          "kind": "message",
+          "role": "compactionSummary",
+          "text": "Earlier turns were compacted.",
+          "createdAt": "2026-10-01T19:00:00.000Z",
+          "id": "entry-compaction"
+        },
+        {
+          "kind": "message",
+          "role": "user",
+          "text": "Show me the screenshot",
+          "attachments": [
+            {
+              "kind": "image",
+              "mimeType": "image/png",
+              "data": "UE5H",
+              "name": "shot.png"
+            },
+            {
+              "kind": "file",
+              "name": "notes.md",
+              "mimeType": "text/markdown",
+              "fsPath": "/n.md",
+              "sizeBytes": 42
+            }
+          ],
+          "createdAt": "2026-10-01T19:00:10.000Z",
+          "id": "entry-user"
+        },
+        {
+          "kind": "tool",
+          "id": "entry-tool",
+          "callId": "call-saved",
+          "toolName": "github_read",
+          "status": "success",
+          "input": { "kind": "issue", "number": 7 },
+          "output": { "message": "Issue 7: crash on start" },
+          "createdAt": "2026-10-01T19:00:20.000Z"
+        },
+        {
+          "kind": "tool",
+          "id": "entry-tool-2",
+          "callId": "call-saved-2",
+          "toolName": "read",
+          "status": "error",
+          "input": null,
+          "output": null,
+          "createdAt": "2026-10-01T19:00:30.000Z"
+        },
+        {
+          "kind": "tool",
+          "id": "entry-tool-3",
+          "callId": "call-saved-3",
+          "toolName": "ls",
+          "status": "error",
+          "createdAt": "2026-10-01T19:00:40.000Z"
+        },
+        {
+          "kind": "message",
+          "role": "branchSummary",
+          "text": "Branch summary",
+          "createdAt": "2026-10-01T19:00:50.000Z",
+          "id": "entry-branch"
+        },
+        {
+          "kind": "message",
+          "role": "assistant",
+          "text": "Here it is.",
+          "createdAt": "2026-10-01T19:00:55.000Z",
+          "id": "entry-assistant",
+          "sourceMessageId": "entry-assistant"
+        },
+        {
+          "kind": "pin",
+          "id": "pin:plan",
+          "createdAt": "2026-10-01T19:00:56.000Z",
+          "card": {
+            "key": "plan",
+            "title": "Plan",
+            "tone": "neutral",
+            "rows": [],
+            "actions": []
+          }
+        }
+      ],
+      "labels": [
+        ["github_read", "Read GitHub issue or PR"],
+        ["ticket_lookup", "Look up ticket"]
+      ]
+    },
+    "expected": [
+      {
+        "createdAt": "2026-10-01T19:00:00.000Z",
+        "id": "entry-compaction",
+        "kind": "message",
+        "role": "compactionSummary",
+        "text": "Earlier turns were compacted."
+      },
+      {
+        "attachments": [
+          {
+            "data": "UE5H",
+            "kind": "image",
+            "mimeType": "image/png",
+            "name": "shot.png"
+          },
+          {
+            "fsPath": "/n.md",
+            "kind": "file",
+            "mimeType": "text/markdown",
+            "name": "notes.md",
+            "sizeBytes": 42
+          }
+        ],
+        "createdAt": "2026-10-01T19:00:10.000Z",
+        "id": "entry-user",
+        "kind": "message",
+        "role": "user",
+        "text": "Show me the screenshot"
+      },
+      {
+        "callId": "call-saved",
+        "createdAt": "2026-10-01T19:00:20.000Z",
+        "detail": "Issue 7: crash on start",
+        "id": "call-saved",
+        "input": { "kind": "issue", "number": 7 },
+        "kind": "tool",
+        "label": "Read GitHub issue or PR: issue 7",
+        "output": { "message": "Issue 7: crash on start" },
+        "status": "success",
+        "toolName": "github_read"
+      },
+      {
+        "callId": "call-saved-2",
+        "createdAt": "2026-10-01T19:00:30.000Z",
+        "id": "call-saved-2",
+        "input": null,
+        "kind": "tool",
+        "label": "Read a file",
+        "output": null,
+        "status": "error",
+        "toolName": "read"
+      },
+      {
+        "callId": "call-saved-3",
+        "createdAt": "2026-10-01T19:00:40.000Z",
+        "id": "call-saved-3",
+        "kind": "tool",
+        "label": "Explored files with ls",
+        "status": "error",
+        "toolName": "ls"
+      },
+      {
+        "createdAt": "2026-10-01T19:00:50.000Z",
+        "id": "entry-branch",
+        "kind": "message",
+        "role": "branchSummary",
+        "text": "Branch summary"
+      },
+      {
+        "createdAt": "2026-10-01T19:00:55.000Z",
+        "id": "entry-assistant",
+        "kind": "message",
+        "role": "assistant",
+        "sourceMessageId": "entry-assistant",
+        "text": "Here it is."
+      },
+      {
+        "card": {
+          "actions": [],
+          "key": "plan",
+          "rows": [],
+          "title": "Plan",
+          "tone": "neutral"
+        },
+        "createdAt": "2026-10-01T19:00:56.000Z",
+        "id": "pin:plan",
+        "kind": "pin"
+      }
+    ]
+  },
+  {
+    "fn": "timelineFromDriverTranscript",
+    "args": {
+      "items": [
+        {
+          "kind": "message",
+          "role": "compactionSummary",
+          "text": "Earlier turns were compacted.",
+          "createdAt": "2026-10-01T19:00:00.000Z",
+          "id": "entry-compaction"
+        },
+        {
+          "kind": "message",
+          "role": "user",
+          "text": "Show me the screenshot",
+          "attachments": [
+            {
+              "kind": "image",
+              "mimeType": "image/png",
+              "data": "UE5H",
+              "name": "shot.png"
+            },
+            {
+              "kind": "file",
+              "name": "notes.md",
+              "mimeType": "text/markdown",
+              "fsPath": "/n.md",
+              "sizeBytes": 42
+            }
+          ],
+          "createdAt": "2026-10-01T19:00:10.000Z",
+          "id": "entry-user"
+        },
+        {
+          "kind": "tool",
+          "id": "entry-tool",
+          "callId": "call-saved",
+          "toolName": "github_read",
+          "status": "success",
+          "input": { "kind": "issue", "number": 7 },
+          "output": { "message": "Issue 7: crash on start" },
+          "createdAt": "2026-10-01T19:00:20.000Z"
+        },
+        {
+          "kind": "tool",
+          "id": "entry-tool-2",
+          "callId": "call-saved-2",
+          "toolName": "read",
+          "status": "error",
+          "input": null,
+          "output": null,
+          "createdAt": "2026-10-01T19:00:30.000Z"
+        },
+        {
+          "kind": "tool",
+          "id": "entry-tool-3",
+          "callId": "call-saved-3",
+          "toolName": "ls",
+          "status": "error",
+          "createdAt": "2026-10-01T19:00:40.000Z"
+        },
+        {
+          "kind": "message",
+          "role": "branchSummary",
+          "text": "Branch summary",
+          "createdAt": "2026-10-01T19:00:50.000Z",
+          "id": "entry-branch"
+        },
+        {
+          "kind": "message",
+          "role": "assistant",
+          "text": "Here it is.",
+          "createdAt": "2026-10-01T19:00:55.000Z",
+          "id": "entry-assistant",
+          "sourceMessageId": "entry-assistant"
+        },
+        {
+          "kind": "pin",
+          "id": "pin:plan",
+          "createdAt": "2026-10-01T19:00:56.000Z",
+          "card": {
+            "key": "plan",
+            "title": "Plan",
+            "tone": "neutral",
+            "rows": [],
+            "actions": []
+          }
+        }
+      ],
+      "labels": []
+    },
+    "expected": [
+      {
+        "createdAt": "2026-10-01T19:00:00.000Z",
+        "id": "entry-compaction",
+        "kind": "message",
+        "role": "compactionSummary",
+        "text": "Earlier turns were compacted."
+      },
+      {
+        "attachments": [
+          {
+            "data": "UE5H",
+            "kind": "image",
+            "mimeType": "image/png",
+            "name": "shot.png"
+          },
+          {
+            "fsPath": "/n.md",
+            "kind": "file",
+            "mimeType": "text/markdown",
+            "name": "notes.md",
+            "sizeBytes": 42
+          }
+        ],
+        "createdAt": "2026-10-01T19:00:10.000Z",
+        "id": "entry-user",
+        "kind": "message",
+        "role": "user",
+        "text": "Show me the screenshot"
+      },
+      {
+        "callId": "call-saved",
+        "createdAt": "2026-10-01T19:00:20.000Z",
+        "detail": "Issue 7: crash on start",
+        "id": "call-saved",
+        "input": { "kind": "issue", "number": 7 },
+        "kind": "tool",
+        "label": "Explored files with github_read",
+        "output": { "message": "Issue 7: crash on start" },
+        "status": "success",
+        "toolName": "github_read"
+      },
+      {
+        "callId": "call-saved-2",
+        "createdAt": "2026-10-01T19:00:30.000Z",
+        "id": "call-saved-2",
+        "input": null,
+        "kind": "tool",
+        "label": "Read a file",
+        "output": null,
+        "status": "error",
+        "toolName": "read"
+      },
+      {
+        "callId": "call-saved-3",
+        "createdAt": "2026-10-01T19:00:40.000Z",
+        "id": "call-saved-3",
+        "kind": "tool",
+        "label": "Explored files with ls",
+        "status": "error",
+        "toolName": "ls"
+      },
+      {
+        "createdAt": "2026-10-01T19:00:50.000Z",
+        "id": "entry-branch",
+        "kind": "message",
+        "role": "branchSummary",
+        "text": "Branch summary"
+      },
+      {
+        "createdAt": "2026-10-01T19:00:55.000Z",
+        "id": "entry-assistant",
+        "kind": "message",
+        "role": "assistant",
+        "sourceMessageId": "entry-assistant",
+        "text": "Here it is."
+      },
+      {
+        "card": {
+          "actions": [],
+          "key": "plan",
+          "rows": [],
+          "title": "Plan",
+          "tone": "neutral"
+        },
+        "createdAt": "2026-10-01T19:00:56.000Z",
+        "id": "pin:plan",
+        "kind": "pin"
+      }
+    ]
+  },
+  {
+    "fn": "buildWorkspaceRecords",
+    "args": {
+      "workspaces": [
+        {
+          "workspaceId": "ws-main",
+          "path": "/repo/pi-gui",
+          "displayName": "pi-gui",
+          "lastOpenedAt": "2026-10-01T19:00:00.000Z",
+          "sortOrder": 0
+        },
+        {
+          "workspaceId": "ws-tree",
+          "path": "/repo/pi-gui-feature",
+          "displayName": "pi-gui feature",
+          "lastOpenedAt": "2026-10-01T19:01:00.000Z",
+          "sortOrder": 1,
+          "pinned": true
+        },
+        {
+          "workspaceId": "ws-dup",
+          "path": "/repo/pi-gui-feature",
+          "displayName": "duplicate path",
+          "lastOpenedAt": "2026-10-01T19:02:00.000Z",
+          "sortOrder": 2
+        },
+        {
+          "workspaceId": "ws-solo",
+          "path": "/repo/solo",
+          "displayName": "solo",
+          "lastOpenedAt": "2026-10-01T19:03:00.000Z",
+          "sortOrder": 3
+        }
+      ],
+      "worktrees": [
+        {
+          "worktreeId": "wt-primary",
+          "workspaceId": "ws-main",
+          "path": "/repo/pi-gui",
+          "displayName": "pi-gui",
+          "kind": "primary",
+          "status": "ready",
+          "createdAt": "2026-10-01T19:00:00.000Z",
+          "updatedAt": "2026-10-01T19:00:00.000Z"
+        },
+        {
+          "worktreeId": "wt-feature",
+          "workspaceId": "ws-main",
+          "path": "/repo/pi-gui-feature",
+          "displayName": "feature",
+          "kind": "linked",
+          "status": "ready",
+          "branchName": "feature",
+          "headSha": "abc123",
+          "createdAt": "2026-10-01T19:01:00.000Z",
+          "updatedAt": "2026-10-01T19:05:00.000Z"
+        },
+        {
+          "worktreeId": "wt-older-owner",
+          "workspaceId": "ws-solo",
+          "path": "/repo/pi-gui-feature",
+          "displayName": "feature again",
+          "kind": "linked",
+          "status": "missing",
+          "createdAt": "2026-10-01T19:01:00.000Z",
+          "updatedAt": "2026-10-01T19:09:00.000Z"
+        },
+        {
+          "worktreeId": "wt-b",
+          "workspaceId": "ws-main",
+          "path": "/repo/wt-b",
+          "displayName": "Beta",
+          "kind": "linked",
+          "status": "error",
+          "createdAt": "2026-10-01T19:01:00.000Z",
+          "updatedAt": "2026-10-01T19:05:00.000Z"
+        },
+        {
+          "worktreeId": "wt-a",
+          "workspaceId": "ws-main",
+          "path": "/repo/wt-a",
+          "displayName": "alpha",
+          "kind": "linked",
+          "status": "ready",
+          "createdAt": "2026-10-01T19:01:00.000Z",
+          "updatedAt": "2026-10-01T19:05:00.000Z"
+        },
+        {
+          "worktreeId": "wt-new",
+          "workspaceId": "ws-main",
+          "path": "/repo/wt-new",
+          "displayName": "newest",
+          "kind": "linked",
+          "status": "ready",
+          "createdAt": "2026-10-01T19:01:00.000Z",
+          "updatedAt": "2026-10-01T19:08:00.000Z"
+        }
+      ],
+      "sessions": [
+        {
+          "sessionRef": { "workspaceId": "ws-main", "sessionId": "s-main" },
+          "workspaceId": "ws-main",
+          "title": "Fix the timeline",
+          "updatedAt": "2026-10-01T19:02:00.000Z",
+          "status": "running",
+          "previewSnippet": "snippet"
+        },
+        {
+          "sessionRef": { "workspaceId": "ws-main", "sessionId": "s-other" },
+          "workspaceId": "ws-main",
+          "title": "Other",
+          "updatedAt": "2026-10-01T19:02:00.000Z",
+          "archivedAt": "2026-10-01T19:03:00.000Z",
+          "status": "idle",
+          "sessionFilePath": "/sessions/other.jsonl"
+        },
+        {
+          "sessionRef": { "workspaceId": "ws-tree", "sessionId": "s-fresh" },
+          "workspaceId": "ws-tree",
+          "title": "Fresh",
+          "updatedAt": "2026-10-01T19:01:00.000Z",
+          "status": "failed"
+        },
+        {
+          "sessionRef": { "workspaceId": "ws-solo", "sessionId": "s-solo" },
+          "workspaceId": "ws-solo",
+          "title": "Solo",
+          "updatedAt": "2026-10-01T19:01:00.000Z",
+          "status": "idle",
+          "previewSnippet": "solo snippet"
+        }
+      ],
+      "transcriptCache": {
+        "ws-main:s-main": [
+          {
+            "kind": "message",
+            "id": "m-1",
+            "role": "user",
+            "text": "Hi",
+            "createdAt": "2026-10-01T19:01:00.000Z"
+          },
+          {
+            "kind": "tool",
+            "id": "c-1",
+            "callId": "c-1",
+            "toolName": "read",
+            "status": "success",
+            "label": "Read a",
+            "createdAt": "2026-10-01T19:03:00.000Z"
+          },
+          {
+            "kind": "activity",
+            "id": "a-1",
+            "label": "Working…",
+            "createdAt": "2026-10-01T19:02:00.000Z"
+          }
+        ],
+        "ws-tree:s-fresh": []
+      },
+      "runningSinceBySession": { "ws-main:s-main": "2026-10-01T19:01:00.000Z" },
+      "sessionConfigBySession": {
+        "ws-main:s-main": {
+          "provider": "anthropic",
+          "modelId": "claude-sonnet"
+        }
+      },
+      "lastViewedAtBySession": {
+        "ws-main:s-main": "2026-10-01T19:00:00.000Z",
+        "ws-main:s-other": "2026-10-01T19:01:00.000Z",
+        "ws-tree:s-fresh": "2026-10-01T19:00:00.000Z"
+      },
+      "lastInteractedAtBySession": {
+        "ws-main:s-other": "2026-10-01T19:02:00.000Z"
+      },
+      "pinnedAtBySession": { "ws-tree:s-fresh": "2026-10-01T19:04:00.000Z" }
+    },
+    "expected": [
+      {
+        "id": "ws-main",
+        "kind": "primary",
+        "lastOpenedAt": "2026-10-01T19:00:00.000Z",
+        "name": "pi-gui",
+        "path": "/repo/pi-gui",
+        "sessions": [
+          {
+            "config": { "modelId": "claude-sonnet", "provider": "anthropic" },
+            "hasUnseenUpdate": false,
+            "id": "s-main",
+            "lastViewedAt": "2026-10-01T19:00:00.000Z",
+            "preview": "Working…",
+            "runningSince": "2026-10-01T19:01:00.000Z",
+            "status": "running",
+            "title": "Fix the timeline",
+            "updatedAt": "2026-10-01T19:02:00.000Z"
+          },
+          {
+            "archivedAt": "2026-10-01T19:03:00.000Z",
+            "hasUnseenUpdate": true,
+            "id": "s-other",
+            "lastInteractedAt": "2026-10-01T19:02:00.000Z",
+            "lastViewedAt": "2026-10-01T19:01:00.000Z",
+            "preview": "Other",
+            "status": "idle",
+            "title": "Other",
+            "updatedAt": "2026-10-01T19:02:00.000Z"
+          }
+        ]
+      },
+      {
+        "branchName": "feature",
+        "id": "ws-tree",
+        "kind": "worktree",
+        "lastOpenedAt": "2026-10-01T19:01:00.000Z",
+        "name": "pi-gui feature",
+        "path": "/repo/pi-gui-feature",
+        "rootWorkspaceId": "ws-main",
+        "sessions": [
+          {
+            "hasUnseenUpdate": true,
+            "id": "s-fresh",
+            "lastViewedAt": "2026-10-01T19:00:00.000Z",
+            "pinnedAt": "2026-10-01T19:04:00.000Z",
+            "preview": "Fresh",
+            "status": "failed",
+            "title": "Fresh",
+            "updatedAt": "2026-10-01T19:01:00.000Z"
+          }
+        ]
+      },
+      {
+        "branchName": "feature",
+        "id": "ws-dup",
+        "kind": "worktree",
+        "lastOpenedAt": "2026-10-01T19:02:00.000Z",
+        "name": "duplicate path",
+        "path": "/repo/pi-gui-feature",
+        "rootWorkspaceId": "ws-main",
+        "sessions": []
+      },
+      {
+        "id": "ws-solo",
+        "kind": "primary",
+        "lastOpenedAt": "2026-10-01T19:03:00.000Z",
+        "name": "solo",
+        "path": "/repo/solo",
+        "sessions": [
+          {
+            "hasUnseenUpdate": false,
+            "id": "s-solo",
+            "preview": "solo snippet",
+            "status": "idle",
+            "title": "Solo",
+            "updatedAt": "2026-10-01T19:01:00.000Z"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "fn": "buildWorkspaceRecords",
+    "args": {
+      "workspaces": [
+        {
+          "workspaceId": "ws-main",
+          "path": "/repo/pi-gui",
+          "displayName": "pi-gui",
+          "lastOpenedAt": "2026-10-01T19:00:00.000Z",
+          "sortOrder": 0
+        },
+        {
+          "workspaceId": "ws-tree",
+          "path": "/repo/pi-gui-feature",
+          "displayName": "pi-gui feature",
+          "lastOpenedAt": "2026-10-01T19:01:00.000Z",
+          "sortOrder": 1,
+          "pinned": true
+        },
+        {
+          "workspaceId": "ws-dup",
+          "path": "/repo/pi-gui-feature",
+          "displayName": "duplicate path",
+          "lastOpenedAt": "2026-10-01T19:02:00.000Z",
+          "sortOrder": 2
+        },
+        {
+          "workspaceId": "ws-solo",
+          "path": "/repo/solo",
+          "displayName": "solo",
+          "lastOpenedAt": "2026-10-01T19:03:00.000Z",
+          "sortOrder": 3
+        }
+      ],
+      "worktrees": [],
+      "sessions": []
+    },
+    "expected": [
+      {
+        "id": "ws-main",
+        "kind": "primary",
+        "lastOpenedAt": "2026-10-01T19:00:00.000Z",
+        "name": "pi-gui",
+        "path": "/repo/pi-gui",
+        "sessions": []
+      },
+      {
+        "id": "ws-tree",
+        "kind": "primary",
+        "lastOpenedAt": "2026-10-01T19:01:00.000Z",
+        "name": "pi-gui feature",
+        "path": "/repo/pi-gui-feature",
+        "sessions": []
+      },
+      {
+        "id": "ws-dup",
+        "kind": "primary",
+        "lastOpenedAt": "2026-10-01T19:02:00.000Z",
+        "name": "duplicate path",
+        "path": "/repo/pi-gui-feature",
+        "sessions": []
+      },
+      {
+        "id": "ws-solo",
+        "kind": "primary",
+        "lastOpenedAt": "2026-10-01T19:03:00.000Z",
+        "name": "solo",
+        "path": "/repo/solo",
+        "sessions": []
+      }
+    ]
+  },
+  {
+    "fn": "buildWorktreeRecords",
+    "args": {
+      "workspaces": [
+        {
+          "workspaceId": "ws-main",
+          "path": "/repo/pi-gui",
+          "displayName": "pi-gui",
+          "lastOpenedAt": "2026-10-01T19:00:00.000Z",
+          "sortOrder": 0
+        },
+        {
+          "workspaceId": "ws-tree",
+          "path": "/repo/pi-gui-feature",
+          "displayName": "pi-gui feature",
+          "lastOpenedAt": "2026-10-01T19:01:00.000Z",
+          "sortOrder": 1,
+          "pinned": true
+        },
+        {
+          "workspaceId": "ws-dup",
+          "path": "/repo/pi-gui-feature",
+          "displayName": "duplicate path",
+          "lastOpenedAt": "2026-10-01T19:02:00.000Z",
+          "sortOrder": 2
+        },
+        {
+          "workspaceId": "ws-solo",
+          "path": "/repo/solo",
+          "displayName": "solo",
+          "lastOpenedAt": "2026-10-01T19:03:00.000Z",
+          "sortOrder": 3
+        }
+      ],
+      "worktrees": [
+        {
+          "worktreeId": "wt-primary",
+          "workspaceId": "ws-main",
+          "path": "/repo/pi-gui",
+          "displayName": "pi-gui",
+          "kind": "primary",
+          "status": "ready",
+          "createdAt": "2026-10-01T19:00:00.000Z",
+          "updatedAt": "2026-10-01T19:00:00.000Z"
+        },
+        {
+          "worktreeId": "wt-feature",
+          "workspaceId": "ws-main",
+          "path": "/repo/pi-gui-feature",
+          "displayName": "feature",
+          "kind": "linked",
+          "status": "ready",
+          "branchName": "feature",
+          "headSha": "abc123",
+          "createdAt": "2026-10-01T19:01:00.000Z",
+          "updatedAt": "2026-10-01T19:05:00.000Z"
+        },
+        {
+          "worktreeId": "wt-older-owner",
+          "workspaceId": "ws-solo",
+          "path": "/repo/pi-gui-feature",
+          "displayName": "feature again",
+          "kind": "linked",
+          "status": "missing",
+          "createdAt": "2026-10-01T19:01:00.000Z",
+          "updatedAt": "2026-10-01T19:09:00.000Z"
+        },
+        {
+          "worktreeId": "wt-b",
+          "workspaceId": "ws-main",
+          "path": "/repo/wt-b",
+          "displayName": "Beta",
+          "kind": "linked",
+          "status": "error",
+          "createdAt": "2026-10-01T19:01:00.000Z",
+          "updatedAt": "2026-10-01T19:05:00.000Z"
+        },
+        {
+          "worktreeId": "wt-a",
+          "workspaceId": "ws-main",
+          "path": "/repo/wt-a",
+          "displayName": "alpha",
+          "kind": "linked",
+          "status": "ready",
+          "createdAt": "2026-10-01T19:01:00.000Z",
+          "updatedAt": "2026-10-01T19:05:00.000Z"
+        },
+        {
+          "worktreeId": "wt-new",
+          "workspaceId": "ws-main",
+          "path": "/repo/wt-new",
+          "displayName": "newest",
+          "kind": "linked",
+          "status": "ready",
+          "createdAt": "2026-10-01T19:01:00.000Z",
+          "updatedAt": "2026-10-01T19:08:00.000Z"
+        }
+      ]
+    },
+    "expected": {
+      "ws-main": [
+        {
+          "id": "wt-new",
+          "name": "newest",
+          "path": "/repo/wt-new",
+          "rootWorkspaceId": "ws-main",
+          "status": "ready",
+          "updatedAt": "2026-10-01T19:08:00.000Z"
+        },
+        {
+          "id": "wt-a",
+          "name": "alpha",
+          "path": "/repo/wt-a",
+          "rootWorkspaceId": "ws-main",
+          "status": "ready",
+          "updatedAt": "2026-10-01T19:05:00.000Z"
+        },
+        {
+          "id": "wt-b",
+          "name": "Beta",
+          "path": "/repo/wt-b",
+          "rootWorkspaceId": "ws-main",
+          "status": "error",
+          "updatedAt": "2026-10-01T19:05:00.000Z"
+        },
+        {
+          "branchName": "feature",
+          "id": "wt-feature",
+          "linkedWorkspaceId": "ws-dup",
+          "name": "feature",
+          "path": "/repo/pi-gui-feature",
+          "rootWorkspaceId": "ws-main",
+          "status": "ready",
+          "updatedAt": "2026-10-01T19:05:00.000Z"
+        }
+      ]
+    }
+  },
+  {
+    "fn": "hasUnseenSessionUpdate",
+    "args": {
+      "status": "idle",
+      "updatedAt": "2026-10-01T19:01:00.000Z",
+      "lastViewedAt": "2026-10-01T19:02:00.000Z",
+      "transcript": [
+        {
+          "kind": "message",
+          "id": "m-1",
+          "role": "user",
+          "text": "Hi",
+          "createdAt": "2026-10-01T19:01:00.000Z"
+        },
+        {
+          "kind": "tool",
+          "id": "c-1",
+          "callId": "c-1",
+          "toolName": "read",
+          "status": "success",
+          "label": "Read a",
+          "createdAt": "2026-10-01T19:03:00.000Z"
+        },
+        {
+          "kind": "activity",
+          "id": "a-1",
+          "label": "Working…",
+          "createdAt": "2026-10-01T19:02:00.000Z"
+        }
+      ]
+    },
+    "expected": true
+  },
+  {
+    "fn": "hasUnseenSessionUpdate",
+    "args": {
+      "status": "idle",
+      "updatedAt": "2026-10-01T19:01:00.000Z",
+      "lastViewedAt": "2026-10-01T19:05:00.000Z",
+      "transcript": [
+        {
+          "kind": "message",
+          "id": "m-1",
+          "role": "user",
+          "text": "Hi",
+          "createdAt": "2026-10-01T19:01:00.000Z"
+        },
+        {
+          "kind": "tool",
+          "id": "c-1",
+          "callId": "c-1",
+          "toolName": "read",
+          "status": "success",
+          "label": "Read a",
+          "createdAt": "2026-10-01T19:03:00.000Z"
+        },
+        {
+          "kind": "activity",
+          "id": "a-1",
+          "label": "Working…",
+          "createdAt": "2026-10-01T19:02:00.000Z"
+        }
+      ]
+    },
+    "expected": false
+  },
+  {
+    "fn": "hasUnseenSessionUpdate",
+    "args": {
+      "status": "running",
+      "updatedAt": "2026-10-01T19:09:00.000Z",
+      "lastViewedAt": "2026-10-01T19:01:00.000Z",
+      "transcript": []
+    },
+    "expected": false
+  },
+  {
+    "fn": "hasUnseenSessionUpdate",
+    "args": {
+      "status": "failed",
+      "updatedAt": "2026-10-01T19:09:00.000Z",
+      "transcript": []
+    },
+    "expected": false
+  },
+  {
+    "fn": "previewFromTranscript",
+    "args": {
+      "transcript": [
+        {
+          "kind": "message",
+          "id": "m-1",
+          "role": "user",
+          "text": "Hi",
+          "createdAt": "2026-10-01T19:01:00.000Z"
+        },
+        {
+          "kind": "tool",
+          "id": "c-1",
+          "callId": "c-1",
+          "toolName": "read",
+          "status": "success",
+          "label": "Read a",
+          "createdAt": "2026-10-01T19:03:00.000Z"
+        },
+        {
+          "kind": "activity",
+          "id": "a-1",
+          "label": "Working…",
+          "createdAt": "2026-10-01T19:02:00.000Z"
+        }
+      ]
+    },
+    "expected": "Working…"
+  },
+  {
+    "fn": "previewFromTranscript",
+    "args": {
+      "transcript": [
+        {
+          "kind": "activity",
+          "id": "a-1",
+          "label": "Working…",
+          "createdAt": "2026-10-01T19:02:00.000Z"
+        },
+        {
+          "kind": "tool",
+          "id": "c-1",
+          "callId": "c-1",
+          "toolName": "read",
+          "status": "success",
+          "label": "Read a",
+          "createdAt": "2026-10-01T19:03:00.000Z"
+        }
+      ]
+    },
+    "expected": "Read a"
+  },
+  {
+    "fn": "previewFromTranscript",
+    "args": { "transcript": [] },
+    "expected": null
+  },
+  {
+    "fn": "formatElapsedDuration",
+    "args": {
+      "startedAt": "2026-10-01T19:00:00.000Z",
+      "endedAt": "2026-10-01T19:00:00.000Z"
+    },
+    "expected": "1s"
+  },
+  {
+    "fn": "formatElapsedDuration",
+    "args": {
+      "startedAt": "2026-10-01T19:00:00.000Z",
+      "endedAt": "2026-10-01T19:00:01.000Z"
+    },
+    "expected": "1s"
+  },
+  {
+    "fn": "formatElapsedDuration",
+    "args": {
+      "startedAt": "2026-10-01T19:00:00.000Z",
+      "endedAt": "2026-10-01T19:00:59.000Z"
+    },
+    "expected": "59s"
+  },
+  {
+    "fn": "formatElapsedDuration",
+    "args": {
+      "startedAt": "2026-10-01T19:00:00.000Z",
+      "endedAt": "2026-10-01T19:01:00.000Z"
+    },
+    "expected": "1m"
+  },
+  {
+    "fn": "formatElapsedDuration",
+    "args": {
+      "startedAt": "2026-10-01T19:00:00.000Z",
+      "endedAt": "2026-10-01T19:03:05.000Z"
+    },
+    "expected": "3m 5s"
+  },
+  {
+    "fn": "formatElapsedDuration",
+    "args": {
+      "startedAt": "2026-10-01T19:05:00.000Z",
+      "endedAt": "2026-10-01T19:00:00.000Z"
+    },
+    "expected": "1s"
+  },
+  {
+    "fn": "formatElapsedDuration",
+    "args": {
+      "startedAt": "2026-10-01T19:00:00.000Z",
+      "endedAt": "2026-10-01T19:00:59.500Z"
+    },
+    "expected": "1m"
+  },
+  {
+    "fn": "formatElapsedDuration",
+    "args": {
+      "startedAt": "2026-10-01T19:00:00.000Z",
+      "endedAt": "2026-10-01T19:00:01.499Z"
+    },
+    "expected": "1s"
+  },
+  {
+    "fn": "formatElapsedDuration",
+    "args": {
+      "startedAt": "not a date",
+      "endedAt": "2026-10-01T19:01:00.000Z"
+    },
+    "expected": "NaNm NaNs"
+  },
+  {
+    "fn": "formatElapsedDuration",
+    "args": {
+      "startedAt": "2026-10-01T19:00:00+02:00",
+      "endedAt": "2026-10-01T18:00:00Z"
+    },
+    "expected": "60m"
+  },
+  {
+    "fn": "cloneComposerAttachments",
+    "args": {
+      "attachments": [
+        {
+          "id": "i-1",
+          "kind": "image",
+          "name": "a.png",
+          "mimeType": "image/png",
+          "data": "UE5H"
+        },
+        {
+          "id": "i-legacy",
+          "name": "old.png",
+          "mimeType": "image/png",
+          "data": "UE5H"
+        },
+        {
+          "id": "f-1",
+          "kind": "file",
+          "name": "b.txt",
+          "mimeType": "text/plain",
+          "fsPath": "/b.txt",
+          "sizeBytes": 9
+        },
+        {
+          "id": "f-2",
+          "kind": "file",
+          "name": "c.txt",
+          "mimeType": "text/plain",
+          "fsPath": "/c.txt",
+          "sizeBytes": "9"
+        },
+        {
+          "id": "bad",
+          "kind": "file",
+          "name": "d.txt",
+          "mimeType": "text/plain"
+        },
+        {
+          "id": "null-kind",
+          "kind": null,
+          "name": "e.png",
+          "mimeType": "image/png",
+          "data": "x"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "data": "UE5H",
+        "id": "i-1",
+        "kind": "image",
+        "mimeType": "image/png",
+        "name": "a.png"
+      },
+      {
+        "data": "UE5H",
+        "id": "i-legacy",
+        "kind": "image",
+        "mimeType": "image/png",
+        "name": "old.png"
+      },
+      {
+        "fsPath": "/b.txt",
+        "id": "f-1",
+        "kind": "file",
+        "mimeType": "text/plain",
+        "name": "b.txt",
+        "sizeBytes": 9
+      },
+      {
+        "fsPath": "/c.txt",
+        "id": "f-2",
+        "kind": "file",
+        "mimeType": "text/plain",
+        "name": "c.txt"
+      }
+    ]
+  },
+  {
+    "fn": "toSessionQueuedMessages",
+    "args": {
+      "messages": [
+        {
+          "id": "q-1",
+          "mode": "steer",
+          "text": "now",
+          "attachments": [
+            {
+              "id": "i-1",
+              "kind": "image",
+              "name": "a.png",
+              "mimeType": "image/png",
+              "data": "UE5H"
+            },
+            {
+              "id": "f-1",
+              "kind": "file",
+              "name": "b.txt",
+              "mimeType": "text/plain",
+              "fsPath": "/b.txt"
+            }
+          ],
+          "createdAt": "2026-10-01T19:01:00.000Z",
+          "updatedAt": "2026-10-01T19:02:00.000Z"
+        },
+        {
+          "id": "q-2",
+          "mode": "followUp",
+          "text": "later",
+          "attachments": [],
+          "createdAt": "2026-10-01T19:01:00.000Z",
+          "updatedAt": "2026-10-01T19:01:00.000Z"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "attachments": [
+          {
+            "data": "UE5H",
+            "kind": "image",
+            "mimeType": "image/png",
+            "name": "a.png"
+          },
+          {
+            "fsPath": "/b.txt",
+            "kind": "file",
+            "mimeType": "text/plain",
+            "name": "b.txt"
+          }
+        ],
+        "createdAt": "2026-10-01T19:01:00.000Z",
+        "id": "q-1",
+        "mode": "steer",
+        "text": "now",
+        "updatedAt": "2026-10-01T19:02:00.000Z"
+      },
+      {
+        "createdAt": "2026-10-01T19:01:00.000Z",
+        "id": "q-2",
+        "mode": "followUp",
+        "text": "later",
+        "updatedAt": "2026-10-01T19:01:00.000Z"
+      }
+    ]
+  },
+  {
+    "fn": "mergeQueuedComposerMessages",
+    "args": {
+      "previous": [
+        {
+          "id": "q-1",
+          "mode": "steer",
+          "text": "now",
+          "attachments": [
+            {
+              "id": "keep-image",
+              "kind": "image",
+              "name": "a.png",
+              "mimeType": "image/png",
+              "data": "UE5H"
+            },
+            {
+              "id": "keep-file",
+              "kind": "file",
+              "name": "b.txt",
+              "mimeType": "text/plain",
+              "fsPath": "/b.txt",
+              "sizeBytes": 3
+            }
+          ],
+          "createdAt": "2026-10-01T19:01:00.000Z",
+          "updatedAt": "2026-10-01T19:01:00.000Z"
+        }
+      ],
+      "next": [
+        {
+          "id": "q-1",
+          "mode": "followUp",
+          "text": "now, edited",
+          "attachments": [
+            {
+              "kind": "image",
+              "name": "a.png",
+              "mimeType": "image/png",
+              "data": "UE5H"
+            },
+            {
+              "kind": "file",
+              "name": "b.txt",
+              "mimeType": "text/plain",
+              "fsPath": "/b.txt",
+              "sizeBytes": 4
+            },
+            { "kind": "image", "mimeType": "image/jpeg", "data": "SlBH" }
+          ],
+          "createdAt": "2026-10-01T19:01:00.000Z",
+          "updatedAt": "2026-10-01T19:02:00.000Z"
+        },
+        {
+          "id": "q-2",
+          "mode": "steer",
+          "text": "plain",
+          "createdAt": "2026-10-01T19:02:00.000Z",
+          "updatedAt": "2026-10-01T19:02:00.000Z"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "attachments": [
+          {
+            "data": "UE5H",
+            "id": "keep-image",
+            "kind": "image",
+            "mimeType": "image/png",
+            "name": "a.png"
+          },
+          {
+            "fsPath": "/b.txt",
+            "id": "q-1:file:1:uuid-1",
+            "kind": "file",
+            "mimeType": "text/plain",
+            "name": "b.txt",
+            "sizeBytes": 4
+          },
+          {
+            "data": "SlBH",
+            "id": "q-1:image:2:uuid-2",
+            "kind": "image",
+            "mimeType": "image/jpeg",
+            "name": "Image 3"
+          }
+        ],
+        "createdAt": "2026-10-01T19:01:00.000Z",
+        "id": "q-1",
+        "mode": "followUp",
+        "text": "now, edited",
+        "updatedAt": "2026-10-01T19:02:00.000Z"
+      },
+      {
+        "attachments": [],
+        "createdAt": "2026-10-01T19:02:00.000Z",
+        "id": "q-2",
+        "mode": "steer",
+        "text": "plain",
+        "updatedAt": "2026-10-01T19:02:00.000Z"
+      }
+    ]
+  },
+  {
+    "fn": "mergeQueuedComposerMessages",
+    "args": { "next": [] },
+    "expected": []
+  },
+  {
+    "fn": "updateSessionRecord",
+    "args": {
+      "session": {
+        "id": "s-1",
+        "title": "Resolved title",
+        "updatedAt": "2026-10-01T19:01:00.000Z",
+        "pinnedAt": "2026-10-01T19:00:00.000Z",
+        "lastInteractedAt": "2026-10-01T19:00:00.000Z",
+        "archivedAt": "2026-10-01T19:00:00.000Z",
+        "preview": "old preview",
+        "status": "running",
+        "runningSince": "2026-10-01T19:01:00.000Z",
+        "hasUnseenUpdate": false,
+        "config": { "provider": "anthropic" }
+      },
+      "snapshot": {
+        "title": "New thread",
+        "updatedAt": "2026-10-01T19:03:00.000Z",
+        "status": "idle"
+      },
+      "transcript": [
+        {
+          "kind": "message",
+          "id": "m-1",
+          "role": "user",
+          "text": "Hi",
+          "createdAt": "2026-10-01T19:01:00.000Z"
+        },
+        {
+          "kind": "tool",
+          "id": "c-1",
+          "callId": "c-1",
+          "toolName": "read",
+          "status": "success",
+          "label": "Read a",
+          "createdAt": "2026-10-01T19:03:00.000Z"
+        },
+        {
+          "kind": "activity",
+          "id": "a-1",
+          "label": "Working…",
+          "createdAt": "2026-10-01T19:02:00.000Z"
+        }
+      ],
+      "lastViewedAt": "2026-10-01T19:02:00.000Z"
+    },
+    "expected": {
+      "archivedAt": "2026-10-01T19:00:00.000Z",
+      "config": { "provider": "anthropic" },
+      "hasUnseenUpdate": true,
+      "id": "s-1",
+      "lastInteractedAt": "2026-10-01T19:00:00.000Z",
+      "lastViewedAt": "2026-10-01T19:02:00.000Z",
+      "pinnedAt": "2026-10-01T19:00:00.000Z",
+      "preview": "old preview",
+      "status": "idle",
+      "title": "Resolved title",
+      "updatedAt": "2026-10-01T19:03:00.000Z"
+    }
+  },
+  {
+    "fn": "updateSessionRecord",
+    "args": {
+      "session": {
+        "id": "s-1",
+        "title": "New thread",
+        "updatedAt": "2026-10-01T19:01:00.000Z",
+        "preview": "p",
+        "status": "idle",
+        "hasUnseenUpdate": true
+      },
+      "snapshot": {
+        "title": "Named",
+        "archivedAt": "2026-10-01T19:04:00.000Z",
+        "preview": "from pi",
+        "config": { "modelId": "m" }
+      },
+      "status": "failed",
+      "transcript": [],
+      "preview": "from transcript",
+      "runningSince": "2026-10-01T19:02:00.000Z"
+    },
+    "expected": {
+      "archivedAt": "2026-10-01T19:04:00.000Z",
+      "config": { "modelId": "m" },
+      "hasUnseenUpdate": false,
+      "id": "s-1",
+      "preview": "from transcript",
+      "runningSince": "2026-10-01T19:02:00.000Z",
+      "status": "failed",
+      "title": "Named",
+      "updatedAt": "2026-10-01T19:01:00.000Z"
+    }
+  },
+  {
+    "fn": "extensionCommandCompatibility",
+    "args": {
+      "payload": {
+        "ws-main": [
+          {
+            "commandName": "ticket:list",
+            "extensionPath": "/ext/tickets.ts",
+            "status": "terminal-only",
+            "message": "ticket:list needs a terminal",
+            "capability": "ui.custom",
+            "updatedAt": "2026-10-01T19:01:00.000Z"
+          },
+          {
+            "commandName": "zeta",
+            "extensionPath": "/ext/a.ts",
+            "status": "terminal-only",
+            "message": "zeta needs a terminal",
+            "capability": "ui.custom",
+            "updatedAt": "2026-10-01T19:01:00.000Z"
+          },
+          {
+            "commandName": "Alpha",
+            "extensionPath": "/ext/a.ts",
+            "status": "terminal-only",
+            "message": "Alpha needs a terminal",
+            "capability": "ui.custom",
+            "updatedAt": "2026-10-01T19:01:00.000Z"
+          },
+          {
+            "commandName": "nameless",
+            "extensionPath": "",
+            "status": "terminal-only",
+            "message": "nameless needs a terminal",
+            "capability": "ui.custom",
+            "updatedAt": "2026-10-01T19:01:00.000Z"
+          }
+        ],
+        "ws-gone": [
+          {
+            "commandName": "gone",
+            "extensionPath": "/ext/gone.ts",
+            "status": "terminal-only",
+            "message": "gone needs a terminal",
+            "capability": "ui.custom",
+            "updatedAt": "2026-10-01T19:01:00.000Z"
+          }
+        ],
+        "ws-empty": [
+          {
+            "commandName": "",
+            "extensionPath": "/ext/x.ts",
+            "status": "terminal-only",
+            "message": " needs a terminal",
+            "capability": "ui.custom",
+            "updatedAt": "2026-10-01T19:01:00.000Z"
+          }
+        ]
+      },
+      "record": {
+        "workspaceId": "ws-main",
+        "record": {
+          "commandName": "ticket",
+          "extensionPath": "/ext/tickets.ts",
+          "status": "supported",
+          "message": "ticket needs a terminal",
+          "capability": "ui.custom",
+          "updatedAt": "2026-10-01T19:01:00.000Z"
+        }
+      },
+      "lookup": {
+        "workspaceId": "ws-main",
+        "command": {
+          "name": "ticket",
+          "source": "extension",
+          "sourceInfo": {
+            "path": "/ext/tickets.ts",
+            "source": "tickets",
+            "scope": "project",
+            "origin": "top-level"
+          }
+        }
+      },
+      "runtime": {
+        "workspace": {
+          "workspaceId": "ws-main",
+          "path": "/repo/ws-main",
+          "displayName": "ws-main"
+        },
+        "providers": [
+          {
+            "id": "anthropic",
+            "name": "Anthropic",
+            "hasAuth": true,
+            "authType": "oauth",
+            "authSource": "oauth",
+            "oauthSupported": true,
+            "apiKeySetupSupported": true
+          }
+        ],
+        "models": [
+          {
+            "providerId": "anthropic",
+            "providerName": "Anthropic",
+            "modelId": "claude-sonnet",
+            "label": "Claude Sonnet",
+            "available": true,
+            "authType": "oauth",
+            "reasoning": true,
+            "supportsImages": true
+          }
+        ],
+        "skills": [
+          {
+            "name": "review",
+            "description": "Review a diff",
+            "filePath": "/skills/review/SKILL.md",
+            "baseDir": "/skills/review",
+            "source": "user",
+            "scope": "user",
+            "enabled": true,
+            "disableModelInvocation": false,
+            "slashCommand": "/skill:review"
+          }
+        ],
+        "extensions": [
+          {
+            "path": "/ext/tickets.ts",
+            "displayName": "tickets",
+            "enabled": true,
+            "sourceInfo": {
+              "path": "/ext/tickets.ts",
+              "source": "tickets",
+              "scope": "project",
+              "origin": "top-level"
+            },
+            "commands": ["ticket"],
+            "tools": [],
+            "flags": [],
+            "flagDetails": [],
+            "shortcuts": [],
+            "diagnostics": []
+          }
+        ],
+        "settings": {
+          "defaultProvider": "anthropic",
+          "defaultModelId": "claude-sonnet",
+          "defaultThinkingLevel": "medium",
+          "enableSkillCommands": true,
+          "enabledModelPatterns": ["claude-*"]
+        }
+      }
+    },
+    "expected": {
+      "afterPrune": {
+        "ws-gone": [
+          {
+            "capability": "ui.custom",
+            "commandName": "gone",
+            "extensionPath": "/ext/gone.ts",
+            "message": "gone needs a terminal",
+            "status": "terminal-only",
+            "updatedAt": "2026-10-01T19:01:00.000Z"
+          }
+        ],
+        "ws-main": [
+          {
+            "capability": "ui.custom",
+            "commandName": "ticket",
+            "extensionPath": "/ext/tickets.ts",
+            "message": "ticket needs a terminal",
+            "status": "supported",
+            "updatedAt": "2026-10-01T19:01:00.000Z"
+          },
+          {
+            "capability": "ui.custom",
+            "commandName": "ticket:list",
+            "extensionPath": "/ext/tickets.ts",
+            "message": "ticket:list needs a terminal",
+            "status": "terminal-only",
+            "updatedAt": "2026-10-01T19:01:00.000Z"
+          }
+        ]
+      },
+      "afterRecord": {
+        "ws-gone": [
+          {
+            "capability": "ui.custom",
+            "commandName": "gone",
+            "extensionPath": "/ext/gone.ts",
+            "message": "gone needs a terminal",
+            "status": "terminal-only",
+            "updatedAt": "2026-10-01T19:01:00.000Z"
+          }
+        ],
+        "ws-main": [
+          {
+            "capability": "ui.custom",
+            "commandName": "Alpha",
+            "extensionPath": "/ext/a.ts",
+            "message": "Alpha needs a terminal",
+            "status": "terminal-only",
+            "updatedAt": "2026-10-01T19:01:00.000Z"
+          },
+          {
+            "capability": "ui.custom",
+            "commandName": "zeta",
+            "extensionPath": "/ext/a.ts",
+            "message": "zeta needs a terminal",
+            "status": "terminal-only",
+            "updatedAt": "2026-10-01T19:01:00.000Z"
+          },
+          {
+            "capability": "ui.custom",
+            "commandName": "ticket",
+            "extensionPath": "/ext/tickets.ts",
+            "message": "ticket needs a terminal",
+            "status": "supported",
+            "updatedAt": "2026-10-01T19:01:00.000Z"
+          },
+          {
+            "capability": "ui.custom",
+            "commandName": "ticket:list",
+            "extensionPath": "/ext/tickets.ts",
+            "message": "ticket:list needs a terminal",
+            "status": "terminal-only",
+            "updatedAt": "2026-10-01T19:01:00.000Z"
+          }
+        ]
+      },
+      "afterRestore": {
+        "ws-gone": [
+          {
+            "capability": "ui.custom",
+            "commandName": "gone",
+            "extensionPath": "/ext/gone.ts",
+            "message": "gone needs a terminal",
+            "status": "terminal-only",
+            "updatedAt": "2026-10-01T19:01:00.000Z"
+          }
+        ],
+        "ws-main": [
+          {
+            "capability": "ui.custom",
+            "commandName": "Alpha",
+            "extensionPath": "/ext/a.ts",
+            "message": "Alpha needs a terminal",
+            "status": "terminal-only",
+            "updatedAt": "2026-10-01T19:01:00.000Z"
+          },
+          {
+            "capability": "ui.custom",
+            "commandName": "zeta",
+            "extensionPath": "/ext/a.ts",
+            "message": "zeta needs a terminal",
+            "status": "terminal-only",
+            "updatedAt": "2026-10-01T19:01:00.000Z"
+          },
+          {
+            "capability": "ui.custom",
+            "commandName": "ticket:list",
+            "extensionPath": "/ext/tickets.ts",
+            "message": "ticket:list needs a terminal",
+            "status": "terminal-only",
+            "updatedAt": "2026-10-01T19:01:00.000Z"
+          }
+        ]
+      },
+      "learned": {
+        "capability": "ui.custom",
+        "commandName": "ticket",
+        "extensionPath": "/ext/tickets.ts",
+        "message": "ticket needs a terminal",
+        "status": "supported",
+        "updatedAt": "2026-10-01T19:01:00.000Z"
+      }
+    }
+  },
+  {
+    "fn": "SessionStateMap.prune",
+    "args": {
+      "keys": {
+        "transcriptCache": ["ws:a", "ws:b"],
+        "composerDraftsBySession": ["ws:c", "ws:a"],
+        "lastViewedAtBySession": ["ws:a", "ws:d"],
+        "pinnedAtBySession": ["ws:a"],
+        "extensionFlagsBySession": ["ws:e"],
+        "runningSinceBySession": ["ws:b"],
+        "sessionErrorsBySession": ["ws:f"],
+        "sessionSubscriptions": ["ws:b", "ws:a"],
+        "pendingAutoTitleBySession": ["ws:b", "ws:g"],
+        "loadedTranscriptKeys": ["ws:h", "ws:a"],
+        "pinnedSessionOrder": ["ws:i", "ws:a"]
+      },
+      "activeKeys": ["ws:a"]
+    },
+    "expected": {
+      "changed": true,
+      "log": ["unsubscribe:ws:b", "cancel:ws:b", "cancel:ws:g"],
+      "remaining": {
+        "composerDraftsBySession": ["ws:a"],
+        "extensionFlagsBySession": [],
+        "lastViewedAtBySession": ["ws:a"],
+        "loadedTranscriptKeys": ["ws:a"],
+        "pendingAutoTitleBySession": [],
+        "pinnedAtBySession": ["ws:a"],
+        "pinnedSessionOrder": ["ws:a"],
+        "runningSinceBySession": [],
+        "sessionErrorsBySession": [],
+        "sessionSubscriptions": ["ws:a"],
+        "transcriptCache": ["ws:a"]
+      }
+    }
+  },
+  {
+    "fn": "SessionStateMap.prune",
+    "args": {
+      "keys": {
+        "transcriptCache": ["ws:gone"],
+        "sessionSubscriptions": ["ws:gone"]
+      },
+      "activeKeys": []
+    },
+    "expected": {
+      "changed": false,
+      "log": ["unsubscribe:ws:gone"],
+      "remaining": {
+        "composerDraftsBySession": [],
+        "extensionFlagsBySession": [],
+        "lastViewedAtBySession": [],
+        "loadedTranscriptKeys": [],
+        "pendingAutoTitleBySession": [],
+        "pinnedAtBySession": [],
+        "pinnedSessionOrder": [],
+        "runningSinceBySession": [],
+        "sessionErrorsBySession": [],
+        "sessionSubscriptions": [],
+        "transcriptCache": []
+      }
+    }
+  },
+  {
+    "fn": "nextRunAt",
+    "args": {
+      "schedule": { "kind": "once", "at": "2026-10-02T09:00:00.000Z" },
+      "from": "2026-10-01T19:00:00.000Z"
+    },
+    "expected": { "value": "2026-10-02T09:00:00.000Z" }
+  },
+  {
+    "fn": "nextRunAt",
+    "args": {
+      "schedule": { "kind": "once", "at": "2026-10-01T19:00:00.000Z" },
+      "from": "2026-10-01T19:00:00.000Z"
+    },
+    "expected": { "value": null }
+  },
+  {
+    "fn": "nextRunAt",
+    "args": {
+      "schedule": { "kind": "once", "at": "soon" },
+      "from": "2026-10-01T19:00:00.000Z"
+    },
+    "expected": { "value": null }
+  },
+  {
+    "fn": "nextRunAt",
+    "args": {
+      "schedule": { "kind": "interval", "everyMs": 3600000 },
+      "from": "2026-10-01T19:00:00.000Z"
+    },
+    "expected": { "value": "2026-10-01T20:00:00.000Z" }
+  },
+  {
+    "fn": "nextRunAt",
+    "args": {
+      "schedule": {
+        "kind": "daily",
+        "hour": 9,
+        "minute": 30,
+        "timeZone": "America/New_York"
+      },
+      "from": "2026-10-01T19:00:00.000Z"
+    },
+    "expected": { "value": "2026-10-02T13:30:00.000Z" }
+  },
+  {
+    "fn": "nextRunAt",
+    "args": {
+      "schedule": {
+        "kind": "daily",
+        "hour": 15,
+        "minute": 30,
+        "timeZone": "America/New_York"
+      },
+      "from": "2026-10-01T19:00:00.000Z"
+    },
+    "expected": { "value": "2026-10-01T19:30:00.000Z" }
+  },
+  {
+    "fn": "nextRunAt",
+    "args": {
+      "schedule": {
+        "kind": "daily",
+        "hour": 2,
+        "minute": 30,
+        "timeZone": "America/New_York"
+      },
+      "from": "2026-03-07T12:00:00.000Z"
+    },
+    "expected": { "value": "2026-03-08T06:30:00.000Z" }
+  },
+  {
+    "fn": "nextRunAt",
+    "args": {
+      "schedule": {
+        "kind": "daily",
+        "hour": 1,
+        "minute": 30,
+        "timeZone": "America/New_York"
+      },
+      "from": "2026-10-31T12:00:00.000Z"
+    },
+    "expected": { "value": "2026-11-01T05:30:00.000Z" }
+  },
+  {
+    "fn": "nextRunAt",
+    "args": {
+      "schedule": {
+        "kind": "daily",
+        "hour": 0,
+        "minute": 0,
+        "timeZone": "Asia/Kolkata"
+      },
+      "from": "2026-12-31T18:29:00.000Z"
+    },
+    "expected": { "value": "2026-12-31T18:30:00.000Z" }
+  },
+  {
+    "fn": "nextRunAt",
+    "args": {
+      "schedule": {
+        "kind": "daily",
+        "hour": 23,
+        "minute": 59,
+        "timeZone": "UTC"
+      },
+      "from": "2026-12-31T23:59:00.000Z"
+    },
+    "expected": { "value": "2027-01-01T23:59:00.000Z" }
+  },
+  {
+    "fn": "nextRunAt",
+    "args": {
+      "schedule": {
+        "kind": "weekly",
+        "days": [1, 3],
+        "hour": 8,
+        "minute": 0,
+        "timeZone": "Europe/London"
+      },
+      "from": "2026-10-01T19:00:00.000Z"
+    },
+    "expected": { "value": "2026-10-05T07:00:00.000Z" }
+  },
+  {
+    "fn": "nextRunAt",
+    "args": {
+      "schedule": {
+        "kind": "weekly",
+        "days": [4],
+        "hour": 20,
+        "minute": 0,
+        "timeZone": "Europe/London"
+      },
+      "from": "2026-10-01T19:00:00.000Z"
+    },
+    "expected": { "value": "2026-10-08T19:00:00.000Z" }
+  },
+  {
+    "fn": "nextRunAt",
+    "args": {
+      "schedule": {
+        "kind": "weekly",
+        "days": [],
+        "hour": 8,
+        "minute": 0,
+        "timeZone": "Australia/Sydney"
+      },
+      "from": "2026-10-01T19:00:00.000Z"
+    },
+    "expected": { "value": "2026-10-01T22:00:00.000Z" }
+  },
+  {
+    "fn": "nextRunAt",
+    "args": {
+      "schedule": {
+        "kind": "weekly",
+        "days": [0],
+        "hour": 2,
+        "minute": 30,
+        "timeZone": "Europe/Berlin"
+      },
+      "from": "2026-03-25T12:00:00.000Z"
+    },
+    "expected": { "value": "2026-03-29T01:30:00.000Z" }
+  },
+  {
+    "fn": "nextRunAt",
+    "args": {
+      "schedule": {
+        "kind": "daily",
+        "hour": 9,
+        "minute": 0,
+        "timeZone": "Mars/Olympus"
+      },
+      "from": "2026-10-01T19:00:00.000Z"
+    },
+    "expected": {
+      "error": {
+        "message": "Invalid time zone specified: Mars/Olympus",
+        "name": "RangeError"
+      }
+    }
+  },
+  {
+    "fn": "earliestScheduledWakeAt",
+    "args": {
+      "now": "2026-10-01T19:05:00.000Z",
+      "tasks": [
+        { "status": "paused", "nextRunAt": "2026-10-01T19:01:00.000Z" },
+        { "status": "active", "nextRunAt": "not a date" },
+        { "status": "active", "nextRunAt": "2026-10-01T19:09:00.000Z" },
+        { "status": "active", "nextRunAt": "2026-10-01T19:07:00.000Z" },
+        { "status": "active" }
+      ]
+    },
+    "expected": "2026-10-01T19:07:00.000Z"
+  },
+  {
+    "fn": "earliestScheduledWakeAt",
+    "args": {
+      "now": "2026-10-01T19:05:00.000Z",
+      "tasks": [{ "status": "active", "nextRunAt": "2026-10-01T19:02:00.000Z" }]
+    },
+    "expected": "2026-10-01T19:05:00.000Z"
+  },
+  {
+    "fn": "earliestScheduledWakeAt",
+    "args": { "now": "2026-10-01T19:05:00.000Z", "tasks": [] },
+    "expected": null
+  }
+]
