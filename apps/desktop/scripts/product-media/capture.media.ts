@@ -15,7 +15,7 @@ import {
 } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
-import { launchDesktop, startThreadFromSurface } from "../../tests/helpers/electron-app";
+import { launchElectronDesktop, startThreadFromSurface } from "../../tests/helpers/electron-app";
 import { replaceFileAtomically } from "../atomic-output.mts";
 
 const repoRoot = path.resolve(__dirname, "../../../..");
@@ -341,7 +341,7 @@ test("capture product media from a real run", async () => {
   // Credentials stay outside the retained evidence tree and are deleted when the run ends.
   const privateDir = await mkdtemp(path.join(tmpdir(), "pi-gui-media-"));
   let xvfb: ChildProcess | undefined;
-  let harness: Awaited<ReturnType<typeof launchDesktop>> | undefined;
+  let harness: Awaited<ReturnType<typeof launchElectronDesktop>> | undefined;
   let stopRecording: (() => Promise<void>) | undefined;
   const rawVideo = path.join(runDir, "hero-raw.mkv");
   try {
@@ -365,7 +365,7 @@ test("capture product media from a real run", async () => {
 
     const display = await startDisplay(runDir);
     xvfb = display.xvfb;
-    harness = await launchDesktop(path.join(runDir, "profile"), {
+    harness = await launchElectronDesktop(path.join(runDir, "profile"), {
       agentDir,
       initialWorkspaces: [cart, notes],
       scrubProviderEnv: true,

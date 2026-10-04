@@ -24,20 +24,15 @@ test("clears a selected session blue dot when the window regains focus", async (
     await setSessionVisibilityOverride(harness, "active");
     await selectSessionByTitle(window, "Refocus Session");
     await setSessionVisibilityOverride(harness, null);
-    await harness.electronApp.evaluate(({ BrowserWindow }) => {
-      const appWindow = BrowserWindow.getAllWindows()[0];
-      appWindow?.minimize();
-    });
+    await harness.windows.minimize();
     await expect
-      .poll(() =>
-        harness.electronApp.evaluate(({ BrowserWindow }) => {
-          const appWindow = BrowserWindow.getAllWindows()[0];
-          return {
-            focused: appWindow?.isFocused() ?? false,
-            minimized: appWindow?.isMinimized() ?? false,
-          };
-        }),
-      )
+      .poll(async () => {
+        const appWindow = await harness.windows.state();
+        return {
+          focused: appWindow?.focused ?? false,
+          minimized: appWindow?.minimized ?? false,
+        };
+      })
       .toEqual({ focused: false, minimized: true });
 
     const row = window.locator(".session-row", { hasText: "Refocus Session" });

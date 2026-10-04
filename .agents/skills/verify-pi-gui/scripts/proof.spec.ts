@@ -2,9 +2,9 @@ import { test, expect } from "@playwright/test";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import {
-  launchDesktop,
+  launchElectronDesktop,
   seedAgentDir,
-  type DesktopHarness,
+  type ElectronDesktopHarness,
 } from "../../../../apps/desktop/tests/helpers/electron-app";
 
 test("visible app navigation and settings persistence without test hooks", async () => {
@@ -17,13 +17,13 @@ test("visible app navigation and settings persistence without test hooks", async
   await mkdir(workspace, { recursive: true });
   const runs: Array<{ pid: number; closed: boolean }> = [];
   const launch = async () =>
-    launchDesktop(userDataDir, {
+    launchElectronDesktop(userDataDir, {
       agentDir,
       initialWorkspaces: [workspace],
       scrubProviderEnv: true,
       envOverrides: { PI_APP_TEST_MODE: undefined },
     });
-  const doctor = async (harness: DesktopHarness) => {
+  const doctor = async (harness: ElectronDesktopHarness) => {
     await harness.focusWindow();
     const page = await harness.firstWindow();
     const identity = await harness.electronApp.evaluate(({ app, BrowserWindow }) => ({
@@ -52,7 +52,7 @@ test("visible app navigation and settings persistence without test hooks", async
   };
   let original: boolean | undefined;
   for (const phase of ["change", "restart"] as const) {
-    let harness: DesktopHarness | undefined;
+    let harness: ElectronDesktopHarness | undefined;
     let tracing = false;
     try {
       harness = await launch();

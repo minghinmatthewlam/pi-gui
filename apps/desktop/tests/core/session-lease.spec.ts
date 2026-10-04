@@ -24,11 +24,7 @@ async function leaseHolderPid(leasePath: string): Promise<number | undefined> {
 }
 
 function piHostPid(harness: DesktopHarness): Promise<number | undefined> {
-  return harness.electronApp.evaluate(() =>
-    (
-      globalThis as { __PI_APP_TEST_HOOKS?: { piHostPid(): number | undefined } }
-    ).__PI_APP_TEST_HOOKS!.piHostPid(),
-  );
+  return harness.hooks.piHostPid();
 }
 
 /**

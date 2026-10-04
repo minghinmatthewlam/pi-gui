@@ -8,6 +8,7 @@ import {
   makeUserDataDir,
   makeWorkspace,
   waitForWorkspaceByPath,
+  type DesktopHarness,
 } from "../helpers/electron-app";
 
 const NARROW_WINDOW_WIDTH = 1200;
@@ -66,23 +67,13 @@ async function expectToggleClearOfTopbarDragRegion(window: Page): Promise<void> 
   expect(layout.toggleRight).toBeLessThanOrEqual(layout.topbarLeft);
 }
 
-async function setElectronWindowSize(
-  app: Awaited<ReturnType<typeof launchDesktop>>["electronApp"],
+async function setDesktopWindowSize(
+  harness: DesktopHarness,
   window: Page,
   width: number,
   height: number,
 ): Promise<void> {
-  const didSetSize = await app.evaluate(
-    ({ BrowserWindow }, size) => {
-      const window = BrowserWindow.getAllWindows()[0];
-      if (!window) {
-        return false;
-      }
-      window.setSize(size.width, size.height);
-      return true;
-    },
-    { width, height },
-  );
+  const didSetSize = await harness.windows.setSize({ width, height });
   expect(didSetSize).toBe(true);
   await expect
     .poll(() =>
@@ -247,7 +238,7 @@ test("keeps collapsed sidebar out of narrow windows and reopens from the button"
   try {
     window = await run.firstWindow();
     await waitForWorkspaceByPath(window, workspacePath);
-    await setElectronWindowSize(run.electronApp, window, NARROW_WINDOW_WIDTH, NARROW_WINDOW_HEIGHT);
+    await setDesktopWindowSize(run, window, NARROW_WINDOW_WIDTH, NARROW_WINDOW_HEIGHT);
     await expect(window.getByTestId("sidebar-toggle")).toBeVisible();
 
     await window.keyboard.press(desktopShortcut("B"));

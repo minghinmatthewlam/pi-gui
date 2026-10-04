@@ -433,9 +433,7 @@ test("custom endpoint dialog supports a long-list keyboard flow with sticky acti
   try {
     const window = await harness.firstWindow();
     video = window.video();
-    await harness.electronApp.evaluate(({ BrowserWindow }) => {
-      BrowserWindow.getAllWindows()[0]?.setSize(900, 600);
-    });
+    await harness.windows.setSize({ width: 900, height: 600 });
     await expect
       .poll(() =>
         window.evaluate(() => ({
