@@ -566,7 +566,7 @@ fn pinned_first(left: Option<bool>, right: Option<bool>) -> Ordering {
 }
 
 /// JavaScript's `localeCompare`: the same ICU root collation V8 uses.
-fn compare_display_names(left: &str, right: &str) -> Ordering {
+pub(crate) fn compare_display_names(left: &str, right: &str) -> Ordering {
     static COLLATOR: OnceLock<CollatorBorrowed<'static>> = OnceLock::new();
     COLLATOR
         .get_or_init(|| {

@@ -225,6 +225,8 @@ name = "pi-gui-core"
 version = "0.1.0"
 dependencies = [
  "icu_collator",
+ "indexmap",
+ "libc",
  "serde",
  "serde_json",
  "tokio",

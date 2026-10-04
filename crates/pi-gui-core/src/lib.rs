@@ -5,6 +5,7 @@
 //! The core runs on one thread with a local async executor, like Node: state lives in
 //! `RefCell`s, and a call runs until its first `.await`.
 
+pub mod checkpoints;
 pub mod error;
 pub mod json_text;
 pub mod persistence;
@@ -26,6 +27,16 @@ pub mod methods {
     pub const INITIALIZE: &str = "core.initialize";
     pub const SHUTDOWN: &str = "core.shutdown";
     pub const CATALOG_CALL: &str = "catalog.call";
+
+    /// Turn checkpoints, routed to `checkpoints::call` by their `checkpoints.` prefix.
+    pub mod checkpoints {
+        pub const RECORD_BOUNDARY: &str = "checkpoints.recordBoundary";
+        pub const LIST: &str = "checkpoints.list";
+        pub const LIST_TURNS: &str = "checkpoints.listTurns";
+        pub const RESOLVE: &str = "checkpoints.resolve";
+        pub const CAPTURE: &str = "checkpoints.capture";
+        pub const MAINTAIN: &str = "checkpoints.maintain";
+    }
 }
 
 #[derive(Deserialize)]
@@ -33,11 +44,15 @@ pub mod methods {
 struct InitializeParams {
     /// The app's profile folder; saved data lives here under the same names as before.
     user_data_dir: PathBuf,
+    /// Capture limits and retention; only tests pass these.
+    #[serde(default)]
+    turn_checkpoints: checkpoints::Options,
 }
 
 /// Parts that exist once the app has said where its profile folder is.
 struct Parts {
     catalog: RefCell<CatalogStore>,
+    checkpoints: Rc<checkpoints::store::TurnCheckpoints>,
 }
 
 pub struct Core {
@@ -73,6 +88,7 @@ impl Core {
                     catalog: RefCell::new(CatalogStore::new(
                         params.user_data_dir.join("catalogs.json"),
                     )),
+                    checkpoints: checkpoints::open(&params.user_data_dir, params.turn_checkpoints)?,
                 };
                 self.parts
                     .set(parts)
@@ -93,14 +109,13 @@ impl Core {
 
 impl Service for Core {
     fn call(self: Rc<Self>, method: String, params: Value) -> LocalFuture<CoreResult<Value>> {
-        let _params = match self.call_now(&method, params) {
+        let params = match self.call_now(&method, params) {
             Ok(result) => return Box::pin(std::future::ready(result)),
             Err(params) => params,
         };
-        // Calls that wait (git, files, processes) go to their part by method prefix, for
-        // example `Some(("git", _)) => Box::pin(git::call(self, method, params))`.
-        #[allow(clippy::match_single_binding)]
+        // Calls that wait (git, files, processes) go to their part by method prefix.
         match method.split_once('.') {
+            Some(("checkpoints", _)) => Box::pin(checkpoints::call(self, method, params)),
             _ => Box::pin(std::future::ready(Err(CoreError::new(format!(
                 "Unknown RPC method: {method}"
             ))))),
@@ -119,6 +134,37 @@ impl Service for Core {
 pub(crate) fn parse<T: DeserializeOwned>(params: Value) -> CoreResult<T> {
     serde_json::from_value(params)
         .map_err(|error| CoreError::new(format!("Invalid parameters: {error}")))
+}
+
+/// A random version 4 UUID, for unique file and ref names like `crypto.randomUUID()`.
+pub(crate) fn random_id() -> String {
+    use std::hash::{BuildHasher, Hasher};
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    // Each `RandomState` is seeded from the operating system's random source.
+    let random = || {
+        let mut hasher = std::collections::hash_map::RandomState::new().build_hasher();
+        hasher.write_u64(COUNTER.fetch_add(1, Ordering::Relaxed));
+        hasher.write_u128(
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|since| since.as_nanos())
+                .unwrap_or_default(),
+        );
+        hasher.finish()
+    };
+    let bits = (u128::from(random()) << 64 | u128::from(random())) & !(0xf << 76) & !(0x3 << 62)
+        | (0x4 << 76)
+        | (0x2 << 62);
+    let hex = format!("{bits:032x}");
+    format!(
+        "{}-{}-{}-{}-{}",
+        &hex[..8],
+        &hex[8..12],
+        &hex[12..16],
+        &hex[16..20],
+        &hex[20..]
+    )
 }
 
 /// Runs the core over a pair of streams until the input closes or the app asks it to stop.

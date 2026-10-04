@@ -8,6 +8,10 @@ publish = false
 
 [dependencies]
 icu_collator = "2"
+indexmap = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 tokio = { version = "1.53.2", features = ["rt", "macros", "io-util", "io-std", "process", "sync", "time", "fs"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
