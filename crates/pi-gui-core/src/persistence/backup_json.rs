@@ -1,18 +1,19 @@
 //! JSON files kept with a `.bak` copy of the previous good version, read and written the way
 //! `readJsonWithBackup` and `writeFileAtomicQueued` in the old `atomic-file-write.ts` (now in
 //! `apps/desktop/tests/unit/saved-data-oracle/`) did, so files either side wrote load on the other. Used by turn checkpoints, ui-state,
-//! attachments, scheduled tasks and review marks (`catalogs.json` has no backup; it uses the
-//! plain write in `atomic.rs`).
+//! attachments, scheduled tasks and review marks (`catalogs.json` has no backup). Both write
+//! through `atomic.rs`.
 //!
 //! The functions here block. Callers run them off the core's thread, through a [`FileQueue`]
 //! when calls for one file must not overlap.
 
+use super::atomic;
 use crate::error::{CoreError, CoreResult};
 use serde_json::Value;
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::fs::{self, File, OpenOptions};
-use std::io::{self, Write};
+use std::fs;
+use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -112,68 +113,32 @@ pub fn write_with_migration_copy<T>(
         )));
     }
     let validated = existing.value.as_ref().map(validate_existing).transpose()?;
-    let dir = path.parent().unwrap_or_else(|| Path::new("."));
-    fs::create_dir_all(dir).map_err(|error| CoreError::io(&error, dir))?;
     let preserved_path = validated.as_ref().and_then(preserve_as);
     if let (Some(preserved_path), Some(old)) = (preserved_path, &existing.contents) {
-        write_file(&preserved_path, old, false)?;
-        sync_dir(dir);
+        let dir = atomic::parent(path);
+        fs::create_dir_all(dir).map_err(|error| CoreError::io(&error, dir))?;
+        atomic::write_new_file(&preserved_path, old)?;
+        atomic::sync_dir(dir);
     }
-    let tmp_path = sibling(
-        path,
-        &format!(".{}.{}.tmp", std::process::id(), crate::random_id()),
-    );
-    write_file(&tmp_path, contents.as_bytes(), true)?;
-    if let Err(error) = promote(&tmp_path, path, existing.corrupted) {
-        let _ = fs::remove_file(&tmp_path);
-        return Err(error);
-    }
-    sync_dir(dir);
-    Ok(())
+    atomic::replace_file(path, contents.as_bytes(), || {
+        keep_previous(path, existing.corrupted)
+    })
 }
 
-/// Writes and syncs a file. `replace` false creates it only if nothing is there yet.
-fn write_file(path: &Path, contents: &[u8], replace: bool) -> CoreResult<()> {
-    let mut options = OpenOptions::new();
-    options.write(true);
-    if replace {
-        options.create(true).truncate(true);
-    } else {
-        options.create_new(true);
-    }
-    let mut file = options
-        .open(path)
-        .map_err(|error| CoreError::io(&error, path))?;
-    if let Err(error) = file.write_all(contents).and_then(|()| file.sync_all()) {
-        if replace {
-            let _ = fs::remove_file(path);
-        }
-        return Err(CoreError::io(&error, path));
-    }
-    Ok(())
-}
-
-fn promote(tmp_path: &Path, path: &Path, keep_corrupt: bool) -> CoreResult<()> {
+/// Keeps the file about to be replaced: copied to `.bak`, or moved aside when damaged.
+fn keep_previous(path: &Path, corrupt: bool) -> CoreResult<()> {
     let ignore_missing = |result: io::Result<()>, at: &Path| match result {
         Err(error) if error.kind() != io::ErrorKind::NotFound => Err(CoreError::io(&error, at)),
         _ => Ok(()),
     };
-    if keep_corrupt {
+    if corrupt {
         // Recovery never replaces the good backup with damaged bytes.
         let aside = sibling(path, &format!(".corrupt.{}", crate::random_id()));
-        ignore_missing(fs::rename(path, &aside), path)?;
+        ignore_missing(fs::rename(path, &aside), path)
     } else {
         // Copy, not move, so a reader never finds the file missing.
         let backup = sibling(path, ".bak");
-        ignore_missing(fs::copy(path, &backup).map(|_| ()), path)?;
-    }
-    fs::rename(tmp_path, path).map_err(|error| CoreError::io(&error, path))
-}
-
-/// Best effort: some platforms (notably Windows) cannot open a folder to sync it.
-fn sync_dir(dir: &Path) {
-    if let Ok(handle) = File::open(dir) {
-        let _ = handle.sync_all();
+        ignore_missing(fs::copy(path, &backup).map(|_| ()), path)
     }
 }
 
