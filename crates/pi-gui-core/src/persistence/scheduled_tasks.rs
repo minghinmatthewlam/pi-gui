@@ -386,16 +386,62 @@ fn is_offset_zone(name: &str) -> bool {
     }
 }
 
-/// `hostTimeZone()`: the computer's zone (from `TZ` or the system setting), else UTC.
+/// `hostTimeZone()`: the computer's zone (from `TZ` or the system setting), else UTC, spelled
+/// the way Intl reports it: ICU still prefers some older names (`Asia/Calcutta` for
+/// `Asia/Kolkata`). A system zone set through an alias such as `US/Eastern` keeps that name.
 fn host_time_zone() -> String {
-    std::env::var("TZ")
+    let zone = std::env::var("TZ")
         .ok()
         .map(|zone| zone.trim_start_matches(':').to_owned())
         .filter(|zone| chrono_tz::Tz::from_str_insensitive(zone).is_ok())
         .or_else(|| iana_time_zone::get_timezone().ok())
         .filter(|zone| is_time_zone(zone))
-        .unwrap_or_else(|| "UTC".into())
+        .unwrap_or_else(|| "UTC".into());
+    ICU_PREFERRED_NAMES
+        .iter()
+        .find(|(name, _)| *name == zone)
+        .map_or(zone, |(_, preferred)| (*preferred).to_owned())
 }
+
+/// IANA zones whose name ICU reports differently.
+const ICU_PREFERRED_NAMES: [(&str, &str); 36] = [
+    ("Africa/Asmara", "Africa/Asmera"),
+    ("America/Argentina/Buenos_Aires", "America/Buenos_Aires"),
+    ("America/Argentina/Catamarca", "America/Catamarca"),
+    ("America/Argentina/Cordoba", "America/Cordoba"),
+    ("America/Argentina/Jujuy", "America/Jujuy"),
+    ("America/Argentina/Mendoza", "America/Mendoza"),
+    ("America/Atikokan", "America/Coral_Harbour"),
+    ("America/Indiana/Indianapolis", "America/Indianapolis"),
+    ("America/Kentucky/Louisville", "America/Louisville"),
+    ("America/Nuuk", "America/Godthab"),
+    ("Asia/Ho_Chi_Minh", "Asia/Saigon"),
+    ("Asia/Kathmandu", "Asia/Katmandu"),
+    ("Asia/Kolkata", "Asia/Calcutta"),
+    ("Asia/Yangon", "Asia/Rangoon"),
+    ("Atlantic/Faroe", "Atlantic/Faeroe"),
+    ("CET", "Europe/Brussels"),
+    ("CST6CDT", "America/Chicago"),
+    ("EET", "Europe/Athens"),
+    ("EST", "America/Panama"),
+    ("EST5EDT", "America/New_York"),
+    ("Etc/GMT", "UTC"),
+    ("Etc/Greenwich", "UTC"),
+    ("Etc/UCT", "UTC"),
+    ("Etc/UTC", "UTC"),
+    ("Etc/Universal", "UTC"),
+    ("Etc/Zulu", "UTC"),
+    ("Europe/Kyiv", "Europe/Kiev"),
+    ("HST", "Pacific/Honolulu"),
+    ("MET", "Europe/Brussels"),
+    ("MST", "America/Phoenix"),
+    ("MST7MDT", "America/Denver"),
+    ("PST8PDT", "America/Los_Angeles"),
+    ("Pacific/Chuuk", "Pacific/Truk"),
+    ("Pacific/Kanton", "Pacific/Enderbury"),
+    ("Pacific/Pohnpei", "Pacific/Ponape"),
+    ("WET", "Europe/Lisbon"),
+];
 
 #[cfg(test)]
 mod tests {
