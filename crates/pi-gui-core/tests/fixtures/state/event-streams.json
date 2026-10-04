@@ -193,9 +193,7 @@
             "type": "toolStarted",
             "toolName": "read",
             "callId": "call-read",
-            "input": {
-              "path": "apps/desktop/electron/conversation/app-store-timeline.ts"
-            }
+            "input": { "path": "apps/desktop/electron/conversation/app-store-timeline.ts" }
           }
         },
         {
@@ -242,10 +240,7 @@
             "success": true,
             "output": {
               "content": [
-                {
-                  "type": "text",
-                  "text": "  export function applyTimelineEvent(\n\n  transcript"
-                },
+                { "type": "text", "text": "  export function applyTimelineEvent(\n\n  transcript" },
                 { "type": "text", "text": "line two" }
               ]
             }
@@ -296,12 +291,7 @@
             "type": "toolFinished",
             "callId": "call-grep",
             "success": true,
-            "output": {
-              "matches": 3,
-              "files": ["a.ts", "b.ts"],
-              "ratio": 0.5,
-              "big": 1e21
-            }
+            "output": { "matches": 3, "files": ["a.ts", "b.ts"], "ratio": 0.5, "big": 1e21 }
           }
         },
         {
@@ -402,21 +392,9 @@
                 "thinkingLevel": "high"
               },
               "usage": {
-                "context": {
-                  "tokens": 12345,
-                  "contextWindow": 200000,
-                  "compactAtTokens": 180000
-                },
-                "lastTurn": {
-                  "input": 1000,
-                  "output": 200,
-                  "cacheRead": 800,
-                  "cacheWrite": 0
-                },
-                "cache": {
-                  "lifetimeSeconds": 300,
-                  "expiresAt": "2026-10-01T19:12:00.000Z"
-                },
+                "context": { "tokens": 12345, "contextWindow": 200000, "compactAtTokens": 180000 },
+                "lastTurn": { "input": 1000, "output": 200, "cacheRead": 800, "cacheWrite": 0 },
+                "cache": { "lifetimeSeconds": 300, "expiresAt": "2026-10-01T19:12:00.000Z" },
                 "totals": {
                   "input": 5000,
                   "output": 900,
@@ -523,9 +501,7 @@
                 "toolCount": 0
               }
             },
-            "runningSinceBySession": {
-              "ws-main:s-main": "2026-10-01T19:01:00.000Z"
-            }
+            "runningSinceBySession": { "ws-main:s-main": "2026-10-01T19:01:00.000Z" }
           },
           "transcript": [
             {
@@ -571,9 +547,7 @@
                 "toolCount": 0
               }
             },
-            "runningSinceBySession": {
-              "ws-main:s-main": "2026-10-01T19:01:00.000Z"
-            }
+            "runningSinceBySession": { "ws-main:s-main": "2026-10-01T19:01:00.000Z" }
           },
           "transcript": [
             {
@@ -619,9 +593,7 @@
                 "toolCount": 0
               }
             },
-            "runningSinceBySession": {
-              "ws-main:s-main": "2026-10-01T19:01:00.000Z"
-            }
+            "runningSinceBySession": { "ws-main:s-main": "2026-10-01T19:01:00.000Z" }
           },
           "transcript": [
             {
@@ -674,9 +646,7 @@
                 "toolCount": 0
               }
             },
-            "runningSinceBySession": {
-              "ws-main:s-main": "2026-10-01T19:01:00.000Z"
-            }
+            "runningSinceBySession": { "ws-main:s-main": "2026-10-01T19:01:00.000Z" }
           },
           "transcript": [
             {
@@ -729,9 +699,7 @@
                 "toolCount": 0
               }
             },
-            "runningSinceBySession": {
-              "ws-main:s-main": "2026-10-01T19:01:00.000Z"
-            }
+            "runningSinceBySession": { "ws-main:s-main": "2026-10-01T19:01:00.000Z" }
           },
           "transcript": [
             {
@@ -784,9 +752,7 @@
                 "toolCount": 0
               }
             },
-            "runningSinceBySession": {
-              "ws-main:s-main": "2026-10-01T19:01:00.000Z"
-            }
+            "runningSinceBySession": { "ws-main:s-main": "2026-10-01T19:01:00.000Z" }
           },
           "transcript": [
             {
@@ -840,9 +806,7 @@
                 "toolCount": 1
               }
             },
-            "runningSinceBySession": {
-              "ws-main:s-main": "2026-10-01T19:01:00.000Z"
-            }
+            "runningSinceBySession": { "ws-main:s-main": "2026-10-01T19:01:00.000Z" }
           },
           "transcript": [
             {
@@ -870,9 +834,7 @@
               "callId": "call-read",
               "createdAt": "2026-10-01T19:03:01.000Z",
               "id": "call-read",
-              "input": {
-                "path": "apps/desktop/electron/conversation/app-store-timeline.ts"
-              },
+              "input": { "path": "apps/desktop/electron/conversation/app-store-timeline.ts" },
               "kind": "tool",
               "label": "Read apps/desktop/electron/conversation/app-store-timeline.ts",
               "status": "running",
@@ -908,9 +870,7 @@
                 "toolCount": 1
               }
             },
-            "runningSinceBySession": {
-              "ws-main:s-main": "2026-10-01T19:01:00.000Z"
-            }
+            "runningSinceBySession": { "ws-main:s-main": "2026-10-01T19:01:00.000Z" }
           },
           "transcript": [
             {
@@ -939,9 +899,7 @@
               "createdAt": "2026-10-01T19:03:01.000Z",
               "detail": "46%",
               "id": "call-read",
-              "input": {
-                "path": "apps/desktop/electron/conversation/app-store-timeline.ts"
-              },
+              "input": { "path": "apps/desktop/electron/conversation/app-store-timeline.ts" },
               "kind": "tool",
               "label": "Read apps/desktop/electron/conversation/app-store-timeline.ts",
               "status": "running",
@@ -977,9 +935,7 @@
                 "toolCount": 1
               }
             },
-            "runningSinceBySession": {
-              "ws-main:s-main": "2026-10-01T19:01:00.000Z"
-            }
+            "runningSinceBySession": { "ws-main:s-main": "2026-10-01T19:01:00.000Z" }
           },
           "transcript": [
             {
@@ -1008,9 +964,7 @@
               "createdAt": "2026-10-01T19:03:01.000Z",
               "detail": "3",
               "id": "call-read",
-              "input": {
-                "path": "apps/desktop/electron/conversation/app-store-timeline.ts"
-              },
+              "input": { "path": "apps/desktop/electron/conversation/app-store-timeline.ts" },
               "kind": "tool",
               "label": "Read apps/desktop/electron/conversation/app-store-timeline.ts",
               "status": "running",
@@ -1046,9 +1000,7 @@
                 "toolCount": 1
               }
             },
-            "runningSinceBySession": {
-              "ws-main:s-main": "2026-10-01T19:01:00.000Z"
-            }
+            "runningSinceBySession": { "ws-main:s-main": "2026-10-01T19:01:00.000Z" }
           },
           "transcript": [
             {
@@ -1077,9 +1029,7 @@
               "createdAt": "2026-10-01T19:03:01.000Z",
               "detail": "reading…",
               "id": "call-read",
-              "input": {
-                "path": "apps/desktop/electron/conversation/app-store-timeline.ts"
-              },
+              "input": { "path": "apps/desktop/electron/conversation/app-store-timeline.ts" },
               "kind": "tool",
               "label": "Read apps/desktop/electron/conversation/app-store-timeline.ts",
               "status": "running",
@@ -1115,9 +1065,7 @@
                 "toolCount": 1
               }
             },
-            "runningSinceBySession": {
-              "ws-main:s-main": "2026-10-01T19:01:00.000Z"
-            }
+            "runningSinceBySession": { "ws-main:s-main": "2026-10-01T19:01:00.000Z" }
           },
           "transcript": [
             {
@@ -1146,9 +1094,7 @@
               "createdAt": "2026-10-01T19:03:01.000Z",
               "detail": "export function applyTimelineEvent( transcript line two",
               "id": "call-read",
-              "input": {
-                "path": "apps/desktop/electron/conversation/app-store-timeline.ts"
-              },
+              "input": { "path": "apps/desktop/electron/conversation/app-store-timeline.ts" },
               "kind": "tool",
               "label": "Read apps/desktop/electron/conversation/app-store-timeline.ts",
               "output": {
@@ -1193,9 +1139,7 @@
                 "toolCount": 2
               }
             },
-            "runningSinceBySession": {
-              "ws-main:s-main": "2026-10-01T19:01:00.000Z"
-            }
+            "runningSinceBySession": { "ws-main:s-main": "2026-10-01T19:01:00.000Z" }
           },
           "transcript": [
             {
@@ -1224,9 +1168,7 @@
               "createdAt": "2026-10-01T19:03:01.000Z",
               "detail": "export function applyTimelineEvent( transcript line two",
               "id": "call-read",
-              "input": {
-                "path": "apps/desktop/electron/conversation/app-store-timeline.ts"
-              },
+              "input": { "path": "apps/desktop/electron/conversation/app-store-timeline.ts" },
               "kind": "tool",
               "label": "Read apps/desktop/electron/conversation/app-store-timeline.ts",
               "output": {
@@ -1281,9 +1223,7 @@
                 "toolCount": 2
               }
             },
-            "runningSinceBySession": {
-              "ws-main:s-main": "2026-10-01T19:01:00.000Z"
-            }
+            "runningSinceBySession": { "ws-main:s-main": "2026-10-01T19:01:00.000Z" }
           },
           "transcript": [
             {
@@ -1312,9 +1252,7 @@
               "createdAt": "2026-10-01T19:03:01.000Z",
               "detail": "export function applyTimelineEvent( transcript line two",
               "id": "call-read",
-              "input": {
-                "path": "apps/desktop/electron/conversation/app-store-timeline.ts"
-              },
+              "input": { "path": "apps/desktop/electron/conversation/app-store-timeline.ts" },
               "kind": "tool",
               "label": "Read apps/desktop/electron/conversation/app-store-timeline.ts",
               "output": {
@@ -1371,9 +1309,7 @@
                 "toolCount": 3
               }
             },
-            "runningSinceBySession": {
-              "ws-main:s-main": "2026-10-01T19:01:00.000Z"
-            }
+            "runningSinceBySession": { "ws-main:s-main": "2026-10-01T19:01:00.000Z" }
           },
           "transcript": [
             {
@@ -1402,9 +1338,7 @@
               "createdAt": "2026-10-01T19:03:01.000Z",
               "detail": "export function applyTimelineEvent( transcript line two",
               "id": "call-read",
-              "input": {
-                "path": "apps/desktop/electron/conversation/app-store-timeline.ts"
-              },
+              "input": { "path": "apps/desktop/electron/conversation/app-store-timeline.ts" },
               "kind": "tool",
               "label": "Read apps/desktop/electron/conversation/app-store-timeline.ts",
               "output": {
@@ -1471,9 +1405,7 @@
                 "toolCount": 3
               }
             },
-            "runningSinceBySession": {
-              "ws-main:s-main": "2026-10-01T19:01:00.000Z"
-            }
+            "runningSinceBySession": { "ws-main:s-main": "2026-10-01T19:01:00.000Z" }
           },
           "transcript": [
             {
@@ -1502,9 +1434,7 @@
               "createdAt": "2026-10-01T19:03:01.000Z",
               "detail": "export function applyTimelineEvent( transcript line two",
               "id": "call-read",
-              "input": {
-                "path": "apps/desktop/electron/conversation/app-store-timeline.ts"
-              },
+              "input": { "path": "apps/desktop/electron/conversation/app-store-timeline.ts" },
               "kind": "tool",
               "label": "Read apps/desktop/electron/conversation/app-store-timeline.ts",
               "output": {
@@ -1539,12 +1469,7 @@
               "input": { "glob": "**/*.ts", "pattern": "applyTimelineEvent" },
               "kind": "tool",
               "label": "Ran grep",
-              "output": {
-                "big": 1e21,
-                "files": ["a.ts", "b.ts"],
-                "matches": 3,
-                "ratio": 0.5
-              },
+              "output": { "big": 1e21, "files": ["a.ts", "b.ts"], "matches": 3, "ratio": 0.5 },
               "status": "success",
               "toolName": "grep"
             }
@@ -1578,9 +1503,7 @@
                 "toolCount": 4
               }
             },
-            "runningSinceBySession": {
-              "ws-main:s-main": "2026-10-01T19:01:00.000Z"
-            }
+            "runningSinceBySession": { "ws-main:s-main": "2026-10-01T19:01:00.000Z" }
           },
           "transcript": [
             {
@@ -1609,9 +1532,7 @@
               "createdAt": "2026-10-01T19:03:01.000Z",
               "detail": "export function applyTimelineEvent( transcript line two",
               "id": "call-read",
-              "input": {
-                "path": "apps/desktop/electron/conversation/app-store-timeline.ts"
-              },
+              "input": { "path": "apps/desktop/electron/conversation/app-store-timeline.ts" },
               "kind": "tool",
               "label": "Read apps/desktop/electron/conversation/app-store-timeline.ts",
               "output": {
@@ -1646,12 +1567,7 @@
               "input": { "glob": "**/*.ts", "pattern": "applyTimelineEvent" },
               "kind": "tool",
               "label": "Ran grep",
-              "output": {
-                "big": 1e21,
-                "files": ["a.ts", "b.ts"],
-                "matches": 3,
-                "ratio": 0.5
-              },
+              "output": { "big": 1e21, "files": ["a.ts", "b.ts"], "matches": 3, "ratio": 0.5 },
               "status": "success",
               "toolName": "grep"
             },
@@ -1694,9 +1610,7 @@
                 "toolCount": 4
               }
             },
-            "runningSinceBySession": {
-              "ws-main:s-main": "2026-10-01T19:01:00.000Z"
-            }
+            "runningSinceBySession": { "ws-main:s-main": "2026-10-01T19:01:00.000Z" }
           },
           "transcript": [
             {
@@ -1725,9 +1639,7 @@
               "createdAt": "2026-10-01T19:03:01.000Z",
               "detail": "export function applyTimelineEvent( transcript line two",
               "id": "call-read",
-              "input": {
-                "path": "apps/desktop/electron/conversation/app-store-timeline.ts"
-              },
+              "input": { "path": "apps/desktop/electron/conversation/app-store-timeline.ts" },
               "kind": "tool",
               "label": "Read apps/desktop/electron/conversation/app-store-timeline.ts",
               "output": {
@@ -1762,12 +1674,7 @@
               "input": { "glob": "**/*.ts", "pattern": "applyTimelineEvent" },
               "kind": "tool",
               "label": "Ran grep",
-              "output": {
-                "big": 1e21,
-                "files": ["a.ts", "b.ts"],
-                "matches": 3,
-                "ratio": 0.5
-              },
+              "output": { "big": 1e21, "files": ["a.ts", "b.ts"], "matches": 3, "ratio": 0.5 },
               "status": "success",
               "toolName": "grep"
             },
@@ -1810,9 +1717,7 @@
                 "toolCount": 4
               }
             },
-            "runningSinceBySession": {
-              "ws-main:s-main": "2026-10-01T19:01:00.000Z"
-            }
+            "runningSinceBySession": { "ws-main:s-main": "2026-10-01T19:01:00.000Z" }
           },
           "transcript": [
             {
@@ -1841,9 +1746,7 @@
               "createdAt": "2026-10-01T19:03:01.000Z",
               "detail": "export function applyTimelineEvent( transcript line two",
               "id": "call-read",
-              "input": {
-                "path": "apps/desktop/electron/conversation/app-store-timeline.ts"
-              },
+              "input": { "path": "apps/desktop/electron/conversation/app-store-timeline.ts" },
               "kind": "tool",
               "label": "Read apps/desktop/electron/conversation/app-store-timeline.ts",
               "output": {
@@ -1878,12 +1781,7 @@
               "input": { "glob": "**/*.ts", "pattern": "applyTimelineEvent" },
               "kind": "tool",
               "label": "Ran grep",
-              "output": {
-                "big": 1e21,
-                "files": ["a.ts", "b.ts"],
-                "matches": 3,
-                "ratio": 0.5
-              },
+              "output": { "big": 1e21, "files": ["a.ts", "b.ts"], "matches": 3, "ratio": 0.5 },
               "status": "success",
               "toolName": "grep"
             },
@@ -1933,9 +1831,7 @@
                 "toolCount": 4
               }
             },
-            "runningSinceBySession": {
-              "ws-main:s-main": "2026-10-01T19:01:00.000Z"
-            }
+            "runningSinceBySession": { "ws-main:s-main": "2026-10-01T19:01:00.000Z" }
           },
           "transcript": [
             {
@@ -1964,9 +1860,7 @@
               "createdAt": "2026-10-01T19:03:01.000Z",
               "detail": "export function applyTimelineEvent( transcript line two",
               "id": "call-read",
-              "input": {
-                "path": "apps/desktop/electron/conversation/app-store-timeline.ts"
-              },
+              "input": { "path": "apps/desktop/electron/conversation/app-store-timeline.ts" },
               "kind": "tool",
               "label": "Read apps/desktop/electron/conversation/app-store-timeline.ts",
               "output": {
@@ -2001,12 +1895,7 @@
               "input": { "glob": "**/*.ts", "pattern": "applyTimelineEvent" },
               "kind": "tool",
               "label": "Ran grep",
-              "output": {
-                "big": 1e21,
-                "files": ["a.ts", "b.ts"],
-                "matches": 3,
-                "ratio": 0.5
-              },
+              "output": { "big": 1e21, "files": ["a.ts", "b.ts"], "matches": 3, "ratio": 0.5 },
               "status": "success",
               "toolName": "grep"
             },
@@ -2056,9 +1945,7 @@
                 "toolCount": 4
               }
             },
-            "runningSinceBySession": {
-              "ws-main:s-main": "2026-10-01T19:01:00.000Z"
-            }
+            "runningSinceBySession": { "ws-main:s-main": "2026-10-01T19:01:00.000Z" }
           },
           "transcript": [
             {
@@ -2087,9 +1974,7 @@
               "createdAt": "2026-10-01T19:03:01.000Z",
               "detail": "export function applyTimelineEvent( transcript line two",
               "id": "call-read",
-              "input": {
-                "path": "apps/desktop/electron/conversation/app-store-timeline.ts"
-              },
+              "input": { "path": "apps/desktop/electron/conversation/app-store-timeline.ts" },
               "kind": "tool",
               "label": "Read apps/desktop/electron/conversation/app-store-timeline.ts",
               "output": {
@@ -2124,12 +2009,7 @@
               "input": { "glob": "**/*.ts", "pattern": "applyTimelineEvent" },
               "kind": "tool",
               "label": "Ran grep",
-              "output": {
-                "big": 1e21,
-                "files": ["a.ts", "b.ts"],
-                "matches": 3,
-                "ratio": 0.5
-              },
+              "output": { "big": 1e21, "files": ["a.ts", "b.ts"], "matches": 3, "ratio": 0.5 },
               "status": "success",
               "toolName": "grep"
             },
@@ -2179,9 +2059,7 @@
                 "toolCount": 4
               }
             },
-            "runningSinceBySession": {
-              "ws-main:s-main": "2026-10-01T19:01:00.000Z"
-            }
+            "runningSinceBySession": { "ws-main:s-main": "2026-10-01T19:01:00.000Z" }
           },
           "transcript": [
             {
@@ -2210,9 +2088,7 @@
               "createdAt": "2026-10-01T19:03:01.000Z",
               "detail": "export function applyTimelineEvent( transcript line two",
               "id": "call-read",
-              "input": {
-                "path": "apps/desktop/electron/conversation/app-store-timeline.ts"
-              },
+              "input": { "path": "apps/desktop/electron/conversation/app-store-timeline.ts" },
               "kind": "tool",
               "label": "Read apps/desktop/electron/conversation/app-store-timeline.ts",
               "output": {
@@ -2247,12 +2123,7 @@
               "input": { "glob": "**/*.ts", "pattern": "applyTimelineEvent" },
               "kind": "tool",
               "label": "Ran grep",
-              "output": {
-                "big": 1e21,
-                "files": ["a.ts", "b.ts"],
-                "matches": 3,
-                "ratio": 0.5
-              },
+              "output": { "big": 1e21, "files": ["a.ts", "b.ts"], "matches": 3, "ratio": 0.5 },
               "status": "success",
               "toolName": "grep"
             },
@@ -2303,9 +2174,7 @@
                 "toolCount": 4
               }
             },
-            "runningSinceBySession": {
-              "ws-main:s-main": "2026-10-01T19:01:00.000Z"
-            }
+            "runningSinceBySession": { "ws-main:s-main": "2026-10-01T19:01:00.000Z" }
           },
           "transcript": [
             {
@@ -2334,9 +2203,7 @@
               "createdAt": "2026-10-01T19:03:01.000Z",
               "detail": "export function applyTimelineEvent( transcript line two",
               "id": "call-read",
-              "input": {
-                "path": "apps/desktop/electron/conversation/app-store-timeline.ts"
-              },
+              "input": { "path": "apps/desktop/electron/conversation/app-store-timeline.ts" },
               "kind": "tool",
               "label": "Read apps/desktop/electron/conversation/app-store-timeline.ts",
               "output": {
@@ -2371,12 +2238,7 @@
               "input": { "glob": "**/*.ts", "pattern": "applyTimelineEvent" },
               "kind": "tool",
               "label": "Ran grep",
-              "output": {
-                "big": 1e21,
-                "files": ["a.ts", "b.ts"],
-                "matches": 3,
-                "ratio": 0.5
-              },
+              "output": { "big": 1e21, "files": ["a.ts", "b.ts"], "matches": 3, "ratio": 0.5 },
               "status": "success",
               "toolName": "grep"
             },
@@ -2447,9 +2309,7 @@
               "createdAt": "2026-10-01T19:03:01.000Z",
               "detail": "export function applyTimelineEvent( transcript line two",
               "id": "call-read",
-              "input": {
-                "path": "apps/desktop/electron/conversation/app-store-timeline.ts"
-              },
+              "input": { "path": "apps/desktop/electron/conversation/app-store-timeline.ts" },
               "kind": "tool",
               "label": "Read apps/desktop/electron/conversation/app-store-timeline.ts",
               "output": {
@@ -2484,12 +2344,7 @@
               "input": { "glob": "**/*.ts", "pattern": "applyTimelineEvent" },
               "kind": "tool",
               "label": "Ran grep",
-              "output": {
-                "big": 1e21,
-                "files": ["a.ts", "b.ts"],
-                "matches": 3,
-                "ratio": 0.5
-              },
+              "output": { "big": 1e21, "files": ["a.ts", "b.ts"], "matches": 3, "ratio": 0.5 },
               "status": "success",
               "toolName": "grep"
             },
@@ -2567,9 +2422,7 @@
               "createdAt": "2026-10-01T19:03:01.000Z",
               "detail": "export function applyTimelineEvent( transcript line two",
               "id": "call-read",
-              "input": {
-                "path": "apps/desktop/electron/conversation/app-store-timeline.ts"
-              },
+              "input": { "path": "apps/desktop/electron/conversation/app-store-timeline.ts" },
               "kind": "tool",
               "label": "Read apps/desktop/electron/conversation/app-store-timeline.ts",
               "output": {
@@ -2604,12 +2457,7 @@
               "input": { "glob": "**/*.ts", "pattern": "applyTimelineEvent" },
               "kind": "tool",
               "label": "Ran grep",
-              "output": {
-                "big": 1e21,
-                "files": ["a.ts", "b.ts"],
-                "matches": 3,
-                "ratio": 0.5
-              },
+              "output": { "big": 1e21, "files": ["a.ts", "b.ts"], "matches": 3, "ratio": 0.5 },
               "status": "success",
               "toolName": "grep"
             },
@@ -2853,16 +2701,8 @@
                   "replacesPiTool": false
                 },
                 { "name": "blank", "label": "  ", "replacesPiTool": false },
-                {
-                  "name": "bash",
-                  "label": "bash (sandboxed)",
-                  "replacesPiTool": true
-                },
-                {
-                  "name": "shared_name",
-                  "label": "From github",
-                  "replacesPiTool": false
-                }
+                { "name": "bash", "label": "bash (sandboxed)", "replacesPiTool": true },
+                { "name": "shared_name", "label": "From github", "replacesPiTool": false }
               ],
               "flags": [],
               "flagDetails": [],
@@ -2880,13 +2720,7 @@
                 "origin": "top-level"
               },
               "commands": [],
-              "tools": [
-                {
-                  "name": "shared_name",
-                  "label": "From other",
-                  "replacesPiTool": false
-                }
-              ],
+              "tools": [{ "name": "shared_name", "label": "From other", "replacesPiTool": false }],
               "flags": [],
               "flagDetails": [],
               "shortcuts": [],
@@ -2904,11 +2738,7 @@
               },
               "commands": [],
               "tools": [
-                {
-                  "name": "create_child_thread",
-                  "label": "Child thread",
-                  "replacesPiTool": false
-                }
+                { "name": "create_child_thread", "label": "Child thread", "replacesPiTool": false }
               ],
               "flags": [],
               "flagDetails": [],
@@ -2927,23 +2757,13 @@
               },
               "commands": ["ticket"],
               "tools": [
-                {
-                  "name": "ticket_lookup",
-                  "label": "Look up ticket",
-                  "replacesPiTool": false
-                }
+                { "name": "ticket_lookup", "label": "Look up ticket", "replacesPiTool": false }
               ],
               "flags": ["verbose"],
-              "flagDetails": [
-                { "name": "verbose", "type": "boolean", "default": false }
-              ],
+              "flagDetails": [{ "name": "verbose", "type": "boolean", "default": false }],
               "shortcuts": [],
               "diagnostics": [
-                {
-                  "type": "warning",
-                  "message": "Slow to load",
-                  "path": "/ext/tickets.ts"
-                }
+                { "type": "warning", "message": "Slow to load", "path": "/ext/tickets.ts" }
               ]
             },
             {
@@ -2957,13 +2777,7 @@
                 "origin": "top-level"
               },
               "commands": [],
-              "tools": [
-                {
-                  "name": "ticket_lookup",
-                  "label": "Off",
-                  "replacesPiTool": false
-                }
-              ],
+              "tools": [{ "name": "ticket_lookup", "label": "Off", "replacesPiTool": false }],
               "flags": [],
               "flagDetails": [],
               "shortcuts": [],
@@ -3154,9 +2968,7 @@
             "type": "toolFinished",
             "callId": "call-bash",
             "success": false,
-            "output": {
-              "stderr": "ls: cannot open directory '/tmp/secret': Permission denied"
-            }
+            "output": { "stderr": "ls: cannot open directory '/tmp/secret': Permission denied" }
           }
         },
         {
@@ -3200,9 +3012,7 @@
                 "toolCount": 0
               }
             },
-            "runningSinceBySession": {
-              "ws-main:s-main": "2026-10-01T19:01:00.000Z"
-            }
+            "runningSinceBySession": { "ws-main:s-main": "2026-10-01T19:01:00.000Z" }
           },
           "transcript": [
             {
@@ -3240,9 +3050,7 @@
                 "toolCount": 1
               }
             },
-            "runningSinceBySession": {
-              "ws-main:s-main": "2026-10-01T19:01:00.000Z"
-            }
+            "runningSinceBySession": { "ws-main:s-main": "2026-10-01T19:01:00.000Z" }
           },
           "transcript": [
             {
@@ -3296,9 +3104,7 @@
                 "toolCount": 1
               }
             },
-            "runningSinceBySession": {
-              "ws-main:s-main": "2026-10-01T19:01:00.000Z"
-            }
+            "runningSinceBySession": { "ws-main:s-main": "2026-10-01T19:01:00.000Z" }
           },
           "transcript": [
             {
@@ -3359,9 +3165,7 @@
                 "toolCount": 2
               }
             },
-            "runningSinceBySession": {
-              "ws-main:s-main": "2026-10-01T19:01:00.000Z"
-            }
+            "runningSinceBySession": { "ws-main:s-main": "2026-10-01T19:01:00.000Z" }
           },
           "transcript": [
             {
@@ -3432,9 +3236,7 @@
                 "toolCount": 3
               }
             },
-            "runningSinceBySession": {
-              "ws-main:s-main": "2026-10-01T19:01:00.000Z"
-            }
+            "runningSinceBySession": { "ws-main:s-main": "2026-10-01T19:01:00.000Z" }
           },
           "transcript": [
             {
@@ -3515,9 +3317,7 @@
                 "toolCount": 4
               }
             },
-            "runningSinceBySession": {
-              "ws-main:s-main": "2026-10-01T19:01:00.000Z"
-            }
+            "runningSinceBySession": { "ws-main:s-main": "2026-10-01T19:01:00.000Z" }
           },
           "transcript": [
             {
@@ -3608,9 +3408,7 @@
                 "toolCount": 5
               }
             },
-            "runningSinceBySession": {
-              "ws-main:s-main": "2026-10-01T19:01:00.000Z"
-            }
+            "runningSinceBySession": { "ws-main:s-main": "2026-10-01T19:01:00.000Z" }
           },
           "transcript": [
             {
@@ -3711,9 +3509,7 @@
                 "toolCount": 6
               }
             },
-            "runningSinceBySession": {
-              "ws-main:s-main": "2026-10-01T19:01:00.000Z"
-            }
+            "runningSinceBySession": { "ws-main:s-main": "2026-10-01T19:01:00.000Z" }
           },
           "transcript": [
             {
@@ -3823,9 +3619,7 @@
                 "toolCount": 7
               }
             },
-            "runningSinceBySession": {
-              "ws-main:s-main": "2026-10-01T19:01:00.000Z"
-            }
+            "runningSinceBySession": { "ws-main:s-main": "2026-10-01T19:01:00.000Z" }
           },
           "transcript": [
             {
@@ -3945,9 +3739,7 @@
                 "toolCount": 8
               }
             },
-            "runningSinceBySession": {
-              "ws-main:s-main": "2026-10-01T19:01:00.000Z"
-            }
+            "runningSinceBySession": { "ws-main:s-main": "2026-10-01T19:01:00.000Z" }
           },
           "transcript": [
             {
@@ -4077,9 +3869,7 @@
                 "toolCount": 9
               }
             },
-            "runningSinceBySession": {
-              "ws-main:s-main": "2026-10-01T19:01:00.000Z"
-            }
+            "runningSinceBySession": { "ws-main:s-main": "2026-10-01T19:01:00.000Z" }
           },
           "transcript": [
             {
@@ -4219,9 +4009,7 @@
                 "toolCount": 10
               }
             },
-            "runningSinceBySession": {
-              "ws-main:s-main": "2026-10-01T19:01:00.000Z"
-            }
+            "runningSinceBySession": { "ws-main:s-main": "2026-10-01T19:01:00.000Z" }
           },
           "transcript": [
             {
@@ -4371,9 +4159,7 @@
                 "toolCount": 10
               }
             },
-            "runningSinceBySession": {
-              "ws-main:s-main": "2026-10-01T19:01:00.000Z"
-            }
+            "runningSinceBySession": { "ws-main:s-main": "2026-10-01T19:01:00.000Z" }
           },
           "transcript": [
             {
@@ -4413,9 +4199,7 @@
               "input": { "command": "ls -la /tmp" },
               "kind": "tool",
               "label": "Ran bash: ls -la /tmp",
-              "output": {
-                "stderr": "ls: cannot open directory '/tmp/secret': Permission denied"
-              },
+              "output": { "stderr": "ls: cannot open directory '/tmp/secret': Permission denied" },
               "status": "error",
               "toolName": "bash"
             },
@@ -4553,9 +4337,7 @@
               "input": { "command": "ls -la /tmp" },
               "kind": "tool",
               "label": "Ran bash: ls -la /tmp",
-              "output": {
-                "stderr": "ls: cannot open directory '/tmp/secret': Permission denied"
-              },
+              "output": { "stderr": "ls: cannot open directory '/tmp/secret': Permission denied" },
               "status": "error",
               "toolName": "bash"
             },
@@ -4840,10 +4622,7 @@
             "sessionRef": { "workspaceId": "ws-main", "sessionId": "s-main" },
             "timestamp": "2026-10-01T19:03:00.000Z",
             "type": "runFailed",
-            "error": {
-              "message": "Model overloaded",
-              "details": { "retryAfter": 30 }
-            }
+            "error": { "message": "Model overloaded", "details": { "retryAfter": 30 } }
           }
         },
         {
@@ -4889,10 +4668,7 @@
             "type": "toolFinished",
             "callId": "call-edit",
             "success": false,
-            "output": {
-              "content": [{ "type": "text", "text": "   " }],
-              "isError": true
-            }
+            "output": { "content": [{ "type": "text", "text": "   " }], "isError": true }
           }
         },
         {
@@ -5001,9 +4777,7 @@
                 "toolCount": 0
               }
             },
-            "runningSinceBySession": {
-              "ws-main:s-main": "2026-10-01T19:01:00.000Z"
-            }
+            "runningSinceBySession": { "ws-main:s-main": "2026-10-01T19:01:00.000Z" }
           },
           "transcript": [
             {
@@ -5042,9 +4816,7 @@
                 "toolCount": 0
               }
             },
-            "runningSinceBySession": {
-              "ws-main:s-main": "2026-10-01T19:01:00.000Z"
-            }
+            "runningSinceBySession": { "ws-main:s-main": "2026-10-01T19:01:00.000Z" }
           },
           "transcript": [
             {
@@ -5130,9 +4902,7 @@
                 "toolCount": 0
               }
             },
-            "runningSinceBySession": {
-              "ws-main:s-main": "2026-10-01T19:10:00.000Z"
-            }
+            "runningSinceBySession": { "ws-main:s-main": "2026-10-01T19:10:00.000Z" }
           },
           "transcript": [
             {
@@ -5186,9 +4956,7 @@
                 "toolCount": 1
               }
             },
-            "runningSinceBySession": {
-              "ws-main:s-main": "2026-10-01T19:10:00.000Z"
-            }
+            "runningSinceBySession": { "ws-main:s-main": "2026-10-01T19:10:00.000Z" }
           },
           "transcript": [
             {
@@ -5252,9 +5020,7 @@
                 "toolCount": 1
               }
             },
-            "runningSinceBySession": {
-              "ws-main:s-main": "2026-10-01T19:10:00.000Z"
-            }
+            "runningSinceBySession": { "ws-main:s-main": "2026-10-01T19:10:00.000Z" }
           },
           "transcript": [
             {
@@ -5286,10 +5052,7 @@
               "input": { "filePath": "src/a.ts" },
               "kind": "tool",
               "label": "Ran edit: src/a.ts",
-              "output": {
-                "content": [{ "text": "   ", "type": "text" }],
-                "isError": true
-              },
+              "output": { "content": [{ "text": "   ", "type": "text" }], "isError": true },
               "status": "error",
               "toolName": "edit"
             }
@@ -5341,10 +5104,7 @@
               "input": { "filePath": "src/a.ts" },
               "kind": "tool",
               "label": "Ran edit: src/a.ts",
-              "output": {
-                "content": [{ "text": "   ", "type": "text" }],
-                "isError": true
-              },
+              "output": { "content": [{ "text": "   ", "type": "text" }], "isError": true },
               "status": "error",
               "toolName": "edit"
             },
@@ -5403,10 +5163,7 @@
               "input": { "filePath": "src/a.ts" },
               "kind": "tool",
               "label": "Ran edit: src/a.ts",
-              "output": {
-                "content": [{ "text": "   ", "type": "text" }],
-                "isError": true
-              },
+              "output": { "content": [{ "text": "   ", "type": "text" }], "isError": true },
               "status": "error",
               "toolName": "edit"
             },
@@ -5758,32 +5515,11 @@
                 "tone": "neutral",
                 "rows": [{ "label": "lint", "value": "passed" }],
                 "actions": [
-                  {
-                    "type": "openFile",
-                    "label": "Open log",
-                    "path": "ci.log",
-                    "line": 12
-                  },
-                  {
-                    "type": "composer",
-                    "label": "Ask",
-                    "text": "Why did it fail?"
-                  },
-                  {
-                    "type": "url",
-                    "label": "Run",
-                    "url": "https://ci.example/run/1"
-                  },
-                  {
-                    "type": "command",
-                    "label": "Rerun",
-                    "command": "/ci rerun"
-                  },
-                  {
-                    "type": "openThread",
-                    "label": "Thread",
-                    "sessionId": "s-other"
-                  }
+                  { "type": "openFile", "label": "Open log", "path": "ci.log", "line": 12 },
+                  { "type": "composer", "label": "Ask", "text": "Why did it fail?" },
+                  { "type": "url", "label": "Run", "url": "https://ci.example/run/1" },
+                  { "type": "command", "label": "Rerun", "command": "/ci rerun" },
+                  { "type": "openThread", "label": "Thread", "sessionId": "s-other" }
                 ]
               }
             }
@@ -5878,13 +5614,7 @@
               "kind": "pin",
               "id": "pin:ci",
               "createdAt": "2026-10-01T19:04:00.000Z",
-              "card": {
-                "key": "ci",
-                "title": "CI",
-                "tone": "warning",
-                "rows": [],
-                "actions": []
-              }
+              "card": { "key": "ci", "title": "CI", "tone": "warning", "rows": [], "actions": [] }
             }
           }
         },
@@ -6196,32 +5926,11 @@
             {
               "card": {
                 "actions": [
-                  {
-                    "label": "Open log",
-                    "line": 12,
-                    "path": "ci.log",
-                    "type": "openFile"
-                  },
-                  {
-                    "label": "Ask",
-                    "text": "Why did it fail?",
-                    "type": "composer"
-                  },
-                  {
-                    "label": "Run",
-                    "type": "url",
-                    "url": "https://ci.example/run/1"
-                  },
-                  {
-                    "command": "/ci rerun",
-                    "label": "Rerun",
-                    "type": "command"
-                  },
-                  {
-                    "label": "Thread",
-                    "sessionId": "s-other",
-                    "type": "openThread"
-                  }
+                  { "label": "Open log", "line": 12, "path": "ci.log", "type": "openFile" },
+                  { "label": "Ask", "text": "Why did it fail?", "type": "composer" },
+                  { "label": "Run", "type": "url", "url": "https://ci.example/run/1" },
+                  { "command": "/ci rerun", "label": "Rerun", "type": "command" },
+                  { "label": "Thread", "sessionId": "s-other", "type": "openThread" }
                 ],
                 "key": "ci",
                 "rows": [{ "label": "lint", "value": "passed" }],
@@ -6281,32 +5990,11 @@
             {
               "card": {
                 "actions": [
-                  {
-                    "label": "Open log",
-                    "line": 12,
-                    "path": "ci.log",
-                    "type": "openFile"
-                  },
-                  {
-                    "label": "Ask",
-                    "text": "Why did it fail?",
-                    "type": "composer"
-                  },
-                  {
-                    "label": "Run",
-                    "type": "url",
-                    "url": "https://ci.example/run/1"
-                  },
-                  {
-                    "command": "/ci rerun",
-                    "label": "Rerun",
-                    "type": "command"
-                  },
-                  {
-                    "label": "Thread",
-                    "sessionId": "s-other",
-                    "type": "openThread"
-                  }
+                  { "label": "Open log", "line": 12, "path": "ci.log", "type": "openFile" },
+                  { "label": "Ask", "text": "Why did it fail?", "type": "composer" },
+                  { "label": "Run", "type": "url", "url": "https://ci.example/run/1" },
+                  { "command": "/ci rerun", "label": "Rerun", "type": "command" },
+                  { "label": "Thread", "sessionId": "s-other", "type": "openThread" }
                 ],
                 "key": "ci",
                 "rows": [{ "label": "lint", "value": "passed" }],
@@ -6373,32 +6061,11 @@
             {
               "card": {
                 "actions": [
-                  {
-                    "label": "Open log",
-                    "line": 12,
-                    "path": "ci.log",
-                    "type": "openFile"
-                  },
-                  {
-                    "label": "Ask",
-                    "text": "Why did it fail?",
-                    "type": "composer"
-                  },
-                  {
-                    "label": "Run",
-                    "type": "url",
-                    "url": "https://ci.example/run/1"
-                  },
-                  {
-                    "command": "/ci rerun",
-                    "label": "Rerun",
-                    "type": "command"
-                  },
-                  {
-                    "label": "Thread",
-                    "sessionId": "s-other",
-                    "type": "openThread"
-                  }
+                  { "label": "Open log", "line": 12, "path": "ci.log", "type": "openFile" },
+                  { "label": "Ask", "text": "Why did it fail?", "type": "composer" },
+                  { "label": "Run", "type": "url", "url": "https://ci.example/run/1" },
+                  { "command": "/ci rerun", "label": "Rerun", "type": "command" },
+                  { "label": "Thread", "sessionId": "s-other", "type": "openThread" }
                 ],
                 "key": "ci",
                 "rows": [{ "label": "lint", "value": "passed" }],
@@ -6717,13 +6384,7 @@
               "kind": "pin"
             },
             {
-              "card": {
-                "actions": [],
-                "key": "ci",
-                "rows": [],
-                "title": "CI",
-                "tone": "warning"
-              },
+              "card": { "actions": [], "key": "ci", "rows": [], "title": "CI", "tone": "warning" },
               "createdAt": "2026-10-01T19:04:00.000Z",
               "id": "pin:ci",
               "kind": "pin"
@@ -6805,13 +6466,7 @@
               "kind": "pin"
             },
             {
-              "card": {
-                "actions": [],
-                "key": "ci",
-                "rows": [],
-                "title": "CI",
-                "tone": "warning"
-              },
+              "card": { "actions": [], "key": "ci", "rows": [], "title": "CI", "tone": "warning" },
               "createdAt": "2026-10-01T19:04:00.000Z",
               "id": "pin:ci",
               "kind": "pin"
@@ -6887,13 +6542,7 @@
               "kind": "pin"
             },
             {
-              "card": {
-                "actions": [],
-                "key": "ci",
-                "rows": [],
-                "title": "CI",
-                "tone": "warning"
-              },
+              "card": { "actions": [], "key": "ci", "rows": [], "title": "CI", "tone": "warning" },
               "createdAt": "2026-10-01T19:04:00.000Z",
               "id": "pin:ci",
               "kind": "pin"
@@ -6969,13 +6618,7 @@
               "kind": "pin"
             },
             {
-              "card": {
-                "actions": [],
-                "key": "ci",
-                "rows": [],
-                "title": "CI",
-                "tone": "warning"
-              },
+              "card": { "actions": [], "key": "ci", "rows": [], "title": "CI", "tone": "warning" },
               "createdAt": "2026-10-01T19:04:00.000Z",
               "id": "pin:ci",
               "kind": "pin"
@@ -7045,13 +6688,7 @@
               "text": "Checking CI. Done.Step one."
             },
             {
-              "card": {
-                "actions": [],
-                "key": "ci",
-                "rows": [],
-                "title": "CI",
-                "tone": "warning"
-              },
+              "card": { "actions": [], "key": "ci", "rows": [], "title": "CI", "tone": "warning" },
               "createdAt": "2026-10-01T19:04:00.000Z",
               "id": "pin:ci",
               "kind": "pin"
@@ -7133,13 +6770,7 @@
               "text": "Checking CI. Done.Step one.Working."
             },
             {
-              "card": {
-                "actions": [],
-                "key": "ci",
-                "rows": [],
-                "title": "CI",
-                "tone": "warning"
-              },
+              "card": { "actions": [], "key": "ci", "rows": [], "title": "CI", "tone": "warning" },
               "createdAt": "2026-10-01T19:04:00.000Z",
               "id": "pin:ci",
               "kind": "pin"
@@ -7228,13 +6859,7 @@
               "text": "Checking CI. Done.Step one.Working."
             },
             {
-              "card": {
-                "actions": [],
-                "key": "ci",
-                "rows": [],
-                "title": "CI",
-                "tone": "warning"
-              },
+              "card": { "actions": [], "key": "ci", "rows": [], "title": "CI", "tone": "warning" },
               "createdAt": "2026-10-01T19:04:00.000Z",
               "id": "pin:ci",
               "kind": "pin"
@@ -7323,13 +6948,7 @@
               "text": "Checking CI. Done.Step one.Working."
             },
             {
-              "card": {
-                "actions": [],
-                "key": "ci",
-                "rows": [],
-                "title": "CI",
-                "tone": "warning"
-              },
+              "card": { "actions": [], "key": "ci", "rows": [], "title": "CI", "tone": "warning" },
               "createdAt": "2026-10-01T19:04:00.000Z",
               "id": "pin:ci",
               "kind": "pin"
@@ -7556,16 +7175,8 @@
                   "replacesPiTool": false
                 },
                 { "name": "blank", "label": "  ", "replacesPiTool": false },
-                {
-                  "name": "bash",
-                  "label": "bash (sandboxed)",
-                  "replacesPiTool": true
-                },
-                {
-                  "name": "shared_name",
-                  "label": "From github",
-                  "replacesPiTool": false
-                }
+                { "name": "bash", "label": "bash (sandboxed)", "replacesPiTool": true },
+                { "name": "shared_name", "label": "From github", "replacesPiTool": false }
               ],
               "flags": [],
               "flagDetails": [],
@@ -7583,13 +7194,7 @@
                 "origin": "top-level"
               },
               "commands": [],
-              "tools": [
-                {
-                  "name": "shared_name",
-                  "label": "From other",
-                  "replacesPiTool": false
-                }
-              ],
+              "tools": [{ "name": "shared_name", "label": "From other", "replacesPiTool": false }],
               "flags": [],
               "flagDetails": [],
               "shortcuts": [],
@@ -7607,11 +7212,7 @@
               },
               "commands": [],
               "tools": [
-                {
-                  "name": "create_child_thread",
-                  "label": "Child thread",
-                  "replacesPiTool": false
-                }
+                { "name": "create_child_thread", "label": "Child thread", "replacesPiTool": false }
               ],
               "flags": [],
               "flagDetails": [],
@@ -7630,23 +7231,13 @@
               },
               "commands": ["ticket"],
               "tools": [
-                {
-                  "name": "ticket_lookup",
-                  "label": "Look up ticket",
-                  "replacesPiTool": false
-                }
+                { "name": "ticket_lookup", "label": "Look up ticket", "replacesPiTool": false }
               ],
               "flags": ["verbose"],
-              "flagDetails": [
-                { "name": "verbose", "type": "boolean", "default": false }
-              ],
+              "flagDetails": [{ "name": "verbose", "type": "boolean", "default": false }],
               "shortcuts": [],
               "diagnostics": [
-                {
-                  "type": "warning",
-                  "message": "Slow to load",
-                  "path": "/ext/tickets.ts"
-                }
+                { "type": "warning", "message": "Slow to load", "path": "/ext/tickets.ts" }
               ]
             },
             {
@@ -7660,13 +7251,7 @@
                 "origin": "top-level"
               },
               "commands": [],
-              "tools": [
-                {
-                  "name": "ticket_lookup",
-                  "label": "Off",
-                  "replacesPiTool": false
-                }
-              ],
+              "tools": [{ "name": "ticket_lookup", "label": "Off", "replacesPiTool": false }],
               "flags": [],
               "flagDetails": [],
               "shortcuts": [],
@@ -7701,12 +7286,7 @@
               "role": "user",
               "text": "Show me the screenshot",
               "attachments": [
-                {
-                  "kind": "image",
-                  "mimeType": "image/png",
-                  "data": "UE5H",
-                  "name": "shot.png"
-                },
+                { "kind": "image", "mimeType": "image/png", "data": "UE5H", "name": "shot.png" },
                 {
                   "kind": "file",
                   "name": "notes.md",
@@ -7802,12 +7382,7 @@
             "sessionRef": { "workspaceId": "ws-main", "sessionId": "s-main" },
             "timestamp": "2026-10-01T19:03:00.000Z",
             "type": "hostUiRequest",
-            "request": {
-              "kind": "notify",
-              "requestId": "n-1",
-              "message": "Saved",
-              "level": "info"
-            }
+            "request": { "kind": "notify", "requestId": "n-1", "message": "Saved", "level": "info" }
           }
         },
         {
@@ -7832,12 +7407,7 @@
             "sessionRef": { "workspaceId": "ws-main", "sessionId": "s-main" },
             "timestamp": "2026-10-01T19:03:00.000Z",
             "type": "hostUiRequest",
-            "request": {
-              "kind": "status",
-              "requestId": "st-1",
-              "key": "ci",
-              "text": "CI: running"
-            }
+            "request": { "kind": "status", "requestId": "st-1", "key": "ci", "text": "CI: running" }
           }
         },
         {
@@ -7862,11 +7432,7 @@
             "sessionRef": { "workspaceId": "ws-main", "sessionId": "s-main" },
             "timestamp": "2026-10-01T19:03:00.000Z",
             "type": "hostUiRequest",
-            "request": {
-              "kind": "title",
-              "requestId": "t-1",
-              "title": "Plan mode"
-            }
+            "request": { "kind": "title", "requestId": "t-1", "title": "Plan mode" }
           }
         },
         {
@@ -7876,11 +7442,7 @@
             "sessionRef": { "workspaceId": "ws-main", "sessionId": "s-main" },
             "timestamp": "2026-10-01T19:04:00.000Z",
             "type": "hostUiRequest",
-            "request": {
-              "kind": "editorText",
-              "requestId": "e-1",
-              "text": "/plan next"
-            }
+            "request": { "kind": "editorText", "requestId": "e-1", "text": "/plan next" }
           }
         },
         {
@@ -7932,12 +7494,7 @@
             "sessionRef": { "workspaceId": "ws-main", "sessionId": "s-main" },
             "timestamp": "2026-10-01T19:05:00.000Z",
             "type": "hostUiRequest",
-            "request": {
-              "kind": "widget",
-              "requestId": "w-3",
-              "key": "todo",
-              "lines": []
-            }
+            "request": { "kind": "widget", "requestId": "w-3", "key": "todo", "lines": [] }
           }
         }
       ]
@@ -7974,12 +7531,7 @@
             },
             {
               "attachments": [
-                {
-                  "data": "UE5H",
-                  "kind": "image",
-                  "mimeType": "image/png",
-                  "name": "shot.png"
-                },
+                { "data": "UE5H", "kind": "image", "mimeType": "image/png", "name": "shot.png" },
                 {
                   "fsPath": "/n.md",
                   "kind": "file",
@@ -8087,12 +7639,7 @@
             },
             {
               "attachments": [
-                {
-                  "data": "UE5H",
-                  "kind": "image",
-                  "mimeType": "image/png",
-                  "name": "shot.png"
-                },
+                { "data": "UE5H", "kind": "image", "mimeType": "image/png", "name": "shot.png" },
                 {
                   "fsPath": "/n.md",
                   "kind": "file",
@@ -8213,12 +7760,7 @@
             },
             {
               "attachments": [
-                {
-                  "data": "UE5H",
-                  "kind": "image",
-                  "mimeType": "image/png",
-                  "name": "shot.png"
-                },
+                { "data": "UE5H", "kind": "image", "mimeType": "image/png", "name": "shot.png" },
                 {
                   "fsPath": "/n.md",
                   "kind": "file",
@@ -8339,12 +7881,7 @@
             },
             {
               "attachments": [
-                {
-                  "data": "UE5H",
-                  "kind": "image",
-                  "mimeType": "image/png",
-                  "name": "shot.png"
-                },
+                { "data": "UE5H", "kind": "image", "mimeType": "image/png", "name": "shot.png" },
                 {
                   "fsPath": "/n.md",
                   "kind": "file",
@@ -8473,12 +8010,7 @@
             },
             {
               "attachments": [
-                {
-                  "data": "UE5H",
-                  "kind": "image",
-                  "mimeType": "image/png",
-                  "name": "shot.png"
-                },
+                { "data": "UE5H", "kind": "image", "mimeType": "image/png", "name": "shot.png" },
                 {
                   "fsPath": "/n.md",
                   "kind": "file",
@@ -8577,11 +8109,7 @@
             "pendingDialogs": [],
             "statuses": [{ "key": "ci", "text": "CI: running" }],
             "widgets": [
-              {
-                "key": "todo",
-                "lines": ["- [ ] one", "- [x] two"],
-                "placement": "aboveComposer"
-              }
+              { "key": "todo", "lines": ["- [ ] one", "- [x] two"], "placement": "aboveComposer" }
             ]
           },
           "revision": 12,
@@ -8613,12 +8141,7 @@
             },
             {
               "attachments": [
-                {
-                  "data": "UE5H",
-                  "kind": "image",
-                  "mimeType": "image/png",
-                  "name": "shot.png"
-                },
+                { "data": "UE5H", "kind": "image", "mimeType": "image/png", "name": "shot.png" },
                 {
                   "fsPath": "/n.md",
                   "kind": "file",
@@ -8718,11 +8241,7 @@
             "statuses": [{ "key": "ci", "text": "CI: running" }],
             "title": "Plan mode",
             "widgets": [
-              {
-                "key": "todo",
-                "lines": ["- [ ] one", "- [x] two"],
-                "placement": "aboveComposer"
-              }
+              { "key": "todo", "lines": ["- [ ] one", "- [x] two"], "placement": "aboveComposer" }
             ]
           },
           "revision": 13,
@@ -8754,12 +8273,7 @@
             },
             {
               "attachments": [
-                {
-                  "data": "UE5H",
-                  "kind": "image",
-                  "mimeType": "image/png",
-                  "name": "shot.png"
-                },
+                { "data": "UE5H", "kind": "image", "mimeType": "image/png", "name": "shot.png" },
                 {
                   "fsPath": "/n.md",
                   "kind": "file",
@@ -8860,11 +8374,7 @@
             "statuses": [{ "key": "ci", "text": "CI: running" }],
             "title": "Plan mode",
             "widgets": [
-              {
-                "key": "todo",
-                "lines": ["- [ ] one", "- [x] two"],
-                "placement": "aboveComposer"
-              }
+              { "key": "todo", "lines": ["- [ ] one", "- [x] two"], "placement": "aboveComposer" }
             ]
           },
           "revision": 14,
@@ -8896,12 +8406,7 @@
             },
             {
               "attachments": [
-                {
-                  "data": "UE5H",
-                  "kind": "image",
-                  "mimeType": "image/png",
-                  "name": "shot.png"
-                },
+                { "data": "UE5H", "kind": "image", "mimeType": "image/png", "name": "shot.png" },
                 {
                   "fsPath": "/n.md",
                   "kind": "file",
@@ -9002,11 +8507,7 @@
             "statuses": [],
             "title": "Plan mode",
             "widgets": [
-              {
-                "key": "todo",
-                "lines": ["- [ ] one", "- [x] two"],
-                "placement": "aboveComposer"
-              }
+              { "key": "todo", "lines": ["- [ ] one", "- [x] two"], "placement": "aboveComposer" }
             ]
           },
           "revision": 15,
@@ -9038,12 +8539,7 @@
             },
             {
               "attachments": [
-                {
-                  "data": "UE5H",
-                  "kind": "image",
-                  "mimeType": "image/png",
-                  "name": "shot.png"
-                },
+                { "data": "UE5H", "kind": "image", "mimeType": "image/png", "name": "shot.png" },
                 {
                   "fsPath": "/n.md",
                   "kind": "file",
@@ -9144,16 +8640,8 @@
             "statuses": [],
             "title": "Plan mode",
             "widgets": [
-              {
-                "key": "todo",
-                "lines": ["- [ ] one", "- [x] two"],
-                "placement": "aboveComposer"
-              },
-              {
-                "key": "below",
-                "lines": ["below"],
-                "placement": "belowComposer"
-              }
+              { "key": "todo", "lines": ["- [ ] one", "- [x] two"], "placement": "aboveComposer" },
+              { "key": "below", "lines": ["below"], "placement": "belowComposer" }
             ]
           },
           "revision": 16,
@@ -9185,12 +8673,7 @@
             },
             {
               "attachments": [
-                {
-                  "data": "UE5H",
-                  "kind": "image",
-                  "mimeType": "image/png",
-                  "name": "shot.png"
-                },
+                { "data": "UE5H", "kind": "image", "mimeType": "image/png", "name": "shot.png" },
                 {
                   "fsPath": "/n.md",
                   "kind": "file",
@@ -9291,16 +8774,8 @@
             "statuses": [],
             "title": "Plan mode",
             "widgets": [
-              {
-                "key": "todo",
-                "lines": ["- [ ] one", "- [x] two"],
-                "placement": "aboveComposer"
-              },
-              {
-                "key": "below",
-                "lines": ["below"],
-                "placement": "belowComposer"
-              }
+              { "key": "todo", "lines": ["- [ ] one", "- [x] two"], "placement": "aboveComposer" },
+              { "key": "below", "lines": ["below"], "placement": "belowComposer" }
             ]
           },
           "revision": 17,
@@ -9332,12 +8807,7 @@
             },
             {
               "attachments": [
-                {
-                  "data": "UE5H",
-                  "kind": "image",
-                  "mimeType": "image/png",
-                  "name": "shot.png"
-                },
+                { "data": "UE5H", "kind": "image", "mimeType": "image/png", "name": "shot.png" },
                 {
                   "fsPath": "/n.md",
                   "kind": "file",
@@ -9437,13 +8907,7 @@
             "pendingDialogs": [],
             "statuses": [],
             "title": "Plan mode",
-            "widgets": [
-              {
-                "key": "below",
-                "lines": ["below"],
-                "placement": "belowComposer"
-              }
-            ]
+            "widgets": [{ "key": "below", "lines": ["below"], "placement": "belowComposer" }]
           },
           "revision": 18,
           "session": {
@@ -9474,12 +8938,7 @@
             },
             {
               "attachments": [
-                {
-                  "data": "UE5H",
-                  "kind": "image",
-                  "mimeType": "image/png",
-                  "name": "shot.png"
-                },
+                { "data": "UE5H", "kind": "image", "mimeType": "image/png", "name": "shot.png" },
                 {
                   "fsPath": "/n.md",
                   "kind": "file",
@@ -9718,9 +9177,7 @@
         "revision": 7
       },
       "runtimeByWorkspace": {},
-      "lastViewedAtBySession": {
-        "ws-tree:s-fresh": "2026-10-01T19:00:00.000Z"
-      },
+      "lastViewedAtBySession": { "ws-tree:s-fresh": "2026-10-01T19:00:00.000Z" },
       "steps": [
         {
           "op": "event",
@@ -9849,9 +9306,7 @@
               "id": "queued-1",
               "mode": "followUp",
               "text": "And then the tests",
-              "attachments": [
-                { "kind": "image", "mimeType": "image/png", "data": "UE5H" }
-              ],
+              "attachments": [{ "kind": "image", "mimeType": "image/png", "data": "UE5H" }],
               "createdAt": "2026-10-01T19:03:00.000Z",
               "updatedAt": "2026-10-01T19:03:00.000Z"
             }
@@ -9930,10 +9385,7 @@
           "op": "event",
           "now": "2026-10-01T19:08:01.000Z",
           "event": {
-            "sessionRef": {
-              "workspaceId": "ws-main",
-              "sessionId": "s-unknown"
-            },
+            "sessionRef": { "workspaceId": "ws-main", "sessionId": "s-unknown" },
             "timestamp": "2026-10-01T19:08:00.000Z",
             "type": "sessionUpdated",
             "snapshot": {
@@ -10020,12 +9472,7 @@
           "transcript": [
             {
               "attachments": [
-                {
-                  "data": "UE5H",
-                  "kind": "image",
-                  "mimeType": "image/png",
-                  "name": "a.png"
-                },
+                { "data": "UE5H", "kind": "image", "mimeType": "image/png", "name": "a.png" },
                 {
                   "fsPath": "/b.txt",
                   "kind": "file",
@@ -10068,19 +9515,12 @@
                 "toolCount": 0
               }
             },
-            "runningSinceBySession": {
-              "ws-tree:s-fresh": "2026-10-01T19:02:00.000Z"
-            }
+            "runningSinceBySession": { "ws-tree:s-fresh": "2026-10-01T19:02:00.000Z" }
           },
           "transcript": [
             {
               "attachments": [
-                {
-                  "data": "UE5H",
-                  "kind": "image",
-                  "mimeType": "image/png",
-                  "name": "a.png"
-                },
+                { "data": "UE5H", "kind": "image", "mimeType": "image/png", "name": "a.png" },
                 {
                   "fsPath": "/b.txt",
                   "kind": "file",
@@ -10129,19 +9569,12 @@
                 "toolCount": 0
               }
             },
-            "runningSinceBySession": {
-              "ws-tree:s-fresh": "2026-10-01T19:02:00.000Z"
-            }
+            "runningSinceBySession": { "ws-tree:s-fresh": "2026-10-01T19:02:00.000Z" }
           },
           "transcript": [
             {
               "attachments": [
-                {
-                  "data": "UE5H",
-                  "kind": "image",
-                  "mimeType": "image/png",
-                  "name": "a.png"
-                },
+                { "data": "UE5H", "kind": "image", "mimeType": "image/png", "name": "a.png" },
                 {
                   "fsPath": "/b.txt",
                   "kind": "file",
@@ -10190,19 +9623,12 @@
                 "toolCount": 0
               }
             },
-            "runningSinceBySession": {
-              "ws-tree:s-fresh": "2026-10-01T19:02:00.000Z"
-            }
+            "runningSinceBySession": { "ws-tree:s-fresh": "2026-10-01T19:02:00.000Z" }
           },
           "transcript": [
             {
               "attachments": [
-                {
-                  "data": "UE5H",
-                  "kind": "image",
-                  "mimeType": "image/png",
-                  "name": "a.png"
-                },
+                { "data": "UE5H", "kind": "image", "mimeType": "image/png", "name": "a.png" },
                 {
                   "fsPath": "/b.txt",
                   "kind": "file",
@@ -10224,9 +9650,7 @@
               "label": "Working…"
             },
             {
-              "attachments": [
-                { "data": "UE5H", "kind": "image", "mimeType": "image/png" }
-              ],
+              "attachments": [{ "data": "UE5H", "kind": "image", "mimeType": "image/png" }],
               "createdAt": "2026-10-01T19:03:00.000Z",
               "id": "queued-1",
               "kind": "message",
@@ -10261,19 +9685,12 @@
                 "toolCount": 0
               }
             },
-            "runningSinceBySession": {
-              "ws-tree:s-fresh": "2026-10-01T19:02:00.000Z"
-            }
+            "runningSinceBySession": { "ws-tree:s-fresh": "2026-10-01T19:02:00.000Z" }
           },
           "transcript": [
             {
               "attachments": [
-                {
-                  "data": "UE5H",
-                  "kind": "image",
-                  "mimeType": "image/png",
-                  "name": "a.png"
-                },
+                { "data": "UE5H", "kind": "image", "mimeType": "image/png", "name": "a.png" },
                 {
                   "fsPath": "/b.txt",
                   "kind": "file",
@@ -10329,19 +9746,12 @@
                 "toolCount": 0
               }
             },
-            "runningSinceBySession": {
-              "ws-tree:s-fresh": "2026-10-01T19:02:00.000Z"
-            }
+            "runningSinceBySession": { "ws-tree:s-fresh": "2026-10-01T19:02:00.000Z" }
           },
           "transcript": [
             {
               "attachments": [
-                {
-                  "data": "UE5H",
-                  "kind": "image",
-                  "mimeType": "image/png",
-                  "name": "a.png"
-                },
+                { "data": "UE5H", "kind": "image", "mimeType": "image/png", "name": "a.png" },
                 {
                   "fsPath": "/b.txt",
                   "kind": "file",
@@ -10402,12 +9812,7 @@
           "transcript": [
             {
               "attachments": [
-                {
-                  "data": "UE5H",
-                  "kind": "image",
-                  "mimeType": "image/png",
-                  "name": "a.png"
-                },
+                { "data": "UE5H", "kind": "image", "mimeType": "image/png", "name": "a.png" },
                 {
                   "fsPath": "/b.txt",
                   "kind": "file",
@@ -10473,11 +9878,7 @@
             "runningSinceBySession": {}
           },
           "transcript": [],
-          "transcriptKeys": [
-            "ws-tree:s-fresh",
-            "ws-main:s-other",
-            "ws-main:s-unknown"
-          ]
+          "transcriptKeys": ["ws-tree:s-fresh", "ws-main:s-other", "ws-main:s-unknown"]
         }
       ],
       "workspaces": [

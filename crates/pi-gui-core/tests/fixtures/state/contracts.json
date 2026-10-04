@@ -143,13 +143,7 @@
       "composerDraftSyncSource": "remote-persist",
       "composerDraftSyncNonce": 3,
       "composerAttachments": [
-        {
-          "id": "i-1",
-          "kind": "image",
-          "name": "a.png",
-          "mimeType": "image/png",
-          "data": "UE5H"
-        },
+        { "id": "i-1", "kind": "image", "name": "a.png", "mimeType": "image/png", "data": "UE5H" },
         {
           "id": "f-1",
           "kind": "file",
@@ -231,16 +225,8 @@
                   "replacesPiTool": false
                 },
                 { "name": "blank", "label": "  ", "replacesPiTool": false },
-                {
-                  "name": "bash",
-                  "label": "bash (sandboxed)",
-                  "replacesPiTool": true
-                },
-                {
-                  "name": "shared_name",
-                  "label": "From github",
-                  "replacesPiTool": false
-                }
+                { "name": "bash", "label": "bash (sandboxed)", "replacesPiTool": true },
+                { "name": "shared_name", "label": "From github", "replacesPiTool": false }
               ],
               "flags": [],
               "flagDetails": [],
@@ -258,13 +244,7 @@
                 "origin": "top-level"
               },
               "commands": [],
-              "tools": [
-                {
-                  "name": "shared_name",
-                  "label": "From other",
-                  "replacesPiTool": false
-                }
-              ],
+              "tools": [{ "name": "shared_name", "label": "From other", "replacesPiTool": false }],
               "flags": [],
               "flagDetails": [],
               "shortcuts": [],
@@ -282,11 +262,7 @@
               },
               "commands": [],
               "tools": [
-                {
-                  "name": "create_child_thread",
-                  "label": "Child thread",
-                  "replacesPiTool": false
-                }
+                { "name": "create_child_thread", "label": "Child thread", "replacesPiTool": false }
               ],
               "flags": [],
               "flagDetails": [],
@@ -305,23 +281,13 @@
               },
               "commands": ["ticket"],
               "tools": [
-                {
-                  "name": "ticket_lookup",
-                  "label": "Look up ticket",
-                  "replacesPiTool": false
-                }
+                { "name": "ticket_lookup", "label": "Look up ticket", "replacesPiTool": false }
               ],
               "flags": ["verbose"],
-              "flagDetails": [
-                { "name": "verbose", "type": "boolean", "default": false }
-              ],
+              "flagDetails": [{ "name": "verbose", "type": "boolean", "default": false }],
               "shortcuts": [],
               "diagnostics": [
-                {
-                  "type": "warning",
-                  "message": "Slow to load",
-                  "path": "/ext/tickets.ts"
-                }
+                { "type": "warning", "message": "Slow to load", "path": "/ext/tickets.ts" }
               ]
             },
             {
@@ -335,13 +301,7 @@
                 "origin": "top-level"
               },
               "commands": [],
-              "tools": [
-                {
-                  "name": "ticket_lookup",
-                  "label": "Off",
-                  "replacesPiTool": false
-                }
-              ],
+              "tools": [{ "name": "ticket_lookup", "label": "Off", "replacesPiTool": false }],
               "flags": [],
               "flagDetails": [],
               "shortcuts": [],
@@ -386,13 +346,7 @@
         "ws-main:s-main": {
           "context": { "tokens": null, "contextWindow": 200000 },
           "cache": {},
-          "totals": {
-            "input": 1,
-            "output": 2,
-            "cacheRead": 3,
-            "cacheWrite": 4,
-            "cost": 0.5
-          },
+          "totals": { "input": 1, "output": 2, "cacheRead": 3, "cacheWrite": 4, "cost": 0.5 },
           "subscription": true
         }
       },
@@ -400,9 +354,7 @@
         "ws-main:s-main": {
           "instanceId": "ui-1",
           "statuses": [{ "key": "ci", "text": "CI: running" }],
-          "widgets": [
-            { "key": "todo", "lines": ["one"], "placement": "belowComposer" }
-          ],
+          "widgets": [{ "key": "todo", "lines": ["one"], "placement": "belowComposer" }],
           "pendingDialogs": [
             {
               "kind": "select",
@@ -411,18 +363,8 @@
               "options": ["a", "b"],
               "allowMultiple": true
             },
-            {
-              "kind": "input",
-              "requestId": "r-2",
-              "title": "Name",
-              "placeholder": "name"
-            },
-            {
-              "kind": "editor",
-              "requestId": "r-3",
-              "title": "Edit",
-              "initialValue": "text"
-            },
+            { "kind": "input", "requestId": "r-2", "title": "Name", "placeholder": "name" },
+            { "kind": "editor", "requestId": "r-3", "title": "Edit", "initialValue": "text" },
             {
               "kind": "confirm",
               "requestId": "r-4",
@@ -455,9 +397,7 @@
           }
         ]
       },
-      "extensionFlagsByWorkspace": {
-        "ws-main": { "verbose": true, "name": "x", "off": false }
-      },
+      "extensionFlagsByWorkspace": { "ws-main": { "verbose": true, "name": "x", "off": false } },
       "extensionFlagsBySession": { "ws-main:s-main": { "verbose": true } },
       "orchestrationChildren": [
         {
@@ -472,12 +412,7 @@
           "status": "waiting",
           "latestTranscript": "done?",
           "transcript": [
-            {
-              "id": "t-1",
-              "role": "parent",
-              "text": "go",
-              "createdAt": "2026-10-01T19:01:00.000Z"
-            }
+            { "id": "t-1", "role": "parent", "text": "go", "createdAt": "2026-10-01T19:01:00.000Z" }
           ],
           "evidence": [
             {
@@ -488,11 +423,7 @@
               "status": "passed",
               "title": "Tests pass",
               "severity": "P2",
-              "git": {
-                "workspaceId": "ws-main",
-                "branchName": "feature",
-                "headSha": "abc"
-              },
+              "git": { "workspaceId": "ws-main", "branchName": "feature", "headSha": "abc" },
               "createdAt": "2026-10-01T19:02:00.000Z"
             }
           ],
@@ -524,11 +455,7 @@
             "minute": 0,
             "timeZone": "UTC"
           },
-          "target": {
-            "kind": "existing-thread",
-            "workspaceId": "ws-main",
-            "sessionId": "s-main"
-          },
+          "target": { "kind": "existing-thread", "workspaceId": "ws-main", "sessionId": "s-main" },
           "createdAt": "2026-10-01T19:00:00.000Z",
           "updatedAt": "2026-10-01T19:00:00.000Z",
           "nextRunAt": "2026-10-01T19:09:00.000Z",
@@ -565,9 +492,7 @@
       },
       "integratedTerminalShell": "/bin/zsh",
       "lastViewedAtBySession": { "ws-main:s-main": "2026-10-01T19:01:00.000Z" },
-      "lastInteractedAtBySession": {
-        "ws-main:s-main": "2026-10-01T19:02:00.000Z"
-      },
+      "lastInteractedAtBySession": { "ws-main:s-main": "2026-10-01T19:02:00.000Z" },
       "pinnedAtBySession": { "ws-main:s-main": "2026-10-01T19:03:00.000Z" },
       "pinnedSessionOrder": ["ws-main:s-main"],
       "workspaceOrder": ["ws-main", "ws-tree"],
@@ -584,11 +509,7 @@
       "collapsedWorkspaceIds": ["ws-tree"],
       "enableTransparency": true,
       "startupDiagnostics": [
-        {
-          "scope": "workspace",
-          "message": "Folder is missing",
-          "workspacePath": "/repo/gone"
-        },
+        { "scope": "workspace", "message": "Folder is missing", "workspacePath": "/repo/gone" },
         { "scope": "application", "message": "Settings were reset" }
       ],
       "revision": 31,
@@ -613,12 +534,7 @@
           "role": "user",
           "text": "Show me the screenshot",
           "attachments": [
-            {
-              "kind": "image",
-              "mimeType": "image/png",
-              "data": "UE5H",
-              "name": "shot.png"
-            },
+            { "kind": "image", "mimeType": "image/png", "data": "UE5H", "name": "shot.png" },
             {
               "kind": "file",
               "name": "notes.md",
@@ -681,13 +597,7 @@
           "kind": "pin",
           "id": "pin:plan",
           "createdAt": "2026-10-01T19:00:56.000Z",
-          "card": {
-            "key": "plan",
-            "title": "Plan",
-            "tone": "neutral",
-            "rows": [],
-            "actions": []
-          }
+          "card": { "key": "plan", "title": "Plan", "tone": "neutral", "rows": [], "actions": [] }
         }
       ],
       "schemaInfo": {
@@ -700,10 +610,7 @@
       "workspaceId": "ws-tree",
       "sessionId": "s-fresh",
       "transcript": [],
-      "schemaInfo": {
-        "runtimeSchemaVersion": 3,
-        "writtenByNewerRuntime": false
-      }
+      "schemaInfo": { "runtimeSchemaVersion": 3, "writtenByNewerRuntime": false }
     },
     { "workspaceId": "ws-main", "sessionId": "s-other", "transcript": [] }
   ]

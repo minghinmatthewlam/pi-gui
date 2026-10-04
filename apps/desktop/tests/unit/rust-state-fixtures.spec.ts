@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 import { sessionKey, type SessionTranscriptItem } from "@pi-gui/session-driver";
 import type { RuntimeCommandRecord, RuntimeSnapshot } from "@pi-gui/session-driver/runtime-types";
-import { format } from "prettier";
+import { format, resolveConfig } from "prettier";
 import {
   createEmptyDesktopAppState,
   type DesktopAppState,
@@ -969,7 +969,10 @@ test("Rust state fixtures hold what the TypeScript functions produce", async () 
   const stale: string[] = [];
   for (const [file, value] of Object.entries(fixtures)) {
     const path = join(fixtureDir, file);
-    const text = await format(JSON.stringify(value), { parser: "json", filepath: path });
+    const text = await format(JSON.stringify(value), {
+      ...(await resolveConfig(path)),
+      filepath: path,
+    });
     if (update) {
       await writeFile(path, text);
       continue;
