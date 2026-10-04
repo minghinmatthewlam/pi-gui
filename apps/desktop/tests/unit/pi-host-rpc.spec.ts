@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { decodeArgs, decodeResult, encodeArgs, encodeResult } from "../../pi-host/protocol";
-import { RpcPeer } from "../../pi-host/rpc-peer";
+import { RpcPeer } from "../../rpc/rpc-peer";
 
 /** Two peers wired back to back, delivering lines asynchronously like a real pipe. */
 function connectedPeers() {

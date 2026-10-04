@@ -13,7 +13,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { PI_HOST_SOCKET_ENV, PI_HOST_TOKEN_ENV } from "./host-env";
 import { hostMethods, type PiHostInitializeParams } from "./protocol";
-import { RpcPeer } from "./rpc-peer";
+import { RpcPeer } from "../rpc/rpc-peer";
 
 export interface PiHostProcess {
   readonly peer: RpcPeer;

@@ -53,13 +53,21 @@ Workspace sync, rename, and removal share a per-workspace mutation queue. The qu
 
 ## pi host process
 
-pi, its extensions and extension view backends run in a child process, the [pi host](../apps/desktop/pi-host/host.ts), started by main with Electron in Node mode. Main and the host talk over two-way JSON-RPC on the host's stdin/stdout ([`rpc-peer.ts`](../apps/desktop/pi-host/rpc-peer.ts)); every method on both sides is named in [`protocol.ts`](../apps/desktop/pi-host/protocol.ts). The host holds no app state. This is the first step of moving the app's own logic out of Electron (the Rust/Tauri experiment), so the boundary is the one a non-Node core will speak.
+pi, its extensions and extension view backends run in a child process, the [pi host](../apps/desktop/pi-host/host.ts), started by main with Electron in Node mode. Main and the host talk over two-way JSON-RPC ([`rpc-peer.ts`](../apps/desktop/rpc/rpc-peer.ts)) on a private local socket that the host joins with a one-time token, so output from tools cannot corrupt it; every method on both sides is named in [`protocol.ts`](../apps/desktop/pi-host/protocol.ts). The host holds no app state. This is the first step of moving the app's own logic out of Electron (the Rust/Tauri experiment), so the boundary is the one a non-Node core will speak.
 
 - The store uses pi through `PiDriverPort` ([`remote-driver.ts`](../apps/desktop/pi-host/remote-driver.ts)); every call is asynchronous. Values pi reads synchronously while building a session (switched-off pi-gui tools, per-thread flags) are pushed to the host before the next call whenever they change.
-- The app stays the only writer of `catalogs.json`; the host's driver reads and writes it through [`remote-catalog.ts`](../apps/desktop/pi-host/remote-catalog.ts).
+- The host's driver reads and writes the catalog through main ([`remote-catalog.ts`](../apps/desktop/pi-host/remote-catalog.ts)), which forwards to the Rust core.
 - Turn capture, pi-gui tool bodies (orchestration and scheduled tasks), sign-in prompts and MCP sign-in links are host → app calls. pi waits on capture exactly as before.
 - Extension view backends and their contained assets live in the host ([`extension-views/`](../apps/desktop/pi-host/extension-views)). Main keeps a copy of open connections ([`remote-extension-views.ts`](../apps/desktop/pi-host/remote-extension-views.ts)) so frame navigation checks and host actions (files, links, threads, drafts) run in main without a round trip.
 - Session leases are held by the host process. If the host exits unexpectedly, main offers a restart.
+
+## Rust core process
+
+[`crates/pi-gui-core`](../crates/pi-gui-core/src/lib.rs) is where the app's own logic moves out of Electron main, one part at a time. Main starts it ([`core-process/launch.ts`](../apps/desktop/core-process/launch.ts)) and calls it over the same JSON-RPC format on its stdin/stdout; only the core's own code writes to that stdout. The methods are listed in [`core-process/protocol.ts`](../apps/desktop/core-process/protocol.ts) and in `methods` in `lib.rs`, and a unit test checks they match. The core answers one call at a time in arrival order.
+
+- It is the only writer of `catalogs.json` (folders, threads, worktrees and session file paths), with the file format, validation messages and ordering of `JsonCatalogStore`. [`rust-core-catalog.spec.ts`](../apps/desktop/tests/unit/rust-core-catalog.spec.ts) runs both on the same random operations and requires identical answers and files. `JsonCatalogStore` remains for the driver's own tests.
+- `pnpm build` and `pnpm dev` build it with cargo into `apps/desktop/build/native`; packaging copies it next to the app's resources. `pnpm test:core` runs its format, lint and unit checks as part of `pnpm check`.
+- If it exits unexpectedly, main shows an error and offers a restart.
 
 ## Pi adapter and contracts
 

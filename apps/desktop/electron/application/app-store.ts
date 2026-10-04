@@ -1,4 +1,3 @@
-import { JsonCatalogStore } from "@pi-gui/catalogs/node";
 import { sessionKey } from "@pi-gui/session-driver";
 import type { ExtensionFlagValues, SessionSchemaInfo } from "@pi-gui/session-driver";
 import type { BrowserWindow } from "electron";
@@ -15,8 +14,8 @@ import {
 import type { PiDriverPort, PiHostConfig } from "../../pi-host/protocol";
 import { serveCatalogToPiHost } from "../../pi-host/remote-catalog";
 import { createRemotePiDriver } from "../../pi-host/remote-driver";
-import type { RpcPeer } from "../../pi-host/rpc-peer";
-import type { SessionCatalogEntry } from "@pi-gui/catalogs";
+import type { RpcPeer } from "../../rpc/rpc-peer";
+import type { SessionCatalogEntry, SessionFileCatalogStorage } from "@pi-gui/catalogs";
 import type {
   NavigateSessionTreeOptions,
   NavigateSessionTreeResult,
@@ -183,6 +182,8 @@ export interface DesktopAppStoreOptions {
   readonly shouldKeepSessionDialogs?: (sessionRef: SessionRef) => boolean;
   /** The message pipe to the pi host process, which runs pi for this store. */
   readonly piHost: RpcPeer;
+  /** Folders, threads and worktrees; owned by the Rust core. */
+  readonly catalogStorage: SessionFileCatalogStorage;
   readonly generateThreadTitleOverride?: (
     workspace: WorkspaceRef,
     options: GenerateThreadTitleOptions,
@@ -236,7 +237,7 @@ export class DesktopAppStore {
   private readonly sessionSchemaInfoCache = new Map<string, SessionSchemaInfo>();
   private readonly sessionSchemaInfoInFlight = new Set<string>();
   private readonly driver: PiDriverPort;
-  private readonly catalogStore: JsonCatalogStore;
+  private readonly catalogStore: SessionFileCatalogStorage;
   private readonly worktreeManager: GitWorktreeManager;
   private readonly worktreeRoot: string;
   private readonly isAppWorktreePath: (path: string) => Promise<boolean>;
@@ -282,8 +283,7 @@ export class DesktopAppStore {
   private readonly extensionFlagsByWorkspace = new Map<string, ExtensionFlagValues>();
 
   constructor(options: DesktopAppStoreOptions) {
-    const catalogFilePath = join(options.userDataDir, "catalogs.json");
-    this.catalogStore = new JsonCatalogStore({ catalogFilePath });
+    this.catalogStore = options.catalogStorage;
     serveCatalogToPiHost(options.piHost, this.catalogStore);
     this.driver = createRemotePiDriver({
       peer: options.piHost,

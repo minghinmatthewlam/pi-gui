@@ -1,0 +1,11 @@
+[package]
+name = "pi-gui-core"
+version = "0.1.0"
+description = "pi-gui's app logic in Rust: saved data now, more parts as they move over from Electron main."
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }

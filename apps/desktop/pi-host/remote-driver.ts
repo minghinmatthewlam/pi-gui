@@ -22,7 +22,7 @@ import {
   type PiHostConfig,
   type SessionEventParams,
 } from "./protocol";
-import type { RpcPeer } from "./rpc-peer";
+import type { RpcPeer } from "../rpc/rpc-peer";
 
 export interface RemotePiDriverOptions {
   readonly peer: RpcPeer;

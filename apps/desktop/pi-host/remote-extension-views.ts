@@ -15,7 +15,7 @@ import {
   type ViewMessageParams,
   type ViewsChangedParams,
 } from "./protocol";
-import type { RpcPeer } from "./rpc-peer";
+import type { RpcPeer } from "../rpc/rpc-peer";
 
 export const DESKTOP_EXTENSION_SCHEME = "pi-extension";
 

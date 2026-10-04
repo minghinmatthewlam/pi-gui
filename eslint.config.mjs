@@ -94,7 +94,12 @@ export default [
   },
   typedProject(["apps/desktop/src/**/*.{ts,tsx,mts,cts}"], "apps/desktop/tsconfig.json"),
   typedProject(
-    ["apps/desktop/electron/**/*.{ts,tsx,mts,cts}", "apps/desktop/pi-host/**/*.{ts,tsx,mts,cts}"],
+    [
+      "apps/desktop/electron/**/*.{ts,tsx,mts,cts}",
+      "apps/desktop/pi-host/**/*.{ts,tsx,mts,cts}",
+      "apps/desktop/rpc/**/*.{ts,tsx,mts,cts}",
+      "apps/desktop/core-process/**/*.{ts,tsx,mts,cts}",
+    ],
     "apps/desktop/tsconfig.electron.json",
   ),
   typedProject(

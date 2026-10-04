@@ -1,6 +1,6 @@
 import { sessionKey } from "@pi-gui/session-driver";
 import type { PiDriverPort } from "../../pi-host/protocol";
-import type { JsonCatalogStore } from "@pi-gui/catalogs/node";
+import type { SessionFileCatalogStorage } from "@pi-gui/catalogs";
 import type {
   CreateSessionOptions,
   ExtensionFlagValues,
@@ -50,7 +50,7 @@ type WorkspaceDriver = Pick<
 
 export interface WorkspaceOwnerHost {
   readonly driver: WorkspaceDriver;
-  readonly catalogStore: JsonCatalogStore;
+  readonly catalogStore: SessionFileCatalogStorage;
   readonly worktreeManager: GitWorktreeManager;
   readonly worktreeRoot: string;
   readonly isAppWorktreePath: (path: string) => Promise<boolean>;

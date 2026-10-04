@@ -1,6 +1,8 @@
 /**
- * Catalog storage across the pipe: the app owns `catalogs.json`, and pi's driver in the host
- * reads and writes it through these calls.
+ * Catalog storage across a pipe. The Rust core owns `catalogs.json`: the app reaches it with
+ * `remoteCatalogStorage(core, coreMethods.catalogCall)`, and pi's driver in the host reaches
+ * the app's copy of that client through `serveCatalogToPiHost`. Every hop uses the same
+ * `{ path, args, undefinedAt }` call.
  */
 import type { SessionFileCatalogStorage } from "@pi-gui/catalogs";
 import {
@@ -11,7 +13,7 @@ import {
   encodeResult,
   type CatalogCallParams,
 } from "./protocol";
-import type { RpcPeer } from "./rpc-peer";
+import type { RpcPeer } from "../rpc/rpc-peer";
 
 const CATALOG_GROUPS = {
   workspaces: ["listWorkspaces", "getWorkspace", "upsertWorkspace", "deleteWorkspace"],
@@ -45,14 +47,15 @@ const CATALOG_PATHS = new Set<string>([
 
 type AnyMethod = (...args: unknown[]) => unknown;
 
-/** Host side: a catalog whose every call goes to the app. */
-export function remoteCatalogStorage(peer: RpcPeer): SessionFileCatalogStorage {
+/** A catalog whose every call goes across `peer`: by default from the host to the app. */
+export function remoteCatalogStorage(
+  peer: RpcPeer,
+  method: string = appMethods.catalog,
+): SessionFileCatalogStorage {
   const call =
     (catalogPath: string): AnyMethod =>
     async (...args) =>
-      decodeResult(
-        await peer.request(appMethods.catalog, { path: catalogPath, ...encodeArgs(args) }),
-      );
+      decodeResult(await peer.request(method, { path: catalogPath, ...encodeArgs(args) }));
   const group = (name: keyof typeof CATALOG_GROUPS) =>
     Object.fromEntries(CATALOG_GROUPS[name].map((method) => [method, call(`${name}.${method}`)]));
   return {

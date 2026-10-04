@@ -29,6 +29,9 @@ import { PendingComposerDraftFlusher } from "./windows/pending-draft-flush";
 import { TurnCheckpointStore } from "./workbench/checkpoint-store";
 import { RemoteExtensionViews, DESKTOP_EXTENSION_SCHEME } from "../pi-host/remote-extension-views";
 import { startPiHost, type PiHostProcess } from "../pi-host/launch";
+import { remoteCatalogStorage } from "../pi-host/remote-catalog";
+import { startCore, type CoreProcess } from "../core-process/launch";
+import { coreMethods } from "../core-process/protocol";
 import {
   appMethods,
   appNotifications,
@@ -98,9 +101,11 @@ const windowTestMode = appTestMode ?? "foreground";
 const devReloadMarkersEnabled = process.env.PI_APP_DEV_RELOAD_MARKERS === "1";
 const TURN_CAPTURE_BACKSTOP_MS = 10_000;
 const PI_HOST_STOP_TIMEOUT_MS = 2_000;
+const CORE_STOP_TIMEOUT_MS = 1_000;
 let store: DesktopAppStore;
 let extensionViewOwner: RemoteExtensionViews | undefined;
 let piHost: PiHostProcess | undefined;
+let core: CoreProcess | undefined;
 let windowOwner: WindowOwner;
 const themeManager = new ThemeManager();
 let mainWindow: BrowserWindow | null = null;
@@ -293,19 +298,35 @@ function toolCallerContext(caller: ToolCaller): ExtensionContext {
 }
 
 /** pi runs in its own process; without it no thread can run, so offer a relaunch. */
-function handlePiHostExit(detail: string): void {
-  console.error(`pi-gui: the pi host process stopped unexpectedly (${detail})`);
+const CHILD_PROCESS_NOTICES = {
+  piHost: {
+    process: "the pi host process",
+    banner: "pi stopped unexpectedly. Restart pi-gui to keep working.",
+    title: "pi stopped unexpectedly",
+    detail: "Threads cannot run until pi-gui restarts. Your threads and drafts are saved.",
+  },
+  core: {
+    process: "the pi-gui-core process",
+    banner: "pi-gui stopped saving changes. Restart pi-gui to keep working.",
+    title: "pi-gui stopped saving changes",
+    detail: "New folders and thread changes cannot be saved until pi-gui restarts.",
+  },
+} as const;
+
+function handleChildProcessExit(child: keyof typeof CHILD_PROCESS_NOTICES, detail: string): void {
+  const notice = CHILD_PROCESS_NOTICES[child];
+  console.error(`pi-gui: ${notice.process} stopped unexpectedly (${detail})`);
   if (quitFlush !== "idle") return;
-  // The store is unset when the host fails before startup finished.
+  // The store is unset when the process fails before startup finished.
   (store as DesktopAppStore | undefined)
-    ?.withError(new Error("pi stopped unexpectedly. Restart pi-gui to keep working."))
+    ?.withError(new Error(notice.banner))
     .catch(() => undefined);
   if (appTestMode) return;
   void dialog
     .showMessageBox({
       type: "error",
-      message: "pi stopped unexpectedly",
-      detail: "Threads cannot run until pi-gui restarts. Your threads and drafts are saved.",
+      message: notice.title,
+      detail: notice.detail,
       buttons: ["Restart pi-gui", "Later"],
       defaultId: 0,
       cancelId: 1,
@@ -313,7 +334,17 @@ function handlePiHostExit(detail: string): void {
     .then(({ response }) => {
       if (response === 0) requestApplicationRelaunch();
     })
-    .catch((error: unknown) => console.error("pi-gui: pi host exit dialog failed", error));
+    .catch((error: unknown) =>
+      console.error(`pi-gui: ${notice.process} exit dialog failed`, error),
+    );
+}
+
+/** The Rust core binary: next to the app's resources when packaged, in build/native otherwise. */
+function coreBinaryPath(): string {
+  const name = process.platform === "win32" ? "pi-gui-core.exe" : "pi-gui-core";
+  return app.isPackaged
+    ? path.join(process.resourcesPath, name)
+    : path.join(__dirname, "..", "..", "build", "native", name);
 }
 
 function createTestExtensionContext(sessionRef: SessionRef): ExtensionToolContext {
@@ -1052,11 +1083,16 @@ app
     const orchestrationRuntimeBridge = createStoreBackedOrchestrationRuntimeBridge();
     const scheduledTaskRuntimeBridge = createStoreBackedScheduledTaskRuntimeBridge();
     const checkpoints = new TurnCheckpointStore(configuredUserDataDir);
+    core = await startCore({
+      binaryPath: coreBinaryPath(),
+      initialize: { userDataDir: configuredUserDataDir },
+      onUnexpectedExit: (detail) => handleChildProcessExit("core", detail),
+    });
     piHost = await startPiHost({
       execPath: process.execPath,
       scriptPath: path.join(__dirname, "pi-host.js"),
       env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
-      onUnexpectedExit: handlePiHostExit,
+      onUnexpectedExit: (detail) => handleChildProcessExit("piHost", detail),
     });
     const hostPeer = piHost.peer;
     const extensionViews: RemoteExtensionViews = new RemoteExtensionViews(hostPeer, (context) =>
@@ -1096,6 +1132,7 @@ app
       shouldKeepSessionDialogs: (sessionRef) =>
         windowOwner?.isSessionVisibleInAnotherWindow(sessionRef) ?? false,
       piHost: hostPeer,
+      catalogStorage: remoteCatalogStorage(core.peer, coreMethods.catalogCall),
       generateThreadTitleOverride: async (workspace, options) =>
         generateThreadTitleOverride?.(workspace, options),
     });
@@ -1138,6 +1175,7 @@ app
           // pi runs in the pi host; tests replace calls on the app's side of the pipe.
           piDriver: () => store.piDriverForTests(),
           piHostPid: () => piHost?.pid,
+          corePid: () => core?.pid,
           handleWindowActivation: () => {
             if (mainWindow) {
               windowOwner.activate(mainWindow);
@@ -1363,6 +1401,8 @@ app.on("before-quit", (event) => {
     .flush(windowOwner.allWindows())
     .then(() => quittingStore.flushPersistence())
     .then(() => piHost?.stop(PI_HOST_STOP_TIMEOUT_MS))
+    // Last: pi may still save thread changes while it stops.
+    .then(() => core?.stop(CORE_STOP_TIMEOUT_MS))
     .catch((error: unknown) => {
       console.error("pi-gui: persistence flush failed during quit:", error);
     });

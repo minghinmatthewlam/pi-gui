@@ -12,6 +12,12 @@
     "forceConsistentCasingInFileNames": true,
     "types": ["node", "electron"]
   },
-  "include": ["electron/**/*.ts", "pi-host/**/*.ts", "contracts/**/*.ts"],
+  "include": [
+    "electron/**/*.ts",
+    "pi-host/**/*.ts",
+    "rpc/**/*.ts",
+    "core-process/**/*.ts",
+    "contracts/**/*.ts"
+  ],
   "exclude": ["dist", "dist-electron", "out", "node_modules"]
 }

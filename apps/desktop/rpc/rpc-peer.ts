@@ -4,8 +4,8 @@
  * request's handler starts in arrival order, so a notification sent before a request is
  * always seen first.
  *
- * Used between the app and the pi host process. The wire format is plain JSON-RPC 2.0 so the
- * Rust core can speak it too.
+ * Used between the app and its two child processes, the pi host and the Rust core
+ * (`crates/pi-gui-core/src/rpc.rs` speaks the same format).
  */
 
 export interface RpcTransport {
@@ -46,8 +46,8 @@ export class RpcRemoteError extends Error {
 }
 
 export class RpcConnectionClosedError extends Error {
-  constructor(reason: string) {
-    super(`pi host connection closed: ${reason}`);
+  constructor(label: string, reason: string) {
+    super(`${label} connection closed: ${reason}`);
     this.name = "RpcConnectionClosedError";
   }
 }
@@ -61,6 +61,8 @@ interface PendingCall {
 export interface RpcPeerOptions {
   readonly transport: RpcTransport;
   readonly onDiagnostic?: (message: string) => void;
+  /** Names the other side in errors, such as "pi host connection closed". */
+  readonly label?: string;
 }
 
 export class RpcPeer {
@@ -73,6 +75,10 @@ export class RpcPeer {
   private buffered: string[] = [];
 
   constructor(private readonly options: RpcPeerOptions) {}
+
+  private get label(): string {
+    return this.options.label ?? "pi host";
+  }
 
   get closed(): boolean {
     return this.closedReason !== undefined;
@@ -92,7 +98,7 @@ export class RpcPeer {
 
   request(method: string, params?: unknown, signal?: AbortSignal): Promise<unknown> {
     if (this.closedReason !== undefined) {
-      return Promise.reject(new RpcConnectionClosedError(this.closedReason));
+      return Promise.reject(new RpcConnectionClosedError(this.label, this.closedReason));
     }
     if (signal?.aborted) return Promise.reject(signal.reason ?? abortError());
     const id = this.nextId++;
@@ -136,7 +142,7 @@ export class RpcPeer {
   close(reason: string): void {
     if (this.closedReason !== undefined) return;
     this.closedReason = reason;
-    const error = new RpcConnectionClosedError(reason);
+    const error = new RpcConnectionClosedError(this.label, reason);
     for (const call of this.pending.values()) {
       call.cleanup();
       call.reject(error);

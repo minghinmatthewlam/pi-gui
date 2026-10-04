@@ -44,7 +44,7 @@ import {
   type ToolCaller,
 } from "./protocol";
 import { remoteCatalogStorage } from "./remote-catalog";
-import { RpcPeer } from "./rpc-peer";
+import { RpcPeer } from "../rpc/rpc-peer";
 import type { SessionRef } from "@pi-gui/session-driver";
 
 if (!hostSocketPath || !hostToken) {
