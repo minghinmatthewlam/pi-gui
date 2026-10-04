@@ -573,6 +573,15 @@ impl TurnCheckpoints {
         capture
     }
 
+    /// Waits until no capture runs, background inventory builds included, so a test can
+    /// remove its folders without a `git` child still writing into them.
+    #[cfg(test)]
+    pub(super) async fn captures_idle(&self) {
+        while !self.warming.borrow().is_empty() || !self.active_captures.borrow().is_empty() {
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    }
+
     /// A checkout too large to read within one boundary's budget never gets an inventory
     /// from boundaries alone. Build it off the capture path so later boundaries read only
     /// changes.

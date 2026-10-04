@@ -220,9 +220,13 @@ mod tests {
             let mut context = std::task::Context::from_waker(std::task::Waker::noop());
             assert!(recording.as_mut().poll(&mut context).is_pending());
             drop(recording);
-            call(methods::LIST, json!({ "target": target }))
+            let records = call(methods::LIST, json!({ "target": target }))
                 .await
-                .unwrap()
+                .unwrap();
+            // The aborted boundary starts a background inventory build; let it finish before
+            // the folders are removed.
+            core.parts().unwrap().checkpoints.captures_idle().await;
+            records
         });
         assert_eq!(records[0]["checkpointId"], "one");
         assert_eq!(records[0]["before"]["code"], "capture-aborted");
