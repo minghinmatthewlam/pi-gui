@@ -7,6 +7,15 @@ import {
   writePersistedUiState,
 } from "../../electron/persistence/app-store-persistence";
 import { AttachmentStore } from "../../electron/persistence/attachment-store";
+import { startTestCorePeer, stopTestCoresAfterEach } from "../helpers/rust-core";
+
+stopTestCoresAfterEach();
+
+/** A fresh profile folder served by the Rust core, and its ui-state path. */
+async function profile(prefix: string) {
+  const dir = await mkdtemp(join(tmpdir(), prefix));
+  return { dir, path: join(dir, "ui-state.json"), core: await startTestCorePeer(dir) };
+}
 
 for (const invalid of [
   { version: 99, composerDraft: "future data" },
@@ -24,11 +33,11 @@ for (const invalid of [
   [],
 ]) {
   test(`preserves invalid UI state ${JSON.stringify(invalid)}`, async () => {
-    const path = join(await mkdtemp(join(tmpdir(), "ui-state-validation-")), "ui-state.json");
+    const { path, core } = await profile("ui-state-validation-");
     const original = JSON.stringify(invalid);
     await writeFile(path, original);
-    await expect(readPersistedUiState(path)).rejects.toThrow(/Invalid ui-state/);
-    await expect(writePersistedUiState(path, { composerDraft: "replacement" })).rejects.toThrow(
+    await expect(readPersistedUiState(core)).rejects.toThrow(/Invalid ui-state/);
+    await expect(writePersistedUiState(core, { composerDraft: "replacement" })).rejects.toThrow(
       /Invalid ui-state/,
     );
     expect(await readFile(path, "utf8")).toBe(original);
@@ -36,12 +45,12 @@ for (const invalid of [
 }
 
 test("reads v15 ui-state without lastInteractedAt and writes v18", async () => {
-  const path = join(await mkdtemp(join(tmpdir(), "ui-state-recency-")), "ui-state.json");
+  const { path, core } = await profile("ui-state-recency-");
   await writeFile(path, JSON.stringify({ version: 15, composerDraft: "kept" }));
-  const decoded = await readPersistedUiState(path);
+  const decoded = await readPersistedUiState(core);
   expect(decoded.version).toBe(15);
   expect(decoded.lastInteractedAtBySession).toBeUndefined();
-  await writePersistedUiState(path, {
+  await writePersistedUiState(core, {
     composerDraft: "kept",
     lastInteractedAtBySession: { "ws:sess": "2026-09-21T12:00:00.000Z" },
   });
@@ -54,12 +63,12 @@ test("reads v15 ui-state without lastInteractedAt and writes v18", async () => {
 });
 
 test("reads v16 ui-state without threadGrouping and writes the saved choice as v18", async () => {
-  const path = join(await mkdtemp(join(tmpdir(), "ui-state-grouping-")), "ui-state.json");
+  const { path, core } = await profile("ui-state-grouping-");
   await writeFile(path, JSON.stringify({ version: 16, composerDraft: "kept" }));
-  const decoded = await readPersistedUiState(path);
+  const decoded = await readPersistedUiState(core);
   expect(decoded.version).toBe(16);
   expect(decoded.threadGrouping).toBeUndefined();
-  await writePersistedUiState(path, {
+  await writePersistedUiState(core, {
     composerDraft: "kept",
     threadGrouping: "workspace",
   });
@@ -72,12 +81,12 @@ test("reads v16 ui-state without threadGrouping and writes the saved choice as v
 });
 
 test("extension flag defaults and per-thread flags round-trip through ui-state", async () => {
-  const path = join(await mkdtemp(join(tmpdir(), "ui-state-flags-")), "ui-state.json");
-  await writePersistedUiState(path, {
+  const { path, core } = await profile("ui-state-flags-");
+  await writePersistedUiState(core, {
     extensionFlagsByWorkspace: { ws: { plan: true, "dry-run": false, env: "" } },
     extensionFlagsBySession: { "ws:sess": { plan: true }, "ws:empty": {} },
   });
-  const decoded = await readPersistedUiState(path);
+  const decoded = await readPersistedUiState(core);
   expect(decoded.extensionFlagsByWorkspace).toEqual({
     ws: { plan: true, "dry-run": false, env: "" },
   });
@@ -85,27 +94,26 @@ test("extension flag defaults and per-thread flags round-trip through ui-state",
 });
 
 test("reads ui-state without folded folders and writes the collapsed ids", async () => {
-  const path = join(await mkdtemp(join(tmpdir(), "ui-state-collapsed-")), "ui-state.json");
+  const { path, core } = await profile("ui-state-collapsed-");
   await writeFile(path, JSON.stringify({ version: 15, composerDraft: "kept" }));
-  expect((await readPersistedUiState(path)).collapsedWorkspaceIds).toBeUndefined();
-  await writePersistedUiState(path, { composerDraft: "kept", collapsedWorkspaceIds: ["alpha"] });
+  expect((await readPersistedUiState(core)).collapsedWorkspaceIds).toBeUndefined();
+  await writePersistedUiState(core, { composerDraft: "kept", collapsedWorkspaceIds: ["alpha"] });
   const written = JSON.parse(await readFile(path, "utf8")) as {
     version: number;
     collapsedWorkspaceIds: readonly string[];
   };
   expect(written.version).toBe(19);
   expect(written.collapsedWorkspaceIds).toEqual(["alpha"]);
-  expect((await readPersistedUiState(path)).collapsedWorkspaceIds).toEqual(["alpha"]);
+  expect((await readPersistedUiState(core)).collapsedWorkspaceIds).toEqual(["alpha"]);
 });
 
 test("backup recovery retains damaged bytes and the good backup", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "ui-state-backup-"));
-  const path = join(dir, "ui-state.json");
+  const { dir, path, core } = await profile("ui-state-backup-");
   const good = JSON.stringify({ version: 15, composerDraft: "retained draft" });
   await writeFile(`${path}.bak`, good);
   await writeFile(path, "{damaged");
-  expect((await readPersistedUiState(path)).composerDraft).toBe("retained draft");
-  await writePersistedUiState(path, { composerDraft: "retained draft" });
+  expect((await readPersistedUiState(core)).composerDraft).toBe("retained draft");
+  await writePersistedUiState(core, { composerDraft: "retained draft" });
   expect(await readFile(`${path}.bak`, "utf8")).toBe(good);
   const preserved = (await readdir(dir)).filter((name) =>
     name.startsWith("ui-state.json.corrupt."),
@@ -115,16 +123,16 @@ test("backup recovery retains damaged bytes and the good backup", async () => {
 });
 
 test("unrecoverable syntax errors cannot be overwritten", async () => {
-  const path = join(await mkdtemp(join(tmpdir(), "ui-state-broken-")), "ui-state.json");
+  const { path, core } = await profile("ui-state-broken-");
   await writeFile(path, "{damaged");
-  await expect(readPersistedUiState(path)).rejects.toThrow(/original data was retained/);
-  await expect(writePersistedUiState(path, {})).rejects.toThrow(/Cannot overwrite/);
+  await expect(readPersistedUiState(core)).rejects.toThrow(/original data was retained/);
+  await expect(writePersistedUiState(core, {})).rejects.toThrow(/Cannot overwrite/);
   expect(await readFile(path, "utf8")).toBe("{damaged");
 });
 
 test("attachment owner rejects malformed entries before read, replacement or pruning", async () => {
   const dir = await mkdtemp(join(tmpdir(), "attachment-validation-"));
-  const store = new AttachmentStore(dir);
+  const store = new AttachmentStore(await startTestCorePeer(dir));
   const valid = {
     id: "one",
     kind: "image" as const,
@@ -151,7 +159,7 @@ test("attachment owner rejects malformed entries before read, replacement or pru
 
 test("unknown attachment fields survive rejected replacement and pruning", async () => {
   const dir = await mkdtemp(join(tmpdir(), "attachment-unknown-"));
-  const store = new AttachmentStore(dir);
+  const store = new AttachmentStore(await startTestCorePeer(dir));
   await store.write("session", []);
   const path = join(dir, "attachments", "session.json");
   const original = JSON.stringify([

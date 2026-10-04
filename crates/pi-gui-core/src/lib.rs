@@ -8,6 +8,7 @@
 pub mod checkpoints;
 pub mod error;
 pub mod git;
+pub mod js;
 pub mod json_text;
 pub mod locale;
 pub mod paths;
@@ -18,6 +19,7 @@ pub mod terminal;
 
 use error::{CoreError, CoreResult};
 use persistence::catalog::CatalogStore;
+use persistence::saved_data::SavedData;
 use rpc::{LocalFuture, Peer, Service};
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
@@ -33,6 +35,16 @@ pub mod methods {
     pub const INITIALIZE: &str = "core.initialize";
     pub const SHUTDOWN: &str = "core.shutdown";
     pub const CATALOG_CALL: &str = "catalog.call";
+    pub const UI_STATE_READ: &str = "uiState.read";
+    pub const UI_STATE_WRITE: &str = "uiState.write";
+    pub const ATTACHMENTS_READ: &str = "attachments.read";
+    pub const ATTACHMENTS_WRITE: &str = "attachments.write";
+    pub const ATTACHMENTS_LIST_KEYS: &str = "attachments.listKeys";
+    pub const ATTACHMENTS_REMOVE: &str = "attachments.remove";
+    pub const SCHEDULED_TASKS_READ: &str = "scheduledTasks.read";
+    pub const SCHEDULED_TASKS_WRITE: &str = "scheduledTasks.write";
+    pub const REVIEWED_SNAPSHOT: &str = "reviewed.snapshot";
+    pub const REVIEWED_SET: &str = "reviewed.set";
 
     /// Turn checkpoints, routed to `checkpoints::call` by their `checkpoints.` prefix.
     pub mod checkpoints {
@@ -87,6 +99,7 @@ struct InitializeParams {
 /// Parts that exist once the app has said where its profile folder is.
 struct Parts {
     catalog: RefCell<CatalogStore>,
+    saved: SavedData,
     checkpoints: Rc<checkpoints::store::TurnCheckpoints>,
     /// `<userData>/worktrees`, where the app creates thread worktrees.
     worktree_root: PathBuf,
@@ -130,6 +143,7 @@ impl Core {
                     catalog: RefCell::new(CatalogStore::new(
                         params.user_data_dir.join("catalogs.json"),
                     )),
+                    saved: SavedData::new(&params.user_data_dir),
                     checkpoints: checkpoints::open(&params.user_data_dir, params.turn_checkpoints)?,
                     worktree_root: params.user_data_dir.join("worktrees"),
                     worktree_refresh: tokio::sync::Mutex::new(()),
@@ -162,6 +176,12 @@ impl Service for Core {
         };
         // Calls that wait (git, files, processes) go to their part by method prefix.
         match method.split_once('.') {
+            Some(("uiState" | "attachments" | "scheduledTasks" | "reviewed", _)) => {
+                Box::pin(async move {
+                    let parts = self.parts()?;
+                    persistence::saved_data::call(&parts.saved, &method, params).await
+                })
+            }
             Some(("checkpoints", _)) => Box::pin(checkpoints::call(self, method, params)),
             Some(("worktrees", _)) => Box::pin(git::worktrees::call(self, method, params)),
             Some(("review", _)) => Box::pin(git::review::call(self, method, params)),

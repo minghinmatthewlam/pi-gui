@@ -41,6 +41,7 @@ import {
 } from "../pi-host/protocol";
 import { performExtensionViewHostAction } from "./extensions/extension-view-actions";
 import { ReviewOwner } from "./workbench/review-owner";
+import { ReviewedStore } from "./workbench/reviewed-store";
 import { registerDesktopIpc } from "./ipc/register-desktop-ipc";
 import {
   createOrchestrationRuntimeTools,
@@ -1250,7 +1251,7 @@ app
         review: new ReviewOwner({
           checkpoints,
           git: gitReviewClient(core.peer),
-          userDataDir: app.getPath("userData"),
+          reviewed: new ReviewedStore(core.peer),
           resolveCheckoutPath: (checkoutId) => store.getWorkspacePath(checkoutId),
           validateTask: (target) =>
             store

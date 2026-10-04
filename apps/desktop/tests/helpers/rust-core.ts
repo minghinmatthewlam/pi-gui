@@ -1,5 +1,7 @@
 import { join } from "node:path";
+import { test } from "@playwright/test";
 import { startCore, type CoreProcess } from "../../core-process/launch";
+import type { RpcPeer } from "../../rpc/rpc-peer";
 
 /**
  * Starts the built Rust core (`pnpm --filter @pi-gui/desktop run build:core`) for unit specs.
@@ -33,4 +35,21 @@ export async function startTestCore(
     else process.env[key] = value;
   }
   return started;
+}
+
+/** Starts a test core that `stopTestCoresAfterEach()` stops, and returns its pipe. */
+export async function startTestCorePeer(userDataDir: string): Promise<RpcPeer> {
+  const core = await startTestCore(userDataDir);
+  running.add(core);
+  return core.peer;
+}
+
+const running = new Set<CoreProcess>();
+
+/** Registers the cleanup in the calling spec file. */
+export function stopTestCoresAfterEach(): void {
+  test.afterEach(async () => {
+    await Promise.all([...running].map((core) => core.stop(1_000)));
+    running.clear();
+  });
 }

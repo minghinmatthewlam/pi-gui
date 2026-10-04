@@ -7,6 +7,21 @@ export const coreMethods = {
   shutdown: "core.shutdown",
   /** Catalog storage calls, in the same `{ path, args, undefinedAt }` shape the pi host uses. */
   catalogCall: "catalog.call",
+  /** `ui-state.json`: the decoded saved state, or `{}` before the first save. */
+  uiStateRead: "uiState.read",
+  /** Saves `{ state }` as version 19. */
+  uiStateWrite: "uiState.write",
+  /** A thread's saved composer attachments by `{ sessionKey }`, or `null`. */
+  attachmentsRead: "attachments.read",
+  attachmentsWrite: "attachments.write",
+  attachmentsListKeys: "attachments.listKeys",
+  attachmentsRemove: "attachments.remove",
+  /** `scheduled-tasks.json` as `{ tasks, recovered }`. */
+  scheduledTasksRead: "scheduledTasks.read",
+  scheduledTasksWrite: "scheduledTasks.write",
+  /** The review marks in `reviewed-files.json`, oldest first. */
+  reviewedSnapshot: "reviewed.snapshot",
+  reviewedSet: "reviewed.set",
   /** Turn checkpoints (`crates/pi-gui-core/src/checkpoints`); see `TurnCheckpointClient`. */
   checkpointsRecordBoundary: "checkpoints.recordBoundary",
   checkpointsList: "checkpoints.list",

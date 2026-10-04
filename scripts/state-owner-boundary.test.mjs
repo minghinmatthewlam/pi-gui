@@ -27,13 +27,8 @@ const durableStateOwners = [
   {
     token: /\bwriteFileAtomicQueued\b/,
     name: "writeFileAtomicQueued",
-    owners: [
-      "apps/desktop/electron/persistence/atomic-file-write.ts",
-      "apps/desktop/electron/persistence/app-store-persistence.ts",
-      "apps/desktop/electron/persistence/attachment-store.ts",
-      "apps/desktop/electron/scheduled-tasks/scheduled-task-store.ts",
-      reviewedStore,
-    ],
+    // The Rust core (crates/pi-gui-core/src/persistence/backup_json.rs) writes these files.
+    owners: [],
   },
 ];
 const productSourceRoots = [
