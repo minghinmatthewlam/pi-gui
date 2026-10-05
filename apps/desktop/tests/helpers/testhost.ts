@@ -416,15 +416,15 @@ export async function launchTestHost(
         send: async (event, window) => {
           const page = await pageOf(window);
           const modifiers = event.modifiers ?? [];
-          const { route } = await control.call<{ route: "newWindow" | "page" }>("keyboard", {
-            window: await windowIdOf(page),
-            keyCode: event.keyCode,
-            modifiers,
-          });
+          const { route } = await control.call<{ route: "newWindow" | "handled" | "page" }>(
+            "keyboard",
+            { window: await windowIdOf(page), keyCode: event.keyCode, modifiers, type: event.type },
+          );
           if (route === "newWindow") {
             await openWindow();
             return;
           }
+          if (route === "handled") return;
           const names: Record<string, string> = {
             shift: "Shift",
             control: "Control",

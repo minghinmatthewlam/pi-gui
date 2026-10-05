@@ -418,8 +418,9 @@ async fn test_call(app: &Rc<App>, name: &str, params: Value) -> CoreResult<Reply
                 focus(app, window);
             }
         }
-        // A key main sees before the page: Shift+Mod+N opens a window on the sender's view
-        // (the page the spec opens next); any other key goes on to the page.
+        // A key main sees before the page: Mod+W while a side panel tool or the terminal has
+        // focus closes that surface, Shift+Mod+N opens a window on the sender's view (the page
+        // the spec opens next), and any other key goes on to the page.
         "keyboard" => {
             let window = window_param(&params)?;
             let modifiers: Vec<&str> = params["modifiers"]
@@ -428,12 +429,34 @@ async fn test_call(app: &Rc<App>, name: &str, params: Value) -> CoreResult<Reply
                 .flatten()
                 .filter_map(Value::as_str)
                 .collect();
-            let platform_modifier = if cfg!(target_os = "macos") {
-                "meta"
+            let (platform_modifier, other_modifier) = if cfg!(target_os = "macos") {
+                ("meta", "control")
             } else {
-                "control"
+                ("control", "meta")
             };
             let key = text_param(&params, "keyCode")?.to_lowercase();
+            let key_down = params["type"].as_str() != Some("keyUp");
+            let close_surface = key_down
+                && key == "w"
+                && modifiers.contains(&platform_modifier)
+                && !modifiers
+                    .iter()
+                    .any(|modifier| [other_modifier, "alt", "shift"].contains(modifier));
+            let surface_focused = {
+                let data = app.kernel.data.borrow();
+                let terminal = &data.workspace.terminal;
+                terminal.terminal_focused.contains(&window)
+                    || terminal.side_panel_focused.contains(&window)
+            };
+            if close_surface && surface_focused {
+                publish::send_to(
+                    &app.kernel,
+                    window,
+                    push::APP_COMMAND,
+                    &"close-focused-surface",
+                );
+                return Ok(Reply::Value(json!({ "route": "handled" })));
+            }
             if modifiers.contains(&platform_modifier) && modifiers.contains(&"shift") && key == "n"
             {
                 let view = app.kernel.windows.view_for_window(&app.kernel, window);
