@@ -7,6 +7,7 @@ import {
   makeWorkspace,
   selectSidePanel,
 } from "../helpers/electron-app";
+import type { NativeKeyModifier } from "../helpers/desktop-harness";
 
 const isMac = process.platform === "darwin";
 /** Control on macOS, where Command switches threads, and Alt elsewhere. */
@@ -74,17 +75,8 @@ test("Control or Alt with 1-9 selects side panel tabs while Cmd or Ctrl keeps sw
     await tab("Terminal").click();
     const terminal = window.getByTestId("integrated-terminal");
     await terminal.locator(".xterm").click();
-    const sendDigit = (keyCode: string, modifiers: string[]) =>
-      harness.electronApp.evaluate(
-        ({ BrowserWindow }, input) => {
-          BrowserWindow.getAllWindows()[0]?.webContents.sendInputEvent({
-            type: "keyDown",
-            keyCode: input.keyCode,
-            modifiers: input.modifiers as Electron.InputEvent["modifiers"],
-          });
-        },
-        { keyCode, modifiers },
-      );
+    const sendDigit = (keyCode: string, modifiers: NativeKeyModifier[]) =>
+      harness.keyboard.send({ keyCode, modifiers });
     const mainModifier = isMac ? "control" : "alt";
     await window.evaluate(() => {
       const review = document.querySelector('[data-testid="workbench-tab-changes"]');
@@ -108,17 +100,8 @@ test("Control or Alt with 1-9 selects side panel tabs while Cmd or Ctrl keeps sw
 
     // Main forwards the chord without consuming it, so the modifier's release
     // still reaches the page and ends the tab hints.
-    const sendKey = (type: "keyDown" | "keyUp", keyCode: string, modifiers: string[]) =>
-      harness.electronApp.evaluate(
-        ({ BrowserWindow }, input) => {
-          BrowserWindow.getAllWindows()[0]?.webContents.sendInputEvent({
-            type: input.type,
-            keyCode: input.keyCode,
-            modifiers: input.modifiers as Electron.InputEvent["modifiers"],
-          });
-        },
-        { type, keyCode, modifiers },
-      );
+    const sendKey = (type: "keyDown" | "keyUp", keyCode: string, modifiers: NativeKeyModifier[]) =>
+      harness.keyboard.send({ type, keyCode, modifiers });
     const modifierKeyCode = isMac ? "Control" : "Alt";
     await sendKey("keyDown", modifierKeyCode, [mainModifier]);
     await expect(tabs.locator("[data-tab-shortcut]")).toHaveCount(3);

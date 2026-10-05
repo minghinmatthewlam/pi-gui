@@ -92,6 +92,29 @@ export default [
     files: ["apps/desktop/src/app/App.tsx"],
     rules: { "max-lines": ["error", { max: 1447 }] },
   },
+  {
+    // These specs must also run against the Rust test host and the Tauri app, so they reach
+    // the app only through DesktopHarness (tests/helpers/desktop-harness.ts).
+    files: ["apps/desktop/tests/{core,native,live}/**/*.{ts,tsx,mts,cts}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["electron", "playwright", "**/electron-harness"],
+              message: "Use DesktopHarness.",
+            },
+            {
+              group: ["**/helpers/electron-app"],
+              importNames: ["launchElectronDesktop", "ElectronDesktopHarness"],
+              message: "Use launchDesktop and DesktopHarness.",
+            },
+          ],
+        },
+      ],
+    },
+  },
   typedProject(["apps/desktop/src/**/*.{ts,tsx,mts,cts}"], "apps/desktop/tsconfig.json"),
   typedProject(
     [

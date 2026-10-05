@@ -1,11 +1,11 @@
 import { expect, test } from "@playwright/test";
 
-import type { PiDriverPort } from "../../pi-host/protocol";
-import type { SessionDriverEvent, SessionRef } from "@pi-gui/session-driver";
+import type { SessionRef } from "@pi-gui/session-driver";
 import { desktopIpc } from "../../contracts/ipc";
 import {
   clickSession,
   createNamedThread,
+  emitTestSessionEvent,
   getDesktopState,
   launchDesktop,
   makeUserDataDir,
@@ -40,85 +40,29 @@ for (const { finish, prompt } of pendingPrompts) {
         workspaceId: state.selectedWorkspaceId!,
         sessionId: state.selectedSessionId!,
       };
-      // A controlled driver holds the real submit IPC open until released. The
-      // visible Send/Stop buttons still exercise the renderer, preload and main
+      // pi's send and cancel are held for the test, so the real submit IPC stays open until
+      // released. The visible Send/Stop buttons still exercise the renderer, preload and main
       // queue; no provider timing or response-length assumption is involved.
-      await harness.electronApp.evaluate(
-        async ({ ipcMain }, input) => {
-          type InvokeHandler = (...args: unknown[]) => unknown;
-          const handlers = (
-            ipcMain as typeof ipcMain & { readonly _invokeHandlers?: Map<string, InvokeHandler> }
-          )._invokeHandlers;
-          const submit = handlers?.get(input.submitChannel);
-          if (!handlers || !submit) throw new Error("Missing submit handler");
-          let submission: Promise<unknown> | undefined;
-          handlers.set(input.submitChannel, (...args) => {
-            submission = Promise.resolve(submit(...args));
-            return submission;
-          });
-          const driver = (
-            globalThis as {
-              __PI_APP_TEST_HOOKS?: {
-                piDriver(): { -readonly [K in keyof PiDriverPort]: PiDriverPort[K] };
-              };
-            }
-          ).__PI_APP_TEST_HOOKS!.piDriver();
-          const hooks = (
-            globalThis as {
-              __PI_APP_TEST_HOOKS?: { emitSessionEvent(event: SessionDriverEvent): Promise<void> };
-            }
-          ).__PI_APP_TEST_HOOKS;
-          if (!hooks) throw new Error("Test event hook unavailable");
-          let release: (() => void) | undefined;
-          const emit = (ref: SessionRef, status: "running" | "idle") =>
-            hooks.emitSessionEvent({
-              type: "sessionUpdated",
-              sessionRef: ref,
-              timestamp: new Date().toISOString(),
-              snapshot: {
-                ref,
-                workspace: { workspaceId: ref.workspaceId, path: input.workspacePath },
-                title: "Pending prompt",
-                status,
-                updatedAt: new Date().toISOString(),
-              },
-            });
-          driver.sendUserMessage = async (ref) => {
-            const pending = new Promise<void>((resolvePrompt) => {
-              release = resolvePrompt;
-            });
-            await emit(ref, "running");
-            await pending;
-          };
-          const completePrompt = async () => {
-            await emit(input.target, "idle");
-            release?.();
-            if (!submission) throw new Error("Missing pending submission");
-            // Wait for the real handler's final state projection, not only idle.
-            await submission;
-          };
-          (
-            globalThis as { __completePendingTestPrompt?: () => Promise<void> }
-          ).__completePendingTestPrompt = completePrompt;
-          driver.cancelCurrentRun = async (ref) => {
-            if (
-              ref.workspaceId !== input.target.workspaceId ||
-              ref.sessionId !== input.target.sessionId
-            ) {
-              throw new Error("Stop targeted the wrong session");
-            }
-            await emit(ref, "idle");
-            release?.();
-          };
-        },
-        {
-          target,
-          workspacePath,
-          submitChannel: desktopIpc.submitComposer,
-        },
-      );
+      await harness.ipc.control(desktopIpc.submitComposer, { mode: "passthrough" });
+      const sends = await harness.driver.intercept("sendUserMessage");
+      const cancels = await harness.driver.intercept("cancelCurrentRun");
+      const emit = (ref: SessionRef, status: "running" | "idle") =>
+        emitTestSessionEvent(harness, {
+          type: "sessionUpdated",
+          sessionRef: ref,
+          timestamp: new Date().toISOString(),
+          snapshot: {
+            ref,
+            workspace: { workspaceId: ref.workspaceId, path: workspacePath },
+            title: "Pending prompt",
+            status,
+            updatedAt: new Date().toISOString(),
+          },
+        });
       await page.getByTestId("composer").fill(prompt);
       await page.getByTestId("send").click();
+      const send = await sends.nextCall();
+      await emit(send.args[0] as SessionRef, "running");
       await expect(page.getByRole("button", { name: "Stop run", exact: true })).toBeVisible();
       await expect(page.locator(".composer__hint")).toHaveCount(0);
       await pinnedSection.getByRole("button", { name: /^Unpin Pending prompt/ }).click();
@@ -135,12 +79,10 @@ for (const { finish, prompt } of pendingPrompts) {
       });
       await expect(row).toHaveAttribute("data-sidebar-indicator", "running");
       if (finish === "complete") {
-        await harness.electronApp.evaluate(async () => {
-          const complete = (globalThis as { __completePendingTestPrompt?: () => Promise<void> })
-            .__completePendingTestPrompt;
-          if (!complete) throw new Error("Missing controlled prompt completion");
-          await complete();
-        });
+        await emit(target, "idle");
+        await send.complete();
+        // Wait for the real handler's final state projection, not only idle.
+        await harness.ipc.settled(desktopIpc.submitComposer);
         await expect(row).not.toHaveAttribute("data-sidebar-indicator", "running");
         await expect(page.locator(".chat-header__title")).toHaveText("Other thread");
         return;
@@ -148,6 +90,11 @@ for (const { finish, prompt } of pendingPrompts) {
       await clickSession(page, "Pending prompt");
       await expect(page.getByRole("button", { name: "Stop run", exact: true })).toBeVisible();
       await page.getByRole("button", { name: "Stop run", exact: true }).click();
+      const cancel = await cancels.nextCall();
+      expect(cancel.args[0], "Stop targeted the wrong session").toEqual(target);
+      await emit(target, "idle");
+      await cancel.complete();
+      await send.complete();
       await expect(page.getByTestId("send")).toHaveAttribute("aria-label", "Send message", {
         timeout: 5_000,
       });

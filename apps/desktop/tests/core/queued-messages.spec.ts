@@ -364,31 +364,15 @@ test("queued edit and cancel keep their original session when navigation is alre
     for (const operation of ["edit", "cancel"] as const) {
       // Invoke both real handlers in one main turn to force navigation ahead
       // of an action dispatched while Alpha is still displayed.
-      await harness.electronApp.evaluate(
-        async ({ ipcMain, BrowserWindow }, payload) => {
-          type InvokeHandler = (...args: unknown[]) => unknown;
-          const handlers = (
-            ipcMain as typeof ipcMain & { readonly _invokeHandlers?: Map<string, InvokeHandler> }
-          )._invokeHandlers;
-          const select = handlers?.get(payload.selectChannel);
-          const action = handlers?.get(payload.actionChannel);
-          const sender = BrowserWindow.getAllWindows()[0]?.webContents;
-          if (!select || !action || !sender) throw new Error("Missing desktop handlers");
-          const event = { sender };
-          const navigation = select(event, payload.bravo);
-          const mutation = action(event, ...payload.args);
-          await Promise.all([navigation, mutation]);
-        },
-        {
-          selectChannel: desktopIpc.selectSession,
-          actionChannel:
-            operation === "edit"
-              ? desktopIpc.editQueuedComposerMessage
-              : desktopIpc.cancelQueuedComposerEdit,
-          bravo,
-          args: operation === "edit" ? [queuedMessage.id, "Alpha scratch"] : [],
-        },
-      );
+      await harness.ipc.invokeTogether([
+        { channel: desktopIpc.selectSession, args: [bravo] },
+        operation === "edit"
+          ? {
+              channel: desktopIpc.editQueuedComposerMessage,
+              args: [queuedMessage.id, "Alpha scratch"],
+            }
+          : { channel: desktopIpc.cancelQueuedComposerEdit, args: [] },
+      ]);
       await expect(window.locator(".chat-header__title")).toHaveText("Queue Bravo");
       await expect(window.getByTestId("composer")).toHaveValue("Bravo draft");
       await expect(window.getByTestId("queued-composer-editing")).toHaveCount(0);
@@ -431,42 +415,17 @@ test("an unsaved keystroke does not overwrite a queued edit or its cancel", asyn
     // Main serializes a window's actions in arrival order. Keep that order across these
     // channels and make the queued actions slow, so a debounced draft write that fires
     // after Edit or Cancel is sent is handled after it, as on a busy main process.
-    await harness.electronApp.evaluate(
-      ({ ipcMain }, payload) => {
-        type InvokeHandler = (...args: unknown[]) => unknown;
-        const handlers = (
-          ipcMain as typeof ipcMain & { readonly _invokeHandlers?: Map<string, InvokeHandler> }
-        )._invokeHandlers;
-        const store = globalThis as typeof globalThis & { __queuedEditChain__?: Promise<unknown> };
-        store.__queuedEditChain__ = Promise.resolve();
-        for (const [channel, delayMs] of payload.channels) {
-          const original = handlers?.get(channel);
-          if (!original) throw new Error(`No IPC handler registered for ${channel}`);
-          ipcMain.removeHandler(channel);
-          ipcMain.handle(channel, (...args) => {
-            const result = (store.__queuedEditChain__ ?? Promise.resolve()).then(async () => {
-              await new Promise((resolve) => setTimeout(resolve, delayMs));
-              return original(...args);
-            });
-            store.__queuedEditChain__ = result.catch(() => undefined);
-            return result;
-          });
-        }
-      },
-      {
-        channels: [
-          [desktopIpc.editQueuedComposerMessage, 600],
-          [desktopIpc.cancelQueuedComposerEdit, 600],
-          [desktopIpc.updateComposerDraft, 0],
-        ] as const,
-      },
-    );
+    const delayedChannels = [
+      [desktopIpc.editQueuedComposerMessage, 600],
+      [desktopIpc.cancelQueuedComposerEdit, 600],
+      [desktopIpc.updateComposerDraft, 0],
+    ] as const;
+    for (const [channel, delayMs] of delayedChannels) {
+      await harness.ipc.control(channel, { mode: "passthrough", delayMs, queue: "queued-edit" });
+    }
     const settle = async () => {
       await window.waitForTimeout(1_000);
-      await harness.electronApp.evaluate(async () => {
-        await (globalThis as typeof globalThis & { __queuedEditChain__?: Promise<unknown> })
-          .__queuedEditChain__;
-      });
+      for (const [channel] of delayedChannels) await harness.ipc.settled(channel);
     };
 
     const composer = window.getByTestId("composer");

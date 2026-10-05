@@ -1,11 +1,11 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
-import type { PiDriverPort } from "../../pi-host/protocol";
-import type { SessionDriverEvent, SessionRef } from "@pi-gui/session-driver";
+import type { SessionRef } from "@pi-gui/session-driver";
 import { desktopIpc } from "../../contracts/ipc";
 import {
   createNamedThread,
+  emitTestSessionEvent,
   getDesktopState,
   launchDesktop,
   makeUserDataDir,
@@ -71,87 +71,28 @@ export default function extension(pi) {
 
     // Hold a real submit open and delay only the draft-persistence boundary. Visible Prepare
     // and Stop still traverse the renderer, preload, host ownership and cancellation paths.
-    await harness.electronApp.evaluate(
-      async ({ ipcMain }, input) => {
-        type InvokeHandler = (...args: unknown[]) => unknown;
-        const handlers = (
-          ipcMain as typeof ipcMain & { readonly _invokeHandlers?: Map<string, InvokeHandler> }
-        )._invokeHandlers;
-        const persist = handlers?.get(input.persistChannel);
-        if (!handlers || !persist) throw new Error("Missing draft persistence handler");
-        let releaseDraft = () => {};
-        const draftGate = new Promise<void>((resolveDraft) => {
-          releaseDraft = resolveDraft;
-        });
-        handlers.set(input.persistChannel, async (...args) => {
-          await draftGate;
-          return persist(...args);
-        });
-        const driver = (
-          globalThis as {
-            __PI_APP_TEST_HOOKS?: {
-              piDriver(): { -readonly [K in keyof PiDriverPort]: PiDriverPort[K] };
-            };
-          }
-        ).__PI_APP_TEST_HOOKS!.piDriver();
-        const hooks = (
-          globalThis as {
-            __PI_APP_TEST_HOOKS?: { emitSessionEvent(event: SessionDriverEvent): Promise<void> };
-          }
-        ).__PI_APP_TEST_HOOKS;
-        if (!hooks) throw new Error("Test event hook unavailable");
-        let releaseRun = () => {};
-        const emit = (ref: SessionRef, status: "running" | "idle") =>
-          hooks.emitSessionEvent({
-            type: "sessionUpdated",
-            sessionRef: ref,
-            timestamp: new Date().toISOString(),
-            snapshot: {
-              ref,
-              workspace: { workspaceId: ref.workspaceId, path: input.workspacePath },
-              title: "Original running task",
-              status,
-              updatedAt: new Date().toISOString(),
-            },
-          });
-        driver.sendUserMessage = async (ref) => {
-          const runGate = new Promise<void>((resolveRun) => {
-            releaseRun = resolveRun;
-          });
-          await emit(ref, "running");
-          await runGate;
-        };
-        driver.cancelCurrentRun = async (ref) => {
-          if (
-            ref.workspaceId !== input.target.workspaceId ||
-            ref.sessionId !== input.target.sessionId
-          )
-            throw new Error("Stop targeted the wrong task");
-          await emit(ref, "idle");
-          releaseRun();
-        };
-        (
-          globalThis as {
-            __extensionDraftStopControl?: { releaseDraft(): void; releaseAll(): void };
-          }
-        ).__extensionDraftStopControl = {
-          releaseDraft,
-          releaseAll() {
-            releaseDraft();
-            releaseRun();
-          },
-        };
-      },
-      {
-        workspacePath,
-        target,
-        persistChannel: desktopIpc.persistComposerDraft,
-      },
-    );
+    await harness.ipc.control(desktopIpc.persistComposerDraft, { mode: "hold" });
+    const sends = await harness.driver.intercept("sendUserMessage");
+    const cancels = await harness.driver.intercept("cancelCurrentRun");
+    const emit = (ref: SessionRef, status: "running" | "idle") =>
+      emitTestSessionEvent(harness, {
+        type: "sessionUpdated",
+        sessionRef: ref,
+        timestamp: new Date().toISOString(),
+        snapshot: {
+          ref,
+          workspace: { workspaceId: ref.workspaceId, path: workspacePath },
+          title: "Original running task",
+          status,
+          updatedAt: new Date().toISOString(),
+        },
+      });
 
     const composer = window.getByTestId("composer");
     await composer.fill("Keep this run active until Stop");
     await window.getByTestId("send").click();
+    const send = await sends.nextCall();
+    await emit(send.args[0] as SessionRef, "running");
     const originalRow = window.locator(`.session-row[data-session-id="${target.sessionId}"]`);
     await expect(originalRow).toHaveAttribute("data-sidebar-indicator", "running");
     await composer.fill("Keep my unsent original draft");
@@ -162,27 +103,21 @@ export default function extension(pi) {
     await expect(stop).toBeEnabled();
     expect(await stop.evaluate((element) => element.closest("[inert]") === null)).toBe(true);
     await stop.click();
+    const cancel = await cancels.nextCall();
+    expect(cancel.args[0], "Stop targeted the wrong task").toEqual(target);
+    await emit(target, "idle");
+    await cancel.complete();
+    await send.complete();
     await expect(originalRow).not.toHaveAttribute("data-sidebar-indicator", "running");
     await expect(composer).toHaveValue("Keep my unsent original draft");
     await expect(window.locator(".chat-header__title")).toHaveText("Original running task");
-    await harness.electronApp.evaluate(() => {
-      const control = (globalThis as { __extensionDraftStopControl?: { releaseDraft(): void } })
-        .__extensionDraftStopControl;
-      if (!control) throw new Error("Missing draft gate");
-      control.releaseDraft();
-    });
+    await harness.ipc.release(desktopIpc.persistComposerDraft);
     await expect(window.locator(".chat-header__title")).toHaveText("Extension prepared task");
     await expect(composer).toHaveValue("Inspect the extension findings.");
     await selectSession(window, "Original running task");
     await expect(composer).toHaveValue("Keep my unsent original draft");
   } finally {
-    await harness.electronApp
-      .evaluate(() => {
-        (
-          globalThis as { __extensionDraftStopControl?: { releaseAll(): void } }
-        ).__extensionDraftStopControl?.releaseAll();
-      })
-      .catch(() => {});
+    await harness.ipc.release(desktopIpc.persistComposerDraft).catch(() => {});
     await harness.close();
   }
 });

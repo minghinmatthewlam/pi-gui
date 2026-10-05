@@ -53,20 +53,12 @@ test("a real provider records PR findings through the installed extension and pr
     scrubProviderEnv: true,
     envOverrides: { ...fixture.envOverrides, PI_APP_TEST_MODE: undefined },
   });
-  const pid = harness.electronApp.process().pid;
+  const pid = harness.app.pid;
   let tracing = false;
   try {
     await harness.focusWindow();
     const window = await harness.firstWindow();
-    const identity = await harness.electronApp.evaluate(({ app, BrowserWindow }) => ({
-      pid: process.pid,
-      appPath: app.getAppPath(),
-      userData: app.getPath("userData"),
-      visible: BrowserWindow.getAllWindows()[0]?.isVisible(),
-      focused: BrowserWindow.getAllWindows()[0]?.isFocused(),
-      testMode: process.env.PI_APP_TEST_MODE ?? null,
-      testHooks: "__PI_APP_TEST_HOOKS" in globalThis,
-    }));
+    const identity = await harness.app.identity();
     const documentFocused = await window.evaluate(() => document.hasFocus());
     await writeFile(
       testInfo.outputPath("doctor.json"),
@@ -76,9 +68,7 @@ test("a real provider records PR findings through the installed extension and pr
     expect(identity.focused || documentFocused).toBe(true);
     expect(resolve(identity.appPath)).toBe(resolve("apps/desktop"));
     expect(resolve(identity.userData)).toBe(resolve(privateRoot, "profile"));
-    await harness.electronApp
-      .context()
-      .tracing.start({ screenshots: true, snapshots: true, sources: true });
+    await harness.context().tracing.start({ screenshots: true, snapshots: true, sources: true });
     tracing = true;
     await window
       .locator(".sidebar")
@@ -153,9 +143,7 @@ test("a real provider records PR findings through the installed extension and pr
   } finally {
     try {
       if (tracing)
-        await harness.electronApp
-          .context()
-          .tracing.stop({ path: testInfo.outputPath("extension-review.zip") });
+        await harness.context().tracing.stop({ path: testInfo.outputPath("extension-review.zip") });
     } finally {
       await harness.close();
     }

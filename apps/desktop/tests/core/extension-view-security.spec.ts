@@ -152,20 +152,14 @@ test("two real windows share one task backend while their frame connections rema
     await expect(firstFrame.locator("#counter")).toHaveText("Count 0 · activations 1");
     const firstUrl = await first.getByTestId("extension-view-frame").getAttribute("src");
     if (!firstUrl) throw new Error("Missing first frame URL");
-    const existing = new Set(harness.electronApp.windows());
+    const existing = new Set(harness.windows.pages());
     // The native New Window shortcut is owned by before-input-event, as in multi-window.spec.
-    await harness.electronApp.evaluate(
-      ({ BrowserWindow }, modifier) => {
-        BrowserWindow.getAllWindows()[0]?.webContents.sendInputEvent({
-          type: "keyDown",
-          keyCode: "n",
-          modifiers: [modifier, "shift"],
-        });
-      },
-      process.platform === "darwin" ? "meta" : "control",
-    );
-    await expect.poll(() => harness.electronApp.windows().length).toBe(2);
-    const second = harness.electronApp.windows().find((candidate) => !existing.has(candidate));
+    await harness.keyboard.send({
+      keyCode: "n",
+      modifiers: [process.platform === "darwin" ? "meta" : "control", "shift"],
+    });
+    await expect.poll(() => harness.windows.pages().length).toBe(2);
+    const second = harness.windows.pages().find((candidate) => !existing.has(candidate));
     if (!second) throw new Error("Expected second desktop window");
     await second.waitForLoadState("domcontentloaded");
     await selectSession(second, "Shared extension task");
@@ -191,7 +185,7 @@ test("two real windows share one task backend while their frame connections rema
     await expect(firstFrame.locator("#counter")).toHaveText("Count 1 · activations 1");
     await expect(secondFrame.locator("#counter")).toHaveText("Count 1 · activations 1");
     await first.close();
-    await expect.poll(() => harness.electronApp.windows().length).toBe(1);
+    await expect.poll(() => harness.windows.pages().length).toBe(1);
     await secondFrame.getByRole("button", { name: "Increment", exact: true }).click();
     await expect(secondFrame.locator("#counter")).toHaveText("Count 2 · activations 1");
     const closedSender = await second.evaluate(async (connectionId) => {

@@ -2,7 +2,6 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, test, type Locator } from "@playwright/test";
 import {
-  type DesktopHarness,
   launchDesktop,
   makeUserDataDir,
   makeWorkspace,
@@ -33,24 +32,6 @@ function assistantMessage(workspacePath: string): string {
     "```",
     "",
   ].join("\n");
-}
-
-async function captureOpenedExternalUrls(
-  harness: DesktopHarness,
-): Promise<() => Promise<readonly string[]>> {
-  await harness.electronApp.evaluate(({ shell }) => {
-    const globals = globalThis as typeof globalThis & { __piGuiOpenedExternalUrls?: string[] };
-    globals.__piGuiOpenedExternalUrls = [];
-    shell.openExternal = async (url: string) => {
-      globals.__piGuiOpenedExternalUrls?.push(url);
-    };
-  });
-  return () =>
-    harness.electronApp.evaluate(
-      () =>
-        (globalThis as typeof globalThis & { __piGuiOpenedExternalUrls?: string[] })
-          .__piGuiOpenedExternalUrls ?? [],
-    );
 }
 
 function fileButton(assistant: Locator, name: string): Locator {
@@ -121,7 +102,7 @@ test("assistant file lines open in the Files panel and web links stay external",
     const window = await harness.firstWindow();
     await selectSession(window, SESSION_TITLE);
     const appUrl = window.url();
-    const openedExternalUrls = await captureOpenedExternalUrls(harness);
+    const openedExternalUrls = await harness.externalUrls.capture();
     const assistant = window.locator(".timeline-item--assistant");
     const user = window.locator(".timeline-item--user");
 
