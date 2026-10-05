@@ -193,7 +193,7 @@ export async function launchTestHost(
     browser = await chromium.launch({ executablePath: chromiumExecutable() });
     const openedBrowser = browser;
     // The windows go with the app, as Electron's do when its process exits.
-    void exited.then(() => openedBrowser.close().catch(() => undefined));
+    exited.then(() => openedBrowser.close()).catch(() => undefined);
     const context: BrowserContext = await browser.newContext({ viewport: WINDOW_SIZE });
     const pageUrl = `${url}/?testhost=${encodeURIComponent(wsUrl)}`;
     const pages: Page[] = [];
