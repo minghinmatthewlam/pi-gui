@@ -16,7 +16,7 @@ import {
 } from "./desktop-harness";
 import type { ThemePresetId } from "../../contracts/desktop-state";
 import { windowBackgroundFor, type ResolvedTheme } from "../../contracts/theme";
-import { seedAgentDir } from "./electron-app";
+import { isProviderAuthEnvVar, seedAgentDir } from "./electron-app";
 
 /**
  * `DesktopHarness` for `pi-gui-testhost`: the Rust app-state kernel with the real pi host and
@@ -102,7 +102,7 @@ function launchEnv(userDataDir: string, agentDir: string, options: TestHostLaunc
   const env: NodeJS.ProcessEnv = { ...process.env };
   // Ambient provider credentials must never turn a fixture test into a real request.
   for (const key of Object.keys(env)) {
-    if (key.endsWith("_API_KEY")) delete env[key];
+    if (isProviderAuthEnvVar(key)) delete env[key];
   }
   Object.assign(env, {
     PI_APP_USER_DATA_DIR: userDataDir,
@@ -211,6 +211,8 @@ export async function launchTestHost(
     const control = await connectControl(wsUrl);
     browser = await chromium.launch({ executablePath: chromiumExecutable() });
     const openedBrowser = browser;
+    // The windows go with the app, as Electron's do when its process exits.
+    exited.then(() => openedBrowser.close()).catch(() => undefined);
     const context: BrowserContext = await browser.newContext({ viewport: WINDOW_SIZE });
     const pageUrl = `${url}/?testhost=${encodeURIComponent(wsUrl)}`;
     const pages: Page[] = [];
@@ -280,7 +282,10 @@ export async function launchTestHost(
         env: (name) => Promise.resolve(env[name]),
         mainProcessType: () => Promise.resolve("testhost"),
         identity: unsupported("The app identity"),
-        decodeImage: unsupported("The native image decoder"),
+        decodeImage: (base64) =>
+          control.call<{ empty: boolean; width: number; height: number }>("decodeImage", {
+            data: base64,
+          }),
       },
       windows: {
         count: async () => (await control.call<number[]>("windows")).length,
@@ -300,7 +305,13 @@ export async function launchTestHost(
           };
         },
         close: async (window) => {
-          await (await pageOf(window)).close();
+          // The host holds the close until the page sends its draft, as Electron main does.
+          const page = await pageOf(window);
+          await control.call("closeWindow", { window: await windowIdOf(page) });
+          // Closing the last window quits, and the pages go with the app.
+          await page.close().catch((error: unknown) => {
+            if (!exitedNow) throw error;
+          });
         },
         show: (window) => focus(window),
         focus,
@@ -463,14 +474,13 @@ function testHostDriver(control: TestHostControl): PiDriverControl {
 function testHostIpc(control: TestHostControl): DesktopIpcControl {
   return {
     control: async (channel, options) => {
-      if (options.mode === "hold" || options.delayMs !== undefined || options.queue) {
-        throw new Error("Holding, delaying or queueing requests is not available on the test host");
-      }
       await control.call("invokeControl.install", {
         channel,
         mode: options.mode,
         sentinel: options.sentinel ?? HYDRATE_TEST_SENTINEL,
         ...(options.replacement === undefined ? {} : { replacement: options.replacement }),
+        ...(options.delayMs === undefined ? {} : { delayMs: options.delayMs }),
+        ...(options.queue === undefined ? {} : { queue: options.queue }),
       });
     },
     update: async (channel, patch) => {
@@ -478,10 +488,13 @@ function testHostIpc(control: TestHostControl): DesktopIpcControl {
     },
     read: (channel) => control.call<IpcInvokeControlSnapshot>("invokeControl.read", { channel }),
     release: async (channel) => {
-      await control.call("invokeControl.set", { channel, mode: "passthrough" });
+      await control.call("invokeControl.release", { channel });
     },
-    // Nothing is ever held, so every request has finished once it has answered.
-    settled: () => Promise.resolve(),
-    invokeTogether: unsupported("Batched IPC requests"),
+    settled: async (channel) => {
+      await control.call("invokeControl.settled", { channel });
+    },
+    invokeTogether: async (requests) => {
+      await control.call("invokeTogether", { requests });
+    },
   };
 }
