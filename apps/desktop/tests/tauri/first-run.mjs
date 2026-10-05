@@ -251,6 +251,11 @@ async function pickFolderInGtkDialog(path) {
   // GTK fills the dialog after it maps and drops keys typed before then; it shows no state
   // to wait on from outside.
   await sleep(1_500);
+  // A typed "/" opens the location entry, which can drop the keys right after it; open it
+  // first, then replace whatever it holds with the whole path.
+  await execFileAsync("xdotool", ["type", "/"]);
+  await sleep(700);
+  await execFileAsync("xdotool", ["key", "ctrl+a"]);
   await execFileAsync("xdotool", ["type", "--delay", "20", path]);
   await sleep(500);
   await execFileAsync("xdotool", ["key", "Return"]);
