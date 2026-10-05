@@ -5,6 +5,7 @@
 //! The core runs on one thread with a local async executor, like Node: state lives in
 //! `RefCell`s, and a call runs until its first `.await`.
 
+pub mod app;
 pub mod checkpoints;
 pub mod error;
 pub mod git;
