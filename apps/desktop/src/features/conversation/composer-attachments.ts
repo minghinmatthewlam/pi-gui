@@ -1,6 +1,6 @@
 /// <reference lib="dom" />
 
-import { type KeyboardEvent } from "react";
+import { type ClipboardEvent, type KeyboardEvent } from "react";
 import {
   assertComposerAttachmentsAccepted,
   assertComposerImageBytes,
@@ -17,31 +17,64 @@ import type {
 } from "../../../contracts/desktop-state";
 import { filePathFor } from "../../platform/file-paths";
 
+// The paste shortcut reads the native clipboard image, which is asynchronous, so the webview
+// pastes before the read settles. While a read is pending, a paste event with image files waits
+// for it: the native image wins and the event's files are the fallback, as when the read was
+// synchronous and the shortcut stopped the paste itself.
+interface ClipboardImageReadInFlight {
+  attachPastedFiles?: () => void;
+}
+
+let pendingClipboardImageRead: ClipboardImageReadInFlight | undefined;
+
 export function handleClipboardImageShortcut(
   event: KeyboardEvent<HTMLTextAreaElement>,
-  readClipboardImage: (() => ClipboardImageRead) | undefined,
+  readClipboardImage: (() => Promise<ClipboardImageRead>) | undefined,
   onImage: (attachment: ComposerImageAttachment) => void,
   onError?: (message: string) => void,
-): boolean {
+): void {
   if (!(event.metaKey || event.ctrlKey) || event.shiftKey || event.key.toLowerCase() !== "v") {
-    return false;
+    return;
+  }
+  if (!readClipboardImage) {
+    return;
   }
 
-  const clipboardImage = readClipboardImage?.();
-  if (!clipboardImage) {
-    return false;
+  const read: ClipboardImageReadInFlight = {};
+  pendingClipboardImageRead = read;
+  const settle = (clipboardImage: ClipboardImageRead | undefined) => {
+    if (pendingClipboardImageRead !== read) {
+      return;
+    }
+    pendingClipboardImageRead = undefined;
+    if (clipboardImage?.ok) {
+      onImage(clipboardImage.attachment);
+    } else if (clipboardImage?.message) {
+      onError?.(clipboardImage.message);
+    } else {
+      read.attachPastedFiles?.();
+    }
+  };
+  void readClipboardImage().then(settle, (error: unknown) => {
+    console.error("[renderer] readClipboardImage failed", error);
+    settle(undefined);
+  });
+}
+
+export function handleComposerImagePaste(
+  event: ClipboardEvent<HTMLElement>,
+  onFiles: (files: File[]) => void,
+): void {
+  const files = extractImageFilesFromClipboardData(event.clipboardData);
+  if (files.length === 0) {
+    return;
   }
-  if (clipboardImage.ok) {
-    event.preventDefault();
-    onImage(clipboardImage.attachment);
-    return true;
+  event.preventDefault();
+  if (pendingClipboardImageRead) {
+    pendingClipboardImageRead.attachPastedFiles = () => onFiles(files);
+    return;
   }
-  if (clipboardImage.message) {
-    event.preventDefault();
-    onError?.(clipboardImage.message);
-    return true;
-  }
-  return false;
+  onFiles(files);
 }
 
 type ComposerImageMimeType = (typeof SUPPORTED_COMPOSER_IMAGE_TYPES)[number]["mimeType"];
