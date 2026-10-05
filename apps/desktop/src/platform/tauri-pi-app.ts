@@ -144,10 +144,7 @@ function fromChildFrame(source: MessageEventSource | null): boolean {
  * chords to this page, which treats them as main did: Mod+W asks the shell, which closes the
  * focused side panel tool; tab chords and app shortcuts become app commands.
  */
-function installFrameChords(
-  platform: NodeJS.Platform,
-  dispatch: (command: string) => void,
-): void {
+function installFrameChords(platform: NodeJS.Platform, dispatch: (command: string) => void): void {
   window.addEventListener("message", (event) => {
     if (!isFrameChord(event.data) || !fromChildFrame(event.source)) return;
     const chord = event.data;
