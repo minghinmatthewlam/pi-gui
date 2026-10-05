@@ -66,7 +66,7 @@ const NON_API_KEY_PROVIDER_ENV_VARS = [
 // which silently poisons "no providers connected" assertions on developer
 // machines that export keys the hardcoded list happened to miss. Scrub the full
 // class instead: every `*_API_KEY` var plus the documented non-suffixed ones.
-function isProviderAuthEnvVar(key: string): boolean {
+export function isProviderAuthEnvVar(key: string): boolean {
   return (
     key.endsWith("_API_KEY") || (NON_API_KEY_PROVIDER_ENV_VARS as readonly string[]).includes(key)
   );

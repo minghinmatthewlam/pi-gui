@@ -34,11 +34,13 @@ pub struct App {
     pub renderer_dir: PathBuf,
     pub test_mode: bool,
     pub windows: session::Windows,
-    /// Set by `test.quit`; the accept loop stops once it fires.
+    /// Set by `test.quit`, or when the last window closes; the accept loop stops once it fires.
     pub quit: tokio::sync::Notify,
     /// Text prompts a test began, by outcome id, until it reads their outcome.
     pub text_prompts: std::cell::RefCell<std::collections::HashMap<u64, TextPromptOutcome>>,
     pub next_text_prompt: std::cell::Cell<u64>,
+    /// Quit has begun: it flushes every window's draft, so a window closing meanwhile waits.
+    pub quitting: std::cell::Cell<bool>,
 }
 
 /// The answer a begun text prompt resolves to.
@@ -151,6 +153,7 @@ async fn run() -> Result<(), CoreError> {
         quit: tokio::sync::Notify::new(),
         text_prompts: Default::default(),
         next_text_prompt: Default::default(),
+        quitting: Default::default(),
     });
     let mut terminate = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
         .map_err(|error| CoreError::new(error.to_string()))?;
@@ -173,6 +176,7 @@ async fn run() -> Result<(), CoreError> {
 /// What Electron's `before-quit` does: windows flush their drafts, state is saved, then pi and
 /// the core stop.
 pub async fn shutdown(app: &App) {
+    app.quitting.set(true);
     app.kernel.prepare_quit().await;
     app.driver.stop(Duration::from_secs(5)).await;
     let _ = app

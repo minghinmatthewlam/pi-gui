@@ -128,6 +128,15 @@ pub async fn on_session_event(
     Ok(())
 }
 
+/// `cancelChildRunsForParent`: Stop on a thread also stops its children. Not ported: no
+/// children run.
+pub async fn cancel_child_runs_for_parent(
+    _kernel: &Kernel,
+    _parent_ref: &SessionRef,
+) -> CoreResult<()> {
+    Ok(())
+}
+
 /// The host's `app.tool` call (the `pi_gui` tool). Not ported.
 pub async fn run_pi_gui_tool(_kernel: &Kernel, _params: Value) -> CoreResult<Value> {
     Err(CoreError::new("not ported: app.tool"))

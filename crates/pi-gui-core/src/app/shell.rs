@@ -5,6 +5,7 @@
 use super::WindowId;
 use crate::error::{CoreError, CoreResult};
 use crate::rpc::LocalFuture;
+use crate::state::driver::SessionRef;
 use indexmap::IndexMap;
 use serde_json::{json, Value};
 use std::cell::{Cell, RefCell};
@@ -109,8 +110,13 @@ pub trait Shell {
     fn reveal_path(&self, path: PathBuf, open: bool) -> LocalFuture<CoreResult<()>>;
     fn toggle_maximize(&self, window: WindowId);
     fn relaunch(&self);
-    /// A desktop notification; the payload is the notification manager's.
+    /// A desktop notification: `{sessionRef, title, body}`. A click on it calls
+    /// `notifications::open_session` with its `sessionRef`.
     fn notify(&self, notification: Value) -> LocalFuture<CoreResult<()>>;
+    /// Takes down the thread's notification, if it is still up.
+    fn close_notification(&self, session_ref: &SessionRef);
+    /// Restores, shows and focuses a window.
+    fn show_window(&self, window: WindowId);
     /// `"status" | "request" | "openSettings"`.
     fn notification_permission(&self, operation: &str) -> LocalFuture<CoreResult<Value>>;
     fn read_clipboard_image(&self) -> Value;
@@ -141,10 +147,62 @@ pub struct TestShell {
     /// `PI_APP_TEST_MODE=background`: windows are never shown, as in the Electron lane.
     background: bool,
     open_dialog_answers: RefCell<VecDeque<Option<Vec<PathBuf>>>>,
+    /// `holdNextOpenDialog`: the next open dialog waits for a release, then returns these.
+    held_open_dialog: RefCell<Option<Vec<PathBuf>>>,
+    /// The held open dialog that is waiting for its release.
+    open_dialog_release: RefCell<Option<Rc<tokio::sync::Notify>>>,
     next_prompt: Cell<u64>,
     prompts: RefCell<IndexMap<u64, OpenPrompt>>,
     /// External links, reveals, notifications and appearance changes, in order.
     log: RefCell<Vec<Value>>,
+    /// `testPermissionStatus`: `None` reads as granted, as a renderer's `Notification` does.
+    permission_status: RefCell<Option<String>>,
+}
+
+const PERMISSION_STATUS_ENV: &str = "PI_APP_TEST_NOTIFICATION_PERMISSION_STATUS";
+const PERMISSION_REQUEST_RESULT_ENV: &str = "PI_APP_TEST_NOTIFICATION_PERMISSION_REQUEST_RESULT";
+const PERMISSION_REQUEST_LOG_ENV: &str = "PI_APP_TEST_NOTIFICATION_PERMISSION_REQUEST_LOG_PATH";
+const NOTIFICATION_SETTINGS_LOG_ENV: &str = "PI_APP_TEST_NOTIFICATION_SETTINGS_LOG_PATH";
+/// Where main sends people for notification settings off macOS.
+const NOTIFICATION_SETTINGS_HELP_URL: &str =
+    "https://support.apple.com/guide/mac-help/change-notifications-settings-mh40583/mac";
+
+/// A permission status from the environment, when it is one.
+fn permission_env(name: &str) -> Option<String> {
+    let value = std::env::var(name).ok()?;
+    matches!(
+        value.as_str(),
+        "granted" | "denied" | "default" | "unsupported" | "unknown"
+    )
+    .then_some(value)
+}
+
+/// Appends the time to the log file the environment names. False when it names none.
+fn append_test_log(name: &str) -> bool {
+    let Some(path) = std::env::var(name)
+        .ok()
+        .filter(|path| !path.trim().is_empty())
+    else {
+        return false;
+    };
+    let line = format!(
+        "{}\n",
+        crate::js::to_iso_string(
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0.0, |elapsed| elapsed.as_millis() as f64)
+        )
+        .unwrap_or_default()
+    );
+    let written = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path.trim())
+        .and_then(|mut file| std::io::Write::write_all(&mut file, line.as_bytes()));
+    if let Err(error) = written {
+        eprintln!("[notification-permission] could not write {path}: {error}");
+    }
+    true
 }
 
 impl TestShell {
@@ -154,9 +212,12 @@ impl TestShell {
             focused: Cell::new(None),
             background,
             open_dialog_answers: RefCell::new(VecDeque::new()),
+            held_open_dialog: RefCell::new(None),
+            open_dialog_release: RefCell::new(None),
             next_prompt: Cell::new(0),
             prompts: RefCell::new(IndexMap::new()),
             log: RefCell::new(Vec::new()),
+            permission_status: RefCell::new(permission_env(PERMISSION_STATUS_ENV)),
         })
     }
 
@@ -215,6 +276,50 @@ impl TestShell {
         self.open_dialog_answers.borrow_mut().push_back(paths);
     }
 
+    /// The next open dialog stays open until `release_held_open_dialog`, then returns `paths`.
+    pub fn hold_open_dialog(&self, paths: Vec<PathBuf>) {
+        *self.held_open_dialog.borrow_mut() = Some(paths);
+    }
+
+    /// Answers the held open dialog.
+    pub fn release_held_open_dialog(&self) -> CoreResult<()> {
+        let release = self
+            .open_dialog_release
+            .borrow_mut()
+            .take()
+            .ok_or_else(|| CoreError::new("Delayed open dialog was not pending."))?;
+        release.notify_one();
+        Ok(())
+    }
+
+    /// Minimizes a window, which also takes its focus.
+    pub fn minimize(&self, window: WindowId) {
+        if let Some(presence) = self.presence(window) {
+            self.set_presence(
+                window,
+                WindowPresence {
+                    minimized: true,
+                    focused: false,
+                    ..presence
+                },
+            );
+        }
+    }
+
+    /// Shows a window, as `BrowserWindow.show` does.
+    pub fn show(&self, window: WindowId) {
+        if let Some(presence) = self.presence(window) {
+            self.set_presence(
+                window,
+                WindowPresence {
+                    visible: true,
+                    ..presence
+                },
+            );
+            self.focus(window);
+        }
+    }
+
     /// Text prompts still open, oldest first, with their message and placeholder.
     pub fn open_prompts(&self) -> Vec<(u64, PromptText)> {
         self.prompts
@@ -271,8 +376,16 @@ impl Shell for TestShell {
         _parent: Option<WindowId>,
         request: PickPaths,
     ) -> LocalFuture<CoreResult<Option<Vec<PathBuf>>>> {
-        let answer = self.open_dialog_answers.borrow_mut().pop_front();
         self.record(json!({ "kind": "openDialog", "title": request.title }));
+        if let Some(paths) = self.held_open_dialog.borrow_mut().take() {
+            let release = Rc::new(tokio::sync::Notify::new());
+            *self.open_dialog_release.borrow_mut() = Some(release.clone());
+            return Box::pin(async move {
+                release.notified().await;
+                Ok(Some(paths))
+            });
+        }
+        let answer = self.open_dialog_answers.borrow_mut().pop_front();
         Box::pin(std::future::ready(Ok(answer.flatten())))
     }
 
@@ -324,10 +437,51 @@ impl Shell for TestShell {
         Box::pin(std::future::ready(Ok(())))
     }
 
+    fn close_notification(&self, session_ref: &SessionRef) {
+        self.record(json!({ "kind": "closeNotification", "sessionRef": session_ref }));
+    }
+
+    fn show_window(&self, window: WindowId) {
+        let Some(presence) = self.presence(window) else {
+            return;
+        };
+        self.set_presence(
+            window,
+            WindowPresence {
+                visible: true,
+                minimized: false,
+                ..presence
+            },
+        );
+        self.focus(window);
+    }
+
+    /// Main's permission service in test mode: `PI_APP_TEST_NOTIFICATION_PERMISSION_*` set the
+    /// status and what asking returns, and requests and settings visits are logged to files.
     fn notification_permission(&self, operation: &str) -> LocalFuture<CoreResult<Value>> {
+        let current = || {
+            self.permission_status
+                .borrow()
+                .clone()
+                .unwrap_or_else(|| "granted".to_owned())
+        };
         let result = match operation {
-            "status" | "request" => Ok(json!("granted")),
-            "openSettings" => Ok(Value::Null),
+            "status" => Ok(json!(current())),
+            "request" => {
+                append_test_log(PERMISSION_REQUEST_LOG_ENV);
+                if let Some(answer) = permission_env(PERMISSION_REQUEST_RESULT_ENV) {
+                    *self.permission_status.borrow_mut() = Some(answer);
+                }
+                Ok(json!(current()))
+            }
+            "openSettings" => {
+                if !append_test_log(NOTIFICATION_SETTINGS_LOG_ENV) {
+                    self.record(
+                        json!({ "kind": "openExternal", "url": NOTIFICATION_SETTINGS_HELP_URL }),
+                    );
+                }
+                Ok(Value::Null)
+            }
             other => Err(CoreError::new(format!(
                 "Unknown notification permission call: {other}"
             ))),

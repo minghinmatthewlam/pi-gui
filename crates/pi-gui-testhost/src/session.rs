@@ -14,12 +14,13 @@ use futures_util::{SinkExt, StreamExt};
 use pi_gui_core::app::dispatch::{self, InvokeCall, Reply};
 use pi_gui_core::app::methods::{self, push};
 use pi_gui_core::app::pi::InterceptOutcome;
+use pi_gui_core::app::publish::ViewState;
 use pi_gui_core::app::settings::login::prompt_for_text;
 use pi_gui_core::app::shell::{Push, Shell};
-use pi_gui_core::app::test_hooks::ControlMode;
-use pi_gui_core::app::{events, publish, ui, WindowId};
+use pi_gui_core::app::test_hooks::{ControlMode, ControlOptions};
+use pi_gui_core::app::{events, notifications, publish, scheduled, ui, WindowId};
 use pi_gui_core::error::{CoreError, CoreResult};
-use pi_gui_core::state::driver::{session_key, SessionDriverEvent};
+use pi_gui_core::state::driver::{session_key, SessionDriverEvent, SessionRef};
 use serde_json::{json, Value};
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
@@ -43,6 +44,8 @@ pub struct Windows {
     senders: Rc<RefCell<HashMap<WindowId, Out>>>,
     /// Windows whose page closed, waiting out the grace period.
     detached: RefCell<HashMap<WindowId, AbortHandle>>,
+    /// The view the next new window starts on, as main's `createAppWindow(sourceView)`.
+    source_view: RefCell<Option<ViewState>>,
 }
 
 fn push_message(push: &Push) -> String {
@@ -145,7 +148,8 @@ fn attach_window(app: &Rc<App>, out: &Out, requested: Option<u64>) -> WindowId {
             }
         }),
     );
-    app.kernel.windows.add(&app.kernel, window, None);
+    let source_view = app.windows.source_view.borrow_mut().take();
+    app.kernel.windows.add(&app.kernel, window, source_view);
     if app.shell.focused_window() == Some(window) {
         focus(app, window);
     }
@@ -153,7 +157,11 @@ fn attach_window(app: &Rc<App>, out: &Out, requested: Option<u64>) -> WindowId {
 }
 
 fn detach_window(app: &Rc<App>, window: WindowId) {
-    app.windows.senders.borrow_mut().remove(&window);
+    if app.windows.senders.borrow_mut().remove(&window).is_none() {
+        // Closed through `test.closeWindow`, already gone.
+        return;
+    }
+    app.kernel.windows.renderer_gone(window);
     let weak = Rc::downgrade(app);
     let timer = tokio::task::spawn_local(async move {
         tokio::time::sleep(RELOAD_GRACE).await;
@@ -162,7 +170,7 @@ fn detach_window(app: &Rc<App>, window: WindowId) {
         };
         app.windows.detached.borrow_mut().remove(&window);
         app.shell.remove_window(window);
-        app.kernel.windows.remove(&app.kernel, window);
+        app.kernel.windows.closed(&app.kernel, window);
     });
     app.windows
         .detached
@@ -245,6 +253,31 @@ fn text_param(params: &Value, name: &str) -> CoreResult<String> {
         .ok_or_else(|| CoreError::new(format!("test call needs {name}")))
 }
 
+fn window_param(params: &Value) -> CoreResult<WindowId> {
+    params["window"]
+        .as_u64()
+        .and_then(|window| WindowId::try_from(window).ok())
+        .ok_or_else(|| CoreError::new("test call needs window"))
+}
+
+/// A title-bar close, as Electron main handles it: the close waits for the renderer's debounced
+/// draft, then the window goes, and on Linux and Windows (and in test mode on macOS) closing
+/// the last window quits. While quit is flushing drafts, quit closes the window itself.
+async fn close_window(app: &Rc<App>, window: WindowId) {
+    if app.quitting.get() || !app.windows.senders.borrow().contains_key(&window) {
+        return;
+    }
+    app.kernel.draft_flush.flush(&app.kernel, &[window]).await;
+    if app.quitting.get() || app.windows.senders.borrow_mut().remove(&window).is_none() {
+        return;
+    }
+    app.shell.remove_window(window);
+    app.kernel.windows.remove(&app.kernel, window);
+    if app.windows.senders.borrow().is_empty() && app.windows.detached.borrow().is_empty() {
+        app.quit.notify_one();
+    }
+}
+
 /// The hooks specs reach through `harness.electronApp.evaluate` under Electron.
 async fn test_call(app: &Rc<App>, name: &str, params: Value) -> CoreResult<Reply> {
     if !app.test_mode {
@@ -280,10 +313,22 @@ async fn test_call(app: &Rc<App>, name: &str, params: Value) -> CoreResult<Reply
         }
         "invokeControl.install" => app.kernel.test.install(
             &text_param(&params, "channel")?,
-            ControlMode::parse(&text_param(&params, "mode")?)?,
-            params["sentinel"].as_str().map(str::to_owned),
-            params.get("replacement").cloned(),
+            ControlOptions {
+                mode: ControlMode::parse(&text_param(&params, "mode")?)?,
+                sentinel: params["sentinel"].as_str().map(str::to_owned),
+                replacement: params.get("replacement").cloned(),
+                delay_ms: params["delayMs"].as_u64(),
+                queue: params["queue"].as_str().map(str::to_owned),
+            },
         )?,
+        "invokeControl.release" => app.kernel.test.release(&text_param(&params, "channel")?)?,
+        "invokeControl.settled" => {
+            app.kernel
+                .test
+                .settled(&text_param(&params, "channel")?)
+                .await?
+        }
+        "invokeTogether" => invoke_together(app, &params).await?,
         "invokeControl.set" => app.kernel.test.set(
             &text_param(&params, "channel")?,
             params["mode"]
@@ -349,18 +394,111 @@ async fn test_call(app: &Rc<App>, name: &str, params: Value) -> CoreResult<Reply
         "shellLog" => return Ok(Reply::Value(Value::Array(app.shell.take_log()))),
         "windows" => return Ok(dispatch::value(app.kernel.windows.ids())),
         "focusWindow" => focus(app, window_param(&params)?),
+        "decodeImage" => {
+            // What Electron's nativeImage reports; the host reads PNG and JPEG headers only.
+            let size = pi_gui_core::app::conversation::attachments::image_size(&text_param(
+                &params, "data",
+            )?);
+            let (width, height) = size.unwrap_or((0, 0));
+            return Ok(Reply::Value(
+                json!({ "empty": size.is_none(), "width": width, "height": height }),
+            ));
+        }
+        "closeWindow" => close_window(app, window_param(&params)?).await,
+        "showWindow" => {
+            let window = window_param(&params)?;
+            app.shell.show(window);
+            focus(app, window);
+        }
+        "minimizeWindow" => app.shell.minimize(window_param(&params)?),
+        // Main's `second-instance`: the foreground window is restored, shown and focused.
+        "secondInstance" => {
+            if let Some(window) = app.kernel.windows.foreground(&app.kernel) {
+                app.shell.show_window(window);
+                focus(app, window);
+            }
+        }
+        // A key main sees before the page: Shift+Mod+N opens a window on the sender's view
+        // (the page the spec opens next); any other key goes on to the page.
+        "keyboard" => {
+            let window = window_param(&params)?;
+            let modifiers: Vec<&str> = params["modifiers"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+                .collect();
+            let platform_modifier = if cfg!(target_os = "macos") {
+                "meta"
+            } else {
+                "control"
+            };
+            let key = text_param(&params, "keyCode")?.to_lowercase();
+            if modifiers.contains(&platform_modifier) && modifiers.contains(&"shift") && key == "n"
+            {
+                let view = app.kernel.windows.view_for_window(&app.kernel, window);
+                *app.windows.source_view.borrow_mut() = Some(view);
+                return Ok(Reply::Value(json!({ "route": "newWindow" })));
+            }
+            return Ok(Reply::Value(json!({ "route": "page" })));
+        }
+        "holdOpenDialog" => app.shell.hold_open_dialog(
+            params["paths"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+                .map(Into::into)
+                .collect(),
+        ),
+        "releaseOpenDialog" => app.shell.release_held_open_dialog()?,
+        "fireDueScheduledTasks" => {
+            app.kernel.initialize().await;
+            let now = match params["nowIso"].as_str() {
+                Some(iso) => app.kernel.env().date_parse(iso),
+                None => app.kernel.env().now_ms(),
+            };
+            return scheduled::fire_due_scheduled_tasks(&app.kernel, now)
+                .await
+                .map(Reply::from);
+        }
+        // A pi-gui tool body, called as the pi host calls it from a tool running in the thread.
+        "tool" => {
+            app.kernel.initialize().await;
+            let session_ref: SessionRef = serde_json::from_value(params["sessionRef"].clone())
+                .map_err(|error| CoreError::new(format!("Invalid sessionRef: {error}")))?;
+            let cwd = app
+                .kernel
+                .data
+                .borrow()
+                .workspace_ref(&session_ref.workspace_id)
+                .map(|workspace| workspace.path)
+                .ok_or_else(|| CoreError::new("Workspace not found"))?;
+            let mut call = json!({
+                "tool": text_param(&params, "tool")?,
+                "caller": { "cwd": cwd, "sessionId": session_ref.session_id },
+            });
+            if let Some(input) = params.get("input") {
+                call["input"] = input.clone();
+            }
+            let result = app
+                .kernel
+                .host_calls()
+                .call("app.tool".into(), call)
+                .await?;
+            return Ok(Reply::Value(result));
+        }
+        // A click on the thread's desktop notification.
+        "clickNotification" => {
+            let session_ref: SessionRef = serde_json::from_value(params["sessionRef"].clone())
+                .map_err(|error| CoreError::new(format!("Invalid sessionRef: {error}")))?;
+            notifications::open_session(&app.kernel, &session_ref).await?;
+        }
         "piHostPid" => return Ok(dispatch::value(app.driver.pid())),
         "quit" => app.quit.notify_one(),
         _ => return Err(CoreError::new(format!("Unknown test call: test.{name}"))),
     }
     Ok(Reply::Undefined)
-}
-
-fn window_param(params: &Value) -> CoreResult<WindowId> {
-    params["window"]
-        .as_u64()
-        .and_then(|window| WindowId::try_from(window).ok())
-        .ok_or_else(|| CoreError::new("test call needs window"))
 }
 
 /// Shows the app's text prompt (used by provider login) as a page of its own, as Electron's
@@ -415,6 +553,63 @@ fn window_state(app: &App, params: &Value) -> Value {
         "themePresetId": app.kernel.data.borrow().state.theme_preset_id,
         "resolvedTheme": ui::resolved_theme(&app.kernel),
     })
+}
+
+/// `harness.ipc.invokeTogether`: the requests reach the kernel from the first window in one
+/// turn, in order, and all of them are waited for.
+async fn invoke_together(app: &Rc<App>, params: &Value) -> CoreResult<()> {
+    let window = app
+        .kernel
+        .windows
+        .ids()
+        .into_iter()
+        .next()
+        .ok_or_else(|| CoreError::new("Expected a desktop window to send from"))?;
+    let mut calls = params["requests"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|request| {
+            let channel = request["channel"].as_str().unwrap_or_default();
+            let method = methods::by_channel(channel).ok_or_else(|| {
+                CoreError::new(format!("No IPC handler registered for {channel}"))
+            })?;
+            let call = InvokeCall {
+                window,
+                main_frame: true,
+                args: decode_args(request),
+            };
+            Ok(Box::pin(dispatch::invoke(&app.kernel, method.api, call)))
+        })
+        .collect::<CoreResult<Vec<_>>>()?;
+    // Electron runs every handler's synchronous part in one main-process turn and queued
+    // actions after it, so a command captures the view displayed before a navigation sent with
+    // it runs. Holding the action queue while each call starts does the same here.
+    let mut started: Vec<Option<CoreResult<Reply>>> = calls.iter().map(|_| None).collect();
+    app.kernel
+        .queue
+        .run(std::future::poll_fn(|cx| {
+            for (call, result) in calls.iter_mut().zip(started.iter_mut()) {
+                if let std::task::Poll::Ready(output) = std::future::Future::poll(call.as_mut(), cx)
+                {
+                    *result = Some(output);
+                }
+            }
+            std::task::Poll::Ready(())
+        }))
+        .await;
+    let pending = calls
+        .into_iter()
+        .zip(started.iter())
+        .filter(|(_, result)| result.is_none())
+        .map(|(call, _)| call);
+    for result in pi_gui_core::app::futures_join_all(pending).await {
+        result?;
+    }
+    for result in started.into_iter().flatten() {
+        result?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]

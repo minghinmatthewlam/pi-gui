@@ -667,7 +667,7 @@ async fn remove_worktree(
 }
 
 /// `setActiveSession`: selects the thread before the refresh that shows it.
-fn set_active_session(kernel: &Kernel, session_ref: &SessionRef) {
+pub(crate) fn set_active_session(kernel: &Kernel, session_ref: &SessionRef) {
     let mut data = kernel.data.borrow_mut();
     data.state.selected_workspace_id = session_ref.workspace_id.clone();
     data.state.selected_session_id = session_ref.session_id.clone();
@@ -930,7 +930,7 @@ pub async fn start_thread(kernel: &Kernel, input: Value) -> CoreResult<DesktopAp
     .await
 }
 
-async fn rollback_worktree(kernel: &Kernel, destroy: Value) {
+pub(crate) async fn rollback_worktree(kernel: &Kernel, destroy: Value) {
     let _ = kernel
         .core_call(crate::methods::WORKTREES_DESTROY, destroy)
         .await;
@@ -1025,15 +1025,15 @@ async fn generate_and_apply_auto_title(
     }
 }
 
-struct WorktreeOptions {
-    path: String,
-    display_name: String,
-    branch_name: String,
+pub(crate) struct WorktreeOptions {
+    pub path: String,
+    pub display_name: String,
+    pub branch_name: String,
 }
 
 /// `buildWorktreeOptions`: named after `title`, the new thread's prompt or the title of the
 /// thread the worktree starts from.
-fn build_worktree_options(
+pub(crate) fn build_worktree_options(
     kernel: &Kernel,
     workspace: &WorkspaceRef,
     title: &str,
@@ -1161,7 +1161,7 @@ async fn resolve_extension_flags(
 }
 
 /// `recordExtensionFlags`.
-fn record_extension_flags(
+pub(crate) fn record_extension_flags(
     kernel: &Kernel,
     session_ref: &SessionRef,
     applied: ExtensionFlagValues,
