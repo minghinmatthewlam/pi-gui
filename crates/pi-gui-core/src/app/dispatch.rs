@@ -222,11 +222,8 @@ pub fn value(value: impl serde::Serialize) -> Reply {
 mod tests {
     use super::*;
 
-    /// The methods no part answers yet. Parts shrink this list as they port their handlers.
-    const UNPORTED: &[&str] = &["sendChildThreadFollowUp", "setChildSupervisionLoop"];
-
     #[test]
-    fn the_remaining_stubs_are_the_listed_ones() {
-        assert_eq!(MethodTable::build().unported(), UNPORTED);
+    fn every_renderer_method_has_a_handler() {
+        assert_eq!(MethodTable::build().unported(), Vec::<&str>::new());
     }
 }

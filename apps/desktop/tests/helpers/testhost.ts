@@ -22,6 +22,10 @@ import {
   createScheduledTaskRuntimeTools,
   type ScheduledTaskRuntimeBridge,
 } from "../../electron/scheduled-tasks/scheduled-task-runtime";
+import {
+  createOrchestrationRuntimeTools,
+  type OrchestrationRuntimeBridge,
+} from "../../electron/orchestration/orchestration-runtime";
 import { isProviderAuthEnvVar, seedAgentDir } from "./electron-app";
 
 /**
@@ -574,7 +578,7 @@ function testHostHooks(
     },
     fireDueScheduledTasks: (nowIso) =>
       control.call<DesktopAppState>("fireDueScheduledTasks", nowIso ? { nowIso } : {}),
-    runOrchestrationRuntimeTool: unsupported("The orchestration runtime tool"),
+    runOrchestrationRuntimeTool: (input) => runOrchestrationTool(control, input),
     runScheduledTaskRuntimeTool: (input) => runScheduledTaskTool(control, input),
     handleWindowActivation: () => focus(),
     setSessionVisibility: async (mode) => {
@@ -628,6 +632,43 @@ async function runScheduledTaskTool(
   );
   if (!tool) {
     throw new Error(`Unknown scheduled-task runtime tool: ${input.toolName}`);
+  }
+  return (await tool.execute(
+    input.toolCallId ?? `test-${input.toolName}`,
+    input.params,
+    undefined,
+    undefined,
+    {} as Parameters<typeof tool.execute>[4],
+  )) as RuntimeToolTestResult;
+}
+
+/**
+ * Runs the thread tool definitions here, as the pi host does, with their bodies called through
+ * the kernel's `app.tool`, as the host calls them.
+ */
+async function runOrchestrationTool(
+  control: TestHostControl,
+  input: RuntimeToolTestInput,
+): Promise<RuntimeToolTestResult> {
+  const call =
+    (tool: string) =>
+    (_ctx: unknown, toolInput?: unknown): Promise<never> =>
+      control.call("tool", {
+        tool,
+        sessionRef: input.sessionRef,
+        ...(toolInput === undefined ? {} : { input: toolInput }),
+      });
+  const bridge: OrchestrationRuntimeBridge = {
+    createChildThread: call("orchestration.createChildThread"),
+    listThreads: call("orchestration.listThreads"),
+    readThread: call("orchestration.readThread"),
+    sendMessageToThread: call("orchestration.sendMessageToThread"),
+  };
+  const tool = createOrchestrationRuntimeTools(bridge).find(
+    (entry) => entry.name === input.toolName,
+  );
+  if (!tool) {
+    throw new Error(`Unknown orchestration runtime tool: ${input.toolName}`);
   }
   return (await tool.execute(
     input.toolCallId ?? `test-${input.toolName}`,
