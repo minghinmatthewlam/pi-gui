@@ -1,6 +1,13 @@
 // Runs the core specs listed in tests/testhost-ready.txt against pi-gui-testhost.
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  utimesSync,
+} from "node:fs";
 import { resolve } from "node:path";
 
 const desktopDir = resolve(import.meta.dirname, "..");
@@ -10,7 +17,38 @@ const entries = readFileSync(resolve(desktopDir, "tests/testhost-ready.txt"), "u
   .map((line) => line.trim())
   .filter((line) => line && !line.startsWith("#"))
   .map((entry) => `apps/desktop/tests/core/${entry}`);
-const extra = process.argv.slice(2).filter((arg) => arg !== "--");
+const build = process.argv.includes("--build");
+if (build) {
+  // Cargo can take another checkout's build of these sources as fresh when they share a target
+  // folder; newer sources here make it rebuild from this checkout.
+  const now = new Date();
+  for (const entry of readdirSync(resolve(repoRoot, "crates"), { recursive: true })) {
+    if (String(entry).endsWith(".rs"))
+      utimesSync(resolve(repoRoot, "crates", String(entry)), now, now);
+  }
+  const cargo = spawnSync("cargo", ["build", "-p", "pi-gui-testhost"], {
+    cwd: repoRoot,
+    stdio: "inherit",
+  });
+  if (cargo.status !== 0) process.exit(cargo.status ?? 1);
+}
+// Run a private copy of the test host: checkouts that share a cargo target folder rebuild the
+// same binary path from their own sources, which would swap it out mid-run.
+let testHostBin = process.env.PI_GUI_TESTHOST_BIN?.trim();
+if (!testHostBin) {
+  const built = resolve(
+    process.env.CARGO_TARGET_DIR ?? resolve(repoRoot, "target"),
+    "debug/pi-gui-testhost",
+  );
+  if (existsSync(built)) {
+    testHostBin = resolve(desktopDir, "out/testhost/pi-gui-testhost");
+    mkdirSync(resolve(testHostBin, ".."), { recursive: true });
+    copyFileSync(built, testHostBin);
+  }
+}
+const extra = process.argv.slice(2).filter((arg) => arg !== "--" && arg !== "--build");
+// Spec paths passed on the command line run instead of the whole list.
+const named = extra.some((arg) => /\.spec\.ts(:\d+)?$/.test(arg));
 const result = spawnSync(
   "pnpm",
   [
@@ -19,7 +57,7 @@ const result = spawnSync(
     "test",
     "-c",
     "apps/desktop/playwright.testhost.config.ts",
-    ...entries,
+    ...(named ? [] : entries),
     ...extra,
   ],
   {
@@ -28,6 +66,7 @@ const result = spawnSync(
     env: {
       ...process.env,
       PI_APP_TEST_TARGET: "testhost",
+      ...(testHostBin ? { PI_GUI_TESTHOST_BIN: testHostBin } : {}),
       PI_APP_TEST_LANE: "core",
       PI_APP_REAL_AUTH: "0",
     },

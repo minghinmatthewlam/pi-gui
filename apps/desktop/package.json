@@ -34,7 +34,7 @@
     "test:e2e:ci:mac": "pnpm run test:e2e:core",
     "test:e2e:runner": "pnpm build && sh -c 'if [ \"$1\" = \"--\" ]; then shift; fi; pnpm --dir ../.. exec playwright test -c apps/desktop/playwright.config.ts \"$@\"' --",
     "test:changed-files": "pnpm run build:core && pnpm --dir ../.. exec playwright test -c apps/desktop/playwright.config.ts apps/desktop/tests/unit/changed-files.spec.ts",
-    "test:e2e:testhost": "pnpm build && cargo build -p pi-gui-testhost && cross-env PI_APP_TEST_MODE=background node scripts/test-testhost.mjs",
+    "test:e2e:testhost": "pnpm build && cross-env PI_APP_TEST_MODE=background node scripts/test-testhost.mjs --build",
     "test:e2e:core": "pnpm build && cross-env PI_APP_TEST_LANE=core PI_APP_REAL_AUTH=0 PI_APP_TEST_MODE=background pnpm --dir ../.. exec playwright test -c apps/desktop/playwright.config.ts apps/desktop/tests/core",
     "test:e2e:native": "pnpm build && cross-env PI_APP_TEST_MODE=foreground pnpm --dir ../.. exec playwright test -c apps/desktop/playwright.config.ts apps/desktop/tests/native",
     "test:e2e:live": "node scripts/require-live-auth.mjs && pnpm build && cross-env PI_APP_TEST_MODE=background pnpm --dir ../.. exec playwright test -c apps/desktop/playwright.config.ts apps/desktop/tests/live",
