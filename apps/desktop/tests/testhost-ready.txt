@@ -7,3 +7,6 @@ persistence.spec.ts:159
 persistence.spec.ts:211
 scheduled-tasks.spec.ts
 scheduled-task-runtime-tools.spec.ts
+notifications.spec.ts
+notification-settings.spec.ts
+notification-onboarding.spec.ts

@@ -46,6 +46,7 @@ export interface TestHostLaunchOptions {
   readonly agentDir?: string;
   readonly enabledModels?: readonly string[];
   readonly envOverrides?: Readonly<Record<string, string | undefined>>;
+  readonly notificationLogPath?: string;
 }
 
 /** The test host's `test.*` calls. */
@@ -97,6 +98,9 @@ function launchEnv(userDataDir: string, agentDir: string, options: TestHostLaunc
     PI_APP_INITIAL_WORKSPACES: (options.initialWorkspaces ?? []).join(delimiter),
     PI_APP_TEST_MODE: options.testMode ?? process.env.PI_APP_TEST_MODE ?? "background",
     PI_CODING_AGENT_DIR: agentDir,
+    ...(options.notificationLogPath
+      ? { PI_APP_NOTIFICATION_LOG_PATH: options.notificationLogPath }
+      : {}),
   });
   for (const [key, value] of Object.entries(options.envOverrides ?? {})) {
     if (value === undefined) delete env[key];

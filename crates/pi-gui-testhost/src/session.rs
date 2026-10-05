@@ -16,7 +16,7 @@ use pi_gui_core::app::methods::{self, push};
 use pi_gui_core::app::pi::InterceptOutcome;
 use pi_gui_core::app::shell::{Push, Shell};
 use pi_gui_core::app::test_hooks::ControlMode;
-use pi_gui_core::app::{events, publish, scheduled, WindowId};
+use pi_gui_core::app::{events, notifications, publish, scheduled, WindowId};
 use pi_gui_core::error::{CoreError, CoreResult};
 use pi_gui_core::state::driver::{session_key, SessionDriverEvent, SessionRef};
 use serde_json::{json, Value};
@@ -358,6 +358,12 @@ async fn test_call(app: &Rc<App>, name: &str, params: Value) -> CoreResult<Reply
                 .call("app.tool".into(), call)
                 .await?;
             return Ok(Reply::Value(result));
+        }
+        // A click on the thread's desktop notification.
+        "clickNotification" => {
+            let session_ref: SessionRef = serde_json::from_value(params["sessionRef"].clone())
+                .map_err(|error| CoreError::new(format!("Invalid sessionRef: {error}")))?;
+            notifications::open_session(&app.kernel, &session_ref).await?;
         }
         "piHostPid" => return Ok(dispatch::value(app.driver.pid())),
         "quit" => app.quit.notify_one(),

@@ -4,7 +4,7 @@
 
 use super::super::publish::{self, project_state_for_view, view_from_state, ViewState};
 use super::super::shell::Push;
-use super::super::{sessions, Kernel, WindowId};
+use super::super::{notifications, sessions, Kernel, WindowId};
 use crate::error::{CoreError, CoreResult};
 use crate::state::desktop_state::{AppView, ComposerDraftSyncSource, DesktopAppState};
 use crate::state::driver::SessionRef;
@@ -55,9 +55,13 @@ impl WindowViews {
             let base = source_view.unwrap_or_else(|| view_from_state(&state));
             view_from_state(&project_state_for_view(&mut data, &base, &state, None))
         };
+        let first = self.views.borrow().is_empty();
         self.views.borrow_mut().insert(window, view);
         self.last_transcript.borrow_mut().remove(&window);
         self.active_window.set(Some(window));
+        if first {
+            notifications::on_first_window(kernel);
+        }
     }
 
     /// `remove`.
@@ -169,9 +173,10 @@ impl WindowViews {
         }
         if self.active_action.get().is_some() {
             self.deferred_activation.set(Some(window));
-            return;
+        } else {
+            self.apply_activation(kernel, window);
         }
-        self.apply_activation(kernel, window);
+        notifications::on_window_activated(kernel);
     }
 
     fn apply_activation(&self, kernel: &Kernel, window: WindowId) {
