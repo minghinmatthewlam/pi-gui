@@ -112,7 +112,7 @@ pub async fn invoke(kernel: &Rc<Kernel>, api: &str, call: InvokeCall) -> CoreRes
     let Some(method) = methods::by_api(api) else {
         return Err(CoreError::new(format!("Unknown method: {api}")));
     };
-    if let Some(reply) = kernel.test.control_invoke(method.channel)? {
+    if let Some(reply) = kernel.test.control_invoke(method.channel, &call.args)? {
         return Ok(reply);
     }
     let Some(handler) = kernel.methods.get(api) else {

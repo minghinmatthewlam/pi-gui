@@ -49,6 +49,8 @@ struct InvokeControl {
     mode: ControlMode,
     invoke_count: u64,
     reject_count: u64,
+    /// Each request's arguments, `undefined` as null, in arrival order.
+    args: Vec<Value>,
     sentinel: String,
     /// `None` is `undefined`.
     replacement: Option<Value>,
@@ -109,6 +111,7 @@ impl TestControls {
                     InvokeControl {
                         mode,
                         invoke_count: 0,
+                        args: Vec::new(),
                         reject_count: 0,
                         sentinel,
                         replacement,
@@ -149,17 +152,27 @@ impl TestControls {
             "mode": control.mode.name(),
             "invokeCount": control.invoke_count,
             "rejectCount": control.reject_count,
+            "args": control.args,
             "sentinel": control.sentinel,
         }))
     }
 
     /// Runs before a handler: `Some` answers the call in its place.
-    pub fn control_invoke(&self, channel: &str) -> CoreResult<Option<Reply>> {
+    pub fn control_invoke(
+        &self,
+        channel: &str,
+        args: &[Option<Value>],
+    ) -> CoreResult<Option<Reply>> {
         let mut controls = self.controls.borrow_mut();
         let Some(control) = controls.get_mut(channel) else {
             return Ok(None);
         };
         control.invoke_count += 1;
+        control.args.push(Value::Array(
+            args.iter()
+                .map(|arg| arg.clone().unwrap_or(Value::Null))
+                .collect(),
+        ));
         match control.mode {
             ControlMode::Passthrough => Ok(None),
             ControlMode::Reject => {
@@ -202,22 +215,28 @@ mod tests {
         controls
             .install(channel, ControlMode::Reject, None, None)
             .unwrap();
-        let error = controls.control_invoke(channel).unwrap_err();
+        let error = controls
+            .control_invoke(channel, &[Some(json!(1))])
+            .unwrap_err();
         assert_eq!(error.message, DEFAULT_SENTINEL);
         controls
             .set(channel, Some(ControlMode::Replace), Some(json!(7)))
             .unwrap();
         assert!(matches!(
-            controls.control_invoke(channel).unwrap(),
+            controls.control_invoke(channel, &[Some(json!(1))]).unwrap(),
             Some(Reply::Value(value)) if value == json!(7)
         ));
         controls
             .set(channel, Some(ControlMode::Passthrough), None)
             .unwrap();
-        assert!(controls.control_invoke(channel).unwrap().is_none());
+        assert!(controls
+            .control_invoke(channel, &[Some(json!(1))])
+            .unwrap()
+            .is_none());
         let read = controls.read(channel).unwrap();
         assert_eq!(read["invokeCount"], 3);
         assert_eq!(read["rejectCount"], 1);
+        assert_eq!(read["args"][0], json!([1]));
         assert_eq!(read["mode"], "passthrough");
     }
 }
