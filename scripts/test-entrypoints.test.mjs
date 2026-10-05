@@ -169,7 +169,17 @@ test("Core shards cover each discovered test exactly once and default to one wor
 });
 
 test("every desktop spec has a known lane and lane commands cannot mix suites", async () => {
-  const lanes = new Set(["unit", "core", "live", "native", "production", "dev", "perf", "demo"]);
+  const lanes = new Set([
+    "unit",
+    "core",
+    "live",
+    "native",
+    "production",
+    "dev",
+    "perf",
+    "demo",
+    "testhost",
+  ]);
   const files = await readdir(path.join(root, "apps/desktop/tests"), { recursive: true });
   for (const file of files.filter((file) => file.endsWith(".spec.ts"))) {
     assert.ok(lanes.has(file.split(path.sep)[0]), `Unclassified desktop spec: ${file}`);

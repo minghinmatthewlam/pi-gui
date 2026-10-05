@@ -34,7 +34,7 @@ export interface DesktopHarness {
   readonly ipc: DesktopIpcControl;
 }
 
-export type DesktopTestTarget = "electron";
+export type DesktopTestTarget = "electron" | "testhost";
 
 export function desktopTestTarget(): DesktopTestTarget {
   const target = process.env.PI_APP_TEST_TARGET?.trim() || "electron";

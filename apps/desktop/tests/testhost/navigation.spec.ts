@@ -8,9 +8,10 @@ import {
   makeUserDataDir,
   makeWorkspace,
   selectSession,
+  streamAssistantDeltas,
   waitForWorkspaceByPath,
 } from "../helpers/electron-app";
-import { launchTestHost, streamAssistantDeltas } from "../helpers/testhost";
+import { launchTestHost } from "../helpers/testhost";
 
 test("persists workspace, selected session, and draft across app restart", async () => {
   const userDataDir = await makeUserDataDir();
