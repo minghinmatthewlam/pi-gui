@@ -182,17 +182,18 @@ pub fn emit(kernel: &Kernel) -> DesktopAppState {
         data.state.revision = JsNumber(revision);
         data.state.clone()
     };
-    for window in kernel.windows.ids() {
+    for window in kernel.windows.publishing_ids() {
         kernel.windows.publish_state(kernel, window, &snapshot);
         kernel.windows.publish_transcript_soon(kernel, window);
     }
     ui::after_emit(kernel, &snapshot);
+    super::notifications::after_emit(kernel, &snapshot);
     snapshot
 }
 
 /// `publishSelectedTranscript`: every window republishes its own thread's transcript.
 pub fn publish_selected_transcript(kernel: &Kernel) {
-    for window in kernel.windows.ids() {
+    for window in kernel.windows.publishing_ids() {
         kernel.windows.publish_transcript_soon(kernel, window);
     }
 }
