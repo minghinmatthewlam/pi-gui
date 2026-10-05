@@ -616,6 +616,9 @@ impl pi::HostCalls for KernelHostCalls {
                         .await?;
                     Ok(Value::Null)
                 }
+                "app.tool" if scheduled::tools::is_scheduled_tool(&params) => {
+                    scheduled::tools::run_tool(&kernel, params).await
+                }
                 "app.tool" => orchestration::run_pi_gui_tool(&kernel, params).await,
                 _ => Err(CoreError::new(format!("Unknown RPC method: {method}"))),
             }

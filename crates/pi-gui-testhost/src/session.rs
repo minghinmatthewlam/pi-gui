@@ -16,9 +16,9 @@ use pi_gui_core::app::methods::{self, push};
 use pi_gui_core::app::pi::InterceptOutcome;
 use pi_gui_core::app::shell::{Push, Shell};
 use pi_gui_core::app::test_hooks::ControlMode;
-use pi_gui_core::app::{events, publish, WindowId};
+use pi_gui_core::app::{events, publish, scheduled, WindowId};
 use pi_gui_core::error::{CoreError, CoreResult};
-use pi_gui_core::state::driver::{session_key, SessionDriverEvent};
+use pi_gui_core::state::driver::{session_key, SessionDriverEvent, SessionRef};
 use serde_json::{json, Value};
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
@@ -322,6 +322,42 @@ async fn test_call(app: &Rc<App>, name: &str, params: Value) -> CoreResult<Reply
                 .and_then(|window| WindowId::try_from(window).ok())
                 .ok_or_else(|| CoreError::new("test call needs window"))?;
             focus(app, window);
+        }
+        "fireDueScheduledTasks" => {
+            app.kernel.initialize().await;
+            let now = match params["nowIso"].as_str() {
+                Some(iso) => app.kernel.env().date_parse(iso),
+                None => app.kernel.env().now_ms(),
+            };
+            return scheduled::fire_due_scheduled_tasks(&app.kernel, now)
+                .await
+                .map(Reply::from);
+        }
+        // A pi-gui tool body, called as the pi host calls it from a tool running in the thread.
+        "tool" => {
+            app.kernel.initialize().await;
+            let session_ref: SessionRef = serde_json::from_value(params["sessionRef"].clone())
+                .map_err(|error| CoreError::new(format!("Invalid sessionRef: {error}")))?;
+            let cwd = app
+                .kernel
+                .data
+                .borrow()
+                .workspace_ref(&session_ref.workspace_id)
+                .map(|workspace| workspace.path)
+                .ok_or_else(|| CoreError::new("Workspace not found"))?;
+            let mut call = json!({
+                "tool": text_param(&params, "tool")?,
+                "caller": { "cwd": cwd, "sessionId": session_ref.session_id },
+            });
+            if let Some(input) = params.get("input") {
+                call["input"] = input.clone();
+            }
+            let result = app
+                .kernel
+                .host_calls()
+                .call("app.tool".into(), call)
+                .await?;
+            return Ok(Reply::Value(result));
         }
         "piHostPid" => return Ok(dispatch::value(app.driver.pid())),
         "quit" => app.quit.notify_one(),

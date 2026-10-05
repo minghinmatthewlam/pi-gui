@@ -12,7 +12,14 @@ import {
   type IpcInvokeControlSnapshot,
   type PiDriverCallRecord,
   type PiDriverControl,
+  type RuntimeToolTestInput,
+  type RuntimeToolTestResult,
 } from "./desktop-harness";
+import type { DesktopAppState } from "../../contracts/desktop-state";
+import {
+  createScheduledTaskRuntimeTools,
+  type ScheduledTaskRuntimeBridge,
+} from "../../electron/scheduled-tasks/scheduled-task-runtime";
 import { seedAgentDir } from "./electron-app";
 
 /**
@@ -344,9 +351,10 @@ function testHostHooks(
     emitSessionEvents: async (events) => {
       for (const event of events) await control.call("emitSessionEvent", { event });
     },
-    fireDueScheduledTasks: unsupported("Firing scheduled tasks"),
+    fireDueScheduledTasks: (nowIso) =>
+      control.call<DesktopAppState>("fireDueScheduledTasks", nowIso ? { nowIso } : {}),
     runOrchestrationRuntimeTool: unsupported("The orchestration runtime tool"),
-    runScheduledTaskRuntimeTool: unsupported("The scheduled-task runtime tool"),
+    runScheduledTaskRuntimeTool: (input) => runScheduledTaskTool(control, input),
     handleWindowActivation: () => focus(),
     setSessionVisibility: async (mode) => {
       await control.call("setSessionVisibility", { value: mode });
@@ -357,6 +365,42 @@ function testHostHooks(
     rejectDeferredThreadTitle: unsupported("Deferring thread titles"),
     piHostPid: () => control.call<number | undefined>("piHostPid"),
   };
+}
+
+/**
+ * Runs the scheduled-task tool definitions here, as the pi host does, with their bodies called
+ * through the kernel's `app.tool`, as the host calls them.
+ */
+async function runScheduledTaskTool(
+  control: TestHostControl,
+  input: RuntimeToolTestInput,
+): Promise<RuntimeToolTestResult> {
+  const call =
+    (tool: string) =>
+    (_ctx: unknown, toolInput?: unknown): Promise<never> =>
+      control.call("tool", {
+        tool,
+        sessionRef: input.sessionRef,
+        ...(toolInput === undefined ? {} : { input: toolInput }),
+      });
+  const bridge: ScheduledTaskRuntimeBridge = {
+    createScheduledTask: call("scheduled.createScheduledTask"),
+    listScheduledTasks: call("scheduled.listScheduledTasks"),
+    updateScheduledTask: call("scheduled.updateScheduledTask"),
+  };
+  const tool = createScheduledTaskRuntimeTools(bridge, () => input.sessionRef.workspaceId).find(
+    (entry) => entry.name === input.toolName,
+  );
+  if (!tool) {
+    throw new Error(`Unknown scheduled-task runtime tool: ${input.toolName}`);
+  }
+  return (await tool.execute(
+    input.toolCallId ?? `test-${input.toolName}`,
+    input.params,
+    undefined,
+    undefined,
+    {} as Parameters<typeof tool.execute>[4],
+  )) as RuntimeToolTestResult;
 }
 
 interface HeldCall {

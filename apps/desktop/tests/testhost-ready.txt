@@ -5,3 +5,5 @@ smoke.spec.ts
 navigation.spec.ts
 persistence.spec.ts:159
 persistence.spec.ts:211
+scheduled-tasks.spec.ts
+scheduled-task-runtime-tools.spec.ts
