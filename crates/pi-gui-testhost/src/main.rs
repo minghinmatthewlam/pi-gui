@@ -128,6 +128,7 @@ async fn run() -> Result<(), CoreError> {
         .local_addr()
         .map_err(|error| CoreError::new(error.to_string()))?;
     println!("pi-gui-testhost listening on http://{address}");
+    shell.set_extension_frame_port(address.port());
 
     let app = Rc::new(App {
         kernel,

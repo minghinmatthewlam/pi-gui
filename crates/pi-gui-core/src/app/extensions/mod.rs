@@ -1,11 +1,17 @@
 //! Extension UI (the extension half of `app-store.ts`, `extensions/extension-notices.ts` and
-//! `extension-actions.ts`): host UI requests, dialog timeouts and notices. Extension views,
-//! actions and the enable/disable settings still answer "not ported".
+//! `extension-actions.ts`): host UI requests and the answers to dialogs, dialog timeouts and
+//! notices. Card buttons are in `actions`, extension views in `views`.
 
-use super::dispatch::MethodTable;
-use super::validation::Arg;
+pub mod actions;
+pub mod views;
+
+use super::dispatch::{self, MethodTable};
+use super::refresh::{self, RefreshOptions};
+use super::validation::{self, Arg};
 use super::{publish, sessions, AppData, Kernel};
+use crate::error::CoreResult;
 use crate::state::desktop_state::ComposerDraftSyncSource;
+use crate::state::desktop_state::DesktopAppState;
 use crate::state::desktop_state::SessionExtensionNoticeRecord;
 use crate::state::driver::{session_key, HostUiRequest, NoticeLevel, SessionRef};
 use crate::state::session_state_map::{
@@ -22,9 +28,58 @@ pub const EXTENSION_NOTICE_TIMEOUT_MS: u64 = 6_000;
 
 /// What the extensions part keeps besides the shared maps.
 #[derive(Default)]
-pub struct ExtensionsState {}
+pub struct ExtensionsState {
+    pub views: views::ViewConnections,
+}
 
-pub fn register(_table: &mut MethodTable) {}
+pub fn register(table: &mut MethodTable) {
+    table.on("respondToHostUiRequest", |kernel, call| {
+        Box::pin(async move {
+            dispatch::immediate(&kernel, &call, async {
+                let workspace_id = validation::expect_non_empty_string(call.arg(0), "workspaceId")?;
+                let session_id = validation::expect_non_empty_string(call.arg(1), "sessionId")?;
+                let response = validation::expect_host_ui_response(call.arg(2))?;
+                let session_ref = crate::state::driver::session_ref(&workspace_id, &session_id);
+                respond_to_host_ui_request(&kernel, &session_ref, response).await
+            })
+            .await
+        })
+    });
+    actions::register(table);
+    views::register(table);
+}
+
+/// `respondToHostUiRequest`: the dialog goes at once, then pi gets the answer.
+async fn respond_to_host_ui_request(
+    kernel: &Kernel,
+    session_ref: &SessionRef,
+    response: Value,
+) -> CoreResult<DesktopAppState> {
+    let request_id = response["requestId"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned();
+    remove_pending_dialog(kernel, session_ref, &request_id);
+    clear_dialog_timeout(&mut kernel.data.borrow_mut(), session_ref, &request_id);
+    sessions::with_error_handling(kernel, async {
+        kernel
+            .driver()
+            .call(
+                "respondToHostUiRequest",
+                super::pi::args([json!(session_ref), response]),
+            )
+            .await?;
+        refresh::refresh_state(
+            kernel,
+            RefreshOptions {
+                clear_last_error: true,
+                ..Default::default()
+            },
+        )
+        .await
+    })
+    .await
+}
 
 fn timer_key(session_ref: &SessionRef, request_id: &str) -> String {
     format!("{}:{request_id}", session_key(session_ref))
@@ -279,13 +334,6 @@ pub fn parse_extension_url(value: &str) -> Option<String> {
         .then(|| url.to_string())
 }
 
-fn is_session_id(value: &str) -> bool {
-    (1..=200).contains(&value.len())
-        && value
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
-}
-
 /// `parseExtensionAction` (`packages/session-driver/src/extension-actions.ts`): `None` for
 /// anything malformed or unknown.
 pub fn parse_extension_action(value: Arg) -> Option<Value> {
@@ -332,7 +380,7 @@ pub fn parse_extension_action(value: Arg) -> Option<Value> {
             let session_id = record
                 .get("sessionId")?
                 .as_str()
-                .filter(|id| is_session_id(id))?;
+                .filter(|id| actions::is_session_id(id))?;
             action.insert("sessionId".into(), json!(session_id));
         }
         _ => return None,
@@ -340,10 +388,9 @@ pub fn parse_extension_action(value: Arg) -> Option<Value> {
     Some(Value::Object(action))
 }
 
-/// The host's `views.changed` and `views.message` notifications. Extension views are not
-/// ported yet, so these are logged and dropped.
-pub fn on_host_view_notification(_kernel: &Kernel, method: &str, _params: Value) {
-    eprintln!("[pi-host] extension views are not ported; dropped {method}");
+/// The host's `views.changed` and `views.message` notifications.
+pub fn on_host_view_notification(kernel: &Kernel, method: &str, params: Value) {
+    views::on_host_notification(kernel, method, params);
 }
 
 #[cfg(test)]

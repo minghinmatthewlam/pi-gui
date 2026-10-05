@@ -84,6 +84,7 @@ impl WindowViews {
         self.recovering.borrow_mut().remove(&window);
         kernel.draft_flush.forget_window(window);
         kernel.workbench.reset_renderer(window);
+        super::super::extensions::views::close_sender(kernel, window);
         if self.active_window.get() == Some(window) {
             let next = self.ids().into_iter().next();
             self.active_window.set(next);
@@ -124,6 +125,8 @@ impl WindowViews {
         self.recovering.borrow_mut().remove(&window);
         self.last_transcript.borrow_mut().remove(&window);
         kernel.workbench.reset_renderer(window);
+        // The old page's extension frames went with it.
+        super::super::extensions::views::close_sender(kernel, window);
         let snapshot = kernel.data.borrow().state.clone();
         self.publish_state(kernel, window, &snapshot);
         self.publish_transcript_soon(kernel, window);

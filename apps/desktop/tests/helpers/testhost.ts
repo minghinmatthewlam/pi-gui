@@ -147,6 +147,35 @@ async function waitForListening(child: ChildProcess, output: string[]): Promise<
   });
 }
 
+/**
+ * Electron main's `will-frame-navigate`: a subframe may only load an extension view's own
+ * document. Anything else is answered 204, so the frame keeps its page and nothing is fetched.
+ */
+async function blockFrameNavigation(context: BrowserContext, appUrl: string): Promise<void> {
+  const appOrigin = new URL(appUrl).origin;
+  const port = new URL(appUrl).port;
+  await context.route(
+    (url) => url.origin !== appOrigin,
+    async (route) => {
+      const request = route.request();
+      if (!request.isNavigationRequest() || !request.frame().parentFrame()) {
+        await route.continue();
+        return;
+      }
+      const url = new URL(request.url());
+      const isViewDocument =
+        url.protocol === "http:" &&
+        /^[0-9a-f]+(-[0-9a-f]+){4}\.localhost$/.test(url.hostname) &&
+        url.port === port &&
+        url.pathname === "/" &&
+        !url.search &&
+        !url.hash;
+      if (isViewDocument) await route.continue();
+      else await route.fulfill({ status: 204 });
+    },
+  );
+}
+
 /** A control connection for `test.*` calls. */
 async function connectControl(wsUrl: string): Promise<TestHostControl & { close(): void }> {
   const socket = new WebSocket(wsUrl);
@@ -224,6 +253,7 @@ export async function launchTestHost(
     // The windows go with the app, as Electron's do when its process exits.
     exited.then(() => openedBrowser.close()).catch(() => undefined);
     const context: BrowserContext = await browser.newContext({ viewport: WINDOW_SIZE });
+    await blockFrameNavigation(context, url);
     const pageUrl = `${url}/?testhost=${encodeURIComponent(wsUrl)}`;
     const pages: Page[] = [];
     const openWindow = async () => {
