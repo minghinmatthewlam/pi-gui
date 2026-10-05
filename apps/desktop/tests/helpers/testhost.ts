@@ -12,7 +12,10 @@ import {
   type IpcInvokeControlSnapshot,
   type PiDriverCallRecord,
   type PiDriverControl,
+  type TextPromptOutcome,
 } from "./desktop-harness";
+import type { ThemePresetId } from "../../contracts/desktop-state";
+import { windowBackgroundFor, type ResolvedTheme } from "../../contracts/theme";
 import { seedAgentDir } from "./electron-app";
 
 /**
@@ -51,6 +54,22 @@ export interface TestHostHarness extends DesktopHarness {
   readonly control: TestHostControl;
   /** Opens another page, which connects as a new window. */
   newWindow(): Promise<Page>;
+}
+
+/** What `test.windowState` reports; the background follows the theme as main's does. */
+interface WindowStateReport {
+  readonly focused: boolean;
+  readonly minimized: boolean;
+  readonly maximized: boolean;
+  readonly visible: boolean;
+  readonly themePresetId: ThemePresetId;
+  readonly resolvedTheme: ResolvedTheme;
+}
+
+async function windowIdOf(page: Page): Promise<number> {
+  return Number(
+    await page.evaluate((key) => globalThis.sessionStorage.getItem(key), WINDOW_ID_KEY),
+  );
 }
 
 function unsupported(what: string): () => Promise<never> {
@@ -209,11 +228,7 @@ export async function launchTestHost(
     const firstWindow = () => (first ??= openWindow());
     const pageOf = async (window?: Page) => window ?? (await firstWindow());
     const focus = async (window?: Page) => {
-      const page = await pageOf(window);
-      const id = Number(
-        await page.evaluate((key) => globalThis.sessionStorage.getItem(key), WINDOW_ID_KEY),
-      );
-      await control.call("focusWindow", { window: id });
+      await control.call("focusWindow", { window: await windowIdOf(await pageOf(window)) });
     };
     // The shell's log is drained by each read, so it is kept here.
     const shellLog: { kind: string; url?: string }[] = [];
@@ -271,7 +286,19 @@ export async function launchTestHost(
         count: async () => (await control.call<number[]>("windows")).length,
         pages: () => [...pages],
         waitForNew: unsupported("A window the app opens itself"),
-        state: unsupported("Native window state"),
+        state: async (window) => {
+          const state = await control.call<WindowStateReport | null>("windowState", {
+            window: await windowIdOf(await pageOf(window)),
+          });
+          if (!state) return undefined;
+          return {
+            focused: state.focused,
+            minimized: state.minimized,
+            maximized: state.maximized,
+            visible: state.visible,
+            backgroundColor: windowBackgroundFor(state.themePresetId, state.resolvedTheme),
+          };
+        },
         close: async (window) => {
           await (await pageOf(window)).close();
         },
@@ -319,7 +346,19 @@ export async function launchTestHost(
         holdNextOpenDialog: unsupported("Holding an open dialog"),
         releaseHeldOpenDialog: unsupported("Holding an open dialog"),
         openDialogCount: async () => (await openDialogs()) - openDialogsBefore,
-        beginTextPrompt: unsupported("The text prompt window"),
+        beginTextPrompt: async (message, placeholder) => {
+          const { prompt, outcome } = await control.call<{ prompt: number; outcome: number }>(
+            "beginTextPrompt",
+            { message, placeholder },
+          );
+          const page = await context.newPage();
+          await page.goto(`${url}/__testhost/prompt?id=${prompt}`);
+          const result = control.call<TextPromptOutcome>("textPromptOutcome", { outcome });
+          // Main destroys the prompt window once it is answered.
+          const closePage = () => page.close().catch(() => undefined);
+          void result.then(closePage, closePage);
+          return { window: page, outcome: () => result };
+        },
       },
       menu: {
         item: unsupported("The application menu"),

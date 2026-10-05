@@ -1,8 +1,12 @@
 //! Model and runtime settings (the settings half of `app-store.ts`): app-global or per-repo
 //! model settings, runtime snapshots, and the settings-file baseline used to notice outside
-//! edits. The settings methods themselves still answer "not ported".
+//! edits. The renderer's settings methods are in `ipc`, their actions in `runtime`, and
+//! provider sign-in in `login`.
 
-use super::dispatch::MethodTable;
+mod ipc;
+pub mod login;
+pub mod runtime;
+
 use super::pi::{args, runtime_call};
 use super::{AppData, Kernel};
 use crate::error::CoreResult;
@@ -18,7 +22,7 @@ use std::path::{Path, PathBuf};
 #[derive(Default)]
 pub struct SettingsState {}
 
-pub fn register(_table: &mut MethodTable) {}
+pub use ipc::register;
 
 /// `hasStoredModelSettings`.
 pub fn has_stored_model_settings(settings: &ModelSettingsSnapshot) -> bool {
@@ -37,7 +41,7 @@ pub fn has_stored_model_settings(settings: &ModelSettingsSnapshot) -> bool {
             .is_some_and(|value| !value.is_empty())
 }
 
-fn is_per_repo(data: &AppData) -> bool {
+pub fn is_per_repo(data: &AppData) -> bool {
     data.state.model_settings_scope_mode == ModelSettingsScopeMode::PerRepo
 }
 
@@ -49,7 +53,7 @@ fn entry_ref(entry: &WorkspaceEntry) -> WorkspaceRef {
     }
 }
 
-fn record_ref(workspace: &WorkspaceRecord) -> WorkspaceRef {
+pub fn record_ref(workspace: &WorkspaceRecord) -> WorkspaceRef {
     WorkspaceRef {
         workspace_id: workspace.id.clone(),
         path: workspace.path.clone(),
@@ -104,11 +108,21 @@ pub async fn restore_global_model_settings(
     workspaces: &[WorkspaceEntry],
     preferred_workspace_id: &str,
 ) -> CoreResult<()> {
+    let refs: Vec<WorkspaceRef> = workspaces.iter().map(entry_ref).collect();
+    restore_global_model_settings_for(kernel, settings, &refs, Some(preferred_workspace_id)).await
+}
+
+/// `restoreGlobalModelSettings` through the first workspace, or the preferred one.
+pub async fn restore_global_model_settings_for(
+    kernel: &Kernel,
+    settings: &ModelSettingsSnapshot,
+    refs: &[WorkspaceRef],
+    preferred_workspace_id: Option<&str>,
+) -> CoreResult<()> {
     if !has_stored_model_settings(settings) {
         return Ok(());
     }
-    let refs: Vec<WorkspaceRef> = workspaces.iter().map(entry_ref).collect();
-    let Some(workspace) = fallback_workspace(&refs, Some(preferred_workspace_id)).cloned() else {
+    let Some(workspace) = fallback_workspace(refs, preferred_workspace_id).cloned() else {
         return Ok(());
     };
     let driver = kernel.driver();
@@ -380,7 +394,7 @@ pub fn global_settings_path() -> PathBuf {
 }
 
 /// `statMtimeMs`.
-async fn stat_mtime_ms(path: &Path) -> Option<f64> {
+pub async fn stat_mtime_ms(path: &Path) -> Option<f64> {
     let modified = tokio::fs::metadata(path).await.ok()?.modified().ok()?;
     let since = modified.duration_since(std::time::UNIX_EPOCH).ok()?;
     Some(since.as_secs_f64() * 1000.0)

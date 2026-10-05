@@ -98,6 +98,13 @@ pub trait Shell {
         request: PromptText,
     ) -> LocalFuture<CoreResult<Option<String>>>;
     fn open_external(&self, url: String) -> LocalFuture<CoreResult<()>>;
+    /// A message the user must acknowledge (`window.alert` in the window), such as sign-in
+    /// instructions.
+    fn show_message(
+        &self,
+        parent: Option<WindowId>,
+        message: String,
+    ) -> LocalFuture<CoreResult<()>>;
     /// Reveals a path in the file manager, or opens it with its app when `open` is set.
     fn reveal_path(&self, path: PathBuf, open: bool) -> LocalFuture<CoreResult<()>>;
     fn toggle_maximize(&self, window: WindowId);
@@ -114,20 +121,28 @@ pub trait Shell {
 /// A window's push sink in the test host.
 pub type PushSink = Box<dyn Fn(&Push)>;
 
+/// A text prompt the test shell is showing, until a test answers it.
+struct OpenPrompt {
+    request: PromptText,
+    reply: tokio::sync::oneshot::Sender<Option<String>>,
+}
+
 struct TestWindow {
     sink: PushSink,
     presence: WindowPresence,
 }
 
 /// A shell with no native windows, for the test host and unit tests. Windows are connections;
-/// dialogs and prompts are answered by `test.*` calls queued ahead of time.
+/// open dialogs are answered by `test.*` calls queued ahead of time, and text prompts stay open
+/// until a test answers them.
 pub struct TestShell {
     windows: RefCell<IndexMap<WindowId, TestWindow>>,
     focused: Cell<Option<WindowId>>,
     /// `PI_APP_TEST_MODE=background`: windows are never shown, as in the Electron lane.
     background: bool,
     open_dialog_answers: RefCell<VecDeque<Option<Vec<PathBuf>>>>,
-    prompt_answers: RefCell<VecDeque<Option<String>>>,
+    next_prompt: Cell<u64>,
+    prompts: RefCell<IndexMap<u64, OpenPrompt>>,
     /// External links, reveals, notifications and appearance changes, in order.
     log: RefCell<Vec<Value>>,
 }
@@ -139,7 +154,8 @@ impl TestShell {
             focused: Cell::new(None),
             background,
             open_dialog_answers: RefCell::new(VecDeque::new()),
-            prompt_answers: RefCell::new(VecDeque::new()),
+            next_prompt: Cell::new(0),
+            prompts: RefCell::new(IndexMap::new()),
             log: RefCell::new(Vec::new()),
         })
     }
@@ -199,9 +215,24 @@ impl TestShell {
         self.open_dialog_answers.borrow_mut().push_back(paths);
     }
 
-    /// The next text prompt returns this; `None` cancels it.
-    pub fn queue_prompt(&self, answer: Option<String>) {
-        self.prompt_answers.borrow_mut().push_back(answer);
+    /// Text prompts still open, oldest first, with their message and placeholder.
+    pub fn open_prompts(&self) -> Vec<(u64, PromptText)> {
+        self.prompts
+            .borrow()
+            .iter()
+            .map(|(id, prompt)| (*id, prompt.request.clone()))
+            .collect()
+    }
+
+    /// Answers an open prompt as its OK button does; `None` is its Cancel button.
+    pub fn answer_prompt(&self, id: u64, answer: Option<String>) -> CoreResult<()> {
+        let prompt = self
+            .prompts
+            .borrow_mut()
+            .shift_remove(&id)
+            .ok_or_else(|| CoreError::new(format!("No open text prompt {id}")))?;
+        let _ = prompt.reply.send(answer);
+        Ok(())
     }
 
     pub fn take_log(&self) -> Vec<Value> {
@@ -250,13 +281,28 @@ impl Shell for TestShell {
         _parent: Option<WindowId>,
         request: PromptText,
     ) -> LocalFuture<CoreResult<Option<String>>> {
-        let answer = self.prompt_answers.borrow_mut().pop_front();
-        self.record(json!({ "kind": "prompt", "message": request.message }));
-        Box::pin(std::future::ready(Ok(answer.flatten())))
+        let id = self.next_prompt.get() + 1;
+        self.next_prompt.set(id);
+        self.record(json!({ "kind": "prompt", "id": id, "message": request.message }));
+        let (reply, answer) = tokio::sync::oneshot::channel();
+        self.prompts
+            .borrow_mut()
+            .insert(id, OpenPrompt { request, reply });
+        // A prompt dropped unanswered (the shell going away) counts as cancelled.
+        Box::pin(async move { Ok(answer.await.unwrap_or(None)) })
     }
 
     fn open_external(&self, url: String) -> LocalFuture<CoreResult<()>> {
         self.record(json!({ "kind": "openExternal", "url": url }));
+        Box::pin(std::future::ready(Ok(())))
+    }
+
+    fn show_message(
+        &self,
+        _parent: Option<WindowId>,
+        message: String,
+    ) -> LocalFuture<CoreResult<()>> {
+        self.record(json!({ "kind": "message", "message": message }));
         Box::pin(std::future::ready(Ok(())))
     }
 

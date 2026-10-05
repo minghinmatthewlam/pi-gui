@@ -5,3 +5,11 @@ smoke.spec.ts
 navigation.spec.ts
 persistence.spec.ts:159
 persistence.spec.ts:211
+custom-endpoints.spec.ts
+extension-provider-models.spec.ts
+login-prompt.spec.ts
+mcp-settings.spec.ts
+provider-settings.spec.ts
+settings-appearance.spec.ts
+settings-general.spec.ts:65
+skills-settings.spec.ts
