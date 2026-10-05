@@ -116,6 +116,12 @@ pub trait Shell {
     fn read_clipboard_image(&self) -> Value;
     /// Theme mode, preset and transparency, for native window chrome.
     fn set_appearance(&self, appearance: Value);
+    /// Where a window loads an extension view's frame. The pi host names it with the
+    /// `pi-extension://<connectionId>/` scheme, which a shell serves as is unless its web view
+    /// cannot load custom schemes.
+    fn extension_frame_url(&self, frame_url: String) -> String {
+        frame_url
+    }
 }
 
 /// A window's push sink in the test host.
@@ -145,6 +151,8 @@ pub struct TestShell {
     prompts: RefCell<IndexMap<u64, OpenPrompt>>,
     /// External links, reveals, notifications and appearance changes, in order.
     log: RefCell<Vec<Value>>,
+    /// The test host's port, which also serves extension frames to Chromium.
+    extension_frame_port: Cell<Option<u16>>,
 }
 
 impl TestShell {
@@ -157,7 +165,14 @@ impl TestShell {
             next_prompt: Cell::new(0),
             prompts: RefCell::new(IndexMap::new()),
             log: RefCell::new(Vec::new()),
+            extension_frame_port: Cell::new(None),
         })
+    }
+
+    /// Chromium cannot load `pi-extension:` frames, so the test host serves them over HTTP on
+    /// this port, by connection id as the host name (see `extension_frame_url`).
+    pub fn set_extension_frame_port(&self, port: u16) {
+        self.extension_frame_port.set(Some(port));
     }
 
     pub fn add_window(&self, window: WindowId, sink: PushSink) {
@@ -290,6 +305,21 @@ impl Shell for TestShell {
             .insert(id, OpenPrompt { request, reply });
         // A prompt dropped unanswered (the shell going away) counts as cancelled.
         Box::pin(async move { Ok(answer.await.unwrap_or(None)) })
+    }
+
+    /// `http://<connectionId>:<port>/`: the same host name and path the frame has under the
+    /// `pi-extension:` scheme, still an opaque origin inside its sandboxed iframe.
+    fn extension_frame_url(&self, frame_url: String) -> String {
+        match (
+            self.extension_frame_port.get(),
+            frame_url.strip_prefix("pi-extension://"),
+        ) {
+            (Some(port), Some(rest)) => {
+                let (host, path) = rest.split_once('/').unwrap_or((rest, ""));
+                format!("http://{host}:{port}/{path}")
+            }
+            _ => frame_url,
+        }
     }
 
     fn open_external(&self, url: String) -> LocalFuture<CoreResult<()>> {

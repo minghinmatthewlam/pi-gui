@@ -35,6 +35,11 @@ const HELD_DRIVER_CALL_TIMEOUT_MS = 15_000;
 const WINDOW_SIZE = { width: 1480, height: 980 } as const;
 /** Where the page's transport keeps its window id (`src/platform/testhost-transport.ts`). */
 const WINDOW_ID_KEY = "pi-gui:testhost-window";
+/**
+ * Extension frames load from `http://<connectionId>:<port>/` on the test host (Chromium cannot
+ * load the `pi-extension:` scheme), so a connection id resolves to the test host.
+ */
+const EXTENSION_FRAME_HOSTS = "*-*-*-*-*";
 
 export interface TestHostLaunchOptions {
   readonly initialWorkspaces?: readonly string[];
@@ -137,6 +142,35 @@ async function waitForListening(child: ChildProcess, output: string[]): Promise<
   });
 }
 
+/**
+ * Electron main's `will-frame-navigate`: a subframe may only load an extension view's own
+ * document. Anything else is answered 204, so the frame keeps its page and nothing is fetched.
+ */
+async function blockFrameNavigation(context: BrowserContext, appUrl: string): Promise<void> {
+  const appOrigin = new URL(appUrl).origin;
+  const port = new URL(appUrl).port;
+  await context.route(
+    (url) => url.origin !== appOrigin,
+    async (route) => {
+      const request = route.request();
+      if (!request.isNavigationRequest() || !request.frame().parentFrame()) {
+        await route.continue();
+        return;
+      }
+      const url = new URL(request.url());
+      const isViewDocument =
+        url.protocol === "http:" &&
+        /^[0-9a-f]+(-[0-9a-f]+){4}$/.test(url.hostname) &&
+        url.port === port &&
+        url.pathname === "/" &&
+        !url.search &&
+        !url.hash;
+      if (isViewDocument) await route.continue();
+      else await route.fulfill({ status: 204 });
+    },
+  );
+}
+
 /** A control connection for `test.*` calls. */
 async function connectControl(wsUrl: string): Promise<TestHostControl & { close(): void }> {
   const socket = new WebSocket(wsUrl);
@@ -209,11 +243,18 @@ export async function launchTestHost(
     const url = await waitForListening(child, output);
     const wsUrl = url.replace(/^http/, "ws");
     const control = await connectControl(wsUrl);
-    browser = await chromium.launch({ executablePath: chromiumExecutable() });
+    browser = await chromium.launch({
+      executablePath: chromiumExecutable(),
+      args: [
+        `--host-resolver-rules=MAP ${EXTENSION_FRAME_HOSTS} 127.0.0.1`,
+        `--proxy-bypass-list=${EXTENSION_FRAME_HOSTS}`,
+      ],
+    });
     const openedBrowser = browser;
     // The windows go with the app, as Electron's do when its process exits.
     exited.then(() => openedBrowser.close()).catch(() => undefined);
     const context: BrowserContext = await browser.newContext({ viewport: WINDOW_SIZE });
+    await blockFrameNavigation(context, url);
     const pageUrl = `${url}/?testhost=${encodeURIComponent(wsUrl)}`;
     const pages: Page[] = [];
     const openWindow = async () => {

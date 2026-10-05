@@ -1,5 +1,5 @@
 //! One port for both: a request asking to upgrade becomes a WebSocket session; any other
-//! request is a file from the built renderer.
+//! request is a file from the built renderer, or an extension view's frame.
 
 use crate::App;
 use std::path::{Component, Path, PathBuf};
@@ -52,6 +52,12 @@ pub async fn serve(app: Rc<App>, mut stream: TcpStream) {
         .next()
         .and_then(|line| line.split_whitespace().nth(1))
         .unwrap_or("/");
+    if let Some(connection_id) = extension_frame_host(&head) {
+        let response = extension_frame(&app, &stream, connection_id, target).await;
+        let _ = stream.write_all(&response).await;
+        let _ = stream.shutdown().await;
+        return;
+    }
     if let Some(query) = target.strip_prefix(PROMPT_PATH) {
         let prompt = query
             .strip_prefix("?id=")
@@ -83,6 +89,78 @@ pub async fn serve(app: Rc<App>, mut stream: TcpStream) {
     };
     let _ = stream.write_all(&response).await;
     let _ = stream.shutdown().await;
+}
+
+/// The connection id an extension frame request names as its host (see
+/// `TestShell::extension_frame_url`); the renderer's own requests use 127.0.0.1.
+fn extension_frame_host(head: &str) -> Option<&str> {
+    let host = head.lines().skip(1).find_map(|line| {
+        let (name, value) = line.split_once(':')?;
+        name.trim()
+            .eq_ignore_ascii_case("host")
+            .then(|| value.trim())
+    })?;
+    let name = host.rsplit_once(':').map_or(host, |(name, _)| name);
+    let is_connection_id = name.contains('-')
+        && name
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit() || byte == b'-');
+    is_connection_id.then_some(name)
+}
+
+/// What Tauri's `pi-extension:` scheme handler answers: the pi host's `views.asset`, with the
+/// same headers. The frame's document names its scripts by its `pi-extension://<id>` origin,
+/// which here is `http://<id>:<port>`, in its body and its Content-Security-Policy alike.
+async fn extension_frame(
+    app: &App,
+    stream: &TcpStream,
+    connection_id: &str,
+    target: &str,
+) -> Vec<u8> {
+    let port = stream
+        .local_addr()
+        .map(|address| address.port())
+        .unwrap_or(0);
+    let scheme_origin = format!("pi-extension://{connection_id}");
+    let http_origin = format!("http://{connection_id}:{port}");
+    let Ok(asset) = app
+        .driver
+        .view_asset(&format!("{scheme_origin}{target}"))
+        .await
+    else {
+        return response(404, "text/plain", b"Unavailable");
+    };
+    let mut body = data_encoding::BASE64
+        .decode(asset["bodyBase64"].as_str().unwrap_or_default().as_bytes())
+        .unwrap_or_default();
+    let mut headers = String::new();
+    for (name, value) in asset["headers"].as_object().into_iter().flatten() {
+        let value = value.as_str().unwrap_or_default();
+        if name.eq_ignore_ascii_case("content-length") {
+            continue;
+        }
+        let value = value.replace(&scheme_origin, &http_origin);
+        headers.push_str(&format!("{name}: {value}\r\n"));
+    }
+    let is_html = asset["headers"]
+        .as_object()
+        .and_then(|headers| headers.get("content-type"))
+        .and_then(|value| value.as_str())
+        .is_some_and(|value| value.starts_with("text/html"));
+    if is_html {
+        body = String::from_utf8_lossy(&body)
+            .replace(&scheme_origin, &http_origin)
+            .into_bytes();
+    }
+    let status = asset["status"].as_u64().unwrap_or(200);
+    let mut bytes = format!(
+        "HTTP/1.1 {status} {}\r\n{headers}Content-Length: {}\r\nConnection: close\r\n\r\n",
+        reason(status as u16),
+        body.len()
+    )
+    .into_bytes();
+    bytes.extend_from_slice(&body);
+    bytes
 }
 
 fn escape_html(value: &str) -> String {
@@ -183,8 +261,17 @@ fn content_type(path: &Path) -> &'static str {
     }
 }
 
+fn reason(status: u16) -> &'static str {
+    match status {
+        200 => "OK",
+        404 => "Not Found",
+        415 => "Unsupported Media Type",
+        _ => "Status",
+    }
+}
+
 fn response(status: u16, content_type: &str, body: &[u8]) -> Vec<u8> {
-    let reason = if status == 200 { "OK" } else { "Not Found" };
+    let reason = reason(status);
     let mut bytes = format!(
         "HTTP/1.1 {status} {reason}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n",
         body.len()
@@ -211,5 +298,18 @@ mod tests {
             Some(PathBuf::from("/r/assets/a.js"))
         );
         assert_eq!(resolve(root, "/../etc/passwd"), None);
+    }
+
+    #[test]
+    fn extension_frames_are_named_by_their_host() {
+        let id = "0b6c8f4e-5d1a-4c3b-9e2f-7a8b9c0d1e2f";
+        assert_eq!(
+            extension_frame_host(&format!("GET / HTTP/1.1\r\nHost: {id}:4000")),
+            Some(id)
+        );
+        assert_eq!(
+            extension_frame_host("GET / HTTP/1.1\r\nhost: 127.0.0.1:4000"),
+            None
+        );
     }
 }

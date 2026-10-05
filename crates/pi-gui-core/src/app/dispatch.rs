@@ -224,11 +224,6 @@ mod tests {
 
     /// The methods no part answers yet. Parts shrink this list as they port their handlers.
     const UNPORTED: &[&str] = &[
-        "listExtensionViews",
-        "openExtensionView",
-        "sendExtensionViewMessage",
-        "closeExtensionView",
-        "runExtensionAction",
         "getTurnChanges",
         "getReview",
         "getReviewFile",
@@ -252,7 +247,6 @@ mod tests {
         "updateScheduledTask",
         "deleteScheduledTask",
         "beginScheduledTaskInterview",
-        "respondToHostUiRequest",
         "ensureTerminalPanel",
         "createTerminalSession",
         "setActiveTerminalSession",

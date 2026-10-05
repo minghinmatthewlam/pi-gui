@@ -707,6 +707,7 @@ dependencies = [
 name = "pi-gui-testhost"
 version = "0.1.0"
 dependencies = [
+ "data-encoding",
  "futures-util",
  "pi-gui-core",
  "serde_json",

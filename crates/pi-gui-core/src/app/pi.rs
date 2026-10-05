@@ -149,6 +149,8 @@ pub trait PiDriver {
     /// `probeCustomProviderModels`: the model ids an OpenAI-compatible endpoint lists. The
     /// host fetches them, as the app has no HTTP client of its own.
     fn probe_custom_provider_models(&self, input: Value) -> LocalFuture<CoreResult<Value>>;
+    /// One of the host's extension view requests (`views.list`, `views.open`, …).
+    fn views(&self, method: &'static str, params: Value) -> LocalFuture<CoreResult<Value>>;
     /// Where the host config comes from; read before every call and pushed when it changed.
     fn set_config_source(&self, source: Box<dyn Fn() -> PiHostConfig>);
     /// Test hooks: holds calls to these methods until a test completes them.
@@ -614,6 +616,12 @@ impl PiDriver for HostPiDriver {
 
     fn probe_custom_provider_models(&self, input: Value) -> LocalFuture<CoreResult<Value>> {
         self.request("host.probeCustomProviderModels", input)
+    }
+
+    fn views(&self, method: &'static str, params: Value) -> LocalFuture<CoreResult<Value>> {
+        // Straight to the host, as main's `RemoteExtensionViews` asks it.
+        let peer = self.peer.clone();
+        Box::pin(async move { peer.request(method, params).await })
     }
 
     fn set_config_source(&self, source: Box<dyn Fn() -> PiHostConfig>) {
