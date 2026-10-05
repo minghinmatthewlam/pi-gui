@@ -36,7 +36,13 @@ pub struct App {
     pub windows: session::Windows,
     /// Set by `test.quit`; the accept loop stops once it fires.
     pub quit: tokio::sync::Notify,
+    /// Text prompts a test began, by outcome id, until it reads their outcome.
+    pub text_prompts: std::cell::RefCell<std::collections::HashMap<u64, TextPromptOutcome>>,
+    pub next_text_prompt: std::cell::Cell<u64>,
 }
+
+/// The answer a begun text prompt resolves to.
+pub type TextPromptOutcome = tokio::task::JoinHandle<Result<String, CoreError>>;
 
 fn env_path(name: &str) -> Option<PathBuf> {
     std::env::var_os(name)
@@ -143,6 +149,8 @@ async fn run() -> Result<(), CoreError> {
         test_mode,
         windows: Default::default(),
         quit: tokio::sync::Notify::new(),
+        text_prompts: Default::default(),
+        next_text_prompt: Default::default(),
     });
     let mut terminate = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
         .map_err(|error| CoreError::new(error.to_string()))?;

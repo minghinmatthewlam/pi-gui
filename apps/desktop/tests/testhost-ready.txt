@@ -42,3 +42,11 @@ workbench-tabs.spec.ts:408
 terminal-diff-layout.spec.ts
 integrated-terminal.spec.ts
 external-links.spec.ts
+custom-endpoints.spec.ts
+extension-provider-models.spec.ts
+login-prompt.spec.ts
+mcp-settings.spec.ts
+provider-settings.spec.ts
+settings-appearance.spec.ts
+settings-general.spec.ts:65
+skills-settings.spec.ts
