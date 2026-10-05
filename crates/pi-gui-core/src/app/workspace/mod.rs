@@ -1,16 +1,25 @@
 //! Folders, threads and worktrees (`workspace/app-store-workspace.ts`,
-//! `workspace/app-store-worktree.ts`, `workspace/extension-flags.ts`). So far: adding, picking
-//! and selecting folders, creating, selecting and starting threads, and the worktree catalog
-//! sync every refresh uses. The rest answers "not ported".
+//! `workspace/app-store-worktree.ts`, `workspace/extension-flags.ts`): adding, renaming,
+//! ordering and removing folders, creating and starting threads, worktrees and their catalog
+//! sync, and thread auto-titles. Thread metadata, the folder's files, the integrated terminal
+//! and the rescan on focus live in the submodules.
+
+mod files;
+mod reconcile;
+pub mod terminal;
+mod threads;
+
+pub use reconcile::reconcile_on_focus;
 
 use super::dispatch::{self, MethodTable, Reply};
 use super::pi::args;
 use super::refresh::{self, RefreshOptions};
 use super::shell::PickPaths;
+use super::validation;
 use super::{conversation, persist, publish, sessions, settings, Kernel, WorktreesSnapshot};
 use crate::error::{CoreError, CoreResult};
 use crate::persistence::catalog::{WorkspaceEntry, WorktreeEntry};
-use crate::state::desktop_state::{AppView, ComposerAttachment, DesktopAppState};
+use crate::state::desktop_state::{AppView, ComposerAttachment, DesktopAppState, WorkspaceKind};
 use crate::state::driver::{
     session_key, ExtensionFlagValue, ExtensionFlagValues, RuntimeFlagType, SessionRef,
     SessionSnapshot, WorkspaceRef,
@@ -24,7 +33,10 @@ use std::rc::Rc;
 
 /// What the workspace part keeps besides the shared state.
 #[derive(Default)]
-pub struct WorkspaceState {}
+pub struct WorkspaceState {
+    reconcile: reconcile::ReconcileQueues,
+    pub terminal: terminal::TerminalState,
+}
 
 pub fn register(table: &mut MethodTable) {
     table.on("addWorkspacePath", |kernel, call| {
@@ -95,6 +107,60 @@ pub fn register(table: &mut MethodTable) {
             dispatch::run(&kernel, &call, || start_thread(&kernel, input)).await
         })
     });
+    table.on("renameWorkspace", |kernel, call| {
+        Box::pin(async move {
+            dispatch::run(&kernel, &call, || async {
+                let id = validation::expect_non_empty_string(call.arg(0), "workspaceId")?;
+                let name = validation::expect_string(call.arg(1), "displayName")?;
+                rename_workspace(&kernel, &id, &name).await
+            })
+            .await
+        })
+    });
+    table.on("removeWorkspace", |kernel, call| {
+        Box::pin(async move {
+            dispatch::run(&kernel, &call, || async {
+                let id = validation::expect_non_empty_string(call.arg(0), "workspaceId")?;
+                remove_workspace(&kernel, &id).await
+            })
+            .await
+        })
+    });
+    table.on("reorderWorkspaces", |kernel, call| {
+        Box::pin(async move {
+            dispatch::run(&kernel, &call, || async {
+                let order = validation::expect_string_array(call.arg(0), "order")?;
+                reorder_workspaces(&kernel, &order).await
+            })
+            .await
+        })
+    });
+    table.on("createWorktree", |kernel, call| {
+        Box::pin(async move {
+            dispatch::run(&kernel, &call, || async {
+                let input = validation::expect_create_worktree_input(call.arg(0))?;
+                create_worktree(&kernel, crate::parse(input)?).await
+            })
+            .await
+        })
+    });
+    table.on("removeWorktree", |kernel, call| {
+        Box::pin(async move {
+            dispatch::run(&kernel, &call, || async {
+                let input = validation::expect_remove_worktree_input(call.arg(0))?;
+                remove_worktree(&kernel, crate::parse(input)?).await
+            })
+            .await
+        })
+    });
+    table.on("syncCurrentWorkspace", |kernel, call| {
+        Box::pin(
+            async move { dispatch::run(&kernel, &call, || sync_current_workspace(&kernel)).await },
+        )
+    });
+    threads::register(table);
+    files::register(table);
+    terminal::register(table);
 }
 
 /// `getWorkspacePath`.
@@ -296,6 +362,310 @@ async fn sync_workspace(
     .await
 }
 
+/// `syncCurrentWorkspace`.
+pub async fn sync_current_workspace(kernel: &Kernel) -> CoreResult<DesktopAppState> {
+    kernel.initialize().await;
+    let (workspace_id, session_id) = {
+        let state = &kernel.data.borrow().state;
+        (
+            state.selected_workspace_id.clone(),
+            state.selected_session_id.clone(),
+        )
+    };
+    if workspace_id.is_empty() {
+        return refresh::refresh_state(
+            kernel,
+            RefreshOptions {
+                clear_last_error: true,
+                refresh_worktrees: true,
+                ..Default::default()
+            },
+        )
+        .await;
+    }
+    sync_workspace(
+        kernel,
+        &workspace_id,
+        RefreshOptions {
+            selected_workspace_id: Some(workspace_id.clone()),
+            selected_session_id: Some(session_id),
+            clear_last_error: true,
+            refresh_worktrees: true,
+            ..Default::default()
+        },
+    )
+    .await
+}
+
+/// The current selection, kept by a refresh.
+fn keep_selection(kernel: &Kernel) -> RefreshOptions {
+    let state = &kernel.data.borrow().state;
+    RefreshOptions {
+        selected_workspace_id: Some(state.selected_workspace_id.clone()),
+        selected_session_id: Some(state.selected_session_id.clone()),
+        clear_last_error: true,
+        ..Default::default()
+    }
+}
+
+/// `renameWorkspace`.
+pub async fn rename_workspace(
+    kernel: &Kernel,
+    workspace_id: &str,
+    display_name: &str,
+) -> CoreResult<DesktopAppState> {
+    kernel.initialize().await;
+    let name = crate::js::trim(display_name);
+    if name.is_empty() {
+        return sessions::with_error(kernel, "Workspace name cannot be empty.".into()).await;
+    }
+    sessions::with_error_handling(kernel, async {
+        kernel
+            .driver()
+            .call("renameWorkspace", args([json!(workspace_id), json!(name)]))
+            .await?;
+        refresh::refresh_state(kernel, keep_selection(kernel)).await
+    })
+    .await
+}
+
+/// `removeWorkspace`: selects the first folder left.
+pub async fn remove_workspace(kernel: &Kernel, workspace_id: &str) -> CoreResult<DesktopAppState> {
+    kernel.initialize().await;
+    sessions::with_error_handling(kernel, async {
+        kernel
+            .driver()
+            .call("removeWorkspace", args([json!(workspace_id)]))
+            .await?;
+        let next = {
+            let state = &kernel.data.borrow().state;
+            state
+                .workspaces
+                .iter()
+                .find(|workspace| workspace.id != workspace_id)
+                .map(|workspace| {
+                    (
+                        workspace.id.clone(),
+                        workspace.sessions.first().map(|session| session.id.clone()),
+                    )
+                })
+        };
+        let (selected_workspace_id, selected_session_id) = match next {
+            Some((workspace, session)) => (Some(workspace), session),
+            None => (None, None),
+        };
+        refresh::refresh_state(
+            kernel,
+            RefreshOptions {
+                selected_workspace_id,
+                selected_session_id,
+                composer_draft: Some(String::new()),
+                clear_last_error: true,
+                ..Default::default()
+            },
+        )
+        .await
+    })
+    .await
+}
+
+/// `reorderWorkspaces`: keeps only primary folders, each once.
+pub async fn reorder_workspaces(kernel: &Kernel, order: &[String]) -> CoreResult<DesktopAppState> {
+    kernel.initialize().await;
+    {
+        let mut data = kernel.data.borrow_mut();
+        let primary: std::collections::HashSet<&str> = data
+            .state
+            .workspaces
+            .iter()
+            .filter(|workspace| workspace.kind == WorkspaceKind::Primary)
+            .map(|workspace| workspace.id.as_str())
+            .collect();
+        let mut seen = std::collections::HashSet::new();
+        let sanitized: Vec<String> = order
+            .iter()
+            .filter(|id| seen.insert(id.as_str()) && primary.contains(id.as_str()))
+            .cloned()
+            .collect();
+        data.state.workspace_order = sanitized;
+        data.state.last_error = None;
+        data.bump();
+    }
+    persist::persist_and_emit(kernel).await
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CreateWorktreeInput {
+    workspace_id: String,
+    from_session_workspace_id: Option<String>,
+    from_session_id: Option<String>,
+}
+
+/// `sessionTitleForWorktree`.
+fn session_title_for_worktree(
+    kernel: &Kernel,
+    workspace_id: &str,
+    session_id: &str,
+) -> Option<String> {
+    kernel
+        .data
+        .borrow()
+        .session(&crate::state::driver::session_ref(workspace_id, session_id))
+        .map(|session| crate::js::trim(&session.title).to_owned())
+}
+
+/// `createWorktree`: a new worktree folder, with a thread named after the one it comes from.
+async fn create_worktree(
+    kernel: &Kernel,
+    input: CreateWorktreeInput,
+) -> CoreResult<DesktopAppState> {
+    kernel.initialize().await;
+    let Some(root) = kernel.data.borrow().workspace_ref(&input.workspace_id) else {
+        return sessions::with_error(kernel, format!("Unknown workspace: {}", input.workspace_id))
+            .await;
+    };
+    sessions::with_error_handling(kernel, async {
+        let session_title = match (&input.from_session_id, &input.from_session_workspace_id) {
+            (Some(session_id), Some(workspace_id)) => {
+                session_title_for_worktree(kernel, workspace_id, session_id)
+            }
+            _ => None,
+        };
+        let options = build_worktree_options(kernel, &root, session_title.as_deref().unwrap_or(""));
+        let created: WorktreeEntry = crate::parse(
+            kernel
+                .core_call(
+                    crate::methods::WORKTREES_CREATE,
+                    json!({
+                        "workspace": root,
+                        "path": options.path,
+                        "displayName": options.display_name,
+                        "branchName": options.branch_name,
+                        "startPoint": "HEAD",
+                    }),
+                )
+                .await?,
+        )?;
+        let synced = async {
+            let synced =
+                sessions::sync_workspace(kernel, &created.path, Some(&created.display_name))
+                    .await?;
+            if let Some(session_id) = &input.from_session_id {
+                let workspace_id = input
+                    .from_session_workspace_id
+                    .as_deref()
+                    .unwrap_or(&input.workspace_id);
+                let mut options = serde_json::Map::new();
+                if let Some(title) = session_title_for_worktree(kernel, workspace_id, session_id) {
+                    options.insert("title".into(), json!(title));
+                }
+                kernel
+                    .driver()
+                    .call(
+                        "createSession",
+                        args([json!(synced.workspace), Value::Object(options)]),
+                    )
+                    .await?;
+            }
+            Ok::<_, CoreError>(())
+        }
+        .await;
+        if let Err(error) = synced {
+            rollback_worktree(
+                kernel,
+                json!({
+                    "workspace": root,
+                    "path": options.path,
+                    "branchName": options.branch_name,
+                }),
+            )
+            .await;
+            return Err(error);
+        }
+        refresh::refresh_state(
+            kernel,
+            RefreshOptions {
+                selected_workspace_id: Some(created.path.clone()),
+                selected_session_id: Some(String::new()),
+                composer_draft: Some(String::new()),
+                clear_last_error: true,
+                refresh_worktrees: false,
+                ..Default::default()
+            },
+        )
+        .await
+    })
+    .await
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RemoveWorktreeInput {
+    workspace_id: String,
+    worktree_id: String,
+}
+
+/// `removeWorktree`: removes the checkout, then forgets its folder; selection falls back to
+/// the root folder when the worktree was selected.
+async fn remove_worktree(
+    kernel: &Kernel,
+    input: RemoveWorktreeInput,
+) -> CoreResult<DesktopAppState> {
+    kernel.initialize().await;
+    let Some(root) = kernel.data.borrow().workspace_ref(&input.workspace_id) else {
+        return sessions::with_error(kernel, format!("Unknown workspace: {}", input.workspace_id))
+            .await;
+    };
+    sessions::with_error_handling(kernel, async {
+        let worktree = kernel
+            .catalog_call("worktrees.getWorktree", vec![json!(input.worktree_id)])
+            .await?;
+        kernel
+            .core_call(
+                crate::methods::WORKTREES_REMOVE,
+                json!({ "workspace": root, "worktreeId": input.worktree_id, "force": false }),
+            )
+            .await?;
+        let path = worktree
+            .as_ref()
+            .and_then(|worktree| worktree.get("path"))
+            .and_then(Value::as_str)
+            .filter(|path| !path.is_empty());
+        if let Some(path) = path {
+            // pi forgets the folder by its path; a folder it never knew is fine.
+            let _ = kernel
+                .driver()
+                .call("removeWorkspace", args([json!(path)]))
+                .await;
+        }
+        let (workspace_id, session_id) = {
+            let state = &kernel.data.borrow().state;
+            if state.selected_workspace_id == input.worktree_id {
+                (input.workspace_id.clone(), String::new())
+            } else {
+                (
+                    state.selected_workspace_id.clone(),
+                    state.selected_session_id.clone(),
+                )
+            }
+        };
+        refresh::refresh_state(
+            kernel,
+            RefreshOptions {
+                selected_workspace_id: Some(workspace_id),
+                selected_session_id: Some(session_id),
+                composer_draft: Some(String::new()),
+                clear_last_error: true,
+                refresh_worktrees: false,
+                ..Default::default()
+            },
+        )
+        .await
+    })
+    .await
+}
+
 /// `setActiveSession`: selects the thread before the refresh that shows it.
 fn set_active_session(kernel: &Kernel, session_ref: &SessionRef) {
     let mut data = kernel.data.borrow_mut();
@@ -391,7 +761,8 @@ pub async fn start_thread(kernel: &Kernel, input: Value) -> CoreResult<DesktopAp
         let mut target = root.clone();
         let mut rollback: Option<Value> = None;
         if input.environment == "worktree" {
-            let options = build_worktree_options(kernel, &root, input.prompt.as_deref());
+            let options =
+                build_worktree_options(kernel, &root, input.prompt.as_deref().unwrap_or(""));
             let created: WorktreeEntry = crate::parse(
                 kernel
                     .core_call(
@@ -660,13 +1031,14 @@ struct WorktreeOptions {
     branch_name: String,
 }
 
-/// `buildWorktreeOptions` for a new thread.
+/// `buildWorktreeOptions`: named after `title`, the new thread's prompt or the title of the
+/// thread the worktree starts from.
 fn build_worktree_options(
     kernel: &Kernel,
     workspace: &WorkspaceRef,
-    title_hint: Option<&str>,
+    title: &str,
 ) -> WorktreeOptions {
-    let preferred = short_display_title(title_hint.map(crate::js::trim).unwrap_or(""), 44);
+    let preferred = short_display_title(title, 44);
     let suffix: String = kernel.env().random_uuid().chars().take(6).collect();
     let base = match &preferred {
         Some(title) => clamp_slug(&slugify(title), 18),
@@ -949,10 +1321,6 @@ async fn canonical_path(path: &str) -> String {
         .to_string_lossy()
         .into_owned()
 }
-
-/// `reconcileWorkspaceOnFocus`: picks up sessions and settings changed outside the app.
-/// Not ported yet: focusing a window does not rescan the folder.
-pub fn reconcile_on_focus(_kernel: &Kernel, _workspace_id: &str) {}
 
 #[cfg(test)]
 mod tests {

@@ -231,6 +231,7 @@ pub struct Kernel {
     pub methods: dispatch::MethodTable,
     pub test: test_hooks::TestControls,
     pub workbench: review::WorkbenchRequests,
+    pub reviews: review::Reviews,
     init: tokio::sync::OnceCell<()>,
     stopping: Cell<bool>,
     this: Weak<Kernel>,
@@ -252,6 +253,7 @@ impl Kernel {
             methods: dispatch::MethodTable::build(),
             test: Default::default(),
             workbench: Default::default(),
+            reviews: Default::default(),
             init: tokio::sync::OnceCell::new(),
             stopping: Cell::new(false),
             this: this.clone(),
@@ -345,6 +347,12 @@ impl Kernel {
         for (_, timer) in self.data.borrow_mut().extension_dialog_timers.drain() {
             timer.abort();
         }
+    }
+
+    /// The core's notifications: terminal output, exits and errors for the window that owns
+    /// the shell.
+    pub fn core_notification(&self, method: &str, params: Value) {
+        workspace::terminal::relay(self, method, params);
     }
 
     /// The pi host's calls to the app (`app.catalog`, `app.captureBoundary`, `app.tool`).

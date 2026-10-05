@@ -380,7 +380,7 @@ pub fn global_settings_path() -> PathBuf {
 }
 
 /// `statMtimeMs`.
-async fn stat_mtime_ms(path: &Path) -> Option<f64> {
+pub async fn stat_mtime_ms(path: &Path) -> Option<f64> {
     let modified = tokio::fs::metadata(path).await.ok()?.modified().ok()?;
     let since = modified.duration_since(std::time::UNIX_EPOCH).ok()?;
     Some(since.as_secs_f64() * 1000.0)

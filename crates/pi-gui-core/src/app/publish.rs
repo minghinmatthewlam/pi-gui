@@ -187,6 +187,7 @@ pub fn emit(kernel: &Kernel) -> DesktopAppState {
         kernel.windows.publish_transcript_soon(kernel, window);
     }
     ui::after_emit(kernel, &snapshot);
+    super::workspace::terminal::after_emit(kernel, &snapshot);
     snapshot
 }
 
