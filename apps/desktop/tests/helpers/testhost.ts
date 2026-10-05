@@ -309,6 +309,15 @@ export async function launchTestHost(
         ]);
         if (timedOut) child.kill("SIGKILL");
         control.close();
+        // Pages close the way a window does, so their pagehide handlers save what is still
+        // pending (a pane width, say) before the browser goes.
+        await Promise.all(
+          context.pages().map(async (page) => {
+            const closed = new Promise((resolveClose) => page.once("close", resolveClose));
+            await page.close({ runBeforeUnload: true }).catch(() => undefined);
+            await closed;
+          }),
+        );
         await context.close();
         if (timedOut) throw new Error(`pi-gui-testhost did not quit:\n${output.join("\n")}`);
       },
