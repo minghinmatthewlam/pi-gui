@@ -10,9 +10,10 @@ use pi_gui_core::app::dispatch::{self, InvokeCall};
 use pi_gui_core::app::methods::{self, push};
 use pi_gui_core::app::pi::{HostLaunch, HostPiDriver};
 use pi_gui_core::app::shell::WindowPresence;
-use pi_gui_core::app::{publish, Kernel, KernelDeps, WindowId};
+use pi_gui_core::app::{notifications, publish, ui, Kernel, KernelDeps, WindowId};
 use pi_gui_core::error::CoreResult;
 use pi_gui_core::rpc::{Peer, Service};
+use pi_gui_core::state::driver::SessionRef;
 use pi_gui_core::state::env::SystemEnv;
 use pi_gui_core::Core;
 use serde_json::{json, Value};
@@ -74,6 +75,22 @@ pub enum KernelMsg {
     },
     /// The app was asked to exit; it exits once everything is saved and stopped.
     Quit,
+    /// A click on a thread's desktop notification.
+    NotificationClicked(SessionRef),
+    /// The page answered its text prompt; `None` is its Cancel.
+    PromptAnswer {
+        window: WindowId,
+        id: u64,
+        value: Option<String>,
+    },
+    /// Mod+W, which closes the focused side panel tool or terminal before the window.
+    CloseShortcut {
+        window: WindowId,
+        /// From the window's menu, which closes the window when no surface has focus.
+        close_window: bool,
+    },
+    /// The window's theme changed, which may be the OS appearance.
+    ThemeChanged(WindowId),
 }
 
 /// Where quitting is: Electron main's `quitFlush`.
@@ -189,9 +206,8 @@ async fn run(
 
 /// What Electron main does before its first window: the core, the pi host, then the store.
 async fn start(app: AppHandle, launch: Launch, handle: KernelHandle) -> CoreResult<Context> {
-    // The core, in process. Its notifications are for the terminal, which is not ported.
+    // The core, in process. Its notifications (terminal output) go to the kernel once it exists.
     let (peer, mut core_lines) = Peer::new();
-    tokio::task::spawn_local(async move { while core_lines.recv().await.is_some() {} });
     let core = Core::new(peer);
     core.clone()
         .call(
@@ -205,7 +221,11 @@ async fn start(app: AppHandle, launch: Launch, handle: KernelHandle) -> CoreResu
         env: std::env::vars().collect(),
     })
     .await?;
-    let shell = Rc::new(TauriShell::new(app.clone(), handle.shared.clone()));
+    let shell = Rc::new(TauriShell::new(
+        app.clone(),
+        handle.clone(),
+        launch.test_mode,
+    ));
     let kernel = Kernel::new(KernelDeps {
         core: core.clone(),
         driver: driver.clone(),
@@ -216,6 +236,19 @@ async fn start(app: AppHandle, launch: Launch, handle: KernelHandle) -> CoreResu
         test_mode: launch.test_mode,
     });
     driver.set_host_calls(kernel.host_calls());
+    let relay = Rc::downgrade(&kernel);
+    tokio::task::spawn_local(async move {
+        while let Some(line) = core_lines.recv().await {
+            let (Some(kernel), Ok(message)) =
+                (relay.upgrade(), serde_json::from_str::<Value>(&line))
+            else {
+                continue;
+            };
+            if let Some(method) = message["method"].as_str() {
+                kernel.core_notification(method, message["params"].clone());
+            }
+        }
+    });
     kernel.start().await;
     Ok(Context {
         app,
@@ -234,6 +267,8 @@ fn handle_message(context: &Rc<Context>, message: KernelMsg) {
     match message {
         KernelMsg::Connected { window, reloaded } => {
             if reloaded {
+                // The old page's prompt went with it.
+                context.shell.cancel_prompts(window);
                 kernel.windows.renderer_reset(kernel, window);
             }
         }
@@ -293,7 +328,7 @@ fn handle_message(context: &Rc<Context>, message: KernelMsg) {
                 .unwrap()
                 .remove(&window);
             context.shell.remove_window(window);
-            kernel.windows.remove(kernel, window);
+            kernel.windows.closed(kernel, window);
         }
         KernelMsg::NewWindow { source } => open_window(context, source),
         KernelMsg::OpenFolder(window) => {
@@ -325,6 +360,47 @@ fn handle_message(context: &Rc<Context>, message: KernelMsg) {
             let context = context.clone();
             tokio::task::spawn_local(async move { quit(&context).await });
         }
+        KernelMsg::NotificationClicked(session_ref) => {
+            let kernel = kernel.clone();
+            tokio::task::spawn_local(async move {
+                if let Err(error) = notifications::open_session(&kernel, &session_ref).await {
+                    eprintln!(
+                        "[notification-manager] openSession failed {}",
+                        error.message
+                    );
+                }
+            });
+        }
+        KernelMsg::PromptAnswer { window, id, value } => {
+            context.shell.answer_prompt(window, id, value);
+        }
+        KernelMsg::CloseShortcut {
+            window,
+            close_window,
+        } => close_shortcut(context, window, close_window),
+        KernelMsg::ThemeChanged(window) => {
+            if context.shell.system_theme_changed(window) {
+                ui::system_theme_changed(kernel);
+            }
+        }
+    }
+}
+
+/// What Electron main's `before-input-event` does with Mod+W: while the terminal or a side
+/// panel tool has focus it closes that surface, and the window stays.
+fn close_shortcut(context: &Context, window: WindowId, close_window: bool) {
+    let kernel = &context.kernel;
+    let surface_focused = {
+        let data = kernel.data.borrow();
+        let terminal = &data.workspace.terminal;
+        terminal.terminal_focused.contains(&window) || terminal.side_panel_focused.contains(&window)
+    };
+    if surface_focused {
+        publish::send_to(kernel, window, push::APP_COMMAND, &"close-focused-surface");
+    } else if close_window {
+        if let Some(native) = context.app.get_webview_window(&shell::label(window)) {
+            let _ = native.close();
+        }
     }
 }
 
@@ -338,7 +414,16 @@ fn open_window(context: &Context, source: Option<WindowId>) {
     context.next_window.set(window);
     context.shell.add_window(window, !context.background);
     kernel.windows.add(kernel, window, source_view);
-    if let Err(error) = windows::create(&context.app, window, !context.background) {
+    let created = windows::create(
+        &context.app,
+        window,
+        !context.background,
+        context.shell.window_background(),
+    );
+    if created.is_ok() {
+        context.shell.apply_appearance(window);
+    }
+    if let Err(error) = created {
         eprintln!("[main] Could not open a window: {error}");
         context.shell.remove_window(window);
         kernel.windows.remove(kernel, window);

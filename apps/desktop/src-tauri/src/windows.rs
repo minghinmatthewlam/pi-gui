@@ -9,6 +9,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Mutex;
 use tauri::webview::NewWindowResponse;
+use tauri::window::Color;
 use tauri::{
     AppHandle, DragDropEvent, Manager, Url, WebviewUrl, WebviewWindowBuilder, WindowEvent,
 };
@@ -16,6 +17,26 @@ use tauri_plugin_opener::OpenerExt;
 
 /// The custom scheme extension views load from, as under Electron.
 pub const EXTENSION_SCHEME: &str = "pi-extension";
+
+/// Where Windows serves the extension scheme: WebView2 loads custom schemes only as
+/// `http://<scheme>.localhost/`.
+const WEBVIEW_EXTENSION_HOST: &str = "pi-extension.localhost";
+
+/// Runs in every frame. In an extension view's frame it hands the app's own chords (Mod+W, the
+/// side panel tabs, the palette) to the window's page, as Electron main sees them before any
+/// frame does; the page decides what they mean. Nothing else leaves the frame.
+const FRAME_CHORDS_SCRIPT: &str = r#"(() => {
+  if (window.top === window) return;
+  window.addEventListener("keydown", (event) => {
+    if (!(event.metaKey || event.ctrlKey || event.altKey) || event.isComposing) return;
+    window.parent.postMessage({
+      type: "pi-gui:frame-chord",
+      key: event.key, code: event.code, repeat: event.repeat,
+      metaKey: event.metaKey, ctrlKey: event.ctrlKey,
+      altKey: event.altKey, shiftKey: event.shiftKey,
+    }, "*");
+  }, true);
+})();"#;
 
 /// The app's own pages: `tauri://localhost` on Linux and macOS, `http://tauri.localhost` on
 /// Windows.
@@ -27,13 +48,38 @@ fn is_app_url(url: &Url) -> bool {
     }
 }
 
+/// An extension view frame, under the scheme or where Windows serves it.
+fn is_extension_url(url: &Url) -> bool {
+    url.scheme() == EXTENSION_SCHEME
+        || (cfg!(windows)
+            && matches!(url.scheme(), "http" | "https")
+            && url.host_str() == Some(WEBVIEW_EXTENSION_HOST))
+}
+
+/// `pi-extension://<connectionId>/<path>` as Windows serves it.
+#[cfg(windows)]
+pub fn webview_frame_url(frame_url: &str) -> Option<String> {
+    let rest = frame_url.strip_prefix(&format!("{EXTENSION_SCHEME}://"))?;
+    Some(format!("http://{WEBVIEW_EXTENSION_HOST}/{rest}"))
+}
+
+/// The `pi-extension:` URL a scheme request is for: on Windows the connection id comes first
+/// in the path.
+pub fn extension_asset_url(request_url: &str) -> String {
+    let served = format!("http://{WEBVIEW_EXTENSION_HOST}/");
+    match request_url.strip_prefix(&served) {
+        Some(rest) if cfg!(windows) => format!("{EXTENSION_SCHEME}://{rest}"),
+        _ => request_url.to_owned(),
+    }
+}
+
 /// What a webview may navigate to. WebKitGTK asks for frames too, so extension views (and
 /// blank frames) are allowed; everything else stays out of the app. Web links reach the
 /// browser through `openExternal` or a new-window request, never a navigation, so a frame
 /// cannot open one on its own.
 pub fn allows_navigation(url: &Url) -> bool {
     is_app_url(url)
-        || url.scheme() == EXTENSION_SCHEME
+        || is_extension_url(url)
         || matches!(url.as_str(), "about:blank" | "about:srcdoc")
 }
 
@@ -47,15 +93,23 @@ fn open_external_web_url(app: &AppHandle, url: &Url) {
     }
 }
 
-/// Electron's `createWindow`: the same size limits, hidden in background test mode.
-pub fn create(app: &AppHandle, window: WindowId, visible: bool) -> tauri::Result<()> {
+/// Electron's `createWindow`: the same size limits, hidden in background test mode, and the
+/// theme's colour behind the page from the start.
+pub fn create(
+    app: &AppHandle,
+    window: WindowId,
+    visible: bool,
+    background: Color,
+) -> tauri::Result<()> {
     let links = app.clone();
     let builder =
         WebviewWindowBuilder::new(app, label(window), WebviewUrl::App("index.html".into()))
             .title("pi")
             .inner_size(1480.0, 980.0)
             .min_inner_size(560.0, 600.0)
+            .background_color(background)
             .visible(visible)
+            .initialization_script_for_all_frames(FRAME_CHORDS_SCRIPT)
             .on_navigation(allows_navigation)
             .on_new_window(move |url, _features| {
                 if !is_app_url(&url) {
@@ -154,6 +208,7 @@ pub fn on_window_event(window: &tauri::Window, event: &WindowEvent) {
         WindowEvent::DragDrop(DragDropEvent::Drop { paths, .. }) => {
             app.state::<DroppedPaths>().set(id, paths);
         }
+        WindowEvent::ThemeChanged(_) => handle.send(KernelMsg::ThemeChanged(id)),
         _ => {}
     }
 }
@@ -175,5 +230,23 @@ mod tests {
         assert!(!allows_navigation(&url("https://example.com/")));
         assert!(!allows_navigation(&url("file:///etc/passwd")));
         assert!(!allows_navigation(&url("tauri://elsewhere/")));
+        assert_eq!(
+            allows_navigation(&url("http://pi-extension.localhost/abc/")),
+            cfg!(windows)
+        );
+    }
+
+    #[test]
+    fn extension_requests_name_their_connection() {
+        assert_eq!(
+            extension_asset_url("pi-extension://abc/app.js"),
+            "pi-extension://abc/app.js"
+        );
+        let served = extension_asset_url("http://pi-extension.localhost/abc/app.js");
+        if cfg!(windows) {
+            assert_eq!(served, "pi-extension://abc/app.js");
+        } else {
+            assert_eq!(served, "http://pi-extension.localhost/abc/app.js");
+        }
     }
 }

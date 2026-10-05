@@ -122,6 +122,11 @@ pub trait Shell {
     fn read_clipboard_image(&self) -> Value;
     /// Theme mode, preset and transparency, for native window chrome.
     fn set_appearance(&self, appearance: Value);
+    /// Whether the OS appearance is dark, which the "system" theme mode follows
+    /// (`nativeTheme.shouldUseDarkColors`).
+    fn system_theme_dark(&self) -> bool {
+        false
+    }
     /// Where a window loads an extension view's frame. The pi host names it with the
     /// `pi-extension://<connectionId>/` scheme, which a shell serves as is unless its web view
     /// cannot load custom schemes.

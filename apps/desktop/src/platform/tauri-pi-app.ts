@@ -1,6 +1,14 @@
 import { Channel, invoke, isTauri } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { SUPPORTED_COMPOSER_IMAGE_TYPES } from "../../contracts/composer-attachments";
+import {
+  desktopIpc,
+  getDesktopCommandFromShortcut,
+  getSidePanelTabCommand,
+  isCloseFocusedSurfaceShortcut,
+  isSinglePressCommand,
+  platformShortcutModifier,
+} from "../../contracts/ipc";
 import { recordFilePath } from "./file-paths";
 import {
   createPiAppBridge,
@@ -8,12 +16,14 @@ import {
   settleKernelAnswer,
   type KernelAnswer,
 } from "./pi-app-api";
+import { showTextPrompt, TEXT_PROMPT_CHANNEL, type TextPromptRequest } from "./tauri-dialogs";
 
 /**
  * `window.piApp` in the Tauri app, standing in for the Electron preload. Calls go to the
  * in-process kernel through the `pi_invoke` command with the test host's contract, and the
  * window's pushes arrive on one channel. It also does what Electron main did for the page:
- * file drops become DOM drops with known paths, and the window's own shortcuts reach the shell.
+ * file drops become DOM drops with known paths, the window's own shortcuts reach the shell, chords
+ * pressed inside extension view frames reach the page, and sign-in text prompts show here.
  */
 
 interface Bootstrap {
@@ -52,10 +62,19 @@ export async function installTauriPiApp(): Promise<void> {
   );
   window.piApp = bridge.api;
   const pushes = new Channel<PushMessage>((message) => {
+    if (message.channel === TEXT_PROMPT_CHANNEL) {
+      showTextPrompt(message.payload as TextPromptRequest, (id, value) => {
+        void invoke("pi_prompt_answer", { id, value }).catch((error: unknown) => {
+          console.error("[piApp] answering the text prompt failed", error);
+        });
+      });
+      return;
+    }
     bridge.deliver(message.channel, message.payload);
   });
   await invoke("pi_connect", { channel: pushes });
   installWindowShortcuts(boot.platform);
+  installFrameChords(boot.platform, (command) => bridge.deliver(desktopIpc.appCommand, command));
   await installFileDrops();
 }
 
@@ -85,6 +104,82 @@ function installWindowShortcuts(platform: NodeJS.Platform): void {
     },
     true,
   );
+}
+
+interface FrameChord {
+  readonly type: "pi-gui:frame-chord";
+  readonly key: string;
+  readonly code: string;
+  readonly repeat: boolean;
+  readonly metaKey: boolean;
+  readonly ctrlKey: boolean;
+  readonly altKey: boolean;
+  readonly shiftKey: boolean;
+}
+
+function isFrameChord(data: unknown): data is FrameChord {
+  if (typeof data !== "object" || data === null) return false;
+  const chord = data as Record<string, unknown>;
+  return (
+    chord.type === "pi-gui:frame-chord" &&
+    typeof chord.key === "string" &&
+    typeof chord.code === "string" &&
+    ["repeat", "metaKey", "ctrlKey", "altKey", "shiftKey"].every(
+      (name) => typeof chord[name] === "boolean",
+    )
+  );
+}
+
+/** Whether a message came from one of this page's own frames. */
+function fromChildFrame(source: MessageEventSource | null): boolean {
+  if (!source) return false;
+  return Array.from(document.querySelectorAll("iframe")).some(
+    (frame) => frame.contentWindow === source,
+  );
+}
+
+/**
+ * Electron main sees every key before any frame, so the app's chords work while an extension
+ * view has focus. Here a script in each frame (`FRAME_CHORDS_SCRIPT` in the shell) posts its
+ * chords to this page, which treats them as main did: Mod+W asks the shell, which closes the
+ * focused side panel tool; tab chords and app shortcuts become app commands.
+ */
+function installFrameChords(
+  platform: NodeJS.Platform,
+  dispatch: (command: string) => void,
+): void {
+  window.addEventListener("message", (event) => {
+    if (!isFrameChord(event.data) || !fromChildFrame(event.source)) return;
+    const chord = event.data;
+    const input = {
+      meta: chord.metaKey,
+      control: chord.ctrlKey,
+      alt: chord.altKey,
+      shift: chord.shiftKey,
+      key: chord.key,
+      code: chord.code,
+    };
+    if (isCloseFocusedSurfaceShortcut({ ...input, platform })) {
+      void invoke("pi_window_command", { command: "closeShortcut" }).catch((error: unknown) => {
+        console.error("[piApp] closeShortcut failed", error);
+      });
+      return;
+    }
+    const sidePanelTabCommand = getSidePanelTabCommand(platform, input);
+    if (sidePanelTabCommand) {
+      if (!chord.repeat) dispatch(sidePanelTabCommand);
+      return;
+    }
+    const command = getDesktopCommandFromShortcut({
+      modifier: platformShortcutModifier(platform, input),
+      alt: chord.altKey,
+      shift: chord.shiftKey,
+      key: chord.key,
+      code: chord.code,
+    });
+    // Holding a palette chord would open and close it at the repeat rate.
+    if (command && !(isSinglePressCommand(command) && chord.repeat)) dispatch(command);
+  });
 }
 
 const IMAGE_TYPE_BY_EXTENSION = new Map<string, string>(

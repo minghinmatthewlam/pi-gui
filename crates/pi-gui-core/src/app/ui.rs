@@ -185,8 +185,20 @@ pub fn register(table: &mut MethodTable) {
 pub fn resolved_theme(kernel: &Kernel) -> &'static str {
     match kernel.data.borrow().ui.theme_mode {
         ThemeMode::Dark => "dark",
-        ThemeMode::Light | ThemeMode::System => "light",
+        ThemeMode::Light => "light",
+        ThemeMode::System if kernel.shell().system_theme_dark() => "dark",
+        ThemeMode::System => "light",
     }
+}
+
+/// `nativeTheme`'s `updated`: the OS appearance changed, so every window hears the resolved
+/// theme again.
+pub fn system_theme_changed(kernel: &Kernel) {
+    publish::broadcast(
+        kernel,
+        super::methods::push::THEME_CHANGED,
+        &resolved_theme(kernel),
+    );
 }
 
 /// `ThemeManager.setMode`: tells every window the resolved theme.

@@ -11,6 +11,7 @@ use tauri::{AppHandle, Manager};
 const NEW_THREAD: &str = "new-thread";
 const NEW_WINDOW: &str = "new-window";
 const OPEN_FOLDER: &str = "open-folder";
+const CLOSE: &str = "close";
 const RELOAD: &str = "reload";
 const QUIT: &str = "quit";
 
@@ -52,7 +53,13 @@ pub fn install(app: &AppHandle) -> tauri::Result<()> {
                 .build(app)?,
         )
         .separator()
-        .item(&PredefinedMenuItem::close_window(app, None)?)
+        // Our own item: Cmd+W closes the focused side panel tool or terminal first, as
+        // Electron main's `before-input-event` does.
+        .item(
+            &MenuItemBuilder::with_id(CLOSE, "Close Window")
+                .accelerator("Cmd+W")
+                .build(app)?,
+        )
         .build()?;
     let edit_menu = SubmenuBuilder::new(app, "Edit")
         .undo()
@@ -72,8 +79,6 @@ pub fn install(app: &AppHandle) -> tauri::Result<()> {
     let window_menu = SubmenuBuilder::new(app, "Window")
         .minimize()
         .maximize()
-        .separator()
-        .close_window()
         .build()?;
     let menu = MenuBuilder::new(app)
         .items(&[&app_menu, &file_menu, &edit_menu, &view_menu, &window_menu])
@@ -114,6 +119,14 @@ pub fn on_menu_event(app: &AppHandle, event: &MenuEvent) {
         OPEN_FOLDER => {
             if let Some(window) = focused_id {
                 handle.send(KernelMsg::OpenFolder(window));
+            }
+        }
+        CLOSE => {
+            if let Some(window) = focused_id {
+                handle.send(KernelMsg::CloseShortcut {
+                    window,
+                    close_window: true,
+                });
             }
         }
         RELOAD => {

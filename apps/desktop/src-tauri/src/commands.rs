@@ -94,7 +94,9 @@ pub async fn pi_invoke(
     Ok(Response::new(InvokeResponseBody::Json(answer)))
 }
 
-/// What Electron main does for its own shortcuts: `newWindow` and `openFolder`.
+/// What Electron main does for its own shortcuts: `newWindow`, `openFolder`, and
+/// `closeShortcut` (Mod+W pressed in an extension view's frame, which closes the side panel
+/// tool when it has focus).
 #[tauri::command]
 pub fn pi_window_command(
     webview: Webview,
@@ -107,8 +109,25 @@ pub fn pi_window_command(
             source: Some(window),
         }),
         "openFolder" => handle.send(KernelMsg::OpenFolder(window)),
+        "closeShortcut" => handle.send(KernelMsg::CloseShortcut {
+            window,
+            close_window: false,
+        }),
         other => return Err(format!("Unknown window command: {other}")),
     }
+    Ok(())
+}
+
+/// The page's answer to its text prompt: the text, or `null` for Cancel.
+#[tauri::command]
+pub fn pi_prompt_answer(
+    webview: Webview,
+    handle: State<'_, KernelHandle>,
+    id: u64,
+    value: Option<String>,
+) -> Result<(), String> {
+    let window = sender(&webview)?;
+    handle.send(KernelMsg::PromptAnswer { window, id, value });
     Ok(())
 }
 

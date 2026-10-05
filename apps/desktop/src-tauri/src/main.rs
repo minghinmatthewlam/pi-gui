@@ -12,6 +12,7 @@ mod commands;
 mod kernel;
 mod menu;
 mod shell;
+mod theme;
 mod windows;
 
 use kernel::{KernelHandle, KernelMsg, Launch};
@@ -76,11 +77,12 @@ fn main() {
             commands::pi_invoke,
             commands::pi_window_command,
             commands::pi_dropped_file,
+            commands::pi_prompt_answer,
         ])
         .register_asynchronous_uri_scheme_protocol(
             windows::EXTENSION_SCHEME,
             |context, request, responder| {
-                let url = request.uri().to_string();
+                let url = windows::extension_asset_url(&request.uri().to_string());
                 context
                     .app_handle()
                     .state::<KernelHandle>()

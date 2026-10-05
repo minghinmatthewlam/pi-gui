@@ -20,6 +20,7 @@ tauri-build = { version = "2.7", features = [] }
 [dependencies]
 base64 = "0.22"
 indexmap = "2"
+notify-rust = "4"
 pi-gui-core = { path = "../../../crates/pi-gui-core" }
 png = "0.17"
 serde = { version = "1", features = ["derive"] }
