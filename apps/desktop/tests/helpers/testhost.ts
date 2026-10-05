@@ -12,10 +12,16 @@ import {
   type IpcInvokeControlSnapshot,
   type PiDriverCallRecord,
   type PiDriverControl,
+  type RuntimeToolTestInput,
+  type RuntimeToolTestResult,
   type TextPromptOutcome,
 } from "./desktop-harness";
-import type { ThemePresetId } from "../../contracts/desktop-state";
+import type { DesktopAppState, ThemePresetId } from "../../contracts/desktop-state";
 import { windowBackgroundFor, type ResolvedTheme } from "../../contracts/theme";
+import {
+  createScheduledTaskRuntimeTools,
+  type ScheduledTaskRuntimeBridge,
+} from "../../electron/scheduled-tasks/scheduled-task-runtime";
 import { isProviderAuthEnvVar, seedAgentDir } from "./electron-app";
 
 /**
@@ -42,6 +48,7 @@ export interface TestHostLaunchOptions {
   readonly agentDir?: string;
   readonly enabledModels?: readonly string[];
   readonly envOverrides?: Readonly<Record<string, string | undefined>>;
+  readonly notificationLogPath?: string;
 }
 
 /** The test host's `test.*` calls. */
@@ -109,6 +116,9 @@ function launchEnv(userDataDir: string, agentDir: string, options: TestHostLaunc
     PI_APP_INITIAL_WORKSPACES: (options.initialWorkspaces ?? []).join(delimiter),
     PI_APP_TEST_MODE: options.testMode ?? process.env.PI_APP_TEST_MODE ?? "background",
     PI_CODING_AGENT_DIR: agentDir,
+    ...(options.notificationLogPath
+      ? { PI_APP_NOTIFICATION_LOG_PATH: options.notificationLogPath }
+      : {}),
   });
   for (const [key, value] of Object.entries(options.envOverrides ?? {})) {
     if (value === undefined) delete env[key];
@@ -229,8 +239,9 @@ export async function launchTestHost(
     let first: Promise<Page> | undefined;
     const firstWindow = () => (first ??= openWindow());
     const pageOf = async (window?: Page) => window ?? (await firstWindow());
+    const windowOf = async (window?: Page) => windowIdOf(await pageOf(window));
     const focus = async (window?: Page) => {
-      await control.call("focusWindow", { window: await windowIdOf(await pageOf(window)) });
+      await control.call("focusWindow", { window: await windowOf(window) });
     };
     // The shell's log is drained by each read, so it is kept here.
     const shellLog: { kind: string; url?: string }[] = [];
@@ -276,7 +287,9 @@ export async function launchTestHost(
           await control.call("quit");
         },
         activate: () => focus(),
-        secondInstance: unsupported("A second app instance"),
+        secondInstance: async () => {
+          await control.call("secondInstance");
+        },
         isReady: () => Promise.resolve(!exitedNow),
         hasSingleInstanceLock: unsupported("The single-instance lock"),
         env: (name) => Promise.resolve(env[name]),
@@ -293,7 +306,7 @@ export async function launchTestHost(
         waitForNew: unsupported("A window the app opens itself"),
         state: async (window) => {
           const state = await control.call<WindowStateReport | null>("windowState", {
-            window: await windowIdOf(await pageOf(window)),
+            window: await windowOf(window),
           });
           if (!state) return undefined;
           return {
@@ -313,9 +326,13 @@ export async function launchTestHost(
             if (!exitedNow) throw error;
           });
         },
-        show: (window) => focus(window),
+        show: async (window) => {
+          await control.call("showWindow", { window: await windowOf(window) });
+        },
         focus,
-        minimize: unsupported("Minimizing a window"),
+        minimize: async (window) => {
+          await control.call("minimizeWindow", { window: await windowOf(window) });
+        },
         emitFocus: async (window) => {
           if (window !== "all") return focus(window);
           for (const page of pages) await focus(page);
@@ -332,7 +349,32 @@ export async function launchTestHost(
         },
         crashRenderer: unsupported("Crashing a renderer"),
       },
-      keyboard: { send: unsupported("Native key events") },
+      keyboard: {
+        // The host routes the key as main's before-input-event would; a key main leaves
+        // alone reaches the page as a real key press.
+        send: async (event, window) => {
+          const page = await pageOf(window);
+          const modifiers = event.modifiers ?? [];
+          const { route } = await control.call<{ route: "newWindow" | "page" }>("keyboard", {
+            window: await windowIdOf(page),
+            keyCode: event.keyCode,
+            modifiers,
+          });
+          if (route === "newWindow") {
+            await openWindow();
+            return;
+          }
+          const names: Record<string, string> = {
+            shift: "Shift",
+            control: "Control",
+            alt: "Alt",
+            meta: "Meta",
+          };
+          const chord = [...modifiers.flatMap((modifier) => names[modifier] ?? []), event.keyCode];
+          if (event.type === "keyUp") await page.keyboard.up(chord.join("+"));
+          else await page.keyboard.press(chord.join("+"));
+        },
+      },
       clipboard: {
         writeText: unsupported("The clipboard"),
         writeImage: unsupported("The clipboard"),
@@ -354,8 +396,13 @@ export async function launchTestHost(
             paths: result.canceled ? null : result.filePaths,
           });
         },
-        holdNextOpenDialog: unsupported("Holding an open dialog"),
-        releaseHeldOpenDialog: unsupported("Holding an open dialog"),
+        holdNextOpenDialog: async (filePaths) => {
+          openDialogsBefore = await openDialogs();
+          await control.call("holdOpenDialog", { paths: filePaths });
+        },
+        releaseHeldOpenDialog: async () => {
+          await control.call("releaseOpenDialog");
+        },
         openDialogCount: async () => (await openDialogs()) - openDialogsBefore,
         beginTextPrompt: async (message, placeholder) => {
           const { prompt, outcome } = await control.call<{ prompt: number; outcome: number }>(
@@ -394,9 +441,10 @@ function testHostHooks(
     emitSessionEvents: async (events) => {
       for (const event of events) await control.call("emitSessionEvent", { event });
     },
-    fireDueScheduledTasks: unsupported("Firing scheduled tasks"),
+    fireDueScheduledTasks: (nowIso) =>
+      control.call<DesktopAppState>("fireDueScheduledTasks", nowIso ? { nowIso } : {}),
     runOrchestrationRuntimeTool: unsupported("The orchestration runtime tool"),
-    runScheduledTaskRuntimeTool: unsupported("The scheduled-task runtime tool"),
+    runScheduledTaskRuntimeTool: (input) => runScheduledTaskTool(control, input),
     handleWindowActivation: () => focus(),
     setSessionVisibility: async (mode) => {
       await control.call("setSessionVisibility", { value: mode });
@@ -407,6 +455,42 @@ function testHostHooks(
     rejectDeferredThreadTitle: unsupported("Deferring thread titles"),
     piHostPid: () => control.call<number | undefined>("piHostPid"),
   };
+}
+
+/**
+ * Runs the scheduled-task tool definitions here, as the pi host does, with their bodies called
+ * through the kernel's `app.tool`, as the host calls them.
+ */
+async function runScheduledTaskTool(
+  control: TestHostControl,
+  input: RuntimeToolTestInput,
+): Promise<RuntimeToolTestResult> {
+  const call =
+    (tool: string) =>
+    (_ctx: unknown, toolInput?: unknown): Promise<never> =>
+      control.call("tool", {
+        tool,
+        sessionRef: input.sessionRef,
+        ...(toolInput === undefined ? {} : { input: toolInput }),
+      });
+  const bridge: ScheduledTaskRuntimeBridge = {
+    createScheduledTask: call("scheduled.createScheduledTask"),
+    listScheduledTasks: call("scheduled.listScheduledTasks"),
+    updateScheduledTask: call("scheduled.updateScheduledTask"),
+  };
+  const tool = createScheduledTaskRuntimeTools(bridge, () => input.sessionRef.workspaceId).find(
+    (entry) => entry.name === input.toolName,
+  );
+  if (!tool) {
+    throw new Error(`Unknown scheduled-task runtime tool: ${input.toolName}`);
+  }
+  return (await tool.execute(
+    input.toolCallId ?? `test-${input.toolName}`,
+    input.params,
+    undefined,
+    undefined,
+    {} as Parameters<typeof tool.execute>[4],
+  )) as RuntimeToolTestResult;
 }
 
 interface HeldCall {

@@ -14,12 +14,13 @@ use futures_util::{SinkExt, StreamExt};
 use pi_gui_core::app::dispatch::{self, InvokeCall, Reply};
 use pi_gui_core::app::methods::{self, push};
 use pi_gui_core::app::pi::InterceptOutcome;
+use pi_gui_core::app::publish::ViewState;
 use pi_gui_core::app::settings::login::prompt_for_text;
 use pi_gui_core::app::shell::{Push, Shell};
 use pi_gui_core::app::test_hooks::{ControlMode, ControlOptions};
-use pi_gui_core::app::{events, publish, ui, WindowId};
+use pi_gui_core::app::{events, notifications, publish, scheduled, ui, WindowId};
 use pi_gui_core::error::{CoreError, CoreResult};
-use pi_gui_core::state::driver::{session_key, SessionDriverEvent};
+use pi_gui_core::state::driver::{session_key, SessionDriverEvent, SessionRef};
 use serde_json::{json, Value};
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
@@ -43,6 +44,8 @@ pub struct Windows {
     senders: Rc<RefCell<HashMap<WindowId, Out>>>,
     /// Windows whose page closed, waiting out the grace period.
     detached: RefCell<HashMap<WindowId, AbortHandle>>,
+    /// The view the next new window starts on, as main's `createAppWindow(sourceView)`.
+    source_view: RefCell<Option<ViewState>>,
 }
 
 fn push_message(push: &Push) -> String {
@@ -145,7 +148,8 @@ fn attach_window(app: &Rc<App>, out: &Out, requested: Option<u64>) -> WindowId {
             }
         }),
     );
-    app.kernel.windows.add(&app.kernel, window, None);
+    let source_view = app.windows.source_view.borrow_mut().take();
+    app.kernel.windows.add(&app.kernel, window, source_view);
     if app.shell.focused_window() == Some(window) {
         focus(app, window);
     }
@@ -157,6 +161,7 @@ fn detach_window(app: &Rc<App>, window: WindowId) {
         // Closed through `test.closeWindow`, already gone.
         return;
     }
+    app.kernel.windows.renderer_gone(window);
     let weak = Rc::downgrade(app);
     let timer = tokio::task::spawn_local(async move {
         tokio::time::sleep(RELOAD_GRACE).await;
@@ -165,7 +170,7 @@ fn detach_window(app: &Rc<App>, window: WindowId) {
         };
         app.windows.detached.borrow_mut().remove(&window);
         app.shell.remove_window(window);
-        app.kernel.windows.remove(&app.kernel, window);
+        app.kernel.windows.closed(&app.kernel, window);
     });
     app.windows
         .detached
@@ -392,6 +397,95 @@ async fn test_call(app: &Rc<App>, name: &str, params: Value) -> CoreResult<Reply
             ));
         }
         "closeWindow" => close_window(app, window_param(&params)?).await,
+        "showWindow" => {
+            let window = window_param(&params)?;
+            app.shell.show(window);
+            focus(app, window);
+        }
+        "minimizeWindow" => app.shell.minimize(window_param(&params)?),
+        // Main's `second-instance`: the foreground window is restored, shown and focused.
+        "secondInstance" => {
+            if let Some(window) = app.kernel.windows.foreground(&app.kernel) {
+                app.shell.show_window(window);
+                focus(app, window);
+            }
+        }
+        // A key main sees before the page: Shift+Mod+N opens a window on the sender's view
+        // (the page the spec opens next); any other key goes on to the page.
+        "keyboard" => {
+            let window = window_param(&params)?;
+            let modifiers: Vec<&str> = params["modifiers"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+                .collect();
+            let platform_modifier = if cfg!(target_os = "macos") {
+                "meta"
+            } else {
+                "control"
+            };
+            let key = text_param(&params, "keyCode")?.to_lowercase();
+            if modifiers.contains(&platform_modifier) && modifiers.contains(&"shift") && key == "n"
+            {
+                let view = app.kernel.windows.view_for_window(&app.kernel, window);
+                *app.windows.source_view.borrow_mut() = Some(view);
+                return Ok(Reply::Value(json!({ "route": "newWindow" })));
+            }
+            return Ok(Reply::Value(json!({ "route": "page" })));
+        }
+        "holdOpenDialog" => app.shell.hold_open_dialog(
+            params["paths"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+                .map(Into::into)
+                .collect(),
+        ),
+        "releaseOpenDialog" => app.shell.release_held_open_dialog()?,
+        "fireDueScheduledTasks" => {
+            app.kernel.initialize().await;
+            let now = match params["nowIso"].as_str() {
+                Some(iso) => app.kernel.env().date_parse(iso),
+                None => app.kernel.env().now_ms(),
+            };
+            return scheduled::fire_due_scheduled_tasks(&app.kernel, now)
+                .await
+                .map(Reply::from);
+        }
+        // A pi-gui tool body, called as the pi host calls it from a tool running in the thread.
+        "tool" => {
+            app.kernel.initialize().await;
+            let session_ref: SessionRef = serde_json::from_value(params["sessionRef"].clone())
+                .map_err(|error| CoreError::new(format!("Invalid sessionRef: {error}")))?;
+            let cwd = app
+                .kernel
+                .data
+                .borrow()
+                .workspace_ref(&session_ref.workspace_id)
+                .map(|workspace| workspace.path)
+                .ok_or_else(|| CoreError::new("Workspace not found"))?;
+            let mut call = json!({
+                "tool": text_param(&params, "tool")?,
+                "caller": { "cwd": cwd, "sessionId": session_ref.session_id },
+            });
+            if let Some(input) = params.get("input") {
+                call["input"] = input.clone();
+            }
+            let result = app
+                .kernel
+                .host_calls()
+                .call("app.tool".into(), call)
+                .await?;
+            return Ok(Reply::Value(result));
+        }
+        // A click on the thread's desktop notification.
+        "clickNotification" => {
+            let session_ref: SessionRef = serde_json::from_value(params["sessionRef"].clone())
+                .map_err(|error| CoreError::new(format!("Invalid sessionRef: {error}")))?;
+            notifications::open_session(&app.kernel, &session_ref).await?;
+        }
         "piHostPid" => return Ok(dispatch::value(app.driver.pid())),
         "quit" => app.quit.notify_one(),
         _ => return Err(CoreError::new(format!("Unknown test call: test.{name}"))),
