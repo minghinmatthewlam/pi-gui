@@ -54,7 +54,7 @@ test("the Rust kernel names every preload method by the channel the preload call
     desktopIpc.pendingComposerDraftFlushed,
   );
   expect(rust.get("setTerminalFocused")?.kind).toBe("Send");
-  expect(rust.get("readClipboardImage")?.kind).toBe("Sync");
+  expect(rust.get("readClipboardImage")?.kind).toBe("Checked");
 });
 
 test("the Rust kernel pushes on the desktopIpc channels", async () => {

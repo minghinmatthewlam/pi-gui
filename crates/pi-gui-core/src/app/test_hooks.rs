@@ -189,7 +189,7 @@ impl TestControls {
 }
 
 fn is_invoked(kind: Kind) -> bool {
-    !matches!(kind, Kind::Send | Kind::Sync)
+    kind != Kind::Send
 }
 
 fn not_installed(channel: &str) -> CoreError {

@@ -23,8 +23,6 @@ pub enum Kind {
     Read,
     /// `ipcRenderer.send`: no answer.
     Send,
-    /// `ipcRenderer.sendSync`.
-    Sync,
 }
 
 /// One renderer method.
@@ -312,7 +310,7 @@ pub const METHODS: &[Method] = &[
         "pi-gui:pick-composer-attachments",
         Queued,
     ),
-    m("readClipboardImage", "pi-gui:read-clipboard-image", Sync),
+    m("readClipboardImage", "pi-gui:read-clipboard-image", Checked),
     m(
         "addComposerAttachments",
         "pi-gui:add-composer-attachments",

@@ -4,7 +4,6 @@ import {
   type PiDesktopApi,
   type PiDesktopCommand,
 } from "../../contracts/ipc";
-import type { ClipboardImageRead } from "../../contracts/composer-attachments";
 
 /**
  * `window.piApp` over the Rust test host's WebSocket, for a page opened with
@@ -272,8 +271,7 @@ export function installTestHostTransport(url: string): Promise<void> {
         desktopIpc.notificationPermissionStatusChanged,
       ),
       pickComposerAttachments: invoke("pickComposerAttachments"),
-      // A synchronous call cannot cross the socket; the test host has no clipboard image.
-      readClipboardImage: (): ClipboardImageRead => ({ ok: false }),
+      readClipboardImage: invoke("readClipboardImage"),
       addComposerAttachments: invoke("addComposerAttachments"),
       removeComposerAttachment: invoke("removeComposerAttachment"),
       editQueuedComposerMessage: invoke("editQueuedComposerMessage"),
