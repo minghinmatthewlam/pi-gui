@@ -424,14 +424,13 @@ function testHostDriver(control: TestHostControl): PiDriverControl {
 function testHostIpc(control: TestHostControl): DesktopIpcControl {
   return {
     control: async (channel, options) => {
-      if (options.mode === "hold" || options.delayMs !== undefined || options.queue) {
-        throw new Error("Holding, delaying or queueing requests is not available on the test host");
-      }
       await control.call("invokeControl.install", {
         channel,
         mode: options.mode,
         sentinel: options.sentinel ?? HYDRATE_TEST_SENTINEL,
         ...(options.replacement === undefined ? {} : { replacement: options.replacement }),
+        ...(options.delayMs === undefined ? {} : { delayMs: options.delayMs }),
+        ...(options.queue === undefined ? {} : { queue: options.queue }),
       });
     },
     update: async (channel, patch) => {
@@ -439,10 +438,13 @@ function testHostIpc(control: TestHostControl): DesktopIpcControl {
     },
     read: (channel) => control.call<IpcInvokeControlSnapshot>("invokeControl.read", { channel }),
     release: async (channel) => {
-      await control.call("invokeControl.set", { channel, mode: "passthrough" });
+      await control.call("invokeControl.release", { channel });
     },
-    // Nothing is ever held, so every request has finished once it has answered.
-    settled: () => Promise.resolve(),
-    invokeTogether: unsupported("Batched IPC requests"),
+    settled: async (channel) => {
+      await control.call("invokeControl.settled", { channel });
+    },
+    invokeTogether: async (requests) => {
+      await control.call("invokeTogether", { requests });
+    },
   };
 }

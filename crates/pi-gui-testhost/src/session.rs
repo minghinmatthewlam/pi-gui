@@ -15,7 +15,7 @@ use pi_gui_core::app::dispatch::{self, InvokeCall, Reply};
 use pi_gui_core::app::methods::{self, push};
 use pi_gui_core::app::pi::InterceptOutcome;
 use pi_gui_core::app::shell::{Push, Shell};
-use pi_gui_core::app::test_hooks::ControlMode;
+use pi_gui_core::app::test_hooks::{ControlMode, ControlOptions};
 use pi_gui_core::app::{events, publish, WindowId};
 use pi_gui_core::error::{CoreError, CoreResult};
 use pi_gui_core::state::driver::{session_key, SessionDriverEvent};
@@ -279,10 +279,22 @@ async fn test_call(app: &Rc<App>, name: &str, params: Value) -> CoreResult<Reply
         }
         "invokeControl.install" => app.kernel.test.install(
             &text_param(&params, "channel")?,
-            ControlMode::parse(&text_param(&params, "mode")?)?,
-            params["sentinel"].as_str().map(str::to_owned),
-            params.get("replacement").cloned(),
+            ControlOptions {
+                mode: ControlMode::parse(&text_param(&params, "mode")?)?,
+                sentinel: params["sentinel"].as_str().map(str::to_owned),
+                replacement: params.get("replacement").cloned(),
+                delay_ms: params["delayMs"].as_u64(),
+                queue: params["queue"].as_str().map(str::to_owned),
+            },
         )?,
+        "invokeControl.release" => app.kernel.test.release(&text_param(&params, "channel")?)?,
+        "invokeControl.settled" => {
+            app.kernel
+                .test
+                .settled(&text_param(&params, "channel")?)
+                .await?
+        }
+        "invokeTogether" => invoke_together(app, &params).await?,
         "invokeControl.set" => app.kernel.test.set(
             &text_param(&params, "channel")?,
             params["mode"]
@@ -328,6 +340,39 @@ async fn test_call(app: &Rc<App>, name: &str, params: Value) -> CoreResult<Reply
         _ => return Err(CoreError::new(format!("Unknown test call: test.{name}"))),
     }
     Ok(Reply::Undefined)
+}
+
+/// `harness.ipc.invokeTogether`: the requests reach the kernel from the first window in one
+/// turn, in order, and all of them are waited for.
+async fn invoke_together(app: &Rc<App>, params: &Value) -> CoreResult<()> {
+    let window = app
+        .kernel
+        .windows
+        .ids()
+        .into_iter()
+        .next()
+        .ok_or_else(|| CoreError::new("Expected a desktop window to send from"))?;
+    let calls = params["requests"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|request| {
+            let channel = request["channel"].as_str().unwrap_or_default();
+            let method = methods::by_channel(channel).ok_or_else(|| {
+                CoreError::new(format!("No IPC handler registered for {channel}"))
+            })?;
+            let call = InvokeCall {
+                window,
+                main_frame: true,
+                args: decode_args(request),
+            };
+            Ok(dispatch::invoke(&app.kernel, method.api, call))
+        })
+        .collect::<CoreResult<Vec<_>>>()?;
+    for result in pi_gui_core::app::futures_join_all(calls).await {
+        result?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]
