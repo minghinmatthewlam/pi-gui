@@ -12,7 +12,6 @@ import {
   type MenuItemConstructorOptions,
   type MessageBoxOptions,
 } from "electron";
-import { isValidHttpBaseUrl } from "@pi-gui/pi-sdk-driver";
 import { randomUUID } from "node:crypto";
 import type {
   AgentToolResult,
@@ -30,6 +29,7 @@ import { PendingComposerDraftFlusher } from "./windows/pending-draft-flush";
 import { TurnCheckpointClient } from "./workbench/checkpoint-client";
 import { RemoteExtensionViews, DESKTOP_EXTENSION_SCHEME } from "../pi-host/remote-extension-views";
 import { startPiHost, type PiHostProcess } from "../pi-host/launch";
+import { probeCustomProviderModels as probeModelsAt } from "../pi-host/custom-provider-probe";
 import { remoteCatalogStorage } from "../pi-host/remote-catalog";
 import { startCore, type CoreProcess } from "../core-process/launch";
 import { coreMethods } from "../core-process/protocol";
@@ -1706,53 +1706,8 @@ function escapeHtml(value: string): string {
     .replace(/'/g, "&#39;");
 }
 
-async function probeCustomProviderModels(
+function probeCustomProviderModels(
   input: CustomProviderProbeInput,
 ): Promise<CustomProviderProbeResult> {
-  const baseUrl = input.baseUrl?.trim();
-  if (!baseUrl || !isValidHttpBaseUrl(baseUrl)) {
-    return { ok: false, error: "Base URL must start with http:// or https://" };
-  }
-  const target = `${baseUrl.replace(/\/+$/, "")}/models`;
-  const apiKey = input.apiKey?.trim();
-  try {
-    const response = await net.fetch(target, {
-      method: "GET",
-      headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : undefined,
-      signal: AbortSignal.timeout(5000),
-    });
-    if (!response.ok) {
-      return { ok: false, error: `${response.status} ${response.statusText} from ${target}` };
-    }
-    const payload = (await response.json()) as unknown;
-    const data = (payload as { data?: unknown }).data;
-    if (!Array.isArray(data)) {
-      return { ok: false, error: `Response from ${target} is missing a "data" array` };
-    }
-    const models = data
-      .map((entry) => {
-        if (
-          entry &&
-          typeof entry === "object" &&
-          typeof (entry as { id?: unknown }).id === "string"
-        ) {
-          return (entry as { id: string }).id;
-        }
-        return undefined;
-      })
-      .filter((id): id is string => Boolean(id && id.length > 0));
-    return { ok: true, models };
-  } catch (error) {
-    return { ok: false, error: describeProbeError(error, target) };
-  }
-}
-
-function describeProbeError(error: unknown, target: string): string {
-  if (error instanceof Error && error.name === "TimeoutError") {
-    return `Timed out after 5s contacting ${target}`;
-  }
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return String(error);
+  return probeModelsAt(input, net.fetch);
 }

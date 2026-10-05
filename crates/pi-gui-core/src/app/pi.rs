@@ -108,6 +108,10 @@ pub trait LoginCallbacks {
     fn on_prompt(&self, prompt: Value) -> LocalFuture<CoreResult<Value>>;
     fn on_progress(&self, message: String) -> Option<LocalFuture<CoreResult<()>>>;
     fn on_manual_code(&self) -> Option<LocalFuture<CoreResult<Value>>>;
+    /// Whether `on_progress` answers; pi only reports progress to an app that listens.
+    fn has_progress(&self) -> bool;
+    /// Whether `on_manual_code` answers; pi only asks for a typed code when it does.
+    fn has_manual_code_input(&self) -> bool;
 }
 
 /// The app's answers to the host's own calls (`app.catalog`, `app.captureBoundary`, `app.tool`)
@@ -142,6 +146,9 @@ pub trait PiDriver {
         provider_id: &str,
         callbacks: Rc<dyn LoginCallbacks>,
     ) -> LocalFuture<CoreResult<Value>>;
+    /// `probeCustomProviderModels`: the model ids an OpenAI-compatible endpoint lists. The
+    /// host fetches them, as the app has no HTTP client of its own.
+    fn probe_custom_provider_models(&self, input: Value) -> LocalFuture<CoreResult<Value>>;
     /// Where the host config comes from; read before every call and pushed when it changed.
     fn set_config_source(&self, source: Box<dyn Fn() -> PiHostConfig>);
     /// Test hooks: holds calls to these methods until a test completes them.
@@ -582,8 +589,8 @@ impl PiDriver for HostPiDriver {
             "workspace": workspace,
             "providerId": provider_id,
             // The host asks for these only when the app can answer them.
-            "hasProgress": true,
-            "hasManualCodeInput": true,
+            "hasProgress": callbacks.has_progress(),
+            "hasManualCodeInput": callbacks.has_manual_code_input(),
         });
         self.logins.borrow_mut().insert(login_id.clone(), callbacks);
         let request = self.request("runtime.login", params);
@@ -595,6 +602,10 @@ impl PiDriver for HostPiDriver {
             }
             result
         })
+    }
+
+    fn probe_custom_provider_models(&self, input: Value) -> LocalFuture<CoreResult<Value>> {
+        self.request("host.probeCustomProviderModels", input)
     }
 
     fn set_config_source(&self, source: Box<dyn Fn() -> PiHostConfig>) {
