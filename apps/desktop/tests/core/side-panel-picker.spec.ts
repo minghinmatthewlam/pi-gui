@@ -65,13 +65,7 @@ test("one icon and keyboard shortcuts toggle the selected workspace tool", async
     await terminal.locator(".xterm").click();
     const modifier = process.platform === "darwin" ? "meta" : "control";
     const pressSidePanelShortcut = () =>
-      harness.electronApp.evaluate(({ BrowserWindow }, keyModifier) => {
-        BrowserWindow.getAllWindows()[0]?.webContents.sendInputEvent({
-          type: "keyDown",
-          keyCode: "b",
-          modifiers: [keyModifier, "alt"],
-        });
-      }, modifier);
+      harness.keyboard.send({ keyCode: "b", modifiers: [modifier, "alt"] });
     await pressSidePanelShortcut();
     await expect(window.getByTestId("workbench")).toHaveCount(0);
     await pressSidePanelShortcut();
@@ -82,13 +76,7 @@ test("one icon and keyboard shortcuts toggle the selected workspace tool", async
 
     // Cmd+R reaches Review from the terminal on macOS; Ctrl+R stays with the shell elsewhere.
     await terminal.locator(".xterm").click();
-    await harness.electronApp.evaluate(({ BrowserWindow }, keyModifier) => {
-      BrowserWindow.getAllWindows()[0]?.webContents.sendInputEvent({
-        type: "keyDown",
-        keyCode: "r",
-        modifiers: [keyModifier],
-      });
-    }, modifier);
+    await harness.keyboard.send({ keyCode: "r", modifiers: [modifier] });
     if (process.platform === "darwin") {
       await expect(window.locator(".diff-panel")).toBeVisible();
     } else {

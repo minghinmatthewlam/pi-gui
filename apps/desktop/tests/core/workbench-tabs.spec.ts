@@ -84,20 +84,14 @@ async function addTool(window: Page, name: ToolName): Promise<void> {
 }
 
 async function openSecondWindow(harness: DesktopHarness): Promise<Page> {
-  const existing = new Set(harness.electronApp.windows());
+  const existing = new Set(harness.windows.pages());
   // The app's native New Window shortcut is handled in before-input-event.
-  await harness.electronApp.evaluate(
-    ({ BrowserWindow }, modifier) => {
-      BrowserWindow.getAllWindows()[0]?.webContents.sendInputEvent({
-        type: "keyDown",
-        keyCode: "n",
-        modifiers: [modifier, "shift"],
-      });
-    },
-    process.platform === "darwin" ? "meta" : "control",
-  );
-  await expect.poll(() => harness.electronApp.windows().length).toBe(existing.size + 1);
-  const opened = harness.electronApp.windows().find((candidate) => !existing.has(candidate));
+  await harness.keyboard.send({
+    keyCode: "n",
+    modifiers: [process.platform === "darwin" ? "meta" : "control", "shift"],
+  });
+  await expect.poll(() => harness.windows.pages().length).toBe(existing.size + 1);
+  const opened = harness.windows.pages().find((candidate) => !existing.has(candidate));
   if (!opened) throw new Error("Expected New Window to create a second desktop window");
   await opened.waitForLoadState("domcontentloaded");
   return opened;
@@ -110,9 +104,7 @@ async function captureToolWidths(
   tool: ToolName,
 ): Promise<void> {
   for (const width of [1280, 1040]) {
-    await harness.electronApp.evaluate(({ BrowserWindow }, nextWidth) => {
-      BrowserWindow.getAllWindows()[0]?.setContentSize(nextWidth, 900);
-    }, width);
+    await harness.windows.setContentSize({ width, height: 900 });
     await expect.poll(() => window.evaluate(() => globalThis.window.innerWidth)).toBe(width);
     await expectActiveTool(window, tool);
     await expect(window.getByTestId("composer")).toBeVisible();
@@ -423,9 +415,7 @@ test("keeps one resizable width across tools, chooser, tasks, and restart", asyn
   };
   let harness = await launchDesktop(fixture.userDataDir, options);
   const setWindowWidth = async (width: number) => {
-    await harness.electronApp.evaluate(({ BrowserWindow }, nextWidth) => {
-      BrowserWindow.getAllWindows()[0]?.setContentSize(nextWidth, 900);
-    }, width);
+    await harness.windows.setContentSize({ width, height: 900 });
   };
   try {
     await setWindowWidth(1440);

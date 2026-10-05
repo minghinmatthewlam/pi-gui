@@ -765,9 +765,9 @@ export function registerDesktopIpc({
       );
     }),
   );
-  ipcMain.on(desktopIpc.readClipboardImage, (event) => {
+  ipcMain.handle(desktopIpc.readClipboardImage, (event) => {
     windows.windowForSender(event.sender);
-    event.returnValue = capabilities.readClipboardImage();
+    return capabilities.readClipboardImage();
   });
   ipcMain.handle(desktopIpc.addComposerAttachments, (event, rawAttachments: unknown) =>
     runCatchingLimits(event, () => {

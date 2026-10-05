@@ -2924,7 +2924,7 @@ export class DesktopAppStore {
     if (cancelled) unsubscribe();
   }
 
-  /** Test mode only: the app's side of the pi host pipe, so specs can stub a call. */
+  /** Test mode only: the app's side of the pi host pipe, so specs can hold a call. */
   piDriverForTests(): PiDriverPort {
     return this.driver;
   }

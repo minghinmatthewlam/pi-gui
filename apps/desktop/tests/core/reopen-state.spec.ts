@@ -136,14 +136,7 @@ test("reopens persisted folders and thread state while a saved running session k
         status: "running",
       });
 
-    await secondRun.electronApp.evaluate(({ BrowserWindow }) => {
-      const contents = BrowserWindow.getAllWindows()[0]?.webContents as
-        | {
-            forcefullyCrashRenderer?: () => void;
-          }
-        | undefined;
-      contents?.forcefullyCrashRenderer?.();
-    });
+    await secondRun.windows.crashRenderer();
 
     await emitTestSessionEvent(secondRun, {
       type: "assistantDelta",
@@ -152,7 +145,7 @@ test("reopens persisted folders and thread state while a saved running session k
       text: "post-crash chunk ".repeat(6),
     });
 
-    const processType = await secondRun.electronApp.evaluate(() => process.type);
+    const processType = await secondRun.app.mainProcessType();
     expect(processType).toBe("browser");
   } finally {
     await secondRun.close();

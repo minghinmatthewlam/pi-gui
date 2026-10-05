@@ -24,6 +24,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { augmentPosixPath } from "../scripts/augment-path.cjs";
 import { DesktopAppStore } from "./application/app-store";
+import { PiDriverInterceptor } from "./application/pi-driver-interceptor";
 import { WindowOwner } from "./windows/window-owner";
 import { PendingComposerDraftFlusher } from "./windows/pending-draft-flush";
 import { TurnCheckpointClient } from "./workbench/checkpoint-client";
@@ -1175,8 +1176,8 @@ app
       Object.assign(globalThis, {
         __PI_APP_TEST_HOOKS: {
           emitSessionEvent: (event: SessionDriverEvent) => store.emitTestSessionEvent(event),
-          // pi runs in the pi host; tests replace calls on the app's side of the pipe.
-          piDriver: () => store.piDriverForTests(),
+          // pi runs in the pi host; tests hold calls on the app's side of the pipe.
+          driver: new PiDriverInterceptor(store.piDriverForTests()),
           piHostPid: () => piHost?.pid,
           corePid: () => core?.pid,
           handleWindowActivation: () => {

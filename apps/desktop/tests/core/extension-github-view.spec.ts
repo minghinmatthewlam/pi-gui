@@ -1,13 +1,7 @@
 import { access, mkdtemp, readFile, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
-import {
-  expect,
-  test,
-  type ElectronApplication,
-  type FrameLocator,
-  type Page,
-} from "@playwright/test";
+import { expect, test, type FrameLocator, type Page } from "@playwright/test";
 import {
   createNamedThread,
   launchDesktop,
@@ -66,20 +60,6 @@ async function agentDirWithExample(userDataDir: string): Promise<string> {
   return agentDir;
 }
 
-async function recordOpenedLinks(app: ElectronApplication): Promise<() => Promise<string[]>> {
-  await app.evaluate(({ shell }) => {
-    const globals = globalThis as typeof globalThis & { __openedLinks?: string[] };
-    globals.__openedLinks = [];
-    shell.openExternal = async (url: string) => {
-      globals.__openedLinks?.push(url);
-    };
-  });
-  return () =>
-    app.evaluate(
-      () => (globalThis as typeof globalThis & { __openedLinks?: string[] }).__openedLinks ?? [],
-    );
-}
-
 async function openGitHubView(window: Page): Promise<FrameLocator> {
   if (!(await window.getByTestId("workbench").isVisible()))
     await window.getByTestId("toggle-side-panel").click();
@@ -107,7 +87,7 @@ test("the GitHub example reads gh only when opened, opens links and drafts a fix
   });
   try {
     const window = await harness.firstWindow();
-    const openedLinks = await recordOpenedLinks(harness.electronApp);
+    const openedLinks = await harness.externalUrls.capture();
     await createNamedThread(window, "Triage the repo");
     // Every thread loads the extension, but gh only runs once its view asks.
     expect(await ghCalls(gh.log)).toBe(0);
@@ -163,7 +143,7 @@ test("without gh the GitHub example says how to get it", async () => {
   });
   try {
     const window = await harness.firstWindow();
-    const openedLinks = await recordOpenedLinks(harness.electronApp);
+    const openedLinks = await harness.externalUrls.capture();
     await createNamedThread(window, "No GitHub CLI");
     const frame = await openGitHubView(window);
     await expect(frame.getByRole("alert")).toContainText("Install gh, run gh auth login");

@@ -54,9 +54,12 @@ use serde::Deserialize;
 use serde_json::{json, Map, Value};
 
 fn fixture(name: &str) -> Value {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/fixtures/state")
-        .join(name);
+    // Read the folder at run time: worktrees share one target folder, so a test binary built
+    // in another checkout must still read this checkout's fixtures.
+    let manifest_dir = std::env::var_os("CARGO_MANIFEST_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")));
+    let path = manifest_dir.join("tests/fixtures/state").join(name);
     let text = std::fs::read_to_string(&path).expect("fixture exists");
     serde_json::from_str(&text).expect("fixture is JSON")
 }
