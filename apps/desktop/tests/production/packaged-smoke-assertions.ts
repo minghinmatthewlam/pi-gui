@@ -1,10 +1,10 @@
 import { basename } from "node:path";
 import { expect, type Page } from "@playwright/test";
-import type { DesktopHarness } from "../helpers/electron-app";
+import type { ElectronDesktopHarness } from "../helpers/electron-app";
 import { waitForWorkspaceByPath } from "../helpers/electron-app";
 
 export async function assertPackagedAppCanStartThread(
-  harness: DesktopHarness,
+  harness: ElectronDesktopHarness,
   window: Page,
   options: {
     readonly expectedExecutablePath: string;

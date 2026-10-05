@@ -203,10 +203,7 @@ test("relaunch skips oversize-pixel saved images without rewriting the attachmen
   try {
     const window = await first.firstWindow();
     await createNamedThread(window, "Restore pixel limits");
-    const size = await first.electronApp.evaluate(({ nativeImage }, data) => {
-      const image = nativeImage.createFromBuffer(Buffer.from(data, "base64"));
-      return { empty: image.isEmpty(), ...image.getSize() };
-    }, wideData);
+    const size = await first.app.decodeImage(wideData);
     expect(size.empty).toBe(false);
     expect(size.width).toBe(COMPOSER_IMAGE_MAX_DIMENSION + 1);
     const state = await getDesktopState(window);

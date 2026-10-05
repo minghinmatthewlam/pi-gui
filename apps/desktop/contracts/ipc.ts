@@ -703,7 +703,9 @@ export interface PiDesktopApi {
   onCommand(listener: (command: PiDesktopCommand) => void): () => void;
   onWorkspacePicked(listener: (workspaceId: string) => void): () => void;
   onClipboardImagePasted(listener: (result: ClipboardImageRead) => void): () => void;
-  getPathForFile(file: File): string;
+  // Electron only; renderer code asks src/platform/file-paths.ts, which Tauri feeds from its
+  // native drag-drop event.
+  getPathForFile?(file: File): string;
   addWorkspacePath(path: string): Promise<DesktopAppState>;
   pickWorkspace(): Promise<DesktopAppState>;
   selectWorkspace(workspaceId: string): Promise<DesktopAppState>;
@@ -840,7 +842,7 @@ export interface PiDesktopApi {
     callback: (status: DesktopNotificationPermissionStatus) => void,
   ): () => void;
   pickComposerAttachments(): Promise<DesktopAppState>;
-  readClipboardImage(): ClipboardImageRead;
+  readClipboardImage(): Promise<ClipboardImageRead>;
   addComposerAttachments(attachments: readonly ComposerAttachment[]): Promise<DesktopAppState>;
   removeComposerAttachment(attachmentId: string): Promise<DesktopAppState>;
   editQueuedComposerMessage(messageId: string, currentDraft?: string): Promise<DesktopAppState>;

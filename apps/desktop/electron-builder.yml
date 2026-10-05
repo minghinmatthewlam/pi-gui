@@ -26,13 +26,16 @@ files:
 extraResources:
   - from: resources/icon.png
     to: icon.png
+  - from: build/native/
+    to: .
+    filter:
+      - pi-gui-core
+      - pi-gui-core.exe
 
 asar: true
 asarUnpack:
   - "**/*.node"
   - "**/*.wasm"
-  - "**/node_modules/node-pty/**/*"
-  - "**/node_modules/.pnpm/node-pty*/node_modules/node-pty/**/*"
 
 artifactName: ${productName}-${version}-${arch}.${ext}
 

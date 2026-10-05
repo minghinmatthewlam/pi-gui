@@ -7,21 +7,19 @@ import type { DesktopAppStore } from "../application/app-store";
 import { resolveExistingWorkspacePath } from "../platform/files/workspace-paths";
 import type { WindowOwner } from "../windows/window-owner";
 import { runExtensionAction, type AppOperationHost } from "./app-operations";
-import type {
-  DesktopExtensionViewOwner,
-  DesktopExtensionConnectionContext,
-} from "./extension-view-owner";
+import type { ExtensionViewConnectionContext } from "../../pi-host/protocol";
+import type { RemoteExtensionViews } from "../../pi-host/remote-extension-views";
 
 export async function performExtensionViewHostAction(
   owners: {
     readonly store: DesktopAppStore;
     readonly windows: WindowOwner;
-    readonly views: DesktopExtensionViewOwner;
+    readonly views: RemoteExtensionViews;
     readonly openExternal: (url: string) => Promise<void>;
     /** Saves the window's debounced composer draft; it must not run inside the window's queue. */
     readonly saveComposerDraft: (window: BrowserWindow) => Promise<void>;
   },
-  context: DesktopExtensionConnectionContext & { readonly action: DesktopHostAction },
+  context: ExtensionViewConnectionContext & { readonly action: DesktopHostAction },
 ): Promise<void> {
   const contents = webContents.fromId(context.senderId);
   if (!contents || contents.isDestroyed()) throw new Error("The requesting window is closed");

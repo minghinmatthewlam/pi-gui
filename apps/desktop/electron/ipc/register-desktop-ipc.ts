@@ -23,7 +23,7 @@ import type { ThemeManager } from "../platform/theme-manager";
 import type { WindowOwner } from "../windows/window-owner";
 import type { PendingComposerDraftFlusher } from "../windows/pending-draft-flush";
 import { WorkbenchRequests, type WorkbenchOwner } from "./workbench-requests";
-import type { DesktopExtensionViewOwner } from "../extensions/extension-view-owner";
+import type { RemoteExtensionViews } from "../../pi-host/remote-extension-views";
 import { registerExtensionViewRequests } from "./extension-view-requests";
 import { registerReviewRequests, type ReviewRequestsOwner } from "./review-requests";
 import { mainFrameHandler } from "./main-frame-ipc";
@@ -171,7 +171,7 @@ export interface DesktopIpcOwners {
   readonly state: StateOwner;
   readonly workbench: WorkbenchOwner;
   readonly review: ReviewRequestsOwner;
-  readonly extensionViews: DesktopExtensionViewOwner;
+  readonly extensionViews: RemoteExtensionViews;
   readonly workspace: WorkspaceOwner;
   readonly conversation: ConversationOwner;
   readonly orchestration: OrchestrationOwner;
@@ -765,9 +765,9 @@ export function registerDesktopIpc({
       );
     }),
   );
-  ipcMain.on(desktopIpc.readClipboardImage, (event) => {
+  ipcMain.handle(desktopIpc.readClipboardImage, (event) => {
     windows.windowForSender(event.sender);
-    event.returnValue = capabilities.readClipboardImage();
+    return capabilities.readClipboardImage();
   });
   ipcMain.handle(desktopIpc.addComposerAttachments, (event, rawAttachments: unknown) =>
     runCatchingLimits(event, () => {
@@ -998,7 +998,7 @@ function registerTerminalIpc(windows: WindowOwner, capabilities: DesktopIpcCapab
         ),
   );
   ipcMain.handle(desktopIpc.terminalWrite, (event, rawTerminalId: unknown, rawData: unknown) => {
-    capabilities
+    return capabilities
       .optionalTerminal()
       ?.write(
         windows.windowForSender(event.sender).webContents,
@@ -1007,7 +1007,7 @@ function registerTerminalIpc(windows: WindowOwner, capabilities: DesktopIpcCapab
       );
   });
   ipcMain.handle(desktopIpc.terminalResize, (event, rawTerminalId: unknown, rawSize: unknown) => {
-    capabilities
+    return capabilities
       .optionalTerminal()
       ?.resize(
         windows.windowForSender(event.sender).webContents,
@@ -1037,7 +1037,7 @@ function registerTerminalIpc(windows: WindowOwner, capabilities: DesktopIpcCapab
   ipcMain.handle(
     desktopIpc.terminalSetTitle,
     (event, rawTerminalId: unknown, rawTitle: unknown) => {
-      capabilities
+      return capabilities
         .optionalTerminal()
         ?.setTitle(
           windows.windowForSender(event.sender).webContents,

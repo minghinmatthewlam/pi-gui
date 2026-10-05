@@ -22,6 +22,7 @@ async function main() {
     ],
     desktopDir,
   );
+  await run("node", ["scripts/build-core.mjs"], desktopDir);
 
   const children = [
     start(

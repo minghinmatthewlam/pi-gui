@@ -1,4 +1,3 @@
-import { JsonCatalogStore } from "@pi-gui/catalogs/node";
 import { sessionKey } from "@pi-gui/session-driver";
 import type { ExtensionFlagValues, SessionSchemaInfo } from "@pi-gui/session-driver";
 import type { BrowserWindow } from "electron";
@@ -10,11 +9,13 @@ import {
   applyHostUiRequestToExtensionUiState,
   type GenerateThreadTitleOptions,
   isExtensionUiDialogRequest,
-  PiSdkDriver,
-  type PiSdkDriverConfig,
   SessionLeasedError,
 } from "@pi-gui/pi-sdk-driver";
-import type { SessionCatalogEntry } from "@pi-gui/catalogs";
+import type { PiDriverPort, PiHostConfig } from "../../pi-host/protocol";
+import { serveCatalogToPiHost } from "../../pi-host/remote-catalog";
+import { createRemotePiDriver } from "../../pi-host/remote-driver";
+import type { RpcPeer } from "../../rpc/rpc-peer";
+import type { SessionCatalogEntry, SessionFileCatalogStorage } from "@pi-gui/catalogs";
 import type {
   NavigateSessionTreeOptions,
   NavigateSessionTreeResult,
@@ -133,7 +134,6 @@ import {
   extensionNoticeTimerId,
   removeExtensionNotice,
 } from "../extensions/extension-notices";
-import { appWorktreeRootMatcher } from "../platform/worktrees/app-worktree-roots";
 import { GitWorktreeManager } from "../platform/worktrees/worktree-manager";
 import { createWorkspaceOwner, type WorkspaceOwner } from "../workspace/app-store-workspace";
 import { resolveExtensionFlags, type ResolvedExtensionFlags } from "../workspace/extension-flags";
@@ -179,14 +179,12 @@ export interface DesktopAppStoreOptions {
   readonly initialWorkspacePaths: readonly string[];
   readonly getWindow?: () => BrowserWindow | null;
   readonly shouldKeepSessionDialogs?: (sessionRef: SessionRef) => boolean;
-  readonly driverOptions?: Pick<
-    PiSdkDriverConfig,
-    | "builtinExtensions"
-    | "desktopExtensions"
-    | "onTurnCaptureBoundary"
-    | "openUrl"
-    | "turnCaptureTimeoutMs"
-  >;
+  /** The message pipe to the pi host process, which runs pi for this store. */
+  readonly piHost: RpcPeer;
+  /** Folders, threads and worktrees; owned by the Rust core. */
+  readonly catalogStorage: SessionFileCatalogStorage;
+  /** The Rust core: worktree Git commands, and ui-state, attachments and scheduled tasks. */
+  readonly core: RpcPeer;
   readonly generateThreadTitleOverride?: (
     workspace: WorkspaceRef,
     options: GenerateThreadTitleOptions,
@@ -239,13 +237,12 @@ export class DesktopAppStore {
   /** Cached session schema info (version-skew flag) projected onto the transcript payload. */
   private readonly sessionSchemaInfoCache = new Map<string, SessionSchemaInfo>();
   private readonly sessionSchemaInfoInFlight = new Set<string>();
-  private readonly driver: PiSdkDriver;
-  private readonly catalogStore: JsonCatalogStore;
+  private readonly driver: PiDriverPort;
+  private readonly catalogStore: SessionFileCatalogStorage;
   private readonly worktreeManager: GitWorktreeManager;
   private readonly worktreeRoot: string;
   private readonly isAppWorktreePath: (path: string) => Promise<boolean>;
-  private readonly uiStateFilePath: string;
-  private readonly scheduledTasksFilePath: string;
+  private readonly core: RpcPeer;
   private scheduledTasksWritable = false;
   private readonly attachmentStore: AttachmentStore;
   private readonly sessionState = new SessionStateMap();
@@ -286,29 +283,20 @@ export class DesktopAppStore {
   private readonly extensionFlagsByWorkspace = new Map<string, ExtensionFlagValues>();
 
   constructor(options: DesktopAppStoreOptions) {
-    const catalogFilePath = join(options.userDataDir, "catalogs.json");
-    this.catalogStore = new JsonCatalogStore({ catalogFilePath });
-    const driverOptions: PiSdkDriverConfig = {
-      catalogStorage: this.catalogStore,
-      ...(options.driverOptions ?? {}),
-      isBuiltinExtensionEnabled: (name) => !this.disabledBuiltinExtensions.has(name),
-      extensionFlagValuesForSession: (sessionRef) =>
-        this.sessionState.extensionFlagsBySession.get(sessionKey(sessionRef)),
+    this.catalogStore = options.catalogStorage;
+    serveCatalogToPiHost(options.piHost, this.catalogStore);
+    this.driver = createRemotePiDriver({
+      peer: options.piHost,
+      config: () => this.piHostConfig(),
       ...(options.generateThreadTitleOverride
         ? { generateThreadTitleOverride: options.generateThreadTitleOverride }
         : {}),
-    };
-
-    this.driver = new PiSdkDriver(driverOptions);
-    this.worktreeRoot = join(options.userDataDir, "worktrees");
-    this.isAppWorktreePath = appWorktreeRootMatcher(this.worktreeRoot);
-    this.worktreeManager = new GitWorktreeManager({
-      catalogStorage: this.catalogStore,
-      isAppWorktreePath: this.isAppWorktreePath,
     });
-    this.uiStateFilePath = join(options.userDataDir, "ui-state.json");
-    this.scheduledTasksFilePath = join(options.userDataDir, "scheduled-tasks.json");
-    this.attachmentStore = new AttachmentStore(options.userDataDir);
+    this.worktreeRoot = join(options.userDataDir, "worktrees");
+    this.worktreeManager = new GitWorktreeManager(options.core);
+    this.isAppWorktreePath = (path) => this.worktreeManager.isAppWorktreePath(path);
+    this.core = options.core;
+    this.attachmentStore = new AttachmentStore(options.core);
     this.initialWorkspacePaths = options.initialWorkspacePaths;
     this.getWindow = options.getWindow ?? (() => null);
     this.shouldKeepSessionDialogs = options.shouldKeepSessionDialogs ?? (() => false);
@@ -815,7 +803,7 @@ export class DesktopAppStore {
     if (!this.scheduledTasksWritable) {
       return;
     }
-    await writeScheduledTasksFile(this.scheduledTasksFilePath, this.state.scheduledTasks);
+    await writeScheduledTasksFile(this.core, this.state.scheduledTasks);
   }
 
   private async runOrchestrationSupervisionTick(): Promise<void> {
@@ -1745,7 +1733,7 @@ export class DesktopAppStore {
     filePath: string,
     enabled: boolean,
   ): Promise<DesktopAppState> {
-    const builtinName = this.driver.runtimeSupervisor.builtinExtensionName(filePath);
+    const builtinName = await this.driver.runtimeSupervisor.builtinExtensionName(filePath);
     if (builtinName) {
       return this.setBuiltinExtensionEnabled(workspaceId, builtinName, enabled);
     }
@@ -1828,7 +1816,7 @@ export class DesktopAppStore {
     if (!ws) {
       throw new Error(`Unknown workspace: ${workspaceId}`);
     }
-    const listing = this.driver.runtimeSupervisor.listMcpServers(ws);
+    const listing = await this.driver.runtimeSupervisor.listMcpServers(ws);
     return {
       globalConfigPath: withHomeAsTilde(listing.globalConfigPath),
       servers: listing.servers.map((server) => ({ ...server })),
@@ -2116,7 +2104,7 @@ export class DesktopAppStore {
     this.persistenceReadiness = "ready";
 
     try {
-      const loadedTasks = await readScheduledTasksFile(this.scheduledTasksFilePath);
+      const loadedTasks = await readScheduledTasksFile(this.core);
       this.state = {
         ...this.state,
         scheduledTasks: [...loadedTasks.tasks],
@@ -2915,10 +2903,38 @@ export class DesktopAppStore {
       return;
     }
 
-    const unsubscribe = this.driver.subscribe(sessionRef, (event) => {
-      this.enqueueSessionEvent(event, key);
-    });
-    this.sessionState.sessionSubscriptions.set(key, unsubscribe);
+    // Claim the key before awaiting the host, so a concurrent call does not subscribe twice.
+    let unsubscribe: (() => void) | undefined;
+    let cancelled = false;
+    const release = () => {
+      cancelled = true;
+      unsubscribe?.();
+    };
+    this.sessionState.sessionSubscriptions.set(key, release);
+    try {
+      unsubscribe = await this.driver.subscribe(sessionRef, (event) => {
+        this.enqueueSessionEvent(event, key);
+      });
+    } catch (error) {
+      if (this.sessionState.sessionSubscriptions.get(key) === release) {
+        this.sessionState.sessionSubscriptions.delete(key);
+      }
+      throw error;
+    }
+    if (cancelled) unsubscribe();
+  }
+
+  /** Test mode only: the app's side of the pi host pipe, so specs can hold a call. */
+  piDriverForTests(): PiDriverPort {
+    return this.driver;
+  }
+
+  /** What pi reads synchronously while it builds a session: switched-off tools and flags. */
+  private piHostConfig(): PiHostConfig {
+    return {
+      disabledBuiltinExtensions: [...this.disabledBuiltinExtensions].sort(),
+      extensionFlags: Object.fromEntries(this.sessionState.extensionFlagsBySession),
+    };
   }
 
   /**
@@ -3958,7 +3974,7 @@ export class DesktopAppStore {
   }
 
   private async readUiState(): Promise<LegacyPersistedUiState> {
-    return readPersistedUiState(this.uiStateFilePath);
+    return readPersistedUiState(this.core);
   }
 
   async persistUiState(): Promise<void> {
@@ -4011,7 +4027,7 @@ export class DesktopAppStore {
       ),
     };
 
-    await writePersistedUiState(this.uiStateFilePath, payload);
+    await writePersistedUiState(this.core, payload);
   }
 
   async persistComposerAttachments(

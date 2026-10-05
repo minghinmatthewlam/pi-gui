@@ -73,17 +73,7 @@ test("an extension view opens https links and threads beside its own", async () 
   });
   try {
     const window = await harness.firstWindow();
-    await harness.electronApp.evaluate(({ shell }) => {
-      const globals = globalThis as typeof globalThis & { __openedLinks?: string[] };
-      globals.__openedLinks = [];
-      shell.openExternal = async (url: string) => {
-        globals.__openedLinks?.push(url);
-      };
-    });
-    const openedLinks = () =>
-      harness.electronApp.evaluate(
-        () => (globalThis as typeof globalThis & { __openedLinks?: string[] }).__openedLinks ?? [],
-      );
+    const openedLinks = await harness.externalUrls.capture();
 
     // A thread in another folder, then two in the view's folder.
     await createNamedThread(window, "Other folder thread", {

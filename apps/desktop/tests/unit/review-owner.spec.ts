@@ -14,10 +14,15 @@ import {
   type AvailableReview,
   type ReviewResult,
 } from "../../contracts/review";
+import { gitReviewClient } from "../../electron/platform/files/git-review";
 import { ReviewOwner, type ReviewCheckpointSource } from "../../electron/workbench/review-owner";
 import { ReviewedStore } from "../../electron/workbench/reviewed-store";
+import { startTestCorePeer, stopTestCoresAfterEach } from "../helpers/rust-core";
 
 const execFileAsync = promisify(execFile);
+
+stopTestCoresAfterEach();
+
 const firstTask = { workspaceId: "workspace", sessionId: "first" };
 const secondTask = { workspaceId: "workspace", sessionId: "second" };
 
@@ -35,8 +40,10 @@ async function fixture() {
   await git(checkoutPath, ["add", "example.txt"]);
   await git(checkoutPath, ["commit", "-m", "baseline"]);
   await writeFile(join(checkoutPath, "example.txt"), "after\n");
+  const core = await startTestCorePeer(userDataDir);
   const options = {
-    userDataDir,
+    git: gitReviewClient(core),
+    reviewed: new ReviewedStore(core),
     resolveCheckoutPath: (id: string) => (id === "checkout" ? checkoutPath : undefined),
     validateTask: (target: typeof firstTask) => target.workspaceId === "workspace",
   };
@@ -273,19 +280,21 @@ test("missing captured history is unavailable and a supplied checkpoint stays ex
 
 test("review metadata serializes concurrent acknowledgements and preserves invalid bytes", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pi-gui-reviewed-store-"));
-  const store = new ReviewedStore(dir);
+  // A second core reads the file afresh, as the next app launch would.
+  const reopen = async () => new ReviewedStore(await startTestCorePeer(dir));
+  const store = await reopen();
   const first = "a".repeat(64);
   const second = "b".repeat(64);
   await Promise.all([store.set(first, true), store.set(second, true)]);
-  expect(await new ReviewedStore(dir).snapshot()).toEqual(new Set([first, second]));
+  expect(await (await reopen()).snapshot()).toEqual(new Set([first, second]));
   await store.set(first, false);
-  expect(await new ReviewedStore(dir).snapshot()).toEqual(new Set([second]));
+  expect(await (await reopen()).snapshot()).toEqual(new Set([second]));
 
   const invalidDir = await mkdtemp(join(tmpdir(), "pi-gui-reviewed-invalid-"));
   const path = join(invalidDir, "reviewed-files.json");
   const original = '{"version":99,"marks":[],"future":"retain"}\n';
   await writeFile(path, original);
-  const invalid = new ReviewedStore(invalidDir);
+  const invalid = new ReviewedStore(await startTestCorePeer(invalidDir));
   await expect(invalid.snapshot()).rejects.toThrow("unsupported");
   await expect(invalid.set(first, true)).rejects.toThrow("unsupported");
   expect(await readFile(path, "utf8")).toBe(original);
@@ -294,15 +303,19 @@ test("review metadata serializes concurrent acknowledgements and preserves inval
   await writeFile(path, `${JSON.stringify({ version: 1, marks: [second] })}\n`);
   expect(await invalid.snapshot()).toEqual(new Set([second]));
   await invalid.set(first, true);
-  expect(await new ReviewedStore(invalidDir).snapshot()).toEqual(new Set([first, second]));
+  expect(await new ReviewedStore(await startTestCorePeer(invalidDir)).snapshot()).toEqual(
+    new Set([first, second]),
+  );
 });
 
-test("reviewed marks are bounded and forget the oldest acknowledgements first", async () => {
+// The 5,000-mark limit, which forgets the oldest acknowledgements first, is covered by the
+// Rust core's own test (`reviewed.rs`), where the limit can be made small.
+test("reviewed marks keep their order and re-marking does not rewrite the file", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pi-gui-reviewed-bounded-"));
-  const store = new ReviewedStore(dir, { maxMarks: 3 });
+  const store = new ReviewedStore(await startTestCorePeer(dir));
   const marks = ["a", "b", "c", "d"].map((letter) => letter.repeat(64));
   for (const mark of marks) await store.set(mark, true);
-  expect(await new ReviewedStore(dir).snapshot()).toEqual(new Set(marks.slice(1)));
+  expect([...(await new ReviewedStore(await startTestCorePeer(dir)).snapshot())]).toEqual(marks);
   // Re-marking an existing acknowledgement does not rewrite or reorder the file.
   const before = await readFile(join(dir, "reviewed-files.json"), "utf8");
   await store.set(marks[1]!, true);

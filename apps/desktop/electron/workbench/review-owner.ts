@@ -18,17 +18,13 @@ import type {
   TurnChangesResult,
 } from "../../contracts/review";
 import { isWorkingReviewScope } from "../../contracts/review";
-import {
-  changeGitReviewFileStage,
-  checkGitReviewFileCurrent,
-  createGitReview,
-  readGitReviewFile,
-  summarizeGitTreeChanges,
-  type GitReviewFile,
-  type GitReviewScope,
-  type GitReviewSnapshot,
+import type {
+  GitReview,
+  GitReviewFile,
+  GitReviewScope,
+  GitReviewSnapshot,
 } from "../platform/files/git-review";
-import { ReviewedStore } from "./reviewed-store";
+import type { ReviewedMarks } from "./reviewed-store";
 
 export interface ReviewCheckpoint {
   readonly state: "available";
@@ -56,7 +52,10 @@ export interface ListedTurn extends ReviewCheckpoint {
 }
 
 export interface ReviewOwnerOptions {
-  readonly userDataDir: string;
+  /** Git work for comparisons, run by the Rust core. */
+  readonly git: GitReview;
+  /** Saved review marks; the app's are kept by the Rust core. */
+  readonly reviewed: ReviewedMarks;
   readonly resolveCheckoutPath: (checkoutId: string) => string | undefined;
   readonly validateTask: (target: SessionRef) => boolean;
   readonly checkpoints?: ReviewCheckpointSource;
@@ -77,12 +76,12 @@ const MAX_CACHED_TURN_SUMMARIES = 500;
 /** Main owns comparison identities and reviewed state; the Git adapter owns Git semantics. */
 export class ReviewOwner {
   private readonly reviews = new Map<string, OwnedReview>();
-  private readonly reviewed: ReviewedStore;
+  private readonly reviewed: ReviewedMarks;
   private readonly mutations = new Map<string, Promise<void>>();
   private readonly turnFiles = new Map<string, Promise<readonly TurnChangedFile[]>>();
 
   constructor(private readonly options: ReviewOwnerOptions) {
-    this.reviewed = new ReviewedStore(options.userDataDir);
+    this.reviewed = options.reviewed;
   }
 
   async getTurnChanges(input: TurnChangesInput): Promise<TurnChangesResult> {
@@ -118,7 +117,11 @@ export class ReviewOwner {
   private turnChangedFiles(turn: ListedTurn): Promise<readonly TurnChangedFile[]> {
     let files = this.turnFiles.get(turn.checkpointId);
     if (!files) {
-      files = summarizeGitTreeChanges(turn.repositoryPath, turn.beforeTreeOid, turn.afterTreeOid);
+      files = this.options.git.summarizeGitTreeChanges(
+        turn.repositoryPath,
+        turn.beforeTreeOid,
+        turn.afterTreeOid,
+      );
       // A failed read is retried on the next request instead of being remembered.
       files.catch(() => this.turnFiles.delete(turn.checkpointId));
       this.turnFiles.set(turn.checkpointId, files);
@@ -175,7 +178,7 @@ export class ReviewOwner {
         gitPath = currentPath;
         scope = input.scope;
       }
-      const snapshot = await createGitReview(gitPath, scope);
+      const snapshot = await this.options.git.createGitReview(gitPath, scope);
       if (snapshot.state !== "available") return snapshot;
       const marks = await this.reviewed.snapshot();
       const owned: OwnedReview = {
@@ -220,7 +223,10 @@ export class ReviewOwner {
     try {
       const resolved = await this.resolveFile(input);
       if (isIssue(resolved)) return resolved;
-      const result = await readGitReviewFile(resolved.review.snapshot, input.fileId);
+      const result = await this.options.git.readGitReviewFile(
+        resolved.review.snapshot,
+        input.fileId,
+      );
       return result.state === "available"
         ? { ...result, reviewId: input.reviewId, fileId: input.fileId }
         : result;
@@ -235,7 +241,10 @@ export class ReviewOwner {
     try {
       const resolved = await this.resolveFile(input);
       if (isIssue(resolved)) return resolved;
-      const issue = await checkGitReviewFileCurrent(resolved.review.snapshot, input.fileId);
+      const issue = await this.options.git.checkGitReviewFileCurrent(
+        resolved.review.snapshot,
+        input.fileId,
+      );
       if (issue) return issue;
       await this.reviewed.set(markKey(resolved.review, resolved.file), input.reviewed);
       return {
@@ -267,7 +276,11 @@ export class ReviewOwner {
       return await this.withMutation(resolved.review.checkoutPath, async () => {
         const current = await this.resolveFile(input);
         if (isIssue(current)) return current;
-        return changeGitReviewFileStage(current.review.snapshot, input.fileId, input.action);
+        return this.options.git.changeGitReviewFileStage(
+          current.review.snapshot,
+          input.fileId,
+          input.action,
+        );
       });
     } catch (error: unknown) {
       return failed(error);
