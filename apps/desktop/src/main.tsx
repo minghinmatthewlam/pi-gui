@@ -4,6 +4,7 @@ import { earlyModifierChords, getSidePanelTabCommand } from "../contracts/ipc";
 import App from "./app/App";
 import { RendererErrorBoundary } from "./app/desktop-recovery";
 import { applyLastTheme } from "./ui/active-theme";
+import { installTestHostTransport, testHostUrl } from "./platform/testhost-transport";
 import "./dev-reload-hook";
 import "./styles.css";
 
@@ -33,16 +34,28 @@ window.addEventListener(
 
 applyLastTheme();
 
-ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
-  <React.StrictMode>
-    <RendererErrorBoundary
-      onRelaunch={() => {
-        window.piApp?.relaunchApplication()?.catch((error: unknown) => {
-          console.error("[renderer] relaunchApplication failed", error);
-        });
-      }}
-    >
-      <App />
-    </RendererErrorBoundary>
-  </React.StrictMode>,
-);
+function mount() {
+  ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
+    <React.StrictMode>
+      <RendererErrorBoundary
+        onRelaunch={() => {
+          window.piApp?.relaunchApplication()?.catch((error: unknown) => {
+            console.error("[renderer] relaunchApplication failed", error);
+          });
+        }}
+      >
+        <App />
+      </RendererErrorBoundary>
+    </React.StrictMode>,
+  );
+}
+
+// In the Rust test host, `window.piApp` arrives over a WebSocket before the app mounts.
+const testHost = testHostUrl();
+if (testHost) {
+  installTestHostTransport(testHost).then(mount, (error: unknown) => {
+    console.error("[renderer] test host connection failed", error);
+  });
+} else {
+  mount();
+}
