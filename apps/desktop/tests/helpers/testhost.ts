@@ -1,8 +1,8 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { delimiter, join, resolve } from "node:path";
 import { createInterface } from "node:readline";
-import { chromium, expect, type Browser, type BrowserContext, type Page } from "@playwright/test";
+import { chromium, expect, type BrowserContext, type Page } from "@playwright/test";
 import {
   HYDRATE_TEST_SENTINEL,
   type DesktopHarness,
@@ -148,6 +148,11 @@ async function connectControl(wsUrl: string): Promise<TestHostControl & { close(
   return {
     call: <T>(method: string, params: Record<string, unknown> = {}) =>
       new Promise<T>((resolveCall, reject) => {
+        // A call after the host quit (a second close, say) fails rather than waiting forever.
+        if (socket.readyState !== WebSocket.OPEN) {
+          reject(new Error("pi-gui-testhost closed"));
+          return;
+        }
         nextId += 1;
         pending.set(nextId, { resolve: resolveCall as (value: unknown) => void, reject });
         socket.send(JSON.stringify({ id: nextId, method: `test.${method}`, args: [params] }));
@@ -173,6 +178,12 @@ export async function launchTestHost(
   }
   const output: string[] = [];
   const env = launchEnv(userDataDir, agentDir, normalized);
+  // A relaunch serves the same origin, so the pages keep their local storage as Electron's
+  // profile does.
+  const portFile = join(userDataDir, "testhost-port");
+  if (existsSync(portFile) && env.PI_GUI_TESTHOST_PORT === undefined) {
+    env.PI_GUI_TESTHOST_PORT = readFileSync(portFile, "utf8").trim();
+  }
   const child = spawn(binary, [], { cwd: desktopDir, env, stdio: ["ignore", "pipe", "pipe"] });
   child.stderr?.on("data", (chunk: Buffer) => {
     output.push(...chunk.toString("utf8").split("\n").filter(Boolean));
@@ -185,22 +196,57 @@ export async function launchTestHost(
       resolveExit();
     }),
   );
-  let browser: Browser | undefined;
+  let browser: BrowserContext | undefined;
   try {
     const url = await waitForListening(child, output);
+    writeFileSync(portFile, new URL(url).port);
     const wsUrl = url.replace(/^http/, "ws");
     const control = await connectControl(wsUrl);
-    browser = await chromium.launch({ executablePath: chromiumExecutable() });
-    const openedBrowser = browser;
-    const context: BrowserContext = await browser.newContext({ viewport: WINDOW_SIZE });
+    // The browser profile lives in the app's profile folder, like Electron's, and pages share
+    // the browser's clipboard, as Electron windows share the system one.
+    browser = await chromium.launchPersistentContext(join(userDataDir, "testhost-browser"), {
+      executablePath: chromiumExecutable(),
+      viewport: WINDOW_SIZE,
+      permissions: ["clipboard-read", "clipboard-write"],
+    });
+    const context: BrowserContext = browser;
     const pageUrl = `${url}/?testhost=${encodeURIComponent(wsUrl)}`;
     const pages: Page[] = [];
+    // The persistent browser opens with a blank page; the first window uses it.
+    let blankPage: Page | undefined = context.pages()[0];
+    // Windows being opened, whose pages are not yet in `pages`.
+    let openingWindows = 0;
+    // Like Electron's navigation handlers, a page never leaves the app: the host gets the URL
+    // instead, and a tab a link opened for it is closed.
+    const appOrigin = new URL(url).origin;
+    await context.route(
+      (target) => target.origin !== appOrigin,
+      async (route) => {
+        const request = route.request();
+        if (!request.isNavigationRequest()) {
+          await route.continue();
+          return;
+        }
+        await route.abort().catch(() => undefined);
+        await control.call("navigateAway", { url: request.url() }).catch(() => undefined);
+        if (openingWindows > 0) return;
+        for (const page of context.pages()) {
+          if (!pages.includes(page) && page !== blankPage) await page.close();
+        }
+      },
+    );
     const openWindow = async () => {
-      const page = await context.newPage();
-      await page.goto(pageUrl);
-      await page.waitForFunction(() => Boolean(globalThis.window.piApp), undefined, {
-        timeout: 15_000,
-      });
+      openingWindows += 1;
+      const page = blankPage ?? (await context.newPage());
+      blankPage = undefined;
+      try {
+        await page.goto(pageUrl);
+        await page.waitForFunction(() => Boolean(globalThis.window.piApp), undefined, {
+          timeout: 15_000,
+        });
+      } finally {
+        openingWindows -= 1;
+      }
       pages.push(page);
       page.once("close", () => pages.splice(pages.indexOf(page), 1));
       return page;
@@ -248,7 +294,7 @@ export async function launchTestHost(
         ]);
         if (timedOut) child.kill("SIGKILL");
         control.close();
-        await openedBrowser.close();
+        await context.close();
         if (timedOut) throw new Error(`pi-gui-testhost did not quit:\n${output.join("\n")}`);
       },
       app: {
@@ -296,8 +342,20 @@ export async function launchTestHost(
       },
       keyboard: { send: unsupported("Native key events") },
       clipboard: {
-        writeText: unsupported("The clipboard"),
-        writeImage: unsupported("The clipboard"),
+        writeText: async (text) => {
+          await (
+            await firstWindow()
+          ).evaluate((value) => navigator.clipboard.writeText(value), text);
+        },
+        writeImage: async (pngBase64) => {
+          await (
+            await firstWindow()
+          ).evaluate(async (data) => {
+            const bytes = Uint8Array.from(atob(data), (character) => character.charCodeAt(0));
+            const image = new Blob([bytes], { type: "image/png" });
+            await navigator.clipboard.write([new ClipboardItem({ "image/png": image })]);
+          }, pngBase64);
+        },
       },
       externalUrls: {
         capture: async () => {
@@ -340,6 +398,18 @@ function testHostHooks(
   control: TestHostControl,
   focus: (window?: Page) => Promise<void>,
 ): DesktopTestHooks {
+  // Title requests are held in the kernel's pi driver. As under Electron, only the latest
+  // request can be answered; one that a newer request replaced stays unanswered.
+  const settledTitles = new Set<number>();
+  const latestTitleRequest = async () => {
+    const held = (await control.call<HeldCall[]>("driver.pending")).filter(
+      (call) => call.method === "generateThreadTitle" && !settledTitles.has(call.id),
+    );
+    for (const call of held) settledTitles.add(call.id);
+    const latest = held.at(-1);
+    if (!latest) throw new Error("Deferred thread-title request is unavailable");
+    return latest;
+  };
   return {
     emitSessionEvents: async (events) => {
       for (const event of events) await control.call("emitSessionEvent", { event });
@@ -351,10 +421,24 @@ function testHostHooks(
     setSessionVisibility: async (mode) => {
       await control.call("setSessionVisibility", { value: mode });
     },
-    deferThreadTitles: unsupported("Deferring thread titles"),
-    hasDeferredThreadTitle: unsupported("Deferring thread titles"),
-    resolveDeferredThreadTitle: unsupported("Deferring thread titles"),
-    rejectDeferredThreadTitle: unsupported("Deferring thread titles"),
+    deferThreadTitles: async () => {
+      await control.call("driver.intercept", { method: "generateThreadTitle" });
+    },
+    hasDeferredThreadTitle: async () =>
+      (await control.call<HeldCall[]>("driver.pending")).some(
+        (call) => call.method === "generateThreadTitle" && !settledTitles.has(call.id),
+      ),
+    resolveDeferredThreadTitle: async (title) => {
+      const { id } = await latestTitleRequest();
+      await control.call("driver.complete", { id, result: title });
+    },
+    rejectDeferredThreadTitle: async () => {
+      const { id } = await latestTitleRequest();
+      await control.call("driver.complete", {
+        id,
+        error: { name: "Error", message: "Deferred thread-title rejected by test" },
+      });
+    },
     piHostPid: () => control.call<number | undefined>("piHostPid"),
   };
 }

@@ -16,7 +16,7 @@ use pi_gui_core::app::methods::{self, push};
 use pi_gui_core::app::pi::InterceptOutcome;
 use pi_gui_core::app::shell::{Push, Shell};
 use pi_gui_core::app::test_hooks::ControlMode;
-use pi_gui_core::app::{events, publish, WindowId};
+use pi_gui_core::app::{events, publish, ui, WindowId};
 use pi_gui_core::error::{CoreError, CoreResult};
 use pi_gui_core::state::driver::{session_key, SessionDriverEvent};
 use serde_json::{json, Value};
@@ -314,6 +314,14 @@ async fn test_call(app: &Rc<App>, name: &str, params: Value) -> CoreResult<Reply
         "queuePrompt" => app
             .shell
             .queue_prompt(params["answer"].as_str().map(str::to_owned)),
+        // A page left the app for this URL: web links open in the browser and anything else is
+        // dropped, as Electron's navigation handlers do.
+        "navigateAway" => {
+            let url = text_param(&params, "url")?;
+            if ui::is_external_web_url(&url) {
+                app.shell.open_external(url).await?;
+            }
+        }
         "shellLog" => return Ok(Reply::Value(Value::Array(app.shell.take_log()))),
         "windows" => return Ok(dispatch::value(app.kernel.windows.ids())),
         "focusWindow" => {
