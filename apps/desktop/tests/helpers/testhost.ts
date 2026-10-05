@@ -41,11 +41,6 @@ const HELD_DRIVER_CALL_TIMEOUT_MS = 15_000;
 const WINDOW_SIZE = { width: 1480, height: 980 } as const;
 /** Where the page's transport keeps its window id (`src/platform/testhost-transport.ts`). */
 const WINDOW_ID_KEY = "pi-gui:testhost-window";
-/**
- * Extension frames load from `http://<connectionId>:<port>/` on the test host (Chromium cannot
- * load the `pi-extension:` scheme), so a connection id resolves to the test host.
- */
-const EXTENSION_FRAME_HOSTS = "*-*-*-*-*";
 
 export interface TestHostLaunchOptions {
   readonly initialWorkspaces?: readonly string[];
@@ -170,7 +165,7 @@ async function blockFrameNavigation(context: BrowserContext, appUrl: string): Pr
       const url = new URL(request.url());
       const isViewDocument =
         url.protocol === "http:" &&
-        /^[0-9a-f]+(-[0-9a-f]+){4}$/.test(url.hostname) &&
+        /^[0-9a-f]+(-[0-9a-f]+){4}\.localhost$/.test(url.hostname) &&
         url.port === port &&
         url.pathname === "/" &&
         !url.search &&
@@ -253,13 +248,7 @@ export async function launchTestHost(
     const url = await waitForListening(child, output);
     const wsUrl = url.replace(/^http/, "ws");
     const control = await connectControl(wsUrl);
-    browser = await chromium.launch({
-      executablePath: chromiumExecutable(),
-      args: [
-        `--host-resolver-rules=MAP ${EXTENSION_FRAME_HOSTS} 127.0.0.1`,
-        `--proxy-bypass-list=${EXTENSION_FRAME_HOSTS}`,
-      ],
-    });
+    browser = await chromium.launch({ executablePath: chromiumExecutable() });
     const openedBrowser = browser;
     // The windows go with the app, as Electron's do when its process exits.
     exited.then(() => openedBrowser.close()).catch(() => undefined);

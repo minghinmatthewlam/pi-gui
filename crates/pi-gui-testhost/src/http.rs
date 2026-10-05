@@ -91,8 +91,8 @@ pub async fn serve(app: Rc<App>, mut stream: TcpStream) {
     let _ = stream.shutdown().await;
 }
 
-/// The connection id an extension frame request names as its host (see
-/// `TestShell::extension_frame_url`); the renderer's own requests use 127.0.0.1.
+/// The connection id an extension frame request names in its host,
+/// `<connectionId>.localhost` (see `TestShell::extension_frame_url`).
 fn extension_frame_host(head: &str) -> Option<&str> {
     let host = head.lines().skip(1).find_map(|line| {
         let (name, value) = line.split_once(':')?;
@@ -101,16 +101,18 @@ fn extension_frame_host(head: &str) -> Option<&str> {
             .then(|| value.trim())
     })?;
     let name = host.rsplit_once(':').map_or(host, |(name, _)| name);
-    let is_connection_id = name.contains('-')
-        && name
+    let id = name.strip_suffix(".localhost")?;
+    let is_connection_id = !id.is_empty()
+        && id
             .bytes()
             .all(|byte| byte.is_ascii_hexdigit() || byte == b'-');
-    is_connection_id.then_some(name)
+    is_connection_id.then_some(id)
 }
 
 /// What Tauri's `pi-extension:` scheme handler answers: the pi host's `views.asset`, with the
 /// same headers. The frame's document names its scripts by its `pi-extension://<id>` origin,
-/// which here is `http://<id>:<port>`, in its body and its Content-Security-Policy alike.
+/// which here is `http://<id>.localhost:<port>`, in its body and its Content-Security-Policy
+/// alike.
 async fn extension_frame(
     app: &App,
     stream: &TcpStream,
@@ -122,7 +124,7 @@ async fn extension_frame(
         .map(|address| address.port())
         .unwrap_or(0);
     let scheme_origin = format!("pi-extension://{connection_id}");
-    let http_origin = format!("http://{connection_id}:{port}");
+    let http_origin = format!("http://{connection_id}.localhost:{port}");
     let Ok(asset) = app
         .driver
         .view_asset(&format!("{scheme_origin}{target}"))
@@ -304,7 +306,7 @@ mod tests {
     fn extension_frames_are_named_by_their_host() {
         let id = "0b6c8f4e-5d1a-4c3b-9e2f-7a8b9c0d1e2f";
         assert_eq!(
-            extension_frame_host(&format!("GET / HTTP/1.1\r\nHost: {id}:4000")),
+            extension_frame_host(&format!("GET / HTTP/1.1\r\nHost: {id}.localhost:4000")),
             Some(id)
         );
         assert_eq!(

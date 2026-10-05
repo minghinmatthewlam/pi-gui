@@ -231,7 +231,7 @@ impl TestShell {
     }
 
     /// Chromium cannot load `pi-extension:` frames, so the test host serves them over HTTP on
-    /// this port, by connection id as the host name (see `extension_frame_url`).
+    /// this port, named by connection id (see `extension_frame_url`).
     pub fn set_extension_frame_port(&self, port: u16) {
         self.extension_frame_port.set(Some(port));
     }
@@ -420,8 +420,10 @@ impl Shell for TestShell {
         Box::pin(async move { Ok(answer.await.unwrap_or(None)) })
     }
 
-    /// `http://<connectionId>:<port>/`: the same host name and path the frame has under the
-    /// `pi-extension:` scheme, still an opaque origin inside its sandboxed iframe.
+    /// `http://<connectionId>.localhost:<port>/`: the same path the frame has under the
+    /// `pi-extension:` scheme. A `.localhost` host is a secure context, as the privileged scheme
+    /// is (extensions use `crypto.randomUUID`), and the frame is still an opaque origin inside
+    /// its sandboxed iframe.
     fn extension_frame_url(&self, frame_url: String) -> String {
         match (
             self.extension_frame_port.get(),
@@ -429,7 +431,7 @@ impl Shell for TestShell {
         ) {
             (Some(port), Some(rest)) => {
                 let (host, path) = rest.split_once('/').unwrap_or((rest, ""));
-                format!("http://{host}:{port}/{path}")
+                format!("http://{host}.localhost:{port}/{path}")
             }
             _ => frame_url,
         }
