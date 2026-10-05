@@ -34,8 +34,10 @@ pub struct App {
     pub renderer_dir: PathBuf,
     pub test_mode: bool,
     pub windows: session::Windows,
-    /// Set by `test.quit`; the accept loop stops once it fires.
+    /// Set by `test.quit`, or when the last window closes; the accept loop stops once it fires.
     pub quit: tokio::sync::Notify,
+    /// Quit has begun: it flushes every window's draft, so a window closing meanwhile waits.
+    pub quitting: std::cell::Cell<bool>,
 }
 
 fn env_path(name: &str) -> Option<PathBuf> {
@@ -130,6 +132,7 @@ async fn run() -> Result<(), CoreError> {
         test_mode,
         windows: Default::default(),
         quit: tokio::sync::Notify::new(),
+        quitting: Default::default(),
     });
     let mut terminate = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
         .map_err(|error| CoreError::new(error.to_string()))?;
@@ -152,6 +155,7 @@ async fn run() -> Result<(), CoreError> {
 /// What Electron's `before-quit` does: windows flush their drafts, state is saved, then pi and
 /// the core stop.
 pub async fn shutdown(app: &App) {
+    app.quitting.set(true);
     app.kernel.prepare_quit().await;
     app.driver.stop(Duration::from_secs(5)).await;
     let _ = app

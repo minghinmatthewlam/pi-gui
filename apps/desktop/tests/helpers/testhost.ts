@@ -13,7 +13,7 @@ import {
   type PiDriverCallRecord,
   type PiDriverControl,
 } from "./desktop-harness";
-import { seedAgentDir } from "./electron-app";
+import { isProviderAuthEnvVar, seedAgentDir } from "./electron-app";
 
 /**
  * `DesktopHarness` for `pi-gui-testhost`: the Rust app-state kernel with the real pi host and
@@ -83,7 +83,7 @@ function launchEnv(userDataDir: string, agentDir: string, options: TestHostLaunc
   const env: NodeJS.ProcessEnv = { ...process.env };
   // Ambient provider credentials must never turn a fixture test into a real request.
   for (const key of Object.keys(env)) {
-    if (key.endsWith("_API_KEY")) delete env[key];
+    if (isProviderAuthEnvVar(key)) delete env[key];
   }
   Object.assign(env, {
     PI_APP_USER_DATA_DIR: userDataDir,
@@ -192,6 +192,8 @@ export async function launchTestHost(
     const control = await connectControl(wsUrl);
     browser = await chromium.launch({ executablePath: chromiumExecutable() });
     const openedBrowser = browser;
+    // The windows go with the app, as Electron's do when its process exits.
+    void exited.then(() => openedBrowser.close().catch(() => undefined));
     const context: BrowserContext = await browser.newContext({ viewport: WINDOW_SIZE });
     const pageUrl = `${url}/?testhost=${encodeURIComponent(wsUrl)}`;
     const pages: Page[] = [];
@@ -208,12 +210,14 @@ export async function launchTestHost(
     let first: Promise<Page> | undefined;
     const firstWindow = () => (first ??= openWindow());
     const pageOf = async (window?: Page) => window ?? (await firstWindow());
-    const focus = async (window?: Page) => {
+    const windowId = async (window?: Page) => {
       const page = await pageOf(window);
-      const id = Number(
+      return Number(
         await page.evaluate((key) => globalThis.sessionStorage.getItem(key), WINDOW_ID_KEY),
       );
-      await control.call("focusWindow", { window: id });
+    };
+    const focus = async (window?: Page) => {
+      await control.call("focusWindow", { window: await windowId(window) });
     };
     // The shell's log is drained by each read, so it is kept here.
     const shellLog: { kind: string; url?: string }[] = [];
@@ -265,7 +269,10 @@ export async function launchTestHost(
         env: (name) => Promise.resolve(env[name]),
         mainProcessType: () => Promise.resolve("testhost"),
         identity: unsupported("The app identity"),
-        decodeImage: unsupported("The native image decoder"),
+        decodeImage: (base64) =>
+          control.call<{ empty: boolean; width: number; height: number }>("decodeImage", {
+            data: base64,
+          }),
       },
       windows: {
         count: async () => (await control.call<number[]>("windows")).length,
@@ -273,7 +280,13 @@ export async function launchTestHost(
         waitForNew: unsupported("A window the app opens itself"),
         state: unsupported("Native window state"),
         close: async (window) => {
-          await (await pageOf(window)).close();
+          // The host holds the close until the page sends its draft, as Electron main does.
+          const page = await pageOf(window);
+          await control.call("closeWindow", { window: await windowId(page) });
+          // Closing the last window quits, and the pages go with the app.
+          await page.close().catch((error: unknown) => {
+            if (!exitedNow) throw error;
+          });
         },
         show: (window) => focus(window),
         focus,

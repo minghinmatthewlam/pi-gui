@@ -152,7 +152,10 @@ fn attach_window(app: &Rc<App>, out: &Out, requested: Option<u64>) -> WindowId {
 }
 
 fn detach_window(app: &Rc<App>, window: WindowId) {
-    app.windows.senders.borrow_mut().remove(&window);
+    if app.windows.senders.borrow_mut().remove(&window).is_none() {
+        // Closed through `test.closeWindow`, already gone.
+        return;
+    }
     let weak = Rc::downgrade(app);
     let timer = tokio::task::spawn_local(async move {
         tokio::time::sleep(RELOAD_GRACE).await;
@@ -244,6 +247,31 @@ fn text_param(params: &Value, name: &str) -> CoreResult<String> {
         .ok_or_else(|| CoreError::new(format!("test call needs {name}")))
 }
 
+fn window_param(params: &Value) -> CoreResult<WindowId> {
+    params["window"]
+        .as_u64()
+        .and_then(|window| WindowId::try_from(window).ok())
+        .ok_or_else(|| CoreError::new("test call needs window"))
+}
+
+/// A title-bar close, as Electron main handles it: the close waits for the renderer's debounced
+/// draft, then the window goes, and on Linux and Windows (and in test mode on macOS) closing
+/// the last window quits. While quit is flushing drafts, quit closes the window itself.
+async fn close_window(app: &Rc<App>, window: WindowId) {
+    if app.quitting.get() || !app.windows.senders.borrow().contains_key(&window) {
+        return;
+    }
+    app.kernel.draft_flush.flush(&app.kernel, &[window]).await;
+    if app.quitting.get() || app.windows.senders.borrow_mut().remove(&window).is_none() {
+        return;
+    }
+    app.shell.remove_window(window);
+    app.kernel.windows.remove(&app.kernel, window);
+    if app.windows.senders.borrow().is_empty() && app.windows.detached.borrow().is_empty() {
+        app.quit.notify_one();
+    }
+}
+
 /// The hooks specs reach through `harness.electronApp.evaluate` under Electron.
 async fn test_call(app: &Rc<App>, name: &str, params: Value) -> CoreResult<Reply> {
     if !app.test_mode {
@@ -328,13 +356,18 @@ async fn test_call(app: &Rc<App>, name: &str, params: Value) -> CoreResult<Reply
             .queue_prompt(params["answer"].as_str().map(str::to_owned)),
         "shellLog" => return Ok(Reply::Value(Value::Array(app.shell.take_log()))),
         "windows" => return Ok(dispatch::value(app.kernel.windows.ids())),
-        "focusWindow" => {
-            let window = params["window"]
-                .as_u64()
-                .and_then(|window| WindowId::try_from(window).ok())
-                .ok_or_else(|| CoreError::new("test call needs window"))?;
-            focus(app, window);
+        "focusWindow" => focus(app, window_param(&params)?),
+        "decodeImage" => {
+            // What Electron's nativeImage reports; the host reads PNG and JPEG headers only.
+            let size = pi_gui_core::app::conversation::attachments::image_size(&text_param(
+                &params, "data",
+            )?);
+            let (width, height) = size.unwrap_or((0, 0));
+            return Ok(Reply::Value(
+                json!({ "empty": size.is_none(), "width": width, "height": height }),
+            ));
         }
+        "closeWindow" => close_window(app, window_param(&params)?).await,
         "piHostPid" => return Ok(dispatch::value(app.driver.pid())),
         "quit" => app.quit.notify_one(),
         _ => return Err(CoreError::new(format!("Unknown test call: test.{name}"))),
@@ -352,7 +385,7 @@ async fn invoke_together(app: &Rc<App>, params: &Value) -> CoreResult<()> {
         .into_iter()
         .next()
         .ok_or_else(|| CoreError::new("Expected a desktop window to send from"))?;
-    let calls = params["requests"]
+    let mut calls = params["requests"]
         .as_array()
         .into_iter()
         .flatten()
@@ -366,10 +399,34 @@ async fn invoke_together(app: &Rc<App>, params: &Value) -> CoreResult<()> {
                 main_frame: true,
                 args: decode_args(request),
             };
-            Ok(dispatch::invoke(&app.kernel, method.api, call))
+            Ok(Box::pin(dispatch::invoke(&app.kernel, method.api, call)))
         })
         .collect::<CoreResult<Vec<_>>>()?;
-    for result in pi_gui_core::app::futures_join_all(calls).await {
+    // Electron runs every handler's synchronous part in one main-process turn and queued
+    // actions after it, so a command captures the view displayed before a navigation sent with
+    // it runs. Holding the action queue while each call starts does the same here.
+    let mut started: Vec<Option<CoreResult<Reply>>> = calls.iter().map(|_| None).collect();
+    app.kernel
+        .queue
+        .run(std::future::poll_fn(|cx| {
+            for (call, result) in calls.iter_mut().zip(started.iter_mut()) {
+                if let std::task::Poll::Ready(output) = std::future::Future::poll(call.as_mut(), cx)
+                {
+                    *result = Some(output);
+                }
+            }
+            std::task::Poll::Ready(())
+        }))
+        .await;
+    let pending = calls
+        .into_iter()
+        .zip(started.iter())
+        .filter(|(_, result)| result.is_none())
+        .map(|(call, _)| call);
+    for result in pi_gui_core::app::futures_join_all(pending).await {
+        result?;
+    }
+    for result in started.into_iter().flatten() {
         result?;
     }
     Ok(())
