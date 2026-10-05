@@ -175,7 +175,7 @@ pub async fn fork_thread(kernel: &Kernel, input: Value) -> CoreResult<DesktopApp
                 .borrow()
                 .session(&source_ref)
                 .map(|session| crate::js::trim(&session.title).to_owned());
-            let options = build_worktree_options(kernel, &root, title.as_deref());
+            let options = build_worktree_options(kernel, &root, title.as_deref().unwrap_or(""));
             let created: WorktreeEntry = crate::parse(
                 kernel
                     .core_call(

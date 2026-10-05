@@ -13,6 +13,7 @@ use std::path::PathBuf;
 use std::rc::{Rc, Weak};
 use std::time::Duration;
 use tokio::sync::oneshot;
+use tokio::task::AbortHandle;
 
 /// `PI_DRIVER_METHODS` in `pi-host/protocol.ts`; a unit test there checks the two match.
 pub const PI_DRIVER_METHODS: &[&str] = &[
@@ -369,6 +370,8 @@ pub struct HostPiDriver {
     /// Ends the host process now.
     kill: RefCell<Option<oneshot::Sender<()>>>,
     exited: RefCell<Option<tokio::sync::watch::Receiver<bool>>>,
+    /// The task writing to the pipe; ending it closes the pipe, which ends the host.
+    writer: RefCell<Option<AbortHandle>>,
 }
 
 impl HostPiDriver {
@@ -390,9 +393,11 @@ impl HostPiDriver {
             stopping: Cell::new(false),
             kill: RefCell::new(Some(kill)),
             exited: RefCell::new(Some(exited.clone())),
+            writer: RefCell::new(None),
         });
         let (reader, writer) = socket.into_split();
-        tokio::task::spawn_local(rpc::write_lines(lines, writer));
+        let writer = tokio::task::spawn_local(rpc::write_lines(lines, writer));
+        *driver.writer.borrow_mut() = Some(writer.abort_handle());
         let service = Rc::new(HostService {
             driver: Rc::downgrade(&driver),
         });
@@ -458,7 +463,10 @@ impl HostPiDriver {
             }
         };
         tokio::pin!(wait_exit);
-        let finished = tokio::time::timeout(timeout, async {
+        // As `pi-host/launch.ts`: a host still running when the time is up is killed, even one
+        // that answered the shutdown request.
+        let deadline = tokio::time::Instant::now() + timeout;
+        let _ = tokio::time::timeout_at(deadline, async {
             tokio::select! {
                 _ = shutdown => {}
                 _ = &mut wait_exit => {}
@@ -466,12 +474,18 @@ impl HostPiDriver {
         })
         .await;
         self.peer.close("app is quitting");
-        if finished.is_err() {
+        if let Some(writer) = self.writer.borrow_mut().take() {
+            writer.abort();
+        }
+        if tokio::time::timeout_at(deadline, &mut wait_exit)
+            .await
+            .is_err()
+        {
             if let Some(kill) = kill {
                 let _ = kill.send(());
             }
+            let _ = tokio::time::timeout(timeout, wait_exit).await;
         }
-        let _ = tokio::time::timeout(timeout, wait_exit).await;
     }
 
     fn push_config(&self) {

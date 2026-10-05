@@ -223,43 +223,7 @@ mod tests {
     use super::*;
 
     /// The methods no part answers yet. Parts shrink this list as they port their handlers.
-    const UNPORTED: &[&str] = &[
-        "getTurnChanges",
-        "getReview",
-        "getReviewFile",
-        "setReviewFileReviewed",
-        "changeReviewFileStage",
-        "renameWorkspace",
-        "removeWorkspace",
-        "reorderWorkspaces",
-        "reorderPinnedSessions",
-        "createWorktree",
-        "removeWorktree",
-        "syncCurrentWorkspace",
-        "renameSession",
-        "archiveSession",
-        "unarchiveSession",
-        "markSessionRead",
-        "setSessionPinned",
-        "sendChildThreadFollowUp",
-        "setChildSupervisionLoop",
-        "ensureTerminalPanel",
-        "createTerminalSession",
-        "setActiveTerminalSession",
-        "writeTerminal",
-        "resizeTerminal",
-        "restartTerminalSession",
-        "closeTerminalSession",
-        "setTerminalTitle",
-        "setTerminalFocused",
-        "setSidePanelFocused",
-        "listWorkspaceFiles",
-        "readWorkspaceFile",
-        "revealWorkspaceFile",
-        "getChangedFiles",
-        "getFileDiff",
-        "stageFile",
-    ];
+    const UNPORTED: &[&str] = &["sendChildThreadFollowUp", "setChildSupervisionLoop"];
 
     #[test]
     fn the_remaining_stubs_are_the_listed_ones() {

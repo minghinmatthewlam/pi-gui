@@ -91,9 +91,8 @@ async fn run() -> Result<(), CoreError> {
         .and_then(|port| port.parse().ok())
         .unwrap_or(0);
 
-    // The core, in process. Its notifications are for the terminal, which is not ported.
+    // The core, in process. Its notifications (terminal output) go to the kernel once it exists.
     let (peer, mut core_lines) = Peer::new();
-    tokio::task::spawn_local(async move { while core_lines.recv().await.is_some() {} });
     let core = Core::new(peer);
     core.clone()
         .call(
@@ -119,6 +118,20 @@ async fn run() -> Result<(), CoreError> {
         test_mode,
     });
     driver.set_host_calls(kernel.host_calls());
+    let relay = Rc::downgrade(&kernel);
+    tokio::task::spawn_local(async move {
+        while let Some(line) = core_lines.recv().await {
+            let (Some(kernel), Ok(message)) = (
+                relay.upgrade(),
+                serde_json::from_str::<serde_json::Value>(&line),
+            ) else {
+                continue;
+            };
+            if let Some(method) = message["method"].as_str() {
+                kernel.core_notification(method, message["params"].clone());
+            }
+        }
+    });
     kernel.start().await;
 
     let listener = tokio::net::TcpListener::bind(("127.0.0.1", port))

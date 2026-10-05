@@ -85,6 +85,7 @@ impl WindowViews {
         kernel.draft_flush.forget_window(window);
         kernel.workbench.reset_renderer(window);
         super::super::extensions::views::close_sender(kernel, window);
+        super::super::workspace::terminal::on_window_closed(kernel, window);
         if self.active_window.get() == Some(window) {
             let next = self.ids().into_iter().next();
             self.active_window.set(next);
