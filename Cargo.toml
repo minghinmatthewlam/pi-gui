@@ -10,3 +10,8 @@ license = "MIT"
 codegen-units = 1
 lto = true
 strip = true
+
+# Line tables keep panics and backtraces readable while debug builds stay a fraction of the
+# size; full debug info filled the disk with several checkouts sharing one target folder.
+[profile.dev]
+debug = "line-tables-only"
