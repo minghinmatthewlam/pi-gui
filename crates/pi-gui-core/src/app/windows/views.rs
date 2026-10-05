@@ -10,7 +10,7 @@ use crate::state::desktop_state::{AppView, ComposerDraftSyncSource, DesktopAppSt
 use crate::state::driver::SessionRef;
 use indexmap::IndexMap;
 use std::cell::{Cell, RefCell};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::rc::Rc;
 
@@ -25,6 +25,8 @@ pub struct WindowViews {
     active_action: Cell<Option<WindowId>>,
     deferred_activation: Cell<Option<WindowId>>,
     draft_persist_origin: Cell<Option<WindowId>>,
+    /// Windows whose renderer is gone: state is not pushed to them until their page loads.
+    recovering: RefCell<HashSet<WindowId>>,
 }
 
 /// The window a state action started from (`beginAction`'s context).
@@ -37,6 +39,15 @@ impl WindowViews {
     /// Open windows, oldest first.
     pub fn ids(&self) -> Vec<WindowId> {
         self.views.borrow().keys().copied().collect()
+    }
+
+    /// Open windows that hear state changes: all but those whose renderer is gone.
+    pub fn publishing_ids(&self) -> Vec<WindowId> {
+        let recovering = self.recovering.borrow();
+        self.ids()
+            .into_iter()
+            .filter(|window| !recovering.contains(window))
+            .collect()
     }
 
     pub fn contains(&self, window: WindowId) -> bool {
@@ -70,6 +81,7 @@ impl WindowViews {
             return;
         }
         self.last_transcript.borrow_mut().remove(&window);
+        self.recovering.borrow_mut().remove(&window);
         kernel.draft_flush.forget_window(window);
         kernel.workbench.reset_renderer(window);
         if self.active_window.get() == Some(window) {
@@ -81,11 +93,35 @@ impl WindowViews {
         }
     }
 
-    /// `renderer reload`: the window lost its pushes; send them again.
+    /// A window closed (main's `closed`): its view goes, then dialogs on threads that no
+    /// visible window shows any more are cancelled.
+    pub fn closed(&self, kernel: &Kernel, window: WindowId) {
+        self.remove(kernel, window);
+        let kernel = kernel.rc();
+        tokio::task::spawn_local(async move {
+            if let Err(error) = cancel_pending_dialogs_without_visible_window(&kernel).await {
+                eprintln!(
+                    "[main] cancelPendingDialogsWithoutVisibleWindow failed {}",
+                    error.message
+                );
+            }
+        });
+    }
+
+    /// `render-process-gone`: the window stops hearing state changes until its page loads.
+    pub fn renderer_gone(&self, window: WindowId) {
+        if self.contains(window) {
+            self.recovering.borrow_mut().insert(window);
+        }
+    }
+
+    /// `did-finish-load` after a reload or a renderer that was gone: the window lost its
+    /// pushes; send them again.
     pub fn renderer_reset(&self, kernel: &Kernel, window: WindowId) {
         if !self.contains(window) {
             return;
         }
+        self.recovering.borrow_mut().remove(&window);
         self.last_transcript.borrow_mut().remove(&window);
         kernel.workbench.reset_renderer(window);
         let snapshot = kernel.data.borrow().state.clone();
@@ -502,4 +538,43 @@ impl WindowViews {
         self.draft_persist_origin.set(previous);
         result
     }
+}
+
+/// `cancelPendingDialogsWithoutVisibleWindow`.
+async fn cancel_pending_dialogs_without_visible_window(kernel: &Kernel) -> CoreResult<()> {
+    kernel.initialize().await;
+    let pending: Vec<SessionRef> = {
+        let data = kernel.data.borrow();
+        data.state
+            .workspaces
+            .iter()
+            .flat_map(|workspace| {
+                workspace
+                    .sessions
+                    .iter()
+                    .map(|session| crate::state::driver::session_ref(&workspace.id, &session.id))
+            })
+            .filter(|session_ref| {
+                data.sessions
+                    .extension_ui_by_session
+                    .get(&crate::state::driver::session_key(session_ref))
+                    .is_some_and(|ui| !ui.pending_dialogs.is_empty())
+            })
+            .collect()
+    };
+    let pending: Vec<SessionRef> = pending
+        .into_iter()
+        .filter(|session_ref| {
+            !kernel
+                .windows
+                .is_session_visible_in_another_window(kernel, session_ref)
+        })
+        .collect();
+    let cancels = pending
+        .iter()
+        .map(|session_ref| sessions::cancel_pending_dialogs_for_session(kernel, session_ref, true));
+    for result in super::super::futures_join_all(cancels).await {
+        result?;
+    }
+    Ok(())
 }

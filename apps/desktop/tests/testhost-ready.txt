@@ -10,3 +10,12 @@ scheduled-task-runtime-tools.spec.ts
 notifications.spec.ts
 notification-settings.spec.ts
 notification-onboarding.spec.ts
+multi-window.spec.ts:179
+multi-window.spec.ts:209
+multi-window.spec.ts:271
+multi-window.spec.ts:426
+multi-window.spec.ts:509
+multi-window.spec.ts:557
+multi-window.spec.ts:622
+close-focused-surface.spec.ts:92
+secondary-surface-inset.spec.ts

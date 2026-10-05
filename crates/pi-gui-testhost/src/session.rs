@@ -14,6 +14,7 @@ use futures_util::{SinkExt, StreamExt};
 use pi_gui_core::app::dispatch::{self, InvokeCall, Reply};
 use pi_gui_core::app::methods::{self, push};
 use pi_gui_core::app::pi::InterceptOutcome;
+use pi_gui_core::app::publish::ViewState;
 use pi_gui_core::app::shell::{Push, Shell};
 use pi_gui_core::app::test_hooks::ControlMode;
 use pi_gui_core::app::{events, notifications, publish, scheduled, WindowId};
@@ -42,6 +43,15 @@ pub struct Windows {
     senders: Rc<RefCell<HashMap<WindowId, Out>>>,
     /// Windows whose page closed, waiting out the grace period.
     detached: RefCell<HashMap<WindowId, AbortHandle>>,
+    /// The view the next new window starts on, as main's `createAppWindow(sourceView)`.
+    source_view: RefCell<Option<ViewState>>,
+}
+
+fn window_param(params: &Value) -> CoreResult<WindowId> {
+    params["window"]
+        .as_u64()
+        .and_then(|window| WindowId::try_from(window).ok())
+        .ok_or_else(|| CoreError::new("test call needs window"))
 }
 
 fn push_message(push: &Push) -> String {
@@ -144,7 +154,8 @@ fn attach_window(app: &Rc<App>, out: &Out, requested: Option<u64>) -> WindowId {
             }
         }),
     );
-    app.kernel.windows.add(&app.kernel, window, None);
+    let source_view = app.windows.source_view.borrow_mut().take();
+    app.kernel.windows.add(&app.kernel, window, source_view);
     if app.shell.focused_window() == Some(window) {
         focus(app, window);
     }
@@ -153,6 +164,7 @@ fn attach_window(app: &Rc<App>, out: &Out, requested: Option<u64>) -> WindowId {
 
 fn detach_window(app: &Rc<App>, window: WindowId) {
     app.windows.senders.borrow_mut().remove(&window);
+    app.kernel.windows.renderer_gone(window);
     let weak = Rc::downgrade(app);
     let timer = tokio::task::spawn_local(async move {
         tokio::time::sleep(RELOAD_GRACE).await;
@@ -161,7 +173,7 @@ fn detach_window(app: &Rc<App>, window: WindowId) {
         };
         app.windows.detached.borrow_mut().remove(&window);
         app.shell.remove_window(window);
-        app.kernel.windows.remove(&app.kernel, window);
+        app.kernel.windows.closed(&app.kernel, window);
     });
     app.windows
         .detached
@@ -316,13 +328,65 @@ async fn test_call(app: &Rc<App>, name: &str, params: Value) -> CoreResult<Reply
             .queue_prompt(params["answer"].as_str().map(str::to_owned)),
         "shellLog" => return Ok(Reply::Value(Value::Array(app.shell.take_log()))),
         "windows" => return Ok(dispatch::value(app.kernel.windows.ids())),
-        "focusWindow" => {
-            let window = params["window"]
-                .as_u64()
-                .and_then(|window| WindowId::try_from(window).ok())
-                .ok_or_else(|| CoreError::new("test call needs window"))?;
+        "focusWindow" => focus(app, window_param(&params)?),
+        "showWindow" => {
+            let window = window_param(&params)?;
+            app.shell.show(window);
             focus(app, window);
         }
+        "minimizeWindow" => app.shell.minimize(window_param(&params)?),
+        "windowState" => {
+            let presence = app.shell.presence(window_param(&params)?);
+            return Ok(Reply::Value(presence.map_or(Value::Null, |presence| {
+                json!({
+                    "focused": presence.focused,
+                    "minimized": presence.minimized,
+                    "maximized": false,
+                    "visible": presence.visible,
+                })
+            })));
+        }
+        // Main's `second-instance`: the foreground window is restored, shown and focused.
+        "secondInstance" => {
+            if let Some(window) = app.kernel.windows.foreground(&app.kernel) {
+                app.shell.show_window(window);
+                focus(app, window);
+            }
+        }
+        // A key main sees before the page: Shift+Mod+N opens a window on the sender's view
+        // (the page the spec opens next); any other key goes on to the page.
+        "keyboard" => {
+            let window = window_param(&params)?;
+            let modifiers: Vec<&str> = params["modifiers"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+                .collect();
+            let platform_modifier = if cfg!(target_os = "macos") {
+                "meta"
+            } else {
+                "control"
+            };
+            let key = text_param(&params, "keyCode")?.to_lowercase();
+            if modifiers.contains(&platform_modifier) && modifiers.contains(&"shift") && key == "n"
+            {
+                let view = app.kernel.windows.view_for_window(&app.kernel, window);
+                *app.windows.source_view.borrow_mut() = Some(view);
+                return Ok(Reply::Value(json!({ "route": "newWindow" })));
+            }
+            return Ok(Reply::Value(json!({ "route": "page" })));
+        }
+        "holdOpenDialog" => app.shell.hold_open_dialog(
+            params["paths"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+                .map(Into::into)
+                .collect(),
+        ),
+        "releaseOpenDialog" => app.shell.release_held_open_dialog()?,
         "fireDueScheduledTasks" => {
             app.kernel.initialize().await;
             let now = match params["nowIso"].as_str() {

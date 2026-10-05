@@ -133,6 +133,10 @@ pub struct TestShell {
     /// `PI_APP_TEST_MODE=background`: windows are never shown, as in the Electron lane.
     background: bool,
     open_dialog_answers: RefCell<VecDeque<Option<Vec<PathBuf>>>>,
+    /// `holdNextOpenDialog`: the next open dialog waits for a release, then returns these.
+    held_open_dialog: RefCell<Option<Vec<PathBuf>>>,
+    /// The held open dialog that is waiting for its release.
+    open_dialog_release: RefCell<Option<Rc<tokio::sync::Notify>>>,
     prompt_answers: RefCell<VecDeque<Option<String>>>,
     /// External links, reveals, notifications and appearance changes, in order.
     log: RefCell<Vec<Value>>,
@@ -193,6 +197,8 @@ impl TestShell {
             focused: Cell::new(None),
             background,
             open_dialog_answers: RefCell::new(VecDeque::new()),
+            held_open_dialog: RefCell::new(None),
+            open_dialog_release: RefCell::new(None),
             prompt_answers: RefCell::new(VecDeque::new()),
             log: RefCell::new(Vec::new()),
             permission_status: RefCell::new(permission_env(PERMISSION_STATUS_ENV)),
@@ -254,6 +260,50 @@ impl TestShell {
         self.open_dialog_answers.borrow_mut().push_back(paths);
     }
 
+    /// The next open dialog stays open until `release_held_open_dialog`, then returns `paths`.
+    pub fn hold_open_dialog(&self, paths: Vec<PathBuf>) {
+        *self.held_open_dialog.borrow_mut() = Some(paths);
+    }
+
+    /// Answers the held open dialog.
+    pub fn release_held_open_dialog(&self) -> CoreResult<()> {
+        let release = self
+            .open_dialog_release
+            .borrow_mut()
+            .take()
+            .ok_or_else(|| CoreError::new("Delayed open dialog was not pending."))?;
+        release.notify_one();
+        Ok(())
+    }
+
+    /// Minimizes a window, which also takes its focus.
+    pub fn minimize(&self, window: WindowId) {
+        if let Some(presence) = self.presence(window) {
+            self.set_presence(
+                window,
+                WindowPresence {
+                    minimized: true,
+                    focused: false,
+                    ..presence
+                },
+            );
+        }
+    }
+
+    /// Shows a window, as `BrowserWindow.show` does.
+    pub fn show(&self, window: WindowId) {
+        if let Some(presence) = self.presence(window) {
+            self.set_presence(
+                window,
+                WindowPresence {
+                    visible: true,
+                    ..presence
+                },
+            );
+            self.focus(window);
+        }
+    }
+
     /// The next text prompt returns this; `None` cancels it.
     pub fn queue_prompt(&self, answer: Option<String>) {
         self.prompt_answers.borrow_mut().push_back(answer);
@@ -295,8 +345,16 @@ impl Shell for TestShell {
         _parent: Option<WindowId>,
         request: PickPaths,
     ) -> LocalFuture<CoreResult<Option<Vec<PathBuf>>>> {
-        let answer = self.open_dialog_answers.borrow_mut().pop_front();
         self.record(json!({ "kind": "openDialog", "title": request.title }));
+        if let Some(paths) = self.held_open_dialog.borrow_mut().take() {
+            let release = Rc::new(tokio::sync::Notify::new());
+            *self.open_dialog_release.borrow_mut() = Some(release.clone());
+            return Box::pin(async move {
+                release.notified().await;
+                Ok(Some(paths))
+            });
+        }
+        let answer = self.open_dialog_answers.borrow_mut().pop_front();
         Box::pin(std::future::ready(Ok(answer.flatten())))
     }
 
