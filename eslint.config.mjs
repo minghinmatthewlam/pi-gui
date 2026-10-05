@@ -40,6 +40,8 @@ export default [
           ".artifacts",
           "test-results",
           "playwright-report",
+          // Cargo output, including Tauri's generated asset bundles.
+          "target",
         ].map((directory) => `${root}${directory}/**`),
       ),
       "**/*.d.{ts,mts,cts}",
