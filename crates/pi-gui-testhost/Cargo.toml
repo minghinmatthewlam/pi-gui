@@ -1,0 +1,14 @@
+[package]
+name = "pi-gui-testhost"
+version = "0.1.0"
+description = "Runs the Rust app-state kernel behind a WebSocket so Playwright can drive the renderer in a browser."
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+pi-gui-core = { path = "../pi-gui-core" }
+serde_json = { version = "1", features = ["preserve_order"] }
+tokio = { version = "1.53.2", features = ["rt", "macros", "net", "io-util", "time", "sync", "signal", "fs"] }
+tokio-tungstenite = { version = "0.30", default-features = false, features = ["handshake"] }

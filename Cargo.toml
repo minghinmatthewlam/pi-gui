@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/pi-gui-core"]
+members = ["crates/pi-gui-core", "crates/pi-gui-testhost"]
 
 [workspace.package]
 edition = "2021"
