@@ -1,0 +1,7 @@
+# Core specs that pass on pi-gui-testhost (the Rust app-state kernel). One per line: a spec
+# file under tests/core, or file:line for a single test while the rest of the file is not
+# ported yet. `pnpm test:e2e:testhost` runs exactly these.
+smoke.spec.ts
+navigation.spec.ts
+persistence.spec.ts:159
+persistence.spec.ts:211

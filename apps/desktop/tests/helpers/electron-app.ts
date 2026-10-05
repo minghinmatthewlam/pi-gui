@@ -23,6 +23,7 @@ import {
   type RuntimeToolTestInput,
   type RuntimeToolTestResult,
 } from "./desktop-harness";
+import { launchTestHost } from "./testhost";
 import { createElectronHarness, type ElectronDesktopHarness } from "./electron-harness";
 
 export {
@@ -148,7 +149,9 @@ export async function launchDesktop(
   userDataDir: string,
   options: readonly string[] | LaunchDesktopOptions = [],
 ): Promise<DesktopHarness> {
-  desktopTestTarget();
+  if (desktopTestTarget() === "testhost") {
+    return launchTestHost(userDataDir, normalizeLaunchOptions(options));
+  }
   return launchElectronDesktop(userDataDir, options);
 }
 

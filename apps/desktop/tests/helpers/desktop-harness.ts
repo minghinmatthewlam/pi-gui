@@ -38,8 +38,8 @@ export type DesktopTestTarget = "electron" | "testhost";
 
 export function desktopTestTarget(): DesktopTestTarget {
   const target = process.env.PI_APP_TEST_TARGET?.trim() || "electron";
-  if (target !== "electron") {
-    throw new Error(`PI_APP_TEST_TARGET=${target} is not a desktop test target yet.`);
+  if (target !== "electron" && target !== "testhost") {
+    throw new Error(`PI_APP_TEST_TARGET=${target} is not a desktop test target.`);
   }
   return target;
 }

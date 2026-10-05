@@ -5,8 +5,7 @@ export default defineConfig({
   forbidOnly: Boolean(process.env.CI),
   testDir: resolve(__dirname, "tests"),
   // Demo specs record marketing videos on demand; keep them out of default/CI discovery.
-  // The test host lane has its own config, playwright.testhost.config.ts.
-  testIgnore: ["**/demo/**", "**/testhost/**"],
+  testIgnore: ["**/demo/**"],
   timeout: 60_000,
   // CI runners are routinely 2-3x slower than dev machines; the default 5s
   // expect timeout flakes on UI convergence that is sub-second locally.
