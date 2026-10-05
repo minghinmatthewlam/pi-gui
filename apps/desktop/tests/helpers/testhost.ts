@@ -8,15 +8,16 @@ import {
   type DesktopHarness,
   type DesktopIpcControl,
   type DesktopTestHooks,
-  type DesktopWindowState,
   type InterceptedDriverCall,
   type IpcInvokeControlSnapshot,
   type PiDriverCallRecord,
   type PiDriverControl,
   type RuntimeToolTestInput,
   type RuntimeToolTestResult,
+  type TextPromptOutcome,
 } from "./desktop-harness";
-import type { DesktopAppState } from "../../contracts/desktop-state";
+import type { DesktopAppState, ThemePresetId } from "../../contracts/desktop-state";
+import { windowBackgroundFor, type ResolvedTheme } from "../../contracts/theme";
 import {
   createScheduledTaskRuntimeTools,
   type ScheduledTaskRuntimeBridge,
@@ -60,6 +61,22 @@ export interface TestHostHarness extends DesktopHarness {
   readonly control: TestHostControl;
   /** Opens another page, which connects as a new window. */
   newWindow(): Promise<Page>;
+}
+
+/** What `test.windowState` reports; the background follows the theme as main's does. */
+interface WindowStateReport {
+  readonly focused: boolean;
+  readonly minimized: boolean;
+  readonly maximized: boolean;
+  readonly visible: boolean;
+  readonly themePresetId: ThemePresetId;
+  readonly resolvedTheme: ResolvedTheme;
+}
+
+async function windowIdOf(page: Page): Promise<number> {
+  return Number(
+    await page.evaluate((key) => globalThis.sessionStorage.getItem(key), WINDOW_ID_KEY),
+  );
 }
 
 function unsupported(what: string): () => Promise<never> {
@@ -220,14 +237,9 @@ export async function launchTestHost(
     let first: Promise<Page> | undefined;
     const firstWindow = () => (first ??= openWindow());
     const pageOf = async (window?: Page) => window ?? (await firstWindow());
-    const windowIdOf = async (window?: Page) => {
-      const page = await pageOf(window);
-      return Number(
-        await page.evaluate((key) => globalThis.sessionStorage.getItem(key), WINDOW_ID_KEY),
-      );
-    };
+    const windowOf = async (window?: Page) => windowIdOf(await pageOf(window));
     const focus = async (window?: Page) => {
-      await control.call("focusWindow", { window: await windowIdOf(window) });
+      await control.call("focusWindow", { window: await windowOf(window) });
     };
     // The shell's log is drained by each read, so it is kept here.
     const shellLog: { kind: string; url?: string }[] = [];
@@ -287,20 +299,28 @@ export async function launchTestHost(
         count: async () => (await control.call<number[]>("windows")).length,
         pages: () => [...pages],
         waitForNew: unsupported("A window the app opens itself"),
-        // The test host has no native window colour, so `backgroundColor` is left out.
-        state: async (window) =>
-          (await control.call<DesktopWindowState | null>("windowState", {
-            window: await windowIdOf(window),
-          })) ?? undefined,
+        state: async (window) => {
+          const state = await control.call<WindowStateReport | null>("windowState", {
+            window: await windowOf(window),
+          });
+          if (!state) return undefined;
+          return {
+            focused: state.focused,
+            minimized: state.minimized,
+            maximized: state.maximized,
+            visible: state.visible,
+            backgroundColor: windowBackgroundFor(state.themePresetId, state.resolvedTheme),
+          };
+        },
         close: async (window) => {
           await (await pageOf(window)).close();
         },
         show: async (window) => {
-          await control.call("showWindow", { window: await windowIdOf(window) });
+          await control.call("showWindow", { window: await windowOf(window) });
         },
         focus,
         minimize: async (window) => {
-          await control.call("minimizeWindow", { window: await windowIdOf(window) });
+          await control.call("minimizeWindow", { window: await windowOf(window) });
         },
         emitFocus: async (window) => {
           if (window !== "all") return focus(window);
@@ -373,7 +393,19 @@ export async function launchTestHost(
           await control.call("releaseOpenDialog");
         },
         openDialogCount: async () => (await openDialogs()) - openDialogsBefore,
-        beginTextPrompt: unsupported("The text prompt window"),
+        beginTextPrompt: async (message, placeholder) => {
+          const { prompt, outcome } = await control.call<{ prompt: number; outcome: number }>(
+            "beginTextPrompt",
+            { message, placeholder },
+          );
+          const page = await context.newPage();
+          await page.goto(`${url}/__testhost/prompt?id=${prompt}`);
+          const result = control.call<TextPromptOutcome>("textPromptOutcome", { outcome });
+          // Main destroys the prompt window once it is answered.
+          const closePage = () => page.close().catch(() => undefined);
+          void result.then(closePage, closePage);
+          return { window: page, outcome: () => result };
+        },
       },
       menu: {
         item: unsupported("The application menu"),

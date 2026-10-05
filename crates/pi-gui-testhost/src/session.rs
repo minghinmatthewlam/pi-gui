@@ -15,9 +15,10 @@ use pi_gui_core::app::dispatch::{self, InvokeCall, Reply};
 use pi_gui_core::app::methods::{self, push};
 use pi_gui_core::app::pi::InterceptOutcome;
 use pi_gui_core::app::publish::ViewState;
+use pi_gui_core::app::settings::login::prompt_for_text;
 use pi_gui_core::app::shell::{Push, Shell};
 use pi_gui_core::app::test_hooks::ControlMode;
-use pi_gui_core::app::{events, notifications, publish, scheduled, WindowId};
+use pi_gui_core::app::{events, notifications, publish, scheduled, ui, WindowId};
 use pi_gui_core::error::{CoreError, CoreResult};
 use pi_gui_core::state::driver::{session_key, SessionDriverEvent, SessionRef};
 use serde_json::{json, Value};
@@ -45,13 +46,6 @@ pub struct Windows {
     detached: RefCell<HashMap<WindowId, AbortHandle>>,
     /// The view the next new window starts on, as main's `createAppWindow(sourceView)`.
     source_view: RefCell<Option<ViewState>>,
-}
-
-fn window_param(params: &Value) -> CoreResult<WindowId> {
-    params["window"]
-        .as_u64()
-        .and_then(|window| WindowId::try_from(window).ok())
-        .ok_or_else(|| CoreError::new("test call needs window"))
 }
 
 fn push_message(push: &Push) -> String {
@@ -323,9 +317,32 @@ async fn test_call(app: &Rc<App>, name: &str, params: Value) -> CoreResult<Reply
                     .map(Into::into)
                     .collect()
             })),
-        "queuePrompt" => app
-            .shell
-            .queue_prompt(params["answer"].as_str().map(str::to_owned)),
+        "beginTextPrompt" => return begin_text_prompt(app, &params).await,
+        "textPromptOutcome" => {
+            let id = params["outcome"]
+                .as_u64()
+                .ok_or_else(|| CoreError::new("test call needs outcome"))?;
+            let outcome = app
+                .text_prompts
+                .borrow_mut()
+                .remove(&id)
+                .ok_or_else(|| CoreError::new(format!("No text prompt outcome {id}")))?;
+            let outcome = outcome
+                .await
+                .map_err(|error| CoreError::new(error.to_string()))?;
+            return Ok(Reply::Value(match outcome {
+                Ok(value) => json!({ "ok": true, "value": value }),
+                Err(error) => json!({ "ok": false, "error": error.message }),
+            }));
+        }
+        "answerPrompt" => {
+            let id = params["id"]
+                .as_u64()
+                .ok_or_else(|| CoreError::new("test call needs id"))?;
+            app.shell
+                .answer_prompt(id, params["value"].as_str().map(str::to_owned))?;
+        }
+        "windowState" => return Ok(Reply::Value(window_state(app, &params))),
         "shellLog" => return Ok(Reply::Value(Value::Array(app.shell.take_log()))),
         "windows" => return Ok(dispatch::value(app.kernel.windows.ids())),
         "focusWindow" => focus(app, window_param(&params)?),
@@ -335,17 +352,6 @@ async fn test_call(app: &Rc<App>, name: &str, params: Value) -> CoreResult<Reply
             focus(app, window);
         }
         "minimizeWindow" => app.shell.minimize(window_param(&params)?),
-        "windowState" => {
-            let presence = app.shell.presence(window_param(&params)?);
-            return Ok(Reply::Value(presence.map_or(Value::Null, |presence| {
-                json!({
-                    "focused": presence.focused,
-                    "minimized": presence.minimized,
-                    "maximized": false,
-                    "visible": presence.visible,
-                })
-            })));
-        }
         // Main's `second-instance`: the foreground window is restored, shown and focused.
         "secondInstance" => {
             if let Some(window) = app.kernel.windows.foreground(&app.kernel) {
@@ -434,6 +440,67 @@ async fn test_call(app: &Rc<App>, name: &str, params: Value) -> CoreResult<Reply
         _ => return Err(CoreError::new(format!("Unknown test call: test.{name}"))),
     }
     Ok(Reply::Undefined)
+}
+
+fn window_param(params: &Value) -> CoreResult<WindowId> {
+    params["window"]
+        .as_u64()
+        .and_then(|window| WindowId::try_from(window).ok())
+        .ok_or_else(|| CoreError::new("test call needs window"))
+}
+
+/// Shows the app's text prompt (used by provider login) as a page of its own, as Electron's
+/// `promptForText` test hook opens its modal. Answers the prompt to load and the outcome to
+/// wait for.
+async fn begin_text_prompt(app: &Rc<App>, params: &Value) -> CoreResult<Reply> {
+    let message = text_param(params, "message")?;
+    let placeholder = params["placeholder"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned();
+    let opened_before = app.shell.open_prompts().last().map(|(id, _)| *id);
+    let kernel = app.kernel.clone();
+    let parent = app.shell.focused_window();
+    let outcome = tokio::task::spawn_local(async move {
+        prompt_for_text(&kernel, parent, message, placeholder, false).await
+    });
+    // The prompt opens as soon as the task first runs.
+    let mut prompt = None;
+    for _ in 0..100 {
+        tokio::task::yield_now().await;
+        prompt = app
+            .shell
+            .open_prompts()
+            .last()
+            .map(|(id, _)| *id)
+            .filter(|id| Some(*id) != opened_before);
+        if prompt.is_some() {
+            break;
+        }
+    }
+    let prompt = prompt.ok_or_else(|| CoreError::new("The text prompt did not open"))?;
+    let id = app.next_text_prompt.get() + 1;
+    app.next_text_prompt.set(id);
+    app.text_prompts.borrow_mut().insert(id, outcome);
+    Ok(Reply::Value(json!({ "prompt": prompt, "outcome": id })))
+}
+
+/// What `BrowserWindow` would report: presence, and the theme its background follows.
+fn window_state(app: &App, params: &Value) -> Value {
+    let Some(presence) = window_param(params)
+        .ok()
+        .and_then(|window| app.shell.presence(window))
+    else {
+        return Value::Null;
+    };
+    json!({
+        "visible": presence.visible,
+        "minimized": presence.minimized,
+        "focused": presence.focused,
+        "maximized": false,
+        "themePresetId": app.kernel.data.borrow().state.theme_preset_id,
+        "resolvedTheme": ui::resolved_theme(&app.kernel),
+    })
 }
 
 #[cfg(test)]

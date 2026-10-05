@@ -1,0 +1,37 @@
+[package]
+name = "pi-gui-tauri"
+version = "0.1.0"
+description = "pi-gui's Tauri app: the Rust app-state kernel in process, the React renderer in a native webview."
+edition = "2021"
+license = "MIT"
+publish = false
+default-run = "pi-gui"
+
+# Its own workspace: the root workspace's checks run without the webview's system libraries.
+[workspace]
+
+[[bin]]
+name = "pi-gui"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2.7", features = [] }
+
+[dependencies]
+base64 = "0.22"
+indexmap = "2"
+pi-gui-core = { path = "../../../crates/pi-gui-core" }
+png = "0.17"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+tauri = { version = "2.12", features = [] }
+tauri-plugin-clipboard-manager = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-notification = "2"
+tauri-plugin-opener = "2"
+tauri-plugin-single-instance = "2"
+tokio = { version = "1.53.2", features = ["rt", "macros", "sync", "time"] }
+uuid = { version = "1", features = ["v4"] }
+
+[profile.dev]
+debug = "line-tables-only"

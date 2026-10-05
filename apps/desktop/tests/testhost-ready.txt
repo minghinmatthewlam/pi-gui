@@ -19,3 +19,11 @@ multi-window.spec.ts:557
 multi-window.spec.ts:622
 close-focused-surface.spec.ts:92
 secondary-surface-inset.spec.ts
+custom-endpoints.spec.ts
+extension-provider-models.spec.ts
+login-prompt.spec.ts
+mcp-settings.spec.ts
+provider-settings.spec.ts
+settings-appearance.spec.ts
+settings-general.spec.ts:65
+skills-settings.spec.ts

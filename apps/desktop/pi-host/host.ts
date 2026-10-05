@@ -43,9 +43,11 @@ import {
   type SubscribeParams,
   type ToolCaller,
 } from "./protocol";
+import { probeCustomProviderModels } from "./custom-provider-probe";
 import { remoteCatalogStorage } from "./remote-catalog";
 import { RpcPeer } from "../rpc/rpc-peer";
 import type { SessionRef } from "@pi-gui/session-driver";
+import type { CustomProviderProbeInput } from "../contracts/ipc";
 
 if (!hostSocketPath || !hostToken) {
   console.error("[pi-host] started without a pipe address; only pi-gui starts this process");
@@ -297,6 +299,10 @@ peer.handle(hostMethods.closeViewSender, (params) => {
   requireViews().closeSender((params as { senderId: number }).senderId);
   return null;
 });
+
+peer.handle(hostMethods.probeCustomProviderModels, (params) =>
+  probeCustomProviderModels(params as CustomProviderProbeInput, fetch),
+);
 
 peer.handle(hostMethods.viewAsset, async (params): Promise<ExtensionViewAssetResponse> => {
   const response = await requireViews().assetResponse((params as { url: string }).url);

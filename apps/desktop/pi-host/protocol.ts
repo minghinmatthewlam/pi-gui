@@ -194,6 +194,8 @@ export const hostMethods = {
   closeView: "views.close",
   closeViewSender: "views.closeSender",
   viewAsset: "views.asset",
+  /** Model ids an OpenAI-compatible endpoint lists; the Rust app has no HTTP client of its own. */
+  probeCustomProviderModels: "host.probeCustomProviderModels",
 } as const;
 
 /** App → host notifications. */

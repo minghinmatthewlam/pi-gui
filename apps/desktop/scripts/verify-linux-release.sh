@@ -309,6 +309,7 @@ verify_install_upgrade_launch_remove() {
     const send = (message) => core.stdin.write(`${JSON.stringify(message)}\n`);
     let lines = "";
     let output = "";
+    let done = false;
     core.stdout.setEncoding("utf8");
     core.stdout.on("data", (chunk) => {
       lines += chunk;
@@ -323,7 +324,9 @@ verify_install_upgrade_launch_remove() {
         } else if (message.method === "terminal.data") {
           output += message.params.data;
           process.stdout.write(message.params.data);
-          if (output.includes("pi-gui-core-terminal-ok")) {
+          // The shell keeps writing (its next prompt) after the marker; stop only once.
+          if (!done && output.includes("pi-gui-core-terminal-ok")) {
+            done = true;
             clearTimeout(timer);
             send({ id: 4, method: "core.shutdown" });
             core.stdin.end();

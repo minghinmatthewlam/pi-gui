@@ -23,6 +23,8 @@
 /apps/*/.turbo/
 /apps/*/test-results/
 /apps/*/playwright-report/
+# Tauri's generated permission schemas.
+/apps/desktop/src-tauri/gen/
 /packages/*/dist/
 /packages/*/dist-electron/
 /packages/*/out/
