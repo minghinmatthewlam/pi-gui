@@ -429,6 +429,14 @@ impl HostPiDriver {
         self.pid
     }
 
+    /// `views.asset`: an extension view's file for a `pi-extension://` request, as
+    /// `{ status, headers, bodyBase64 }`.
+    pub async fn view_asset(&self, url: &str) -> CoreResult<Value> {
+        self.peer
+            .request("views.asset", json!({ "url": url }))
+            .await
+    }
+
     /// Who answers `app.*` calls; set once the kernel exists.
     pub fn set_host_calls(&self, calls: Rc<dyn HostCalls>) {
         *self.host_calls.borrow_mut() = Some(calls);

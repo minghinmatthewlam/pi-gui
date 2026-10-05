@@ -4,6 +4,7 @@ import { earlyModifierChords, getSidePanelTabCommand } from "../contracts/ipc";
 import App from "./app/App";
 import { RendererErrorBoundary } from "./app/desktop-recovery";
 import { applyLastTheme } from "./ui/active-theme";
+import { installTauriPiApp, isTauriWebview } from "./platform/tauri-pi-app";
 import { installTestHostTransport, testHostUrl } from "./platform/testhost-transport";
 import "./dev-reload-hook";
 import "./styles.css";
@@ -50,11 +51,16 @@ function mount() {
   );
 }
 
-// In the Rust test host, `window.piApp` arrives over a WebSocket before the app mounts.
+// In the Rust test host, `window.piApp` arrives over a WebSocket before the app mounts; in
+// the Tauri app, over Tauri's commands.
 const testHost = testHostUrl();
 if (testHost) {
   installTestHostTransport(testHost).then(mount, (error: unknown) => {
     console.error("[renderer] test host connection failed", error);
+  });
+} else if (isTauriWebview()) {
+  installTauriPiApp().then(mount, (error: unknown) => {
+    console.error("[renderer] Tauri app connection failed", error);
   });
 } else {
   mount();
