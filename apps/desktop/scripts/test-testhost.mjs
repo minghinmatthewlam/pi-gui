@@ -6,6 +6,7 @@ import {
   mkdirSync,
   readFileSync,
   readdirSync,
+  renameSync,
   utimesSync,
 } from "node:fs";
 import { resolve } from "node:path";
@@ -33,17 +34,23 @@ if (build) {
   if (cargo.status !== 0) process.exit(cargo.status ?? 1);
 }
 // Run a private copy of the test host: checkouts that share a cargo target folder rebuild the
-// same binary path from their own sources, which would swap it out mid-run.
+// same binary path from their own sources, which would swap it out mid-run. The copy is taken
+// right after this checkout's build; without `--build` the last copy is reused.
 let testHostBin = process.env.PI_GUI_TESTHOST_BIN?.trim();
 if (!testHostBin) {
-  const built = resolve(
-    process.env.CARGO_TARGET_DIR ?? resolve(repoRoot, "target"),
-    "debug/pi-gui-testhost",
-  );
-  if (existsSync(built)) {
-    testHostBin = resolve(desktopDir, "out/testhost/pi-gui-testhost");
+  testHostBin = resolve(desktopDir, "out/testhost/pi-gui-testhost");
+  if (build) {
+    const built = resolve(
+      process.env.CARGO_TARGET_DIR ?? resolve(repoRoot, "target"),
+      "debug/pi-gui-testhost",
+    );
     mkdirSync(resolve(testHostBin, ".."), { recursive: true });
-    copyFileSync(built, testHostBin);
+    // Copy then rename, so a test host still running from the old copy keeps its file.
+    copyFileSync(built, `${testHostBin}.new`);
+    renameSync(`${testHostBin}.new`, testHostBin);
+  } else if (!existsSync(testHostBin)) {
+    console.error("No test host copy yet: run with --build first.");
+    process.exit(1);
   }
 }
 const extra = process.argv.slice(2).filter((arg) => arg !== "--" && arg !== "--build");

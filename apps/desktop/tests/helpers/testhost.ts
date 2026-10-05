@@ -2,7 +2,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { delimiter, join, resolve } from "node:path";
 import { createInterface } from "node:readline";
-import { chromium, expect, type BrowserContext, type Page } from "@playwright/test";
+import { chromium, expect, type BrowserContext, type Page, type Request } from "@playwright/test";
 import {
   HYDRATE_TEST_SENTINEL,
   type DesktopHarness,
@@ -155,6 +155,17 @@ async function waitForListening(child: ChildProcess, output: string[]): Promise<
  * Electron main's `will-frame-navigate`: a subframe may only load an extension view's own
  * document. Anything else is answered 204, so the frame keeps its page and nothing is fetched.
  */
+/** A navigation inside a page's frame, as opposed to a page (or a page a link opens) loading. */
+function isFrameNavigation(request: Request): boolean {
+  if (!request.isNavigationRequest()) return false;
+  try {
+    return request.frame().parentFrame() !== null;
+  } catch {
+    // A page a link opens has no frame yet when its first request is routed.
+    return false;
+  }
+}
+
 async function blockFrameNavigation(context: BrowserContext, appUrl: string): Promise<void> {
   const appOrigin = new URL(appUrl).origin;
   const port = new URL(appUrl).port;
@@ -162,7 +173,7 @@ async function blockFrameNavigation(context: BrowserContext, appUrl: string): Pr
     (url) => url.origin !== appOrigin,
     async (route) => {
       const request = route.request();
-      if (!request.isNavigationRequest() || !request.frame().parentFrame()) {
+      if (!isFrameNavigation(request)) {
         await route.fallback();
         return;
       }
@@ -303,7 +314,7 @@ export async function launchTestHost(
       (target) => target.origin !== appOrigin,
       async (route) => {
         const request = route.request();
-        if (request.isNavigationRequest() && request.frame().parentFrame()) {
+        if (isFrameNavigation(request)) {
           // A frame inside a page: `blockFrameNavigation` decides.
           await route.fallback();
           return;
