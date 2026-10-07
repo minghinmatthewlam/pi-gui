@@ -15,7 +15,7 @@ The primary product flow is to send a prompt, watch an assistant response grow, 
 - Sidebar New thread (or Cmd+N / Control+N) → enter a prompt → Start thread.
 - Existing thread → composer → Send message (the primary proof uses the button).
 - During a run, an empty composer shows Stop run. Stop also works while the run is still starting (driver test `packages/pi-sdk-driver/test/stop-before-run-start.test.mts` only; no Electron checkpoint). There is no running hint line under the composer; the thread header shows "Working for …" instead.
-- Click a tool header to expand/collapse its output.
+- Click a tool header to expand/collapse its output (the header is disabled until the tool has output). Images a tool returns show inside its expanded row (core `tool-output-images.spec.ts`). A tool an extension registered shows the extension's own label plus the call's main argument, e.g. "Look up ticket: T-42" (core `extension-tool-labels.spec.ts`).
 - Enter is a separate send entry point; queued Enter and steering shortcuts are mapped in `follow-ups.md`.
 
 ## Driving it with Playwright
@@ -34,6 +34,7 @@ Preconditions: a built app, an explicitly selected working provider/model, and t
 - Missing/expired authentication is BLOCKED; do not replace the run with mocked responses or silently pass a skip.
 - A final answer alone does not prove streaming. Require observed growth while running.
 - The initial scratch folder is a fixture; native folder selection is a separate proof.
+- A run error with a huge unbroken token wraps inside the error banner and the failed-run row, and the banner scrolls past a capped height, so the composer stays on screen (core `timeline-overflow.spec.ts`; no `prove.sh` checkpoint).
 
 ## Streaming scroll diagnostic
 

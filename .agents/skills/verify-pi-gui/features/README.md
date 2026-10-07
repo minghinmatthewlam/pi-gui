@@ -27,21 +27,29 @@ Record exact feature/entry point, command, result and evidence directory. `compl
 | Supporting | [Skills](skills.md)                             | `--smoke` covers opening; `--maintenance` covers Try and aliases                                             |
 | Supporting | [Scheduled tasks](scheduled-tasks.md)           | Core Electron specs for list/create/fire/tool; not in default conversation proof                             |
 | Supporting | [Worktrees](worktrees.md)                       | `--maintenance` switches to Workspace grouping, creates a permanent worktree, and checks `git worktree list` |
+| Supporting | [Review panel](review.md)                       | Core `review-*` specs only; no `prove.sh` lane                                                               |
+| Supporting | [Add to Chat](add-to-chat.md)                   | Core `transcript-annotations.spec.ts` only; no `prove.sh` lane                                               |
 
 Packaged-app launch, native dialogs/clipboard, model/account onboarding, attachments, file/diff/terminal interaction, and broader extension behavior require separate mapped journeys as those features are changed. Do not claim full-app coverage from this initial map.
 
 These user-facing surfaces have no feature file and no `prove.sh` checkpoint yet; a lane passing says nothing about them:
 
-- Review panel (Cmd/Ctrl+R: diff beside a file tree, scope menu, Staged/Unstaged, quiet refresh on window focus), `apps/desktop/src/features/workbench/`; core `review-layout`, `review-scopes`, `review-auto-refresh` specs.
 - Side panel tabs on Control+1–9 (macOS) or Alt+1–9 elsewhere, `apps/desktop/src/features/workbench/side-panel-tab-hints.ts`; core `side-panel-tab-shortcuts.spec.ts`.
 - Context ring beside the model picker, `apps/desktop/src/features/conversation/context-meter.tsx`.
 - Changes card after a turn that edited files, `apps/desktop/src/features/conversation/turn-changes-card.tsx`; core `turn-changes-card.spec.ts`.
-- Add to Chat: select transcript text, annotate, and send the notes with the next message, `apps/desktop/src/features/conversation/annotations/`; core `transcript-annotations.spec.ts`.
 - Extension notify toast above the composer and extension messages in the transcript, `apps/desktop/src/features/extensions/extension-notices.tsx` and `apps/desktop/src/features/conversation/timeline-item.tsx`; core `extension-notices.spec.ts`, `extension-custom-messages.spec.ts`.
 - Theme presets built from seed colours, Settings > Appearance; core `settings-appearance.spec.ts`.
 - Browse branches (session tree), `apps/desktop/src/features/conversation/tree-modal.tsx`; core `tree-command.spec.ts`.
+- Extension cards in the transcript and their buttons, `apps/desktop/src/features/conversation/extension-card.tsx`; core `extension-cards.spec.ts`, `extension-card-actions.spec.ts`.
+- Pinned extension cards above the composer (Expand/Collapse, Hide), `apps/desktop/src/features/extensions/pinned-cards.tsx`; core `extension-pinned-cards.spec.ts`.
+- Extension views opening links and threads, `apps/desktop/electron/extensions/extension-view-actions.ts`; core `extension-view-links.spec.ts`. The GitHub, Usage and Trace examples under `examples/desktop-extensions/` have core `extension-github-view`, `extension-usage-view` and `extension-trace-view` specs.
+- Extension flags chosen per thread on New thread, `apps/desktop/src/features/threads/extension-flags-selector.tsx`; core `extension-flags.spec.ts`.
 
-## Latest observed proof (2026-09-30)
+## Latest observed proof (2026-10-07)
+
+Weekly maintenance pass on main `572c0c6` in a Linux cloud session (Xvfb). Smoke `run-JOCJLj` passed. Conversation `run-DpBJix` was **blocked**, not failed by the app: openai-codex rejected the environment's saved refresh token as already used (`refresh_token_reused`), so neither the conversation nor the maintenance lane ran and this pass has no real-provider proof. Fixture-backed core specs passed 90/90 via `test:e2e:runner` on the real Electron app: `archive`, `thread-menu`, `composer-draft-flush`, `sidebar-folder-collapse`, `navigation`, `sidebar-layout`, `worktrees`, `mcp-settings`, `skills-settings`, `scheduled-tasks`, `scheduled-task-runtime-tools`, `queued-messages`, `tool-output-images`, `extension-tool-labels`, `timeline-overflow`, `extensions`, `composer-controls`, the five `review-*` specs, `changed-files`, `turn-changes-card`, `workbench-tabs`, `transcript-annotations`, `extension-pinned-cards`, `extension-cards`, `extension-view-links` and `extension-flags`, plus 4/4 in unit `annotation-prompt.spec.ts`. The source pass found doc drift only; recipe selectors still match. Review and Add to Chat got their own feature files.
+
+## Earlier observed proof (2026-09-30)
 
 Weekly maintenance pass on main `f4a3479` in a Linux cloud session (Xvfb), `openai-codex/gpt-5.6-luna`. Conversation `run-NC9jpz` passed all ten checkpoints, maintenance `run-FwHJa7` passed all seven, and smoke `run-wKB2qr` passed. No assertion failures; all owned Electron PIDs closed. Ten core specs passed 34/34 via `test:e2e:runner`: `scheduled-tasks`, `scheduled-task-runtime-tools`, `archive`, `thread-menu`, `skills-settings`, `worktrees`, `navigation`, `composer-controls`, `sidebar-layout` and `extensions`, plus 17/17 in unit `app-store-scheduled-tasks.spec.ts`. The source pass found doc drift only; recipe selectors still match.
 

@@ -9,6 +9,7 @@ Users keep independent conversations and drafts, switch while an agent works, an
 - `thread-background-completion`: Bravo finishes while Alpha is selected.
 - `thread-restart`: both real conversations and their distinct drafts survive app restart.
 - `thread-archive-restore`: archive and restore Bravo without losing the conversation or draft.
+- `thread-draft-flush`: a draft typed inside the composer's short save delay is still kept when the app quits, a window closes, the thread is archived (hover, menu or shortcut), or an extension card or view opens another thread.
 
 ## How to get to it (user POV)
 
@@ -26,6 +27,7 @@ Preconditions: Alpha and Bravo created through the visible composer by the defau
 - **Drafts:** enter distinct Alpha/Bravo drafts, switch in both directions, and require the corresponding composer values.
 - **Archive:** hover Bravo, click its Archive label, require Alpha selected; expand Archived, hover Bravo and Restore. Verify Bravo's draft on selection.
 - **Restart:** close only the owned Electron process and relaunch with the same private profile and agent directory. Require Bravo still selected, then visit both rows and check each assistant marker and draft.
+- **Just-typed drafts:** `pnpm --filter @pi-gui/desktop run test:e2e:runner -- apps/desktop/tests/core/composer-draft-flush.spec.ts` (quit, last-window close, close during quit, uncommitted edit, archive shortcut, every window on quit, extension card button and view opening another thread). The default recipe types its drafts well before switching, archiving or restarting, so it does not prove this window.
 - **Evidence:** retain action traces, per-checkpoint screenshot/ARIA pairs, restart doctor records, completed feature IDs, and process cleanup records.
 
 ## Gotchas
