@@ -22,7 +22,7 @@ Preconditions: isolated workspace containing the Demo Skill/Plan Loop fixtures c
 - **Core regression:** `pnpm --filter @pi-gui/desktop run test:e2e:runner -- apps/desktop/tests/core/skills-settings.spec.ts`.
 - **Browse:** click the exact Skills button, require `skills-surface` and a `skills-list` containing Demo Skill (rows are grouped by Workspace, User, and This session; six per group, then Show N more), click the Demo Skill row button, and require `.skill-detail` to contain `/skill:demo-skill`. The row's switch (`Enable Demo Skill`) and the detail's `Enabled` switch toggle the skill.
 - **Try:** click the exact Try button. `composer` must contain `/skill:demo-skill `.
-- **Alias:** fill `composer` with `/plan`, `/plan-loop`, and `/skill:plan-loop` separately; `slash-menu` must contain Plan Loop and its full command.
+- **Alias:** fill `composer` with `/plan`, `/plan-loop`, and `/skill:plan-loop` separately; `slash-menu` must contain Plan Loop each time, and `/skill:plan-loop` for `/plan`.
 - **Proof:** capture the selected skill, Try action, resulting composer value, and each alias menu. Settings-toggle coverage is mapped separately.
 
 Extensions (the Extensions tab and its pi-gui tools switches, the sidebar Extensions button, the extension dock, dialogs, view panel, notify toast and transcript messages) have no feature file and no `prove.sh` lane; only `apps/desktop/tests/core/extension*.spec.ts` covers them.
