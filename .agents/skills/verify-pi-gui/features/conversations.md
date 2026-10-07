@@ -15,7 +15,7 @@ The primary product flow is to send a prompt, watch an assistant response grow, 
 - Sidebar New thread (or Cmd+N / Control+N) → enter a prompt → Start thread.
 - Existing thread → composer → Send message (the primary proof uses the button).
 - During a run, an empty composer shows Stop run. Stop also works while the run is still starting (driver test `packages/pi-sdk-driver/test/stop-before-run-start.test.mts` only; no Electron checkpoint). There is no running hint line under the composer; the thread header shows "Working for …" instead.
-- Click a tool header to expand/collapse its output (the header is disabled until the tool has output). Images a tool returns show inside its expanded row (core `tool-output-images.spec.ts`). A tool an extension registered shows the extension's own label plus the call's main argument, e.g. "Look up ticket: T-42" (core `extension-tool-labels.spec.ts`).
+- Click a tool header to expand/collapse its output (the header is disabled until the call has arguments or output). Images a tool returns show inside its expanded row (core `tool-output-images.spec.ts`). A tool an extension registered shows the extension's own label plus the call's main argument, e.g. "Look up ticket: T-42" (core `extension-tool-labels.spec.ts`).
 - Enter is a separate send entry point; queued Enter and steering shortcuts are mapped in `follow-ups.md`.
 
 ## Driving it with Playwright

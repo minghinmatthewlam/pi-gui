@@ -12,8 +12,8 @@ Users review what changed in a thread's checkout, by turn, by working-tree state
 ## How to get to it (user POV)
 
 - Press Cmd+R (Ctrl+R elsewhere), or open the side panel's Review tab ("Review uncommitted, branch or turn changes"). Settings > Keyboard shortcuts lists it as Toggle review.
-- The toolbar has a `Review scope` menu (Last Turn, Uncommitted, Unstaged, Staged, Branch; Selected Turn appears only while that scope is active), added/removed line totals, `Refresh comparison`, a `Review options` menu that names the comparison and can switch to another checkout (the thread's own reads `Current task · <branch>`), and `Show file tree` / `Hide file tree`. Branch adds a `Base branch` box (placeholder `Repository default`) and Compare.
-- The file tree has `Filter changed files`, per-file Stage / Unstage buttons, and a `Mark <path> reviewed` checkbox. The diff header has `Open in Files`. An empty comparison reads "No changes" (or "No changes in the captured files." for a turn).
+- The toolbar has a `Review scope` menu (Last Turn, Uncommitted, Unstaged, Staged, Branch; Selected Turn appears only while that scope is active), added/removed line totals, a `Refresh` button (tooltip "Refresh comparison"; an outdated comparison also shows a banner with its own `Refresh comparison` button), a `Review options` menu that names the comparison and can switch to another checkout (the thread's own reads `Current task · <branch>`), and `Show file tree` / `Hide file tree`. Branch adds a `Base branch` box (placeholder `Repository default`) and Compare.
+- The file tree has `Filter changed files`, per-file Stage / Unstage buttons on Uncommitted, Staged and Unstaged (none on turn or Branch scopes), and a `Mark <path> reviewed` checkbox. The diff header has `Open in Files`. An empty comparison reads "No changes" (or "No changes in the captured files." for a turn).
 - Working scopes and Branch reload quietly when the window regains focus; Last Turn does not.
 - A write tool row in the transcript has a `View <path> in changes` button that opens its change in Review.
 
