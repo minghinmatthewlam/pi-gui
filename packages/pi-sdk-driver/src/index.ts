@@ -10,6 +10,7 @@ export type {
 } from "./extension-ui-state.js";
 export type { BuiltinExtension } from "./builtin-extensions.js";
 export type { PiSdkDriverConfig } from "./pi-sdk-driver.js";
+export { getAgentDir } from "@earendil-works/pi-coding-agent";
 export { createPiSdkDriver, PiSdkDriver } from "./pi-sdk-driver.js";
 export {
   CUSTOM_PROVIDER_ID_PATTERN,
@@ -20,6 +21,15 @@ export {
 export type { PiSdkDriverOptions, SyncWorkspaceResult } from "./session-supervisor.js";
 export { SessionSupervisor } from "./session-supervisor.js";
 export { SessionLeasedError } from "./session-lease.js";
+export {
+  acquireLeaseFile,
+  currentLeaseIdentity,
+  defaultIsPidAlive,
+  DEFAULT_LEASE_TTL_MS,
+  refreshLeaseFile,
+  releaseLeaseFile,
+  sessionLeasePath,
+} from "./session-lease.js";
 export type { LeaseInfo } from "./session-lease.js";
 export { RUNTIME_SCHEMA_VERSION } from "./session-schema.js";
 export type { GenerateThreadTitleOptions } from "./thread-title-generator.js";

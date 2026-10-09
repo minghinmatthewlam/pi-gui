@@ -1,4 +1,9 @@
 import { JsonCatalogStore } from "@pi-gui/catalogs/node";
+import {
+  DesktopRuntimeProfiles,
+  type ExperimentalLittleCoderOptions,
+  type RuntimeBootstrapInput,
+} from "../runtime/runtime-profiles";
 import { sessionKey } from "@pi-gui/session-driver";
 import type { ExtensionFlagValues, SessionSchemaInfo } from "@pi-gui/session-driver";
 import type { BrowserWindow } from "electron";
@@ -175,6 +180,8 @@ type ExtensionUiDialogRequest = Extract<
   readonly timeoutMs?: number;
 };
 export interface DesktopAppStoreOptions {
+  /** Host-only experimental bootstrap. Omission preserves Standard Pi exclusively. */
+  readonly littleCoder?: ExperimentalLittleCoderOptions;
   readonly userDataDir: string;
   readonly initialWorkspacePaths: readonly string[];
   readonly getWindow?: () => BrowserWindow | null;
@@ -240,6 +247,7 @@ export class DesktopAppStore {
   private readonly sessionSchemaInfoCache = new Map<string, SessionSchemaInfo>();
   private readonly sessionSchemaInfoInFlight = new Set<string>();
   private readonly driver: PiSdkDriver;
+  private readonly runtimeProfiles: DesktopRuntimeProfiles;
   private readonly catalogStore: JsonCatalogStore;
   private readonly worktreeManager: GitWorktreeManager;
   private readonly worktreeRoot: string;
@@ -299,7 +307,12 @@ export class DesktopAppStore {
         : {}),
     };
 
-    this.driver = new PiSdkDriver(driverOptions);
+    this.runtimeProfiles = new DesktopRuntimeProfiles(
+      options.userDataDir,
+      driverOptions,
+      options.littleCoder,
+    );
+    this.driver = this.runtimeProfiles.standardDriver;
     this.worktreeRoot = join(options.userDataDir, "worktrees");
     this.isAppWorktreePath = appWorktreeRootMatcher(this.worktreeRoot);
     this.worktreeManager = new GitWorktreeManager({
@@ -733,6 +746,19 @@ export class DesktopAppStore {
         this.resolveSelectedSessionError(selectedWorkspaceId, selectedSessionId, false) ??
         (selectedSessionId ? undefined : state.lastError),
     };
+  }
+
+  getRuntimeProfileDiagnostics() {
+    return this.runtimeProfiles.diagnostics();
+  }
+
+  /** Main-process spike API; deliberately absent from preload and conversation owners. */
+  bootstrapLittleCoderRuntime(input: RuntimeBootstrapInput) {
+    return this.runtimeProfiles.bootstrapLittleCoder(input);
+  }
+
+  closeExperimentalRuntimes(): Promise<void> {
+    return this.runtimeProfiles.close();
   }
 
   async flushPersistence(): Promise<void> {
