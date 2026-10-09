@@ -297,6 +297,25 @@ export function TerminalPanel({ workspace, sessionId, onHide }: TerminalPanelPro
       );
     });
     terminal.open(container);
+    const handleContextMenu = (event: MouseEvent) => {
+      event.preventDefault();
+      if (terminal.hasSelection()) {
+        void navigator.clipboard.writeText(terminal.getSelection()).catch((error: unknown) => {
+          setError(error instanceof Error ? error.message : String(error));
+        });
+        terminal.clearSelection();
+        return;
+      }
+      void navigator.clipboard
+        .readText()
+        .then((text) => {
+          if (text) terminal.paste(text);
+        })
+        .catch((error: unknown) => {
+          setError(error instanceof Error ? error.message : String(error));
+        });
+    };
+    container.addEventListener("contextmenu", handleContextMenu);
     if (activeSession.replay) {
       terminal.write(activeSession.replay);
     }
@@ -310,6 +329,7 @@ export function TerminalPanel({ workspace, sessionId, onHide }: TerminalPanelPro
 
     return () => {
       resizeObserver.disconnect();
+      container.removeEventListener("contextmenu", handleContextMenu);
       fitAddonRef.current = null;
       terminalRef.current = null;
       activeTerminalIdRef.current = "";
