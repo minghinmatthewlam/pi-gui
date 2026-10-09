@@ -1,0 +1,53 @@
+{
+  "package": "pi-gui-little-coder-overlay",
+  "revision": 1,
+  "date": "2026-10-09",
+  "design": "non-destructive overlay for existing pi-gui repository",
+  "must_not_replace": [
+    "README.md",
+    "AGENTS.md",
+    "CLAUDE.md"
+  ],
+  "files": {
+    "docs/little-coder-desktop/CODEX-START.md": {
+      "sha256": "872af5542bf9ae76079df01095d05cd47e82903656be79dcfa61b157b6a4c3e4",
+      "bytes": 1861
+    },
+    "docs/little-coder-desktop/DECISIONS.md": {
+      "sha256": "dfd2eec37c039a086076043c59565233580c9d8f54c7b40ffc911b9722d77377",
+      "bytes": 2602
+    },
+    "docs/little-coder-desktop/DESIGN.md": {
+      "sha256": "daa0160189e6090e3f2391c280b05804da562da4fe560479a73d7f42eaed4ecc",
+      "bytes": 6581
+    },
+    "docs/little-coder-desktop/INSTALL.md": {
+      "sha256": "ec12171e3dd9f09d2d2a211d878fdfda99c94e7a795e27a3b2866b8f7baa4e57",
+      "bytes": 2195
+    },
+    "docs/little-coder-desktop/PROJECT-OVERVIEW.md": {
+      "sha256": "7e9ea5531e822fb58c264d7d0143dee1ddbc5af04e2a82eddecb04e9c85dda1d",
+      "bytes": 3233
+    },
+    "docs/little-coder-desktop/PROJECT-RULES.md": {
+      "sha256": "059b577fd4e183be6857c7836b75b2e577b4d8dd23f9d09bc3786ea4c80b352b",
+      "bytes": 4945
+    },
+    "docs/little-coder-desktop/ROADMAP.md": {
+      "sha256": "dac6b5827c548f953d7cd5dcd3b0f098177ea401227d40010fa02e98b241b1c5",
+      "bytes": 3389
+    },
+    "docs/little-coder-desktop/TECHNICAL-SPEC.md": {
+      "sha256": "2ca2af2091cffad63fee7c2319eb1860f9941393803d434f1d9d01160415562f",
+      "bytes": 10836
+    },
+    "docs/little-coder-desktop/TEST-MATRIX.md": {
+      "sha256": "78d817c261b0b5cd8a50d4478298508bab1f5d42f6ccc17a0dd1d4a398e95cd8",
+      "bytes": 1787
+    },
+    "docs/little-coder-desktop/work-packages/WP-001-bootstrap-and-integration-spike.md": {
+      "sha256": "a07b39f7180aaa7083f67ac5f36c744d6d263ae147c4c22844a64c93a8e9b43e",
+      "bytes": 5911
+    }
+  }
+}
