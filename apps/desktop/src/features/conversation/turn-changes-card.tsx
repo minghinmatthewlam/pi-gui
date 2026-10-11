@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import type { TurnChangeSummary, TurnChangedFile } from "../../../contracts/review";
+import { useTranslation } from "../../i18n";
 import { FileDiffIcon } from "../../ui/icons";
 
 const COLLAPSED_FILE_COUNT = 5;
@@ -16,6 +17,7 @@ export function TurnChangesCard({
 }) {
   const [expanded, setExpanded] = useState(false);
   const listRef = useRef<HTMLUListElement | null>(null);
+  const { t } = useTranslation();
   const { files } = turn;
   const hidden = expanded ? 0 : Math.max(0, files.length - COLLAPSED_FILE_COUNT);
   const shown = hidden ? files.slice(0, COLLAPSED_FILE_COUNT) : files;
@@ -40,7 +42,7 @@ export function TurnChangesCard({
         </span>
         <div className="turn-changes__summary">
           <span className="turn-changes__title">
-            {`Edited ${files.length} ${files.length === 1 ? "file" : "files"}`}
+            {t("turnChanges.editedFiles", { count: files.length })}
           </span>
           <LineStats lines={totals} />
         </div>

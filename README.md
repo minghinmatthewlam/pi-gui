@@ -1,5 +1,7 @@
 # pi-gui
 
+[English](./README.md) · [简体中文](./README.zh-CN.md)
+
 The desktop app for the [pi](https://github.com/earendil-works/pi) coding agent.
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)

@@ -4,6 +4,7 @@ import type {
   RuntimeSettingsSnapshot,
   RuntimeSnapshot,
 } from "@pi-gui/session-driver/runtime-types";
+import { useTranslation, type Translate } from "../../i18n";
 import { SearchIcon } from "../../ui/icons";
 import { SettingsSelect, SettingsSwitch } from "./settings-controls";
 import {
@@ -24,10 +25,9 @@ interface SettingsModelsSectionProps {
   readonly onOpenProviders: () => void;
 }
 
-const THINKING_OPTIONS = THINKING_LEVELS.map((level) => ({
-  value: level,
-  label: labelForThinking(level),
-}));
+function thinkingOptions(t: Translate) {
+  return THINKING_LEVELS.map((level) => ({ value: level, label: labelForThinking(level, t) }));
+}
 
 function modelPattern(model: RuntimeModelRecord): string {
   return `${model.providerId}/${model.modelId}`;
@@ -41,6 +41,7 @@ export function SettingsModelsSection({
   onSetScopedModelPatterns,
   onOpenProviders,
 }: SettingsModelsSectionProps) {
+  const { t } = useTranslation();
   const [query, setQuery] = useState("");
   const [showUnconnected, setShowUnconnected] = useState(false);
 
@@ -94,7 +95,7 @@ export function SettingsModelsSection({
         <SettingsRow title="Reasoning" description="Default reasoning effort for new threads.">
           <SettingsSelect
             label="Reasoning"
-            options={THINKING_OPTIONS}
+            options={thinkingOptions(t)}
             value={runtime?.settings.defaultThinkingLevel ?? undefined}
             onChange={onSetThinkingLevel}
           />

@@ -2,6 +2,7 @@ import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import type { WorkspaceRecord, WorkspaceSessionTarget } from "../../../contracts/desktop-state";
 import type { PiDesktopApi } from "../../../contracts/ipc";
 import { sessionLastInteractedAt } from "../../../contracts/thread-recency";
+import { formatNumber, useTranslation } from "../../i18n";
 import { formatRelativeTime } from "../../lib/string-utils";
 import { ChatIcon, FileIcon, FolderIcon, ModelIcon } from "../../ui/icons";
 import type { ComposerModelOption } from "../conversation/composer-commands";
@@ -73,6 +74,7 @@ export function CommandPaletteSurface({
   onOpenFile,
   onSelectModel,
 }: CommandPaletteSurfaceProps) {
+  const { t, locale } = useTranslation();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<CommandFilter>("all");
   const [listing, setListing] = useState<FileListing>({ status: "loading" });
@@ -114,7 +116,7 @@ export function CommandPaletteSurface({
     return {
       id: `chat:${target.workspaceId}:${target.sessionId}`,
       title: thread.session.title,
-      detail: [thread.contextLabel, formatRelativeTime(sessionLastInteractedAt(thread.session))]
+      detail: [thread.contextLabel, formatRelativeTime(sessionLastInteractedAt(thread.session), t)]
         .filter(Boolean)
         .join(" · "),
       icon: <ChatIcon />,
@@ -186,7 +188,7 @@ export function CommandPaletteSurface({
             ? "Searching…"
             : query.trim()
               ? "No matching files."
-              : `Type to search ${(files?.length ?? 0).toLocaleString()} files.`;
+              : `Type to search ${formatNumber(locale, files?.length ?? 0)} files.`;
   } else if (mode === "models") {
     label = "Switch model";
     placeholder = "Switch model";

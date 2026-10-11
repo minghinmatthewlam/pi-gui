@@ -1,13 +1,13 @@
 import type { ComposerAttachment, QueuedComposerMessage } from "../../../contracts/desktop-state";
+import { useTranslation, type Translate } from "../../i18n";
 import { FileIcon } from "../../ui/icons";
 import { ImageAttachmentThumb } from "./image-attachment-thumb";
 import { parseAnnotatedPrompt } from "./annotations/annotation-prompt";
 
-function queuedPreview(text: string): string {
+function queuedPreview(text: string, t: Translate): string {
   const annotated = parseAnnotatedPrompt(text);
   if (!annotated) return text;
-  const count = annotated.annotations.length;
-  const label = `${count} annotation${count === 1 ? "" : "s"}`;
+  const label = t("queuedComposer.annotations", { count: annotated.annotations.length });
   return annotated.body.trim() ? `${annotated.body.trim()} · ${label}` : label;
 }
 
@@ -28,6 +28,8 @@ export function QueuedComposerMessages({
   onSteerMessage,
   onCancelEdit,
 }: QueuedComposerMessagesProps) {
+  const { t } = useTranslation();
+
   if (messages.length === 0 && !editingQueuedMessageId) {
     return null;
   }
@@ -50,7 +52,7 @@ export function QueuedComposerMessages({
         >
           <div className="queued-composer-message__header">
             {message.text ? (
-              <div className="queued-composer-message__text">{queuedPreview(message.text)}</div>
+              <div className="queued-composer-message__text">{queuedPreview(message.text, t)}</div>
             ) : null}
             <div className="queued-composer-message__actions">
               {message.mode !== "steer" ? (

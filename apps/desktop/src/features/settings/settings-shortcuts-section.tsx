@@ -1,3 +1,4 @@
+import { useTranslation, type MessageKey } from "../../i18n";
 import { SettingsGroup, SettingsRow } from "./settings-utils";
 
 /**
@@ -8,53 +9,55 @@ type KeyModifier = "Ctrl" | "Alt" | "Shift" | "Mod";
 type Modifier = KeyModifier | "TabMod";
 
 interface Shortcut {
-  readonly title: string;
+  readonly titleKey: MessageKey;
   readonly modifiers: readonly Modifier[];
   readonly key: string;
 }
 
+interface ShortcutGroup {
+  readonly titleKey: MessageKey;
+  readonly shortcuts: readonly Shortcut[];
+}
+
 // Mirrors getDesktopCommandFromShortcut in contracts/ipc.ts and the keys the renderer handles
 // itself (find, thread switcher, composer, terminal tabs).
-const SHORTCUT_GROUPS: readonly {
-  readonly title: string;
-  readonly shortcuts: readonly Shortcut[];
-}[] = [
+const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
   {
-    title: "App",
+    titleKey: "settings.shortcuts.groupApp",
     shortcuts: [
-      { title: "Command palette", modifiers: ["Mod"], key: "K" },
-      { title: "Go to file", modifiers: ["Mod"], key: "P" },
-      { title: "Open settings", modifiers: ["Mod"], key: "," },
-      { title: "Toggle sidebar", modifiers: ["Mod"], key: "B" },
-      { title: "Toggle side panel", modifiers: ["Mod", "Alt"], key: "B" },
-      { title: "New window", modifiers: ["Mod", "Shift"], key: "N" },
+      { titleKey: "settings.shortcuts.commandPalette", modifiers: ["Mod"], key: "K" },
+      { titleKey: "settings.shortcuts.goToFile", modifiers: ["Mod"], key: "P" },
+      { titleKey: "settings.shortcuts.openSettings", modifiers: ["Mod"], key: "," },
+      { titleKey: "settings.shortcuts.toggleSidebar", modifiers: ["Mod"], key: "B" },
+      { titleKey: "settings.shortcuts.toggleSidePanel", modifiers: ["Mod", "Alt"], key: "B" },
+      { titleKey: "settings.shortcuts.newWindow", modifiers: ["Mod", "Shift"], key: "N" },
     ],
   },
   {
-    title: "Threads",
+    titleKey: "settings.shortcuts.groupThreads",
     shortcuts: [
-      { title: "New thread", modifiers: ["Mod"], key: "N" },
-      { title: "Switch to recent thread", modifiers: ["Mod"], key: "1–9" },
-      { title: "Cycle through threads", modifiers: ["Ctrl"], key: "Tab" },
-      { title: "Find in thread", modifiers: ["Mod"], key: "F" },
+      { titleKey: "settings.shortcuts.newThread", modifiers: ["Mod"], key: "N" },
+      { titleKey: "settings.shortcuts.switchRecent", modifiers: ["Mod"], key: "1–9" },
+      { titleKey: "settings.shortcuts.cycleThreads", modifiers: ["Ctrl"], key: "Tab" },
+      { titleKey: "settings.shortcuts.findInThread", modifiers: ["Mod"], key: "F" },
     ],
   },
   {
-    title: "Composer",
+    titleKey: "settings.shortcuts.groupComposer",
     shortcuts: [
-      { title: "Send message, or queue it during a run", modifiers: [], key: "Enter" },
-      { title: "Steer the running agent", modifiers: ["Mod"], key: "Enter" },
-      { title: "New line", modifiers: ["Shift"], key: "Enter" },
+      { titleKey: "settings.shortcuts.send", modifiers: [], key: "Enter" },
+      { titleKey: "settings.shortcuts.steer", modifiers: ["Mod"], key: "Enter" },
+      { titleKey: "settings.shortcuts.newLine", modifiers: ["Shift"], key: "Enter" },
     ],
   },
   {
-    title: "Workbench",
+    titleKey: "settings.shortcuts.groupWorkbench",
     shortcuts: [
-      { title: "Toggle terminal", modifiers: ["Mod"], key: "J" },
-      { title: "New terminal tab", modifiers: ["Mod"], key: "T" },
-      { title: "Toggle review", modifiers: ["Mod"], key: "R" },
-      { title: "Switch to side panel tab", modifiers: ["TabMod"], key: "1–9" },
-      { title: "Close workbench tab", modifiers: ["Mod"], key: "W" },
+      { titleKey: "settings.shortcuts.toggleTerminal", modifiers: ["Mod"], key: "J" },
+      { titleKey: "settings.shortcuts.newTerminalTab", modifiers: ["Mod"], key: "T" },
+      { titleKey: "settings.shortcuts.toggleReview", modifiers: ["Mod"], key: "R" },
+      { titleKey: "settings.shortcuts.switchSidePanelTab", modifiers: ["TabMod"], key: "1–9" },
+      { titleKey: "settings.shortcuts.closeWorkbenchTab", modifiers: ["Mod"], key: "W" },
     ],
   },
 ];
@@ -84,12 +87,13 @@ function shortcutKeys(platform: NodeJS.Platform, shortcut: Shortcut): readonly s
 }
 
 export function SettingsShortcutsSection({ platform }: { readonly platform: NodeJS.Platform }) {
+  const { t } = useTranslation();
   return (
     <>
       {SHORTCUT_GROUPS.map((group) => (
-        <SettingsGroup key={group.title} title={group.title}>
+        <SettingsGroup key={group.titleKey} title={t(group.titleKey)}>
           {group.shortcuts.map((shortcut) => (
-            <SettingsRow key={shortcut.title} title={shortcut.title}>
+            <SettingsRow key={shortcut.titleKey} title={t(shortcut.titleKey)}>
               <span className="settings-keys">
                 {shortcutKeys(platform, shortcut).map((key) => (
                   <kbd key={key}>{key}</kbd>

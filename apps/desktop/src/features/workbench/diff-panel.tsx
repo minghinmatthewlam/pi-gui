@@ -18,6 +18,7 @@ import { isWorkingReviewScope, reviewStageActions } from "../../../contracts/rev
 import { InlineDiff } from "../../ui/diff-inline";
 import { ChevronDownIcon, FileIcon, MoreIcon, RefreshIcon, SidePanelIcon } from "../../ui/icons";
 import { extensionToLanguage } from "../../ui/syntax-highlight";
+import { formatDateTime, useTranslation } from "../../i18n";
 import { formatPathForDisplay, ReviewFileTree, reviewTreeOrder } from "./review-file-tree";
 import { ReviewMenu } from "./review-menu";
 
@@ -47,6 +48,7 @@ export function DiffPanel({
   onSelectionChange,
   onOpenFile,
 }: DiffPanelProps) {
+  const { locale } = useTranslation();
   const scopeKey = JSON.stringify(selection.scope);
   const requestedScope = useMemo(() => selection.scope, [scopeKey]);
   const queryKey = JSON.stringify([workspaceId, sessionId, selection.workspaceId, scopeKey]);
@@ -420,7 +422,7 @@ export function DiffPanel({
       ? [
           review.baseLabel,
           ...(review.headOid ? [`HEAD ${review.headOid.slice(0, 8)}`] : []),
-          ...(review.capturedAt ? [`Captured ${formatCaptureTime(review.capturedAt)}`] : []),
+          ...(review.capturedAt ? [`Captured ${formatDateTime(locale, review.capturedAt)}`] : []),
         ]
       : [];
 
@@ -742,11 +744,6 @@ function CoverageNotice({ coverage }: { readonly coverage: ReviewCoverage }) {
       )}
     </details>
   );
-}
-
-function formatCaptureTime(value: string): string {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
 
 function errorMessage(error: unknown): string {
