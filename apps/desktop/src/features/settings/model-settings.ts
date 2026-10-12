@@ -1,10 +1,21 @@
+import { minimatch } from "minimatch";
 import type {
   ModelSettingsSnapshot,
+  RuntimeModelRecord,
   RuntimeSettingsSnapshot,
   RuntimeSnapshot,
 } from "@pi-gui/session-driver/runtime-types";
 import type { DesktopAppState, WorkspaceRecord } from "../../../contracts/desktop-state";
 import { resolveRepoWorkspaceId } from "../../../contracts/workspace-roots";
+
+/** Matches an `enabledModels` entry the way pi does, including globs like `openrouter/**`. */
+export function modelMatchesPattern(model: RuntimeModelRecord, pattern: string): boolean {
+  const fullId = `${model.providerId}/${model.modelId}`;
+  if (pattern === fullId) return true;
+  if (!/[*?[]/.test(pattern)) return false;
+  const glob = pattern.replace(/:(off|minimal|low|medium|high|xhigh|max)$/, "");
+  return [fullId, model.modelId].some((id) => minimatch(id, glob, { nocase: true }));
+}
 
 export function toModelSettingsSnapshot(
   settings: RuntimeSettingsSnapshot | ModelSettingsSnapshot,
