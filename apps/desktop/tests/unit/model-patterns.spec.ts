@@ -24,3 +24,11 @@ test("enabled model patterns match like pi's model scope, globs included", () =>
   expect(modelMatchesPattern(model("cursor", "grok-4.7@1m:fast"), "cursor/grok-4.7@*")).toBe(true);
   expect(modelMatchesPattern(model("cursor", "grok-4.7"), "cursor/grok")).toBe(false);
 });
+
+test("a glob reused across models keeps matching each one on its own", () => {
+  const pattern = "openrouter/z-ai/*:high";
+  expect(modelMatchesPattern(model("openrouter", "z-ai/glm-5.3"), pattern)).toBe(true);
+  expect(modelMatchesPattern(model("openrouter", "qwen/qwen-4"), pattern)).toBe(false);
+  expect(modelMatchesPattern(model("OPENROUTER", "Z-AI/GLM-5.4"), pattern)).toBe(true);
+  expect(modelMatchesPattern(model("anthropic", "z-ai/glm-5.3"), pattern)).toBe(false);
+});
