@@ -304,6 +304,18 @@ export function buildProviderOptions(
     }));
 }
 
+interface ModelOptionsCacheEntry {
+  readonly enabledPatterns: readonly string[];
+  readonly options: readonly ComposerModelOption[];
+}
+
+// Runtime wrappers change on typing; cache their immutable catalog inputs instead.
+// shortcut: fresh IPC arrays miss, reconcile them if post-fix profiles still show rebuild cost.
+const modelOptionsCache = new WeakMap<
+  RuntimeSnapshot["models"],
+  WeakMap<RuntimeSnapshot["providers"], ModelOptionsCacheEntry>
+>();
+
 export function buildModelOptions(
   runtime: RuntimeSnapshot | undefined,
 ): readonly ComposerModelOption[] {
@@ -312,9 +324,18 @@ export function buildModelOptions(
   }
 
   const enabledPatterns = runtime.settings.enabledModelPatterns;
-  const allAvailable = enabledPatterns.length === 0;
+  let providerCache = modelOptionsCache.get(runtime.models);
+  const cached = providerCache?.get(runtime.providers);
+  if (
+    cached &&
+    cached.enabledPatterns.length === enabledPatterns.length &&
+    cached.enabledPatterns.every((pattern, index) => pattern === enabledPatterns[index])
+  ) {
+    return cached.options;
+  }
 
-  return [...runtime.models]
+  const allAvailable = enabledPatterns.length === 0;
+  const options = [...runtime.models]
     .filter((model) => {
       if (!model.available) return false;
       if (allAvailable) return true;
@@ -338,6 +359,13 @@ export function buildModelOptions(
       providerId: model.providerId,
       modelId: model.modelId,
     }));
+
+  if (!providerCache) {
+    providerCache = new WeakMap<RuntimeSnapshot["providers"], ModelOptionsCacheEntry>();
+    modelOptionsCache.set(runtime.models, providerCache);
+  }
+  providerCache.set(runtime.providers, { enabledPatterns, options });
+  return options;
 }
 
 export function slashOptionsForCommand(
