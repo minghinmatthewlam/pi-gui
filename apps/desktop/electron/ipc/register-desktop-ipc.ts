@@ -316,6 +316,9 @@ export function registerDesktopIpc({
   ipcMain.handle(desktopIpc.selectedTranscriptRequest, (event) =>
     owners.state.getSelectedTranscriptForView(windows.viewForSender(event.sender)),
   );
+  ipcMain.on(desktopIpc.selectedTranscriptResend, (event) => {
+    windows.resendSelectedTranscript(event.sender);
+  });
 
   ipcMain.handle(desktopIpc.addWorkspacePath, (event, rawPath: unknown) =>
     run(event, () => owners.workspace.addWorkspace(expectNonEmptyString(rawPath, "workspacePath"))),

@@ -6,6 +6,7 @@ import type {
   DesktopAppViewState,
   SelectedTranscriptRecord,
 } from "../../contracts/desktop-state";
+import { selectedTranscriptPatch } from "../../contracts/desktop-state";
 import { desktopIpc } from "../../contracts/ipc";
 import { SerializedActionQueue } from "./action-queue";
 
@@ -378,7 +379,21 @@ export class WindowOwner {
       return;
     }
     this.lastPublishedTranscript.set(webContentsId, payload);
-    window.webContents.send(desktopIpc.selectedTranscriptChanged, payload);
+    const patch = previous && payload ? selectedTranscriptPatch(previous, payload) : undefined;
+    if (patch && patch.deleteCount === 0 && patch.rows.length === 0) {
+      return;
+    }
+    window.webContents.send(desktopIpc.selectedTranscriptChanged, patch ?? payload);
+  }
+
+  // The window could not apply a patch (it reloaded or missed one), so send it the whole transcript.
+  resendSelectedTranscript(sender: WebContents): void {
+    const window = BrowserWindow.fromWebContents(sender);
+    if (!window || !this.windows.has(window)) {
+      return;
+    }
+    this.lastPublishedTranscript.delete(window.webContents.id);
+    this.publishTranscriptSoon(window);
   }
 
   private publishTranscriptSoon(window: BrowserWindow): void {

@@ -219,6 +219,75 @@ export interface SelectedTranscriptRecord {
   readonly schemaInfo?: SessionSchemaInfo;
 }
 
+// What changed since the transcript last sent to a window: `deleteCount` rows at `start` were
+// replaced by `rows`. Sending this instead of a tens-of-MB transcript keeps both processes free.
+export interface SelectedTranscriptPatch {
+  readonly workspaceId: string;
+  readonly sessionId: string;
+  readonly start: number;
+  readonly deleteCount: number;
+  readonly rows: readonly TranscriptMessage[];
+}
+
+// Rows are replaced, never edited in place, so identity finds the changed range.
+// Undefined when only a whole record can describe the change.
+export function selectedTranscriptPatch(
+  previous: SelectedTranscriptRecord,
+  next: SelectedTranscriptRecord,
+): SelectedTranscriptPatch | undefined {
+  if (
+    previous.workspaceId !== next.workspaceId ||
+    previous.sessionId !== next.sessionId ||
+    previous.schemaInfo !== next.schemaInfo
+  ) {
+    return undefined;
+  }
+  const before = previous.transcript;
+  const after = next.transcript;
+  const shorter = Math.min(before.length, after.length);
+  let start = 0;
+  while (start < shorter && before[start] === after[start]) {
+    start += 1;
+  }
+  let end = 0;
+  while (
+    end < shorter - start &&
+    before[before.length - 1 - end] === after[after.length - 1 - end]
+  ) {
+    end += 1;
+  }
+  return {
+    workspaceId: next.workspaceId,
+    sessionId: next.sessionId,
+    start,
+    deleteCount: before.length - start - end,
+    rows: after.slice(start, after.length - end),
+  };
+}
+
+// Undefined when the patch does not fit this record, so the window must pull the whole transcript.
+export function applySelectedTranscriptPatch(
+  record: SelectedTranscriptRecord | null,
+  patch: SelectedTranscriptPatch,
+): SelectedTranscriptRecord | undefined {
+  if (
+    !record ||
+    record.workspaceId !== patch.workspaceId ||
+    record.sessionId !== patch.sessionId ||
+    patch.start + patch.deleteCount > record.transcript.length
+  ) {
+    return undefined;
+  }
+  return {
+    ...record,
+    transcript: [
+      ...record.transcript.slice(0, patch.start),
+      ...patch.rows,
+      ...record.transcript.slice(patch.start + patch.deleteCount),
+    ],
+  };
+}
+
 export interface WorktreeRecord {
   readonly id: string;
   readonly rootWorkspaceId: string;
