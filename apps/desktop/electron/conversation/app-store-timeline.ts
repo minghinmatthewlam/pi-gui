@@ -166,7 +166,8 @@ export function applyTimelineEvent(
   }
 
   const key = sessionKey(event.sessionRef);
-  const transcript = [...(transcriptCache.get(key) ?? [])];
+  const previous = transcriptCache.get(key);
+  const transcript = [...(previous ?? [])];
   const currentMetrics = state.runMetricsBySession.get(key);
 
   switch (event.type) {
@@ -356,7 +357,14 @@ export function applyTimelineEvent(
       break;
   }
 
+  // Keep the same array when nothing changed: the window skips publishing an unchanged
+  // transcript by identity, and frequent events (title updates, running ticks) change nothing.
+  if (previous ? sameItems(previous, transcript) : transcript.length === 0) return;
   transcriptCache.set(key, transcript);
+}
+
+function sameItems(a: readonly TranscriptMessage[], b: readonly TranscriptMessage[]): boolean {
+  return a.length === b.length && a.every((item, index) => item === b[index]);
 }
 
 /** Replaces a pin's earlier write, as the projection does; a pin written after removal is new. */

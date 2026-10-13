@@ -349,19 +349,9 @@ export class WindowOwner {
     if (!canPublishToWindow(window)) {
       return;
     }
-    const projected = this.projectState(webContentsId);
-    if (payload) {
-      if (
-        projected.selectedWorkspaceId !== payload.workspaceId ||
-        projected.selectedSessionId !== payload.sessionId
-      ) {
-        return;
-      }
-    } else if (projected.selectedSessionId) {
-      return;
-    }
     // Transcript arrays are replaced on writes, so identity detects changes
     // without serializing unchanged transcripts for unrelated session events.
+    // Check it before projecting state, which clones the whole app state.
     const previous = this.lastPublishedTranscript.get(webContentsId);
     if (payload) {
       if (
@@ -374,6 +364,17 @@ export class WindowOwner {
         return;
       }
     } else if (previous === null) {
+      return;
+    }
+    const projected = this.projectState(webContentsId);
+    if (payload) {
+      if (
+        projected.selectedWorkspaceId !== payload.workspaceId ||
+        projected.selectedSessionId !== payload.sessionId
+      ) {
+        return;
+      }
+    } else if (projected.selectedSessionId) {
       return;
     }
     this.lastPublishedTranscript.set(webContentsId, payload);
