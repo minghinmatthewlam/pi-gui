@@ -370,7 +370,12 @@ export function getSidePanelToggleShortcutLabel(platform: NodeJS.Platform): stri
   return platform === "darwin" ? "⌘⌥B" : "Ctrl+Alt+B";
 }
 
-export type PiDesktopStateListener = (state: DesktopAppState) => void;
+// A state push leaves out the model catalog (`runtimeByWorkspace`) when it is unchanged
+// since the last push to that window; the window keeps the one it has.
+export type PiDesktopStatePush = Omit<DesktopAppState, "runtimeByWorkspace"> & {
+  readonly runtimeByWorkspace?: DesktopAppState["runtimeByWorkspace"];
+};
+export type PiDesktopStateListener = (state: PiDesktopStatePush) => void;
 export type PiDesktopSelectedTranscriptListener = (
   payload: SelectedTranscriptRecord | null,
 ) => void;
