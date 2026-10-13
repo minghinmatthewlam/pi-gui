@@ -13,6 +13,7 @@ import {
   SettingsRow,
   THINKING_LEVELS,
 } from "./settings-utils";
+import { modelMatchesPattern } from "./model-settings";
 
 interface SettingsModelsSectionProps {
   readonly runtime?: RuntimeSnapshot;
@@ -52,8 +53,14 @@ export function SettingsModelsSection({
   const savedPatterns = runtime?.settings.enabledModelPatterns ?? [];
   const activePatterns =
     savedPatterns.length === 0 ? availableModels.map(modelPattern) : savedPatterns;
-  const activeSet = new Set(activePatterns);
-  const enabledModels = availableModels.filter((model) => activeSet.has(modelPattern(model)));
+  const isEnabled = (model: RuntimeModelRecord) =>
+    activePatterns.some((pattern) => modelMatchesPattern(model, pattern));
+  // A glob like `openrouter/**` can't be switched off for one model, so its switch is locked.
+  const isGlobEnabled = (model: RuntimeModelRecord) =>
+    activePatterns.some(
+      (pattern) => pattern !== modelPattern(model) && modelMatchesPattern(model, pattern),
+    );
+  const enabledModels = availableModels.filter(isEnabled);
 
   const defaultProvider = runtime?.settings.defaultProvider;
   const defaultModelId = runtime?.settings.defaultModelId;
@@ -144,7 +151,7 @@ export function SettingsModelsSection({
           ) : (
             visibleAvailable.map((model) => {
               const pattern = modelPattern(model);
-              const enabled = activeSet.has(pattern);
+              const enabled = isEnabled(model);
               return (
                 <ModelRow
                   isDefault={
@@ -155,7 +162,7 @@ export function SettingsModelsSection({
                 >
                   <SettingsSwitch
                     checked={enabled}
-                    disabled={enabled && activePatterns.length <= 1}
+                    disabled={enabled && (activePatterns.length <= 1 || isGlobEnabled(model))}
                     label={`Enable ${pattern}`}
                     onChange={(next) => setEnabled(pattern, next)}
                   />
