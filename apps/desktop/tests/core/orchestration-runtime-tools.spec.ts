@@ -119,6 +119,14 @@ test("create_child_thread returns after a slow worker starts, before its turn co
     const window = await harness.firstWindow();
     await createNamedThread(window, "Parent orchestration thread");
     const parentRef = await selectedSessionRef(window);
+    // Record what state pushes carry, to check they leave the children out.
+    await window.evaluate(() => {
+      const record = globalThis as typeof globalThis & { pushedChildCounts?: number[] };
+      record.pushedChildCounts = [];
+      globalThis.window.piApp?.onStateChanged((state) => {
+        record.pushedChildCounts?.push(state.orchestrationChildren.length);
+      });
+    });
     const prompt = "Keep this delegated worker running slowly.";
     // The server never answers, so the child's first turn cannot complete. A tool
     // that awaited the turn would never return, and the test timeout names this step.
@@ -141,6 +149,12 @@ test("create_child_thread returns after a slow worker starts, before its turn co
       `.session-row[data-session-id="${child?.childSessionId}"] .session-row__status--running`,
     );
     await expect(childRunningIndicator).toBeVisible();
+    // getState() returns the child, but state pushes to the window never carry it.
+    const pushedChildCounts = await window.evaluate(
+      () => (globalThis as typeof globalThis & { pushedChildCounts?: number[] }).pushedChildCounts,
+    );
+    expect(pushedChildCounts?.length).toBeGreaterThan(0);
+    expect(pushedChildCounts?.every((count) => count === 0)).toBe(true);
     if (proofDir) {
       await window.screenshot({
         path: join(proofDir, "orchestration-child-running.png"),
