@@ -306,6 +306,8 @@ export class SessionSupervisor {
   /** Latest plan limits a provider reported, shared by every session on that provider. */
   private readonly planLimitsByProvider = new Map<string, SessionPlanLimits>();
   private readonly ensureRecordInFlight = new Map<string, Promise<ManagedSessionRecord>>();
+  /** Sessions being released; a reopen waits for these first. */
+  private readonly releaseInFlight = new Map<string, Promise<void>>();
   /** Preserve invocation order so stale touches cannot undo a later rename or removal. */
   private readonly workspaceMutationQueues = new Map<WorkspaceId, Promise<void>>();
   private readonly leaseIdentity: LeaseIdentity = currentLeaseIdentity();
@@ -1588,8 +1590,51 @@ export class SessionSupervisor {
     });
   }
 
+  /**
+   * Frees an idle session's runtime and loaded file. It reopens from its file the next time it
+   * is used. Unlike closeSession this emits nothing and changes nothing the person can see.
+   * Returns false, and keeps the session, while it runs, has queued messages, or waits on the
+   * person.
+   */
+  async releaseSession(sessionRef: SessionRef): Promise<boolean> {
+    const key = sessionKey(sessionRef);
+    const record = this.records.get(key);
+    if (!record) {
+      return true;
+    }
+    if (
+      this.ensureRecordInFlight.has(key) ||
+      isRecordBusy(record) ||
+      record.queuedMessages.length > 0 ||
+      record.startingQueuedMessage !== undefined ||
+      record.queuedStartScheduled ||
+      record.pendingHostUiRequests.size > 0 ||
+      record.bindingExtensions ||
+      record.reloadPending ||
+      record.reloadInFlight !== undefined
+    ) {
+      return false;
+    }
+
+    // Out of the map first, so a reopen builds a new record. The reopen waits for this release,
+    // so releasing the old lease can't remove the new one.
+    this.records.delete(key);
+    record.closed = true;
+    record.unsubscribeAgent?.();
+    record.unsubscribeAgent = undefined;
+    record.listeners.clear();
+    const released = (async () => {
+      await this.persistSnapshot(record);
+      await this.disposeRecordRuntimeSafely(record);
+    })().finally(() => this.releaseInFlight.delete(key));
+    this.releaseInFlight.set(key, released);
+    await released;
+    return true;
+  }
+
   private async ensureRecord(sessionRef: SessionRef): Promise<ManagedSessionRecord> {
     const key = sessionKey(sessionRef);
+    await this.releaseInFlight.get(key)?.catch(() => undefined);
     const existing = this.records.get(key);
     if (existing && existing.session && !existing.closed) {
       return existing;

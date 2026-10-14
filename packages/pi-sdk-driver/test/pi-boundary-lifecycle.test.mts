@@ -131,10 +131,11 @@ async function fixture(
     { initialModel: { provider: "boundary-test", modelId: "scripted" } },
   );
   const ref = snapshot.ref;
-  const unsubscribe = driver.subscribe(ref, (event) => {
+  const listen = (event: SessionDriverEvent) => {
     events.push(event);
     for (const listener of changed) listener();
-  });
+  };
+  let unsubscribe = driver.subscribe(ref, listen);
   t.after(async () => {
     unsubscribe();
     await driver.closeSession(ref);
@@ -155,7 +156,15 @@ async function fixture(
   return {
     driver,
     ref,
-    runtime,
+    // The latest runtime; reopening a released session creates a new one.
+    get runtime() {
+      return runtime;
+    },
+    /** Listen again, as the app does after a released session reopens. */
+    resubscribe() {
+      unsubscribe();
+      unsubscribe = driver.subscribe(ref, listen);
+    },
     events,
     rawEvents,
     until,
@@ -437,5 +446,49 @@ await test(
       persisted.map((event) => event.runId),
       [h.initialRunId(), extensionRunId],
     );
+  },
+);
+
+await test(
+  "releasing an idle session frees it and it reopens from its file; a running one is kept",
+  { timeout: 15000 },
+  async (t) => {
+    const replying = gate();
+    const finishReply = gate();
+    let requests = 0;
+    const h = await fixture(t, async (model) => {
+      requests += 1;
+      if (requests === 2) {
+        replying.release();
+        await finishReply.promise;
+      }
+      return response(model, `Reply ${requests}`);
+    });
+    await h.driver.sendUserMessage(h.ref, { text: "First" });
+    await h.until(() => h.completions().length === 1);
+    const before = await h.driver.getTranscript(h.ref);
+    const firstRuntime = h.runtime;
+
+    assert.equal(await h.driver.releaseSession(h.ref), true);
+    // Reopening builds a new runtime from the session file, with the same transcript.
+    const reopened = await h.driver.openSession(h.ref);
+    h.resubscribe();
+    assert.equal(reopened.status, "idle");
+    assert.notEqual(h.runtime, firstRuntime, "the released runtime is not reused");
+    assert.deepEqual(await h.driver.getTranscript(h.ref), before);
+
+    // A released session still works.
+    const sending = h.driver.sendUserMessage(h.ref, { text: "Second" });
+    try {
+      await replying.promise;
+      assert.equal(await h.driver.releaseSession(h.ref), false, "a running session is kept");
+      assert.equal((await h.driver.openSession(h.ref)).status, "running");
+    } finally {
+      finishReply.release();
+      await sending;
+    }
+    await h.until(() => h.completions().length === 2);
+    const after = await h.driver.getTranscript(h.ref);
+    assert.ok(after.some((item) => item.kind === "message" && item.text === "Reply 2"));
   },
 );
