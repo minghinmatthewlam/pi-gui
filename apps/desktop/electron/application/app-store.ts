@@ -109,6 +109,8 @@ import {
   previewFromTranscript,
   toSessionQueuedMessages,
   toSessionRef,
+  transcriptForWindow,
+  transcriptImageResponse,
 } from "./app-store-utils";
 import type {
   CustomProviderConfig,
@@ -628,6 +630,11 @@ export class DesktopAppStore {
     return workspace?.sessions.some((session) => session.id === sessionId)
       ? { workspaceId: workspace.id, sessionId }
       : undefined;
+  }
+
+  /** Serves a tool-output image the window shows, by the URL its transcript row carries. */
+  transcriptImageResponse(requestUrl: string): Response {
+    return transcriptImageResponse(requestUrl, (key) => this.sessionState.transcriptCache.get(key));
   }
 
   async getStateForView(view: DesktopAppViewState): Promise<DesktopAppState> {
@@ -4073,7 +4080,11 @@ export class DesktopAppStore {
     return {
       workspaceId: sessionRef.workspaceId,
       sessionId: sessionRef.sessionId,
-      transcript: this.sessionState.transcriptCache.get(sessionKey(sessionRef)) ?? [],
+      // Image data stays here; the window loads each image when its row is shown.
+      transcript: transcriptForWindow(
+        sessionRef,
+        this.sessionState.transcriptCache.get(sessionKey(sessionRef)) ?? [],
+      ),
       ...(schemaInfo ? { schemaInfo } : {}),
     };
   }
