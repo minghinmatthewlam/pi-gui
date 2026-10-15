@@ -1073,6 +1073,7 @@ app
       Object.assign(globalThis, {
         __PI_APP_TEST_HOOKS: {
           emitSessionEvent: (event: SessionDriverEvent) => store.emitTestSessionEvent(event),
+          loadedTranscriptSessionIds: () => store.loadedTranscriptSessionIdsForTest(),
           handleWindowActivation: () => {
             if (mainWindow) {
               windowOwner.activate(mainWindow);

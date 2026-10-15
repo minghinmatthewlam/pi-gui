@@ -57,6 +57,7 @@ import {
   type SetChildSupervisionLoopInput,
   type SelectedTranscriptRecord,
   type SessionExtensionNoticeRecord,
+  type SessionRecord,
   type StartThreadInput,
   type StartupDiagnostic,
   type ThemeMode,
@@ -161,6 +162,9 @@ import {
   isSessionVisibleInWindow,
 } from "../conversation/session-visibility";
 
+/** Idle threads kept loaded so switching back to them stays instant; older ones are released. */
+const RECENT_THREADS_KEPT_LOADED = 3;
+
 type StateListener = (state: DesktopAppState) => void;
 type SelectedTranscriptListener = (payload: SelectedTranscriptRecord | null) => void;
 type SessionEventListener = (
@@ -210,6 +214,8 @@ export class DesktopAppStore {
    * trailing refresh so the final state is never dropped.
    */
   private readonly sessionCommandRefreshers = new Map<string, { dirty: boolean }>();
+  /** Threads viewed most recently, newest first; these stay loaded when others are released. */
+  private recentlyViewedSessionKeys: string[] = [];
   /**
    * Coalesce token-level assistantDelta / redundant sessionUpdated publishes so
    * the renderer does not apply a full DesktopAppState snapshot per token.
@@ -831,6 +837,11 @@ export class DesktopAppStore {
   async emitTestSessionEvent(event: SessionDriverEvent): Promise<void> {
     await this.initialize();
     await this.handleSessionEvent(event);
+  }
+
+  /** Test only: threads whose transcript is kept in memory. */
+  loadedTranscriptSessionIdsForTest(): string[] {
+    return [...this.sessionState.loadedTranscriptKeys];
   }
 
   subscribe(listener: StateListener): () => void {
@@ -4270,6 +4281,75 @@ export class DesktopAppStore {
     this.schedulePersistUiState();
     this.emit();
     this.publishSelectedTranscriptFor(sessionRef);
+    this.noteSessionViewed(sessionRef);
+    void this.releaseIdleSessions().catch((error: unknown) => {
+      console.error("[app-store] releasing idle threads failed", error);
+    });
+  }
+
+  private noteSessionViewed(sessionRef: SessionRef): void {
+    const key = sessionKey(sessionRef);
+    this.recentlyViewedSessionKeys = [
+      key,
+      ...this.recentlyViewedSessionKeys.filter((entry) => entry !== key),
+    ].slice(0, RECENT_THREADS_KEPT_LOADED);
+  }
+
+  /**
+   * Every opened thread used to stay in memory until quit: its pi session and its transcript.
+   * Free idle threads that weren't viewed recently; they reload from their files when opened.
+   * Threads that run, wait on the person, or take part in orchestration stay loaded.
+   */
+  private async releaseIdleSessions(): Promise<void> {
+    const keep = new Set(this.recentlyViewedSessionKeys);
+    const loaded = new Set([
+      ...this.sessionState.sessionSubscriptions.keys(),
+      ...this.sessionState.loadedTranscriptKeys,
+    ]);
+    for (const workspace of this.state.workspaces) {
+      for (const session of workspace.sessions) {
+        const sessionRef = { workspaceId: workspace.id, sessionId: session.id };
+        const key = sessionKey(sessionRef);
+        if (!loaded.has(key) || keep.has(key) || !this.canReleaseSession(sessionRef, session)) {
+          continue;
+        }
+        this.sessionState.sessionSubscriptions.get(key)?.();
+        this.sessionState.sessionSubscriptions.delete(key);
+        this.sessionState.loadedTranscriptKeys.delete(key);
+        this.sessionState.transcriptCache.delete(key);
+        this.sessionState.sessionCommandsBySession.delete(key);
+        if (!(await this.driver.releaseSession(sessionRef))) {
+          // It became busy; keep listening. Its transcript reloads when it is next opened.
+          await this.ensureSessionSubscribed(sessionRef);
+        }
+      }
+    }
+  }
+
+  private canReleaseSession(sessionRef: SessionRef, session: SessionRecord): boolean {
+    const key = sessionKey(sessionRef);
+    const inOrchestration = this.state.orchestrationChildren.some(
+      (child) =>
+        (child.parentWorkspaceId === sessionRef.workspaceId &&
+          child.parentSessionId === sessionRef.sessionId) ||
+        (child.childWorkspaceId === sessionRef.workspaceId &&
+          child.childSessionId === sessionRef.sessionId),
+    );
+    return (
+      session.status !== "running" &&
+      !this.sessionState.runningSinceBySession.has(key) &&
+      !(
+        this.state.selectedWorkspaceId === sessionRef.workspaceId &&
+        this.state.selectedSessionId === sessionRef.sessionId
+      ) &&
+      !this.shouldKeepSessionDialogs(sessionRef) &&
+      !inOrchestration &&
+      (this.sessionState.queuedComposerMessagesBySession.get(key)?.length ?? 0) === 0 &&
+      !this.sessionState.queuedComposerEditsBySession.has(key) &&
+      (this.sessionState.extensionUiBySession.get(key)?.pendingDialogs.length ?? 0) === 0 &&
+      !this.pendingRuntimeCommandsBySession.has(key) &&
+      !this.sessionState.pendingAutoTitleBySession.has(key)
+    );
   }
 
   private startSelectedSessionHydration(
