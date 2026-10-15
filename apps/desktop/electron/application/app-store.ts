@@ -57,6 +57,7 @@ import {
   type SetChildSupervisionLoopInput,
   type SelectedTranscriptRecord,
   type SessionExtensionNoticeRecord,
+  type SessionExtensionUiUpdate,
   type StartThreadInput,
   type StartupDiagnostic,
   type ThemeMode,
@@ -201,6 +202,7 @@ export class DesktopAppStore {
   /** Serialize full-state refreshes so stale async builders cannot publish over newer state. */
   private refreshStateQueue: Promise<void> = Promise.resolve();
   private readonly selectedTranscriptListeners = new Set<SelectedTranscriptListener>();
+  private readonly extensionUiListeners = new Set<(update: SessionExtensionUiUpdate) => void>();
   private readonly sessionEventListeners = new Set<SessionEventListener>();
   private readonly sessionEventQueues = new Map<string, Promise<void>>();
   /**
@@ -850,6 +852,13 @@ export class DesktopAppStore {
       .catch(() => undefined);
     return () => {
       this.selectedTranscriptListeners.delete(listener);
+    };
+  }
+
+  subscribeToExtensionUi(listener: (update: SessionExtensionUiUpdate) => void): () => void {
+    this.extensionUiListeners.add(listener);
+    return () => {
+      this.extensionUiListeners.delete(listener);
     };
   }
 
@@ -3393,6 +3402,9 @@ export class DesktopAppStore {
     if (subscriptionKey !== key) {
       this.migrateSessionSubscriptionKey(subscriptionKey, key);
     }
+    if (subscriptionKey === key && (await this.applyExtensionUiOnlyEvent(event))) {
+      return;
+    }
     // Apply-then-publish is wrapped so the finally always either emits or
     // schedules a coalesced emit. Token-level assistantDelta / redundant
     // sessionUpdated ticks must not publish a full app snapshot per token.
@@ -3743,6 +3755,40 @@ export class DesktopAppStore {
     }
 
     return runtimeByWorkspace;
+  }
+
+  /**
+   * Status, widget and title changes only touch one session's extension UI, and extensions can
+   * send them many times a second (a spinner in the title, for one). Send that session's UI on
+   * its own instead of the whole app state. Anything else returns false and takes the full path.
+   */
+  private async applyExtensionUiOnlyEvent(event: SessionDriverEvent): Promise<boolean> {
+    if (
+      event.type !== "hostUiRequest" ||
+      (event.request.kind !== "status" &&
+        event.request.kind !== "widget" &&
+        event.request.kind !== "title") ||
+      !this.sessionFromState(event.sessionRef)
+    ) {
+      return false;
+    }
+    const key = sessionKey(event.sessionRef);
+    const uiState = this.getOrCreateExtensionUiState(event.sessionRef);
+    applyHostUiRequestToExtensionUiState(uiState, event.request);
+    const ui = serializeExtensionUiState(uiState);
+    // Same counter as emit(), so the renderer orders this against full state pushes.
+    this.publishRevision = Math.max(this.publishRevision, this.state.revision) + 1;
+    this.state = {
+      ...this.state,
+      revision: this.publishRevision,
+      sessionExtensionUiBySession: { ...this.state.sessionExtensionUiBySession, [key]: ui },
+    };
+    const update = { sessionKey: key, ui, revision: this.publishRevision };
+    for (const listener of this.extensionUiListeners) {
+      listener(update);
+    }
+    await this.emitSessionEvent(event, this.state);
+    return true;
   }
 
   private serializeSessionExtensionUiState() {

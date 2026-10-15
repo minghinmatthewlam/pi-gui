@@ -264,6 +264,16 @@ export interface SessionExtensionUiStateRecord {
   readonly editorText?: string;
 }
 
+/**
+ * One session's extension UI, sent on its own when only its status, widgets or title changed.
+ * `revision` comes from the same counter as full state pushes, so a stale one is dropped.
+ */
+export interface SessionExtensionUiUpdate {
+  readonly sessionKey: string;
+  readonly ui: SessionExtensionUiStateRecord;
+  readonly revision: number;
+}
+
 export type ExtensionCommandCompatibilityStatus = "supported" | "terminal-only";
 
 export interface ExtensionCommandCompatibilityRecord {
