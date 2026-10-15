@@ -300,3 +300,36 @@ test("a multi-line drag that runs past the text still adds its lines", async () 
     await harness.close();
   }
 });
+
+test("copies a transcript selection from the button beside Add to Chat", async () => {
+  test.setTimeout(60_000);
+  const harness = await launchWithTranscript("transcript-copy", [
+    { role: "user", text: "Ask" },
+    { role: "assistant", text: REPLY },
+  ]);
+  try {
+    const page = await harness.firstWindow();
+    await expect(page.locator(".timeline-item--assistant").last()).toContainText("TN stamps");
+    await harness.electronApp.evaluate(({ clipboard }) => clipboard.writeText(""));
+
+    await dragSelect(page, "official admission record");
+    const copy = page.getByTestId("copy-selection");
+    await expect(copy).toContainText("Copy");
+    await expect(page.getByTestId("add-to-chat")).toBeVisible();
+    await copy.click();
+    await expect(copy).toContainText("Copied");
+    await expect
+      .poll(() => harness.electronApp.evaluate(({ clipboard }) => clipboard.readText()))
+      .toBe("official admission record");
+
+    // Copying keeps the selection and adds nothing; Add to Chat still works on it.
+    expect(await page.evaluate(() => window.getSelection()?.toString())).toBe(
+      "official admission record",
+    );
+    await expect(page.getByTestId("annotation-marker")).toHaveCount(0);
+    await page.getByTestId("add-to-chat").click();
+    await expect(page.getByTestId("annotation-editor")).toBeVisible();
+  } finally {
+    await harness.close();
+  }
+});

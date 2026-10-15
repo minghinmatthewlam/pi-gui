@@ -31,8 +31,12 @@ interface OpenEditor {
   readonly anchor: DOMRect;
 }
 
+function shortcutKeys(platform: NodeJS.Platform, key: string): readonly string[] {
+  return platform === "darwin" ? ["⌘", key] : ["Ctrl", key];
+}
+
 export function addToChatShortcutKeys(platform: NodeJS.Platform): readonly string[] {
-  return platform === "darwin" ? ["⌘", "L"] : ["Ctrl", "L"];
+  return shortcutKeys(platform, "L");
 }
 
 function isAddToChatShortcut(event: KeyboardEvent, platform: NodeJS.Platform): boolean {
@@ -127,7 +131,7 @@ function popoverTop(anchor: DOMRect, height: number): number {
 }
 
 /**
- * The "Add to Chat" button over a transcript selection, and the comment box that opens
+ * The Copy and "Add to Chat" buttons over a transcript selection, and the comment box that opens
  * when an annotation is added or its marker is clicked.
  */
 export function useAnnotationSelection({
@@ -243,7 +247,12 @@ export function useAnnotationSelection({
   const layer = (
     <>
       {selection && !editor ? (
-        <AddToChatButton anchor={selection.rect} platform={platform} onAdd={addSelection} />
+        <SelectionActions
+          anchor={selection.rect}
+          platform={platform}
+          quote={selection.quote}
+          onAdd={addSelection}
+        />
       ) : null}
       {editor && editing && annotations ? (
         <AnnotationEditor
@@ -263,36 +272,72 @@ export function useAnnotationSelection({
   return { layer, openAnnotation };
 }
 
-function AddToChatButton({
+const COPIED_FEEDBACK_MS = 1200;
+
+function SelectionActions({
   anchor,
   platform,
+  quote,
   onAdd,
 }: {
   readonly anchor: DOMRect;
   readonly platform: NodeJS.Platform;
+  readonly quote: string;
   readonly onAdd: () => void;
 }) {
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return undefined;
+    const timer = window.setTimeout(() => setCopied(false), COPIED_FEEDBACK_MS);
+    return () => window.clearTimeout(timer);
+  }, [copied]);
+  // A different selection starts without the confirmation.
+  useEffect(() => setCopied(false), [quote]);
+
+  const copy = () => {
+    navigator.clipboard.writeText(quote).then(
+      () => setCopied(true),
+      (error: unknown) => console.error("[renderer] navigator.clipboard.writeText failed", error),
+    );
+  };
+
   return (
     <div
       className="annotation-popover annotation-add"
       style={{ top: popoverTop(anchor, 32), left: Math.max(POPOVER_GAP, anchor.left) }}
+      // Keep the transcript selection alive through a click on either button.
+      onMouseDown={(event) => event.preventDefault()}
     >
+      <button
+        className="annotation-add__button"
+        data-testid="copy-selection"
+        type="button"
+        onClick={copy}
+      >
+        <span>{copied ? "Copied" : "Copy"}</span>
+        <ShortcutKeys keys={shortcutKeys(platform, "C")} />
+      </button>
+      <span className="annotation-add__divider" aria-hidden="true" />
       <button
         className="annotation-add__button"
         data-testid="add-to-chat"
         type="button"
-        // Keep the transcript selection alive through the click.
-        onMouseDown={(event) => event.preventDefault()}
         onClick={onAdd}
       >
         <span>Add to Chat</span>
-        <span className="annotation-add__keys" aria-hidden="true">
-          {addToChatShortcutKeys(platform).map((key) => (
-            <kbd key={key}>{key}</kbd>
-          ))}
-        </span>
+        <ShortcutKeys keys={addToChatShortcutKeys(platform)} />
       </button>
     </div>
+  );
+}
+
+function ShortcutKeys({ keys }: { readonly keys: readonly string[] }) {
+  return (
+    <span className="annotation-add__keys" aria-hidden="true">
+      {keys.map((key) => (
+        <kbd key={key}>{key}</kbd>
+      ))}
+    </span>
   );
 }
 
