@@ -21,6 +21,7 @@ import { SettingsNotificationsSection } from "./settings-notifications-section";
 import { SettingsProvidersSection } from "./settings-providers-section";
 import { type SettingsSection, settingsSectionDefinition } from "./settings-sections";
 import { SettingsShortcutsSection } from "./settings-shortcuts-section";
+import { t, useLocale } from "../../lib/i18n";
 
 export type { SettingsSection } from "./settings-sections";
 
@@ -98,6 +99,9 @@ export function SettingsView({
   onSetEnableTransparency,
   mcpActions,
 }: SettingsViewProps) {
+  // Subscribing makes the page title and "select a workspace" notice refresh
+  // when the user picks a new locale.
+  useLocale();
   const definition = settingsSectionDefinition(section);
   const header = (
     <header className="view-header">
@@ -119,9 +123,9 @@ export function SettingsView({
           <div className="settings-group">
             <div className="settings-row">
               <div className="settings-row__label">
-                <div className="settings-row__title">Select a workspace</div>
+                <div className="settings-row__title">{t("settings.select_workspace.title")}</div>
                 <div className="settings-row__description">
-                  Providers and models are set per workspace. Choose one, or open a folder first.
+                  {t("settings.select_workspace.description")}
                 </div>
               </div>
             </div>

@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import type { RuntimeSnapshot } from "@pi-gui/session-driver/runtime-types";
 import type { ModelSettingsScopeMode } from "../../../contracts/desktop-state";
-import { SettingsSegmented, SettingsSwitch } from "./settings-controls";
+import { SettingsSegmented, SettingsSelect, SettingsSwitch } from "./settings-controls";
 import { SettingsGroup, SettingsRow } from "./settings-utils";
+import { listLocales, setLocale, useLocale, type LocaleId, t } from "../../lib/i18n";
 
 interface SettingsGeneralSectionProps {
   readonly runtime?: RuntimeSnapshot;
@@ -21,7 +22,11 @@ export function SettingsGeneralSection({
   onSetIntegratedTerminalShell,
   onToggleSkillCommands,
 }: SettingsGeneralSectionProps) {
+  // Subscribing makes the section re-render when the user picks a new locale.
+  useLocale();
   const [terminalShellDraft, setTerminalShellDraft] = useState(integratedTerminalShell);
+  const locales = listLocales();
+  const currentLocale = useLocale();
 
   useEffect(() => {
     setTerminalShellDraft(integratedTerminalShell);
@@ -35,40 +40,57 @@ export function SettingsGeneralSection({
 
   return (
     <>
-      <SettingsGroup title="Agent">
+      <SettingsGroup title={t("settings.language")} plain>
         <SettingsRow
-          title="Model settings scope"
-          description="Apply the default model and enabled models everywhere, or set them per repo."
+          title={t("settings.language")}
+          description={t("settings.language.description")}
+        >
+          <SettingsSelect
+            label={t("settings.language")}
+            options={locales.map((locale) => ({
+              value: locale.id,
+              label: locale.nativeName,
+            }))}
+            value={currentLocale}
+            onChange={(value) => setLocale(value as LocaleId)}
+          />
+        </SettingsRow>
+      </SettingsGroup>
+
+      <SettingsGroup title={t("settings.general.agent.title")}>
+        <SettingsRow
+          title={t("settings.general.model_scope.title")}
+          description={t("settings.general.model_scope.description")}
         >
           <SettingsSegmented
-            label="Model settings scope"
+            label={t("settings.general.model_scope.aria")}
             options={[
-              { value: "app-global", label: "App global" },
-              { value: "per-repo", label: "Per repo" },
+              { value: "app-global", label: t("settings.general.model_scope.app_global") },
+              { value: "per-repo", label: t("settings.general.model_scope.per_repo") },
             ]}
             value={modelSettingsScopeMode}
             onChange={onSetModelSettingsScopeMode}
           />
         </SettingsRow>
         <SettingsRow
-          title="Skill slash commands"
-          description="Offer each skill as a slash command in the composer."
+          title={t("settings.general.skill_commands.title")}
+          description={t("settings.general.skill_commands.description")}
         >
           <SettingsSwitch
             checked={runtime?.settings.enableSkillCommands ?? true}
-            label="Enable skill slash commands"
+            label={t("settings.general.skill_commands.aria")}
             onChange={onToggleSkillCommands}
           />
         </SettingsRow>
       </SettingsGroup>
 
-      <SettingsGroup title="Terminal">
+      <SettingsGroup title={t("settings.general.terminal.title")}>
         <SettingsRow
-          title="Shell"
-          description="The shell the integrated terminal starts. Leave blank to use your login shell."
+          title={t("settings.general.terminal.shell.title")}
+          description={t("settings.general.terminal.shell.description")}
         >
           <input
-            aria-label="Shell of integrated terminal"
+            aria-label={t("settings.general.terminal.shell.aria")}
             className="settings-text-input"
             placeholder="/bin/zsh"
             spellCheck={false}

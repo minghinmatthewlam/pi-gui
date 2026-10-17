@@ -1,17 +1,28 @@
 import type { PaletteFilter, PaletteItem, PaletteSection } from "./command-palette";
 import { rankByFuzzy, type RankedMatch } from "./fuzzy-match";
+import { t } from "../../lib/i18n";
 
 /** An item before matching; the palette highlights its title. */
 export type PaletteCandidate = Omit<PaletteItem, "titleMatches" | "detailMatches">;
 
 export type CommandFilter = "all" | "chats" | "workspaces" | "actions";
 
-export const COMMAND_FILTERS: readonly PaletteFilter<CommandFilter>[] = [
-  { id: "all", label: "All" },
-  { id: "chats", label: "Chats" },
-  { id: "workspaces", label: "Workspaces" },
-  { id: "actions", label: "Actions" },
-];
+/**
+ * The Cmd-K filter tabs. Labels are resolved at render time via `t()` so the
+ * active locale applies immediately; the id stays a stable string the renderer
+ * uses for state and matching.
+ */
+export function buildCommandFilters(): readonly PaletteFilter<CommandFilter>[] {
+  return [
+    { id: "all", label: t("palette.filter.all") },
+    { id: "chats", label: t("palette.filter.chats") },
+    { id: "workspaces", label: t("palette.filter.workspaces") },
+    { id: "actions", label: t("palette.filter.actions") },
+  ];
+}
+
+/** Back-compat alias: callers that read the static list before first render. */
+export const COMMAND_FILTERS: readonly PaletteFilter<CommandFilter>[] = buildCommandFilters();
 
 const RECENT_CHAT_COUNT = 5;
 const ALL_FILTER_LIMITS = { chats: 8, workspaces: 5, actions: 8 } as const;
@@ -53,24 +64,34 @@ export function buildCommandSections(input: {
   if (query.trim() === "") {
     switch (filter) {
       case "chats":
-        return [{ id: "chats", label: "Chats", items: chats.slice(0, SINGLE_FILTER_LIMIT) }];
+        return [
+          {
+            id: "chats",
+            label: t("palette.filter.chats"),
+            items: chats.slice(0, SINGLE_FILTER_LIMIT),
+          },
+        ];
       case "workspaces":
-        return [{ id: "workspaces", label: "Workspaces", items: workspaces }];
+        return [{ id: "workspaces", label: t("palette.filter.workspaces"), items: workspaces }];
       case "actions":
-        return [{ id: "actions", label: "Actions", items: actions }];
+        return [{ id: "actions", label: t("palette.filter.actions"), items: actions }];
       case "all":
         return [
-          { id: "recents", label: "Recents", items: chats.slice(0, RECENT_CHAT_COUNT) },
-          { id: "actions", label: "Actions", items: actions },
+          {
+            id: "recents",
+            label: t("palette.section.recents"),
+            items: chats.slice(0, RECENT_CHAT_COUNT),
+          },
+          { id: "actions", label: t("palette.section.actions"), items: actions },
         ];
     }
   }
 
   const single = filter !== "all";
   const kinds = [
-    { id: "chats", label: "Chats", candidates: chats },
-    { id: "workspaces", label: "Workspaces", candidates: workspaces },
-    { id: "actions", label: "Actions", candidates: actions },
+    { id: "chats", label: t("palette.filter.chats"), candidates: chats },
+    { id: "workspaces", label: t("palette.filter.workspaces"), candidates: workspaces },
+    { id: "actions", label: t("palette.filter.actions"), candidates: actions },
   ] as const;
   return kinds
     .filter((kind) => !single || kind.id === filter)
@@ -110,7 +131,7 @@ export function buildFileSections(input: {
     return [
       {
         id: "open-files",
-        label: "Open files",
+        label: t("palette.files.section.open_files"),
         items: [...openTabs].reverse().map(toCandidate),
       },
     ];
@@ -126,7 +147,7 @@ export function buildFileSections(input: {
       detailMatches: match.positions.filter((position) => position < directory.length),
     };
   });
-  return [{ id: "files", label: "Files", items }];
+  return [{ id: "files", label: t("palette.files.section.files"), items }];
 }
 
 export function buildListSection(input: {

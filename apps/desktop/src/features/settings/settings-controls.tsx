@@ -1,4 +1,5 @@
 import { ChevronDownIcon } from "../../ui/icons";
+import { t } from "../../lib/i18n";
 
 /** A checkbox drawn as a switch, so it keeps native checkbox keyboard and form behaviour. */
 export function SettingsSwitch({
@@ -85,7 +86,7 @@ export function SettingsSelect<T extends string>({
       >
         {hasValue ? null : (
           <option disabled value="">
-            Choose…
+            {t("settings.select.placeholder")}
           </option>
         )}
         {options.map((option) => (

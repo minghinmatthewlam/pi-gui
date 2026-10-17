@@ -9,6 +9,7 @@ import {
   SkillIcon,
   SunIcon,
 } from "../../ui/icons";
+import { t } from "../../lib/i18n";
 
 export interface SettingsSectionDefinition {
   readonly id: string;
@@ -22,91 +23,120 @@ export interface SettingsSectionDefinition {
   readonly needsWorkspace: boolean;
 }
 
-/** Nav order: grouped the way Codex groups its settings, one entry per page. */
-export const SETTINGS_SECTIONS = [
-  {
-    id: "general",
-    title: "General",
-    group: "App",
-    icon: <SettingsIcon />,
-    keywords: ["model settings scope", "per repo", "skill slash commands", "terminal", "shell"],
-    description: () => "App and runtime defaults.",
-    needsWorkspace: false,
-  },
-  {
-    id: "appearance",
-    title: "Appearance",
-    group: "App",
-    icon: <SunIcon />,
-    keywords: ["theme", "light", "dark", "system", "preset", "colors", "transparency"],
-    description: () => "Choose light, dark or system mode and a color preset.",
-    needsWorkspace: false,
-  },
-  {
-    id: "notifications",
-    title: "Notifications",
-    group: "App",
-    icon: <BellIcon />,
-    keywords: ["alerts", "background", "completion", "failures", "approval", "macos"],
-    description: () => "Choose which background events alert you.",
-    needsWorkspace: false,
-  },
-  {
-    id: "shortcuts",
-    title: "Keyboard shortcuts",
-    group: "App",
-    icon: <KeyboardIcon />,
-    keywords: ["keys", "hotkeys", "keybindings"],
-    description: () => "Shortcuts available across the app.",
-    needsWorkspace: false,
-  },
-  {
-    id: "providers",
-    title: "Providers",
-    group: "Agent",
-    icon: <PlugIcon />,
-    keywords: ["login", "logout", "oauth", "api key", "auth", "custom endpoint"],
-    description: (workspaceName) => `Connect providers and manage auth for ${workspaceName}.`,
-    needsWorkspace: true,
-  },
-  {
-    id: "models",
-    title: "Models",
-    group: "Agent",
-    icon: <ModelIcon />,
-    keywords: ["default model", "reasoning", "thinking", "enabled models"],
-    description: () => "Choose the default model and which models appear in pickers.",
-    needsWorkspace: true,
-  },
-  {
-    id: "mcp",
-    title: "MCP servers",
-    group: "Agent",
-    icon: <ExtensionIcon />,
-    keywords: ["mcp", "mcp.json", "model context protocol", "servers", "code mode", "codemode"],
-    description: () => "Add, remove and switch the MCP servers pi connects in each thread.",
-    needsWorkspace: true,
-  },
-] as const satisfies readonly SettingsSectionDefinition[];
+/**
+ * Build the static nav entries. The titles, descriptions and search keywords
+ * come from the locale dictionaries; only the icons and the `id` /
+ * `needsWorkspace` shape are renderer-side. Calling this on every render lets
+ * the user switch language and have the nav refresh instantly.
+ */
+function makeSections(): readonly SettingsSectionDefinition[] {
+  return [
+    {
+      id: "general",
+      title: t("settings.section.general.title"),
+      group: t("settings.section.general.group"),
+      icon: <SettingsIcon />,
+      keywords: t("settings.section.general.keywords").split(", "),
+      description: () => t("settings.section.general.description"),
+      needsWorkspace: false,
+    },
+    {
+      id: "appearance",
+      title: t("settings.section.appearance.title"),
+      group: t("settings.section.appearance.group"),
+      icon: <SunIcon />,
+      keywords: t("settings.section.appearance.keywords").split(", "),
+      description: () => t("settings.section.appearance.description"),
+      needsWorkspace: false,
+    },
+    {
+      id: "notifications",
+      title: t("settings.section.notifications.title"),
+      group: t("settings.section.notifications.group"),
+      icon: <BellIcon />,
+      keywords: t("settings.section.notifications.keywords").split(", "),
+      description: () => t("settings.section.notifications.description"),
+      needsWorkspace: false,
+    },
+    {
+      id: "shortcuts",
+      title: t("settings.section.shortcuts.title"),
+      group: t("settings.section.shortcuts.group"),
+      icon: <KeyboardIcon />,
+      keywords: t("settings.section.shortcuts.keywords").split(", "),
+      description: () => t("settings.section.shortcuts.description"),
+      needsWorkspace: false,
+    },
+    {
+      id: "providers",
+      title: t("settings.section.providers.title"),
+      group: t("settings.section.providers.group"),
+      icon: <PlugIcon />,
+      keywords: t("settings.section.providers.keywords").split(", "),
+      description: (workspaceName) =>
+        t("settings.section.providers.description", { workspace: workspaceName }),
+      needsWorkspace: true,
+    },
+    {
+      id: "models",
+      title: t("settings.section.models.title"),
+      group: t("settings.section.models.group"),
+      icon: <ModelIcon />,
+      keywords: t("settings.section.models.keywords").split(", "),
+      description: () => t("settings.section.models.description"),
+      needsWorkspace: true,
+    },
+    {
+      id: "mcp",
+      title: t("settings.section.mcp.title"),
+      group: t("settings.section.mcp.group"),
+      icon: <ExtensionIcon />,
+      keywords: t("settings.section.mcp.keywords").split(", "),
+      description: () => t("settings.section.mcp.description"),
+      needsWorkspace: true,
+    },
+  ];
+}
+
+/** Build a fresh list at call time so a locale change refreshes the nav. */
+export function settingsSections(): readonly SettingsSectionDefinition[] {
+  return makeSections();
+}
+
+/**
+ * Initial section list. Consumers that need a stable reference (e.g. nav id
+ * type unions) use `settingsSections()`; this constant keeps the inferred
+ * `SettingsSection` type narrowing working without re-resolving.
+ */
+export const SETTINGS_SECTIONS = makeSections();
 
 export type SettingsSection = (typeof SETTINGS_SECTIONS)[number]["id"];
 
 /** Skills and extensions live in the settings nav but are their own app views. */
 export const CUSTOMIZE_SECTION_ID = "customize";
 
-export const SETTINGS_NAV_ITEMS = [
-  ...SETTINGS_SECTIONS,
-  {
-    id: CUSTOMIZE_SECTION_ID,
-    title: "Skills and extensions",
-    group: "Customize",
-    icon: <SkillIcon />,
-    keywords: ["skills", "extensions", "plugins", "slash commands", "tools"],
-  },
-] as const;
+export function settingsNavItems(): readonly SettingsSectionDefinition[] {
+  const base = makeSections();
+  return [
+    ...base,
+    {
+      id: CUSTOMIZE_SECTION_ID,
+      title: t("settings.section.customize.title"),
+      group: t("settings.section.customize.group"),
+      icon: <SkillIcon />,
+      keywords: t("settings.section.customize.keywords").split(", "),
+      description: () => "",
+      needsWorkspace: false,
+    },
+  ];
+}
+
+/** Back-compat: callers that read the static nav before first render. */
+export const SETTINGS_NAV_ITEMS = settingsNavItems();
 
 export function settingsSectionDefinition(section: SettingsSection): SettingsSectionDefinition {
-  return SETTINGS_SECTIONS.find((definition) => definition.id === section) ?? SETTINGS_SECTIONS[0];
+  const list = makeSections();
+  return list.find((definition) => definition.id === section) ?? list[0]!;
 }
 
 export function sectionTitle(section: SettingsSection): string {
