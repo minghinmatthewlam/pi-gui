@@ -46,6 +46,8 @@ interface UseSessionComposerParams {
   readonly annotations: TranscriptAnnotations;
 }
 
+const EMPTY_ID_SET: ReadonlySet<string> = new Set();
+
 export function useSessionComposer(params: UseSessionComposerParams) {
   const {
     api,
@@ -67,10 +69,21 @@ export function useSessionComposer(params: UseSessionComposerParams) {
     annotations,
   } = params;
 
-  const [attachmentsClearedOnSubmit, setAttachmentsClearedOnSubmit] = useState(false);
-  const composerAttachments = attachmentsClearedOnSubmit
-    ? []
-    : (snapshot?.composerAttachments ?? []);
+  // Attachments optimistically hidden while their submit is in flight. Scoped to the
+  // submitted ids (not a blanket flag) because the submit IPC resolves only after the
+  // whole agent turn finishes; a blanket flag hid every attachment added mid-run.
+  const [submittedAttachmentIds, setSubmittedAttachmentIds] =
+    useState<ReadonlySet<string>>(EMPTY_ID_SET);
+  const snapshotAttachments = snapshot?.composerAttachments ?? [];
+  const composerAttachments =
+    submittedAttachmentIds.size === 0
+      ? snapshotAttachments
+      : snapshotAttachments.filter((attachment) => !submittedAttachmentIds.has(attachment.id));
+
+  const clearSubmittedAttachmentIds = (submittedIds: ReadonlySet<string>) => {
+    // Only clear this submit's ids; a newer overlapping submit may own the state now.
+    setSubmittedAttachmentIds((current) => (current === submittedIds ? EMPTY_ID_SET : current));
+  };
 
   const stopCurrentRun = () => {
     if (!api || selectedSession?.status !== "running") return;
@@ -124,7 +137,10 @@ export function useSessionComposer(params: UseSessionComposerParams) {
       ? formatAnnotatedPrompt(sentAnnotations.taken, previousDraft)
       : previousDraft;
     setComposerDraft("");
-    setAttachmentsClearedOnSubmit(true);
+    const submittedIds = new Set(composerAttachments.map((attachment) => attachment.id));
+    if (submittedIds.size > 0) {
+      setSubmittedAttachmentIds(submittedIds);
+    }
     void (async () => {
       const nextState = await updateSnapshot(setSnapshot, () =>
         api.submitComposer(
@@ -143,13 +159,13 @@ export function useSessionComposer(params: UseSessionComposerParams) {
       if (composerDraftRef.current === "") {
         setComposerDraft(returnedToComposer ? previousDraft : nextState.composerDraft);
       }
-      setAttachmentsClearedOnSubmit(false);
+      clearSubmittedAttachmentIds(submittedIds);
     })().catch(() => {
       if (composerDraftRef.current === "") {
         setComposerDraft(previousDraft);
       }
       sentAnnotations?.undo();
-      setAttachmentsClearedOnSubmit(false);
+      clearSubmittedAttachmentIds(submittedIds);
     });
   };
 
