@@ -7,6 +7,7 @@ import type {
 } from "@pi-gui/session-driver/runtime-types";
 import type { ExtensionCommandCompatibilityRecord } from "../../../contracts/desktop-state";
 import { titleCase } from "../../lib/string-utils";
+import { modelMatchesPattern } from "../settings/model-settings";
 
 export type ComposerSlashCommandKind =
   | "runtime"
@@ -303,6 +304,18 @@ export function buildProviderOptions(
     }));
 }
 
+interface ModelOptionsCacheEntry {
+  readonly enabledPatterns: readonly string[];
+  readonly options: readonly ComposerModelOption[];
+}
+
+// Runtime wrappers change on typing; cache their immutable catalog inputs instead.
+// shortcut: fresh IPC arrays miss, reconcile them if post-fix profiles still show rebuild cost.
+const modelOptionsCache = new WeakMap<
+  RuntimeSnapshot["models"],
+  WeakMap<RuntimeSnapshot["providers"], ModelOptionsCacheEntry>
+>();
+
 export function buildModelOptions(
   runtime: RuntimeSnapshot | undefined,
 ): readonly ComposerModelOption[] {
@@ -311,14 +324,22 @@ export function buildModelOptions(
   }
 
   const enabledPatterns = runtime.settings.enabledModelPatterns;
-  const allAvailable = enabledPatterns.length === 0;
-  const enabledSet = allAvailable ? undefined : new Set(enabledPatterns);
+  let providerCache = modelOptionsCache.get(runtime.models);
+  const cached = providerCache?.get(runtime.providers);
+  if (
+    cached &&
+    cached.enabledPatterns.length === enabledPatterns.length &&
+    cached.enabledPatterns.every((pattern, index) => pattern === enabledPatterns[index])
+  ) {
+    return cached.options;
+  }
 
-  return [...runtime.models]
+  const allAvailable = enabledPatterns.length === 0;
+  const options = [...runtime.models]
     .filter((model) => {
       if (!model.available) return false;
-      if (!enabledSet) return true;
-      return enabledSet.has(`${model.providerId}/${model.modelId}`);
+      if (allAvailable) return true;
+      return enabledPatterns.some((pattern) => modelMatchesPattern(model, pattern));
     })
     .sort((left: RuntimeSnapshot["models"][number], right: RuntimeSnapshot["models"][number]) => {
       const providerCompare =
@@ -338,6 +359,13 @@ export function buildModelOptions(
       providerId: model.providerId,
       modelId: model.modelId,
     }));
+
+  if (!providerCache) {
+    providerCache = new WeakMap<RuntimeSnapshot["providers"], ModelOptionsCacheEntry>();
+    modelOptionsCache.set(runtime.models, providerCache);
+  }
+  providerCache.set(runtime.providers, { enabledPatterns, options });
+  return options;
 }
 
 export function slashOptionsForCommand(
