@@ -1,3 +1,4 @@
+import { useTranslation } from "../../../i18n";
 import { ChatIcon, CloseIcon } from "../../../ui/icons";
 import type { TranscriptAnnotation } from "./annotation-prompt";
 
@@ -9,6 +10,8 @@ export function AnnotationChip({
   readonly annotations: readonly TranscriptAnnotation[];
   readonly onRemove: (id: string) => void;
 }) {
+  const { t } = useTranslation();
+
   if (annotations.length === 0) return null;
   const label = `${annotations.length} annotation${annotations.length === 1 ? "" : "s"}`;
   return (
@@ -29,7 +32,7 @@ export function AnnotationChip({
                 ) : null}
               </div>
               <button
-                aria-label={`Remove annotation ${index + 1}`}
+                aria-label={t("ui.removeAnnotationValue", { value: index + 1 })}
                 className="annotation-chip__remove"
                 type="button"
                 onClick={() => onRemove(annotation.id)}

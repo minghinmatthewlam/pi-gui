@@ -1,3 +1,4 @@
+import { useTranslation, type Translate } from "../../i18n";
 import { useEffect, useId, useState } from "react";
 import type {
   SessionPlanLimit,
@@ -17,6 +18,8 @@ const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
  * opens a card with pi's context, prompt-cache, plan-limit and thread usage.
  */
 export function ContextMeter({ usage }: ContextMeterProps) {
+  const { t } = useTranslation();
+
   const [open, setOpen] = useState(false);
   const cardId = useId();
   const now = useNow(open && hasCountdown(usage));
@@ -27,9 +30,7 @@ export function ContextMeter({ usage }: ContextMeterProps) {
   const tone =
     percent === null ? "unknown" : percent > 90 ? "danger" : percent > 70 ? "warning" : "normal";
   const label =
-    percent === null
-      ? "Context window: usage unknown until the next reply"
-      : `Context window: ${formatPercent(percent)} used`;
+    percent === null ? t("context.unknown") : t("context.usage", { value: formatPercent(percent) });
 
   return (
     <div
@@ -64,38 +65,53 @@ export function ContextMeter({ usage }: ContextMeterProps) {
       {open ? (
         <div className="context-meter__card" id={cardId} role="tooltip">
           <section className="context-meter__section">
-            <h3 className="context-meter__heading">Context window</h3>
+            <h3 className="context-meter__heading">{t("ui.contextWindow")}</h3>
             <p className="context-meter__headline">
               {context.tokens === null || percent === null
-                ? `Unknown until the next reply · ${formatTokens(context.contextWindow)} window`
-                : `${formatPercent(percent)} used · ${formatTokens(context.tokens)} / ${formatTokens(context.contextWindow)} tokens`}
+                ? t("ui.unknownUntilTheNextReplyValueWindow", {
+                    value: formatTokens(context.contextWindow),
+                  })
+                : t("ui.valueUsedValueValueTokens", {
+                    value: formatPercent(percent),
+                    value1: formatTokens(context.tokens),
+                    value2: formatTokens(context.contextWindow),
+                  })}
             </p>
             <p className="context-meter__note">
               {context.compactAtTokens === undefined
-                ? "Automatic compaction is off"
-                : `Compacts automatically at ${formatPercent((context.compactAtTokens / context.contextWindow) * 100)}`}
+                ? t("ui.automaticCompactionIsOff")
+                : t("ui.compactsAutomaticallyAtValue", {
+                    value: formatPercent((context.compactAtTokens / context.contextWindow) * 100),
+                  })}
             </p>
           </section>
           <section className="context-meter__section">
-            <h3 className="context-meter__heading">Prompt cache</h3>
+            <h3 className="context-meter__heading">{t("ui.promptCache")}</h3>
             {usage.lastTurn ? (
               <Row
-                label="Last turn"
-                value={`${formatPercent(cacheHitPercent(usage.lastTurn))} cached`}
+                label={t("ui.lastTurn")}
+                value={t("context.cached", {
+                  value: formatPercent(cacheHitPercent(usage.lastTurn)),
+                })}
               />
             ) : null}
             <CacheRow cache={usage.cache} now={now} />
           </section>
           {usage.planLimits && usage.planLimits.limits.length > 0 ? (
             <section className="context-meter__section">
-              <h3 className="context-meter__heading">Plan limits</h3>
+              <h3 className="context-meter__heading">{t("ui.planLimits")}</h3>
               {usage.planLimits.limits.map((limit) => (
                 <Row
                   key={limit.windowMinutes}
-                  label={`${formatPercent(limit.usedPercent)} of ${windowLabel(limit)} limit`}
+                  label={t("ui.valueOfValueLimit", {
+                    value: formatPercent(limit.usedPercent),
+                    value1: windowLabel(limit, t),
+                  })}
                   value={
                     limit.resetsAt
-                      ? `resets in ${formatDuration(Date.parse(limit.resetsAt) - now)}`
+                      ? t("context.resets", {
+                          value: formatDuration(Date.parse(limit.resetsAt) - now, t),
+                        })
                       : ""
                   }
                 />
@@ -103,18 +119,20 @@ export function ContextMeter({ usage }: ContextMeterProps) {
             </section>
           ) : null}
           <section className="context-meter__section">
-            <h3 className="context-meter__heading">This thread</h3>
+            <h3 className="context-meter__heading">{t("ui.thisThread")}</h3>
             <Row
-              label="Input / Output"
+              label={t("ui.inputOutput")}
               value={`${formatTokens(usage.totals.input)} / ${formatTokens(usage.totals.output)}`}
             />
             <Row
-              label="Cache read / write"
+              label={t("ui.cacheReadWrite")}
               value={`${formatTokens(usage.totals.cacheRead)} / ${formatTokens(usage.totals.cacheWrite)}`}
             />
             <Row
-              label="Cost"
-              value={usage.subscription ? "Subscription" : `$${usage.totals.cost.toFixed(2)}`}
+              label={t("ui.cost")}
+              value={
+                usage.subscription ? t("context.subscription") : `$${usage.totals.cost.toFixed(2)}`
+              }
             />
           </section>
         </div>
@@ -133,22 +151,29 @@ function Row({ label, value }: { readonly label: string; readonly value: string 
 }
 
 function CacheRow({ cache, now }: { readonly cache: SessionPromptCache; readonly now: number }) {
+  const { t } = useTranslation();
+
   const nextRefreshIn = cache.nextRefreshAt ? Date.parse(cache.nextRefreshAt) - now : 0;
   if (nextRefreshIn > 0) {
-    return <Row label="Kept warm" value={`next refresh in ${formatCountdown(nextRefreshIn)}`} />;
+    return (
+      <Row
+        label={t("ui.keptWarm")}
+        value={t("context.nextRefresh", { value: formatCountdown(nextRefreshIn) })}
+      />
+    );
   }
   if (!cache.expiresAt) {
     return cache.lifetimeSeconds === undefined ? (
-      <Row label="Expiry" value="not reported by this model" />
+      <Row label={t("ui.expiry")} value="not reported by this model" />
     ) : (
-      <Row label="Expiry" value="nothing cached for this model yet" />
+      <Row label={t("ui.expiry")} value="nothing cached for this model yet" />
     );
   }
   const expiresIn = Date.parse(cache.expiresAt) - now;
   return expiresIn > 0 ? (
-    <Row label="Expires in" value={formatCountdown(expiresIn)} />
+    <Row label={t("ui.expiresIn")} value={formatCountdown(expiresIn)} />
   ) : (
-    <Row label="Expiry" value="expired, next turn rewrites it" />
+    <Row label={t("ui.expiry")} value="expired, next turn rewrites it" />
   );
 }
 
@@ -178,11 +203,12 @@ function cacheHitPercent(turn: NonNullable<SessionUsageSnapshot["lastTurn"]>): n
   return prompt > 0 ? (turn.cacheRead / prompt) * 100 : 0;
 }
 
-function windowLabel(limit: SessionPlanLimit): string {
-  if (limit.windowMinutes === 7 * 24 * 60) return "weekly";
-  if (limit.windowMinutes === 24 * 60) return "daily";
-  if (limit.windowMinutes % 60 === 0) return `${limit.windowMinutes / 60}-hour`;
-  return `${limit.windowMinutes}-minute`;
+function windowLabel(limit: SessionPlanLimit, t: Translate): string {
+  if (limit.windowMinutes === 7 * 24 * 60) return t("context.weekly");
+  if (limit.windowMinutes === 24 * 60) return t("context.daily");
+  if (limit.windowMinutes % 60 === 0)
+    return t("context.hours", { hours: limit.windowMinutes / 60 });
+  return t("context.minutes", { minutes: limit.windowMinutes });
 }
 
 function formatTokens(count: number): string {
@@ -210,12 +236,12 @@ function formatCountdown(ms: number): string {
 }
 
 /** Coarse "1 d 16 h" / "2 hr 57 min" for plan-limit resets, like Claude's hover. */
-function formatDuration(ms: number): string {
+function formatDuration(ms: number, t: Translate): string {
   const totalMinutes = Math.max(0, Math.round(ms / 60_000));
   const days = Math.floor(totalMinutes / (24 * 60));
   const hours = Math.floor((totalMinutes % (24 * 60)) / 60);
   const minutes = totalMinutes % 60;
-  if (days > 0) return `${days} d ${hours} h`;
-  if (hours > 0) return `${hours} hr ${minutes} min`;
-  return `${minutes} min`;
+  if (days > 0) return t("context.durationDays", { days: days, hours: hours });
+  if (hours > 0) return t("context.durationHours", { hours: hours, minutes: minutes });
+  return t("context.durationMinutes", { minutes: minutes });
 }

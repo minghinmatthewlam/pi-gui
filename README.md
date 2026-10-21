@@ -1,5 +1,7 @@
 # pi-gui
 
+[English](./README.md) · [简体中文](./README.zh-CN.md)
+
 The desktop app for the [pi](https://github.com/earendil-works/pi) coding agent.
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
@@ -116,6 +118,16 @@ Building from source is for contributors; see [Development](#development).
 
 pi-gui reads and writes pi's own session files and settings, so threads, credentials and
 skills are shared with the pi CLI.
+
+### Interface language
+
+Choose **Settings → Appearance → Language** to use English, 简体中文, 日本語, or follow
+the system language. The choice is remembered for this app profile. Language packs
+cover settings (including Models, Providers, custom endpoints and MCP), skills and
+extensions, new threads and the composer, command palettes, and the Files, Review
+and Terminal panels. File contents, conversation text, provider names, code, and
+descriptions supplied by skills and extensions remain unchanged. Native menus
+and messages returned by external services still use their original language.
 
 ## Architecture
 

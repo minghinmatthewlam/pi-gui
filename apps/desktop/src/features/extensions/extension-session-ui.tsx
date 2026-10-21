@@ -1,3 +1,4 @@
+import { useTranslation, translate, type Translate } from "../../i18n";
 import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import type { HostUiResponse } from "@pi-gui/session-driver";
 import { trapDialogFocus } from "../../ui/dialog-focus";
@@ -10,7 +11,6 @@ import type {
 
 const ANSI_ESCAPE_PATTERN = /\u001B\[[0-?]*[ -/]*[@-~]/g;
 const DOCK_SEGMENT_SEPARATOR = "--------------------";
-const GENERIC_ACTIVE_LABEL = "Extension UI active";
 
 interface ExtensionDockBlock {
   readonly key: string;
@@ -34,6 +34,7 @@ export function hasExtensionDockContent(uiState?: SessionExtensionUiStateRecord)
 
 export function buildExtensionDockModel(
   uiState?: SessionExtensionUiStateRecord,
+  t: Translate = translate,
 ): ExtensionDockModel | undefined {
   if (!hasExtensionDockContent(uiState)) {
     return undefined;
@@ -47,7 +48,7 @@ export function buildExtensionDockModel(
     .filter((status) => status.text.trim().length > 0);
   const primaryBlocks = buildWidgetBlocks(uiState?.widgets ?? [], "aboveComposer");
   const secondaryBlocks = buildWidgetBlocks(uiState?.widgets ?? [], "belowComposer");
-  const summaryText = resolveDockSummaryText(statuses, primaryBlocks, secondaryBlocks);
+  const summaryText = resolveDockSummaryText(statuses, primaryBlocks, secondaryBlocks, t);
 
   return {
     summaryText,
@@ -101,6 +102,8 @@ export function ExtensionDock({
   readonly onToggle: () => void;
   readonly onDismiss?: () => void;
 }) {
+  const { t } = useTranslation();
+
   return (
     <div
       className={`extension-dock ${expanded ? "extension-dock--expanded" : ""}`}
@@ -125,10 +128,10 @@ export function ExtensionDock({
         </button>
         {onDismiss ? (
           <button
-            aria-label="Hide extension status"
+            aria-label={t("ui.hideExtensionStatus")}
             className="extension-dock__dismiss icon-button"
             data-testid="extension-dock-dismiss"
-            title="Hide until the extension changes it"
+            title={t("ui.hideUntilTheExtensionChangesIt")}
             type="button"
             onClick={(event) => focusComposerAfter(event.currentTarget, onDismiss)}
           >
@@ -156,6 +159,8 @@ export function ExtensionDialog({
   readonly dialog: SessionExtensionDialogRecord;
   readonly onRespond: (response: HostUiResponse) => void;
 }) {
+  const { t } = useTranslation();
+
   const [draft, setDraft] = useState("");
   const titleId = useId();
   const bodyId = useId();
@@ -254,7 +259,7 @@ export function ExtensionDialog({
           <input
             autoFocus
             className="skills-search"
-            placeholder={dialog.placeholder ?? "Enter a value"}
+            placeholder={dialog.placeholder ?? t("extensions.enterValue")}
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
           />
@@ -277,7 +282,7 @@ export function ExtensionDialog({
             type="button"
             onClick={respondWithCancel}
           >
-            Cancel
+            {t("scheduledTasks.editor.cancel")}
           </button>
           {dialog.kind === "confirm" ? (
             <button
@@ -286,7 +291,7 @@ export function ExtensionDialog({
               type="button"
               onClick={respondWithSubmit}
             >
-              Confirm
+              {t("ui.confirm")}
             </button>
           ) : null}
           {dialog.kind === "input" || dialog.kind === "editor" ? (
@@ -296,7 +301,7 @@ export function ExtensionDialog({
               type="button"
               onClick={respondWithSubmit}
             >
-              Submit
+              {t("ui.submit")}
             </button>
           ) : null}
         </div>
@@ -322,6 +327,7 @@ function resolveDockSummaryText(
   statuses: readonly { readonly key: string; readonly text: string }[],
   primaryBlocks: readonly ExtensionDockBlock[],
   secondaryBlocks: readonly ExtensionDockBlock[],
+  t: Translate,
 ): string {
   for (const status of statuses) {
     if (status.text.trim().length > 0) {
@@ -336,7 +342,7 @@ function resolveDockSummaryText(
     }
   }
 
-  return GENERIC_ACTIVE_LABEL;
+  return t("extensions.uiActive");
 }
 
 function buildDockBodyText(

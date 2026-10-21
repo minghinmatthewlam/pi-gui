@@ -1,3 +1,4 @@
+import { useTranslation } from "../../i18n";
 import {
   useEffect,
   useId,
@@ -63,6 +64,8 @@ export function CommandPalette<F extends string>({
   onBack,
   onClose,
 }: CommandPaletteProps<F>) {
+  const { t } = useTranslation();
+
   const listId = useId();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -202,7 +205,7 @@ export function CommandPalette<F extends string>({
             onChange={(event) => onQueryChange(event.target.value)}
           />
           <button
-            aria-label="Close"
+            aria-label={t("scheduledTasks.editor.close")}
             className="command-palette__close"
             type="button"
             onClick={onClose}
@@ -212,7 +215,7 @@ export function CommandPalette<F extends string>({
         </div>
 
         {filters && filters.length > 0 ? (
-          <div aria-label="Filters" className="command-palette__filters" role="tablist">
+          <div aria-label={t("ui.filters")} className="command-palette__filters" role="tablist">
             {filters.map((filter) => (
               <button
                 key={filter.id}
@@ -295,23 +298,23 @@ export function CommandPalette<F extends string>({
         <div className="command-palette__footer" aria-hidden="true">
           <span>
             <kbd>↑</kbd>
-            <kbd>↓</kbd> Navigate
+            <kbd>↓</kbd> {t("ui.navigate")}
           </span>
           <span>
-            <kbd>↵</kbd> Open
+            <kbd>↵</kbd> {t("ui.open")}
           </span>
           {filters && filters.length > 0 ? (
             <span>
-              <kbd>Tab</kbd> Filters
+              <kbd>{t("ui.tab")}</kbd> {t("ui.filters2")}
             </span>
           ) : null}
           {onBack ? (
             <span>
-              <kbd>⌫</kbd> Back
+              <kbd>⌫</kbd> {t("ui.back")}
             </span>
           ) : null}
           <span>
-            <kbd>Esc</kbd> Close
+            <kbd>{t("ui.esc")}</kbd> {t("ui.close")}
           </span>
         </div>
       </div>

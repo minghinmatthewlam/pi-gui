@@ -15,6 +15,7 @@ import { DesktopStartupSurface, toStartupSurfaceState } from "./desktop-recovery
 import { buildFileWorkbenchContexts } from "./file-workbench-contexts";
 import { canTogglePrimarySidebar } from "./app-shell-utils";
 import { useDesktopCommands } from "./use-desktop-commands";
+import { useTranslation } from "../i18n";
 import { useRunningLabel } from "../features/conversation/hooks/use-running-label";
 import { useTimelineViewport } from "../features/conversation/hooks/use-timeline-viewport";
 import { buildDisplayTimelineItems } from "../features/conversation/timeline-turns";
@@ -95,6 +96,7 @@ import { useSessionComposer } from "../features/conversation/hooks/use-session-c
 import { useTranscriptAnnotations } from "../features/conversation/annotations/use-transcript-annotations";
 
 export default function App() {
+  const { t } = useTranslation();
   const desktop = useDesktopAppState();
   const workbenchWidth = useWorkbenchWidth();
   const snapshot = desktop.snapshot;
@@ -200,10 +202,14 @@ export default function App() {
     (selectedDefaultEnabled ? selectedModelRuntime?.settings.defaultModelId : undefined);
   const resolvedSessionThinkingLevel =
     selectedSession?.config?.thinkingLevel ?? selectedModelRuntime?.settings.defaultThinkingLevel;
-  const selectedSessionModelOnboarding = deriveModelOnboardingState(selectedModelRuntime, {
-    provider: resolvedSessionProvider,
-    modelId: resolvedSessionModelId,
-  });
+  const selectedSessionModelOnboarding = deriveModelOnboardingState(
+    selectedModelRuntime,
+    {
+      provider: resolvedSessionProvider,
+      modelId: resolvedSessionModelId,
+    },
+    t,
+  );
   const queuedComposerMessages = snapshot?.queuedComposerMessages ?? [];
   const editingQueuedMessageId = snapshot?.editingQueuedMessageId;
   const runningLabel = useRunningLabel(
@@ -337,8 +343,8 @@ export default function App() {
     ],
   );
   const selectedExtensionDock = useMemo(
-    () => buildExtensionDockModel(selectedExtensionUi),
-    [selectedExtensionUi],
+    () => buildExtensionDockModel(selectedExtensionUi, t),
+    [selectedExtensionUi, t],
   );
   const shownExtensionDock = useDismissibleExtensionDock(
     selectedSessionKey,
@@ -1020,7 +1026,7 @@ export default function App() {
               <div className="chat-header__status">
                 {selectedSession.status === "running"
                   ? runningLabel
-                  : formatRelativeTime(selectedSession.updatedAt)}
+                  : formatRelativeTime(selectedSession.updatedAt, t)}
               </div>
               <div
                 className="chat-header__menu-wrap"
@@ -1029,7 +1035,7 @@ export default function App() {
                 <button
                   aria-haspopup="menu"
                   aria-expanded={threadMenu.openMenu?.surface === "header"}
-                  aria-label="Thread actions"
+                  aria-label={t("app.threadActions")}
                   className="icon-button"
                   data-testid="thread-header-menu"
                   type="button"
@@ -1050,7 +1056,7 @@ export default function App() {
 
         {snapshot.startupDiagnostics.length > 0 ? (
           <div className="startup-diagnostics" role="status" data-testid="startup-diagnostics">
-            <strong>Some saved workspaces could not be refreshed.</strong>
+            <strong>{t("app.startupDiagnostics.title")}</strong>
             <span>
               {snapshot.startupDiagnostics
                 .map((diagnostic) => {
@@ -1058,7 +1064,11 @@ export default function App() {
                     ?.split(/[\\/]/)
                     .filter(Boolean)
                     .at(-1);
-                  return workspaceName ? `${workspaceName} is unavailable.` : diagnostic.message;
+                  return workspaceName
+                    ? t("app.startupDiagnostics.workspaceUnavailable", {
+                        workspace: workspaceName,
+                      })
+                    : diagnostic.message;
                 })
                 .join(" ")}
             </span>
@@ -1136,9 +1146,9 @@ export default function App() {
             ) : (
               <section className="canvas canvas--empty">
                 <div className="empty-panel">
-                  <div className="session-header__eyebrow">Workspace</div>
-                  <h1>Open a folder to start</h1>
-                  <p>Add a project folder before creating a new thread.</p>
+                  <div className="session-header__eyebrow">{t("app.workspaceEyebrow")}</div>
+                  <h1>{t("app.empty.openFolder.title")}</h1>
+                  <p>{t("app.empty.newThread.body")}</p>
                 </div>
               </section>
             )
@@ -1153,16 +1163,15 @@ export default function App() {
                       data-testid="schema-skew-notice"
                     >
                       <span className="schema-skew-notice__text">
-                        This session was written by a newer version of pi — some content may not
-                        display. Update pi-gui (or open it with the pi CLI) to see everything.
+                        {t("app.schemaSkew.message")}
                       </span>
                       <button
                         type="button"
                         className="schema-skew-notice__dismiss"
-                        aria-label="Dismiss notice"
+                        aria-label={t("app.schemaSkew.dismissLabel")}
                         onClick={() => dismissSchemaSkewNotice(selectedSessionKey)}
                       >
-                        Dismiss
+                        {t("app.schemaSkew.dismiss")}
                       </button>
                     </div>
                   ) : null}
@@ -1303,9 +1312,9 @@ export default function App() {
           ) : selectedWorkspace ? (
             <section className="canvas canvas--empty">
               <div className="empty-panel">
-                <div className="session-header__eyebrow">Workspace</div>
+                <div className="session-header__eyebrow">{t("app.workspaceEyebrow")}</div>
                 <h1>{selectedWorkspace.name}</h1>
-                <p>Create a thread for this folder, then jump between sessions from the sidebar.</p>
+                <p>{t("app.empty.workspace.body")}</p>
                 <div className="empty-panel__actions">
                   <button
                     className="button button--primary"
@@ -1316,7 +1325,7 @@ export default function App() {
                       )
                     }
                   >
-                    New thread
+                    {t("app.newThread")}
                   </button>
                 </div>
               </div>
@@ -1324,12 +1333,9 @@ export default function App() {
           ) : (
             <section className="canvas canvas--empty">
               <div className="empty-panel">
-                <div className="session-header__eyebrow">Workspace</div>
-                <h1>Open a folder to start</h1>
-                <p>
-                  Add project folders, group sessions under them, and jump between threads from the
-                  sidebar.
-                </p>
+                <div className="session-header__eyebrow">{t("app.workspaceEyebrow")}</div>
+                <h1>{t("app.empty.openFolder.title")}</h1>
+                <p>{t("app.empty.noWorkspace.body")}</p>
               </div>
             </section>
           )}
@@ -1397,7 +1403,7 @@ export default function App() {
                     />
                   ) : (
                     <p className="workbench__unavailable" role="status">
-                      This file checkout is unavailable.
+                      {t("app.fileCheckoutUnavailable")}
                     </p>
                   ),
                 terminal: () => (
