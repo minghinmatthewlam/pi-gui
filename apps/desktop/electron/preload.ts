@@ -22,6 +22,7 @@ import {
   type DesktopNotificationPermissionStatus,
   type WorkspaceFilePreview,
   type PiDesktopCommand,
+  type PiDesktopSelectedTranscriptListener,
   type TerminalDataEvent,
   type TerminalErrorEvent,
   type TerminalExitEvent,
@@ -174,10 +175,10 @@ contextBridge.exposeInMainWorld("piApp", {
     ipcRenderer.invoke(
       desktopIpc.selectedTranscriptRequest,
     ) as Promise<SelectedTranscriptRecord | null>,
-  onSelectedTranscriptChanged: (listener: (payload: SelectedTranscriptRecord | null) => void) => {
+  onSelectedTranscriptChanged: (listener: PiDesktopSelectedTranscriptListener) => {
     const handle = (
       _event: Electron.IpcRendererEvent,
-      payload: SelectedTranscriptRecord | null,
+      payload: Parameters<PiDesktopSelectedTranscriptListener>[0],
     ) => {
       listener(payload);
     };
@@ -186,6 +187,7 @@ contextBridge.exposeInMainWorld("piApp", {
       ipcRenderer.removeListener(desktopIpc.selectedTranscriptChanged, handle);
     };
   },
+  resendSelectedTranscript: () => ipcRenderer.send(desktopIpc.selectedTranscriptResend),
   onCommand: (listener: (command: PiDesktopCommand) => void) => appCommands.subscribe(listener),
   onWorkspacePicked: (listener: (workspaceId: string) => void) => {
     const handle = (_event: Electron.IpcRendererEvent, workspaceId: string) => {

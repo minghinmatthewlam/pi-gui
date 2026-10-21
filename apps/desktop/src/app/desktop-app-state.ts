@@ -6,7 +6,11 @@ import {
   type Dispatch,
   type SetStateAction,
 } from "react";
-import type { DesktopAppState, SelectedTranscriptRecord } from "../../contracts/desktop-state";
+import {
+  applySelectedTranscriptPatch,
+  type DesktopAppState,
+  type SelectedTranscriptRecord,
+} from "../../contracts/desktop-state";
 import type { PiDesktopApi } from "../../contracts/ipc";
 
 export type HydrationOperation = "state" | "selected-transcript";
@@ -412,10 +416,27 @@ export function useDesktopAppState(): DesktopAppSession {
         apply({ type: "state-pushed", state });
       }
     });
-    const unsubscribeTranscript = api.onSelectedTranscriptChanged((record) => {
-      if (active) {
-        apply({ type: "transcript-pushed", record });
+    let resendRequested = false;
+    const unsubscribeTranscript = api.onSelectedTranscriptChanged((payload) => {
+      if (!active) {
+        return;
       }
+      if (payload && "rows" in payload) {
+        // A patch only fits the record main last pushed, not one this window pulled itself.
+        const current = modelRef.current;
+        const record = current.receivedPushedTranscript
+          ? applySelectedTranscriptPatch(current.transcriptRecord, payload)
+          : undefined;
+        if (record) {
+          apply({ type: "transcript-pushed", record });
+        } else if (!resendRequested) {
+          resendRequested = true;
+          api.resendSelectedTranscript();
+        }
+        return;
+      }
+      resendRequested = false;
+      apply({ type: "transcript-pushed", record: payload });
     });
 
     pullState(api);
