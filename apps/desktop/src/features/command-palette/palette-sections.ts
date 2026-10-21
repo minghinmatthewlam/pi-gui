@@ -1,3 +1,4 @@
+import { translate, type Translate } from "../../i18n";
 import type { PaletteFilter, PaletteItem, PaletteSection } from "./command-palette";
 import { rankByFuzzy, type RankedMatch } from "./fuzzy-match";
 
@@ -6,13 +7,15 @@ export type PaletteCandidate = Omit<PaletteItem, "titleMatches" | "detailMatches
 
 export type CommandFilter = "all" | "chats" | "workspaces" | "actions";
 
-export const COMMAND_FILTERS: readonly PaletteFilter<CommandFilter>[] = [
-  { id: "all", label: "All" },
-  { id: "chats", label: "Chats" },
-  { id: "workspaces", label: "Workspaces" },
-  { id: "actions", label: "Actions" },
-];
-
+export function commandFilters(t: Translate = translate): readonly PaletteFilter<CommandFilter>[] {
+  return [
+    { id: "all", label: t("scheduledTasks.filter.all") },
+    { id: "chats", label: t("palette.chats") },
+    { id: "workspaces", label: t("palette.workspaces") },
+    { id: "actions", label: t("palette.actions") },
+  ];
+}
+export const COMMAND_FILTERS = commandFilters();
 const RECENT_CHAT_COUNT = 5;
 const ALL_FILTER_LIMITS = { chats: 8, workspaces: 5, actions: 8 } as const;
 const SINGLE_FILTER_LIMIT = 100;
@@ -41,36 +44,41 @@ function rankedSection(
  * single filter lists its kind. A query ranks each kind by title, and All puts
  * the kind with the strongest match first.
  */
-export function buildCommandSections(input: {
-  readonly query: string;
-  readonly filter: CommandFilter;
-  /** Most recently used first. */
-  readonly chats: readonly PaletteCandidate[];
-  readonly workspaces: readonly PaletteCandidate[];
-  readonly actions: readonly PaletteCandidate[];
-}): readonly PaletteSection[] {
+export function buildCommandSections(
+  input: {
+    readonly query: string;
+    readonly filter: CommandFilter;
+    /** Most recently used first. */
+    readonly chats: readonly PaletteCandidate[];
+    readonly workspaces: readonly PaletteCandidate[];
+    readonly actions: readonly PaletteCandidate[];
+  },
+  t: Translate = translate,
+): readonly PaletteSection[] {
   const { query, filter, chats, workspaces, actions } = input;
   if (query.trim() === "") {
     switch (filter) {
       case "chats":
-        return [{ id: "chats", label: "Chats", items: chats.slice(0, SINGLE_FILTER_LIMIT) }];
+        return [
+          { id: "chats", label: t("palette.chats"), items: chats.slice(0, SINGLE_FILTER_LIMIT) },
+        ];
       case "workspaces":
-        return [{ id: "workspaces", label: "Workspaces", items: workspaces }];
+        return [{ id: "workspaces", label: t("palette.workspaces"), items: workspaces }];
       case "actions":
-        return [{ id: "actions", label: "Actions", items: actions }];
+        return [{ id: "actions", label: t("palette.actions"), items: actions }];
       case "all":
         return [
-          { id: "recents", label: "Recents", items: chats.slice(0, RECENT_CHAT_COUNT) },
-          { id: "actions", label: "Actions", items: actions },
+          { id: "recents", label: t("palette.recents"), items: chats.slice(0, RECENT_CHAT_COUNT) },
+          { id: "actions", label: t("palette.actions"), items: actions },
         ];
     }
   }
 
   const single = filter !== "all";
   const kinds = [
-    { id: "chats", label: "Chats", candidates: chats },
-    { id: "workspaces", label: "Workspaces", candidates: workspaces },
-    { id: "actions", label: "Actions", candidates: actions },
+    { id: "chats", label: t("palette.chats"), candidates: chats },
+    { id: "workspaces", label: t("palette.workspaces"), candidates: workspaces },
+    { id: "actions", label: t("palette.actions"), candidates: actions },
   ] as const;
   return kinds
     .filter((kind) => !single || kind.id === filter)
@@ -99,18 +107,21 @@ export function splitPath(path: string): { readonly name: string; readonly direc
  * Cmd-P results. With no query, the thread's open file tabs, newest first.
  * A query shows the ranked paths (from rankPaths) with name and directory highlights.
  */
-export function buildFileSections(input: {
-  readonly query: string;
-  readonly ranked: readonly RankedMatch<string>[];
-  readonly openTabs: readonly string[];
-  readonly toCandidate: (path: string) => PaletteCandidate;
-}): readonly PaletteSection[] {
+export function buildFileSections(
+  input: {
+    readonly query: string;
+    readonly ranked: readonly RankedMatch<string>[];
+    readonly openTabs: readonly string[];
+    readonly toCandidate: (path: string) => PaletteCandidate;
+  },
+  t: Translate = translate,
+): readonly PaletteSection[] {
   const { query, ranked, openTabs, toCandidate } = input;
   if (query.trim() === "") {
     return [
       {
         id: "open-files",
-        label: "Open files",
+        label: t("palette.openFiles"),
         items: [...openTabs].reverse().map(toCandidate),
       },
     ];
@@ -126,7 +137,7 @@ export function buildFileSections(input: {
       detailMatches: match.positions.filter((position) => position < directory.length),
     };
   });
-  return [{ id: "files", label: "Files", items }];
+  return [{ id: "files", label: t("ui.files"), items }];
 }
 
 export function buildListSection(input: {

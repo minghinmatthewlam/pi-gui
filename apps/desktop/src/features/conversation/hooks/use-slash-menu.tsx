@@ -1,3 +1,4 @@
+import { useTranslation } from "../../../i18n";
 import { useEffect, useState, type Dispatch, type KeyboardEvent, type SetStateAction } from "react";
 import type { RuntimeCommandRecord, RuntimeSnapshot } from "@pi-gui/session-driver/runtime-types";
 import type {
@@ -132,6 +133,7 @@ export function useSlashMenu(params: UseSlashMenuParams): SlashMenuState {
     onSelectLogoutProvider,
   } = params;
 
+  const { t } = useTranslation();
   const [slashIndex, setSlashIndex] = useState(0);
   const [slashOptionIndex, setSlashOptionIndex] = useState(0);
   const [activeSlashFlow, setActiveSlashFlow] = useState<ActiveSlashFlow | undefined>();
@@ -147,6 +149,7 @@ export function useSlashMenu(params: UseSlashMenuParams): SlashMenuState {
         commandCompatibility,
         {
           allowTreeCommand,
+          t,
         },
       )
     : [];
@@ -167,18 +170,23 @@ export function useSlashMenu(params: UseSlashMenuParams): SlashMenuState {
   const slashOptions =
     activeSlashOptionCommand?.kind === "model"
       ? buildModelOptions(selectedModelRuntime)
-      : slashOptionsForCommand(activeSlashOptionCommand, selectedRuntime);
+      : slashOptionsForCommand(activeSlashOptionCommand, selectedRuntime, t);
   const activeSlashOptionEmptyState = slashOptionEmptyState(
     activeSlashOptionCommand,
     activeSlashOptionCommand?.kind === "model" ? undefined : selectedRuntime,
+    t,
   );
   const modelSlashEmptyState =
     activeSlashOptionCommand?.kind === "model" && slashOptions.length === 0
       ? (() => {
-          const state = deriveModelOnboardingState(selectedModelRuntime, {
-            provider: undefined,
-            modelId: undefined,
-          });
+          const state = deriveModelOnboardingState(
+            selectedModelRuntime,
+            {
+              provider: undefined,
+              modelId: undefined,
+            },
+            t,
+          );
           return {
             title: state.emptyModelTitle,
             description: state.emptyModelDescription,

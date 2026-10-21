@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { translate, type Translate } from "../../i18n";
 import {
   BellIcon,
   ExtensionIcon,
@@ -23,92 +24,113 @@ export interface SettingsSectionDefinition {
 }
 
 /** Nav order: grouped the way Codex groups its settings, one entry per page. */
-export const SETTINGS_SECTIONS = [
-  {
-    id: "general",
-    title: "General",
-    group: "App",
-    icon: <SettingsIcon />,
-    keywords: ["model settings scope", "per repo", "skill slash commands", "terminal", "shell"],
-    description: () => "App and runtime defaults.",
-    needsWorkspace: false,
-  },
-  {
-    id: "appearance",
-    title: "Appearance",
-    group: "App",
-    icon: <SunIcon />,
-    keywords: ["theme", "light", "dark", "system", "preset", "colors", "transparency"],
-    description: () => "Choose light, dark or system mode and a color preset.",
-    needsWorkspace: false,
-  },
-  {
-    id: "notifications",
-    title: "Notifications",
-    group: "App",
-    icon: <BellIcon />,
-    keywords: ["alerts", "background", "completion", "failures", "approval", "macos"],
-    description: () => "Choose which background events alert you.",
-    needsWorkspace: false,
-  },
-  {
-    id: "shortcuts",
-    title: "Keyboard shortcuts",
-    group: "App",
-    icon: <KeyboardIcon />,
-    keywords: ["keys", "hotkeys", "keybindings"],
-    description: () => "Shortcuts available across the app.",
-    needsWorkspace: false,
-  },
-  {
-    id: "providers",
-    title: "Providers",
-    group: "Agent",
-    icon: <PlugIcon />,
-    keywords: ["login", "logout", "oauth", "api key", "auth", "custom endpoint"],
-    description: (workspaceName) => `Connect providers and manage auth for ${workspaceName}.`,
-    needsWorkspace: true,
-  },
-  {
-    id: "models",
-    title: "Models",
-    group: "Agent",
-    icon: <ModelIcon />,
-    keywords: ["default model", "reasoning", "thinking", "enabled models"],
-    description: () => "Choose the default model and which models appear in pickers.",
-    needsWorkspace: true,
-  },
-  {
-    id: "mcp",
-    title: "MCP servers",
-    group: "Agent",
-    icon: <ExtensionIcon />,
-    keywords: ["mcp", "mcp.json", "model context protocol", "servers", "code mode", "codemode"],
-    description: () => "Add, remove and switch the MCP servers pi connects in each thread.",
-    needsWorkspace: true,
-  },
-] as const satisfies readonly SettingsSectionDefinition[];
+export const settingsSectionIds = [
+  "general",
+  "appearance",
+  "notifications",
+  "shortcuts",
+  "providers",
+  "models",
+  "mcp",
+] as const;
 
-export type SettingsSection = (typeof SETTINGS_SECTIONS)[number]["id"];
+export type SettingsSection = (typeof settingsSectionIds)[number];
 
 /** Skills and extensions live in the settings nav but are their own app views. */
 export const CUSTOMIZE_SECTION_ID = "customize";
 
-export const SETTINGS_NAV_ITEMS = [
-  ...SETTINGS_SECTIONS,
-  {
-    id: CUSTOMIZE_SECTION_ID,
-    title: "Skills and extensions",
-    group: "Customize",
-    icon: <SkillIcon />,
-    keywords: ["skills", "extensions", "plugins", "slash commands", "tools"],
-  },
-] as const;
-
-export function settingsSectionDefinition(section: SettingsSection): SettingsSectionDefinition {
-  return SETTINGS_SECTIONS.find((definition) => definition.id === section) ?? SETTINGS_SECTIONS[0];
+/** Titles and descriptions are copy, so they are built per locale rather than module-level. */
+export function settingsSections(t: Translate): readonly SettingsSectionDefinition[] {
+  return [
+    {
+      id: "general",
+      title: t("settings.nav.general"),
+      group: t("settings.group.app"),
+      icon: <SettingsIcon />,
+      keywords: ["model settings scope", "per repo", "skill slash commands", "terminal", "shell"],
+      description: () => t("settings.section.general.description"),
+      needsWorkspace: false,
+    },
+    {
+      id: "appearance",
+      title: t("settings.nav.appearance"),
+      group: t("settings.group.app"),
+      icon: <SunIcon />,
+      keywords: ["theme", "light", "dark", "system", "preset", "colors", "transparency"],
+      description: () => t("settings.section.appearance.description"),
+      needsWorkspace: false,
+    },
+    {
+      id: "notifications",
+      title: t("settings.nav.notifications"),
+      group: t("settings.group.app"),
+      icon: <BellIcon />,
+      keywords: ["alerts", "background", "completion", "failures", "approval", "macos"],
+      description: () => t("settings.section.notifications.description"),
+      needsWorkspace: false,
+    },
+    {
+      id: "shortcuts",
+      title: t("settings.nav.shortcuts"),
+      group: t("settings.group.app"),
+      icon: <KeyboardIcon />,
+      keywords: ["keys", "hotkeys", "keybindings"],
+      description: () => t("settings.section.shortcuts.description"),
+      needsWorkspace: false,
+    },
+    {
+      id: "providers",
+      title: t("settings.nav.providers"),
+      group: t("settings.group.agent"),
+      icon: <PlugIcon />,
+      keywords: ["login", "logout", "oauth", "api key", "auth", "custom endpoint"],
+      description: (workspaceName) =>
+        t("settings.section.providers.description", { workspace: workspaceName }),
+      needsWorkspace: true,
+    },
+    {
+      id: "models",
+      title: t("settings.nav.models"),
+      group: t("settings.group.agent"),
+      icon: <ModelIcon />,
+      keywords: ["default model", "reasoning", "thinking", "enabled models"],
+      description: () => t("settings.section.models.description"),
+      needsWorkspace: true,
+    },
+    {
+      id: "mcp",
+      title: t("settings.nav.mcp"),
+      group: t("settings.group.agent"),
+      icon: <ExtensionIcon />,
+      keywords: ["mcp", "mcp.json", "model context protocol", "servers", "code mode", "codemode"],
+      description: () => t("settings.section.mcp.description"),
+      needsWorkspace: true,
+    },
+  ];
 }
 
-export function sectionTitle(section: SettingsSection): string {
-  return settingsSectionDefinition(section).title;
+export function settingsNavItems(t: Translate) {
+  return [
+    ...settingsSections(t),
+    {
+      id: CUSTOMIZE_SECTION_ID,
+      title: t("settings.nav.customize"),
+      group: t("settings.group.customize"),
+      icon: <SkillIcon />,
+      keywords: ["skills", "extensions", "plugins", "slash commands", "tools"],
+    },
+  ];
+}
+
+export function settingsSectionDefinition(
+  section: SettingsSection,
+  t: Translate,
+): SettingsSectionDefinition {
+  const sections = settingsSections(t);
+  return sections.find((definition) => definition.id === section) ?? sections[0]!;
+}
+
+/** English unless a locale is passed; the command palette builds labels outside React. */
+export function sectionTitle(section: SettingsSection, t: Translate = translate): string {
+  return settingsSectionDefinition(section, t).title;
 }

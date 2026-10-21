@@ -1,3 +1,4 @@
+import { useTranslation } from "../../../i18n";
 import {
   useCallback,
   useEffect,
@@ -73,6 +74,7 @@ export function useNewThreadController(params: UseNewThreadControllerParams) {
   const [extensionFlagEdits, setExtensionFlagEdits] = useState<ExtensionFlagValues>({});
   const [composerError, setComposerError] = useState<string | undefined>();
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
+  const { t } = useTranslation();
   const previousActiveViewRef = useRef<AppView | null>(null);
   // Set while an in-app open is switching to New thread, so its chosen folder
   // is not replaced by the selected one when the view change arrives.
@@ -101,10 +103,14 @@ export function useNewThreadController(params: UseNewThreadControllerParams) {
   const setExtensionFlag = useCallback((name: string, value: boolean | string) => {
     setExtensionFlagEdits((current) => ({ ...current, [name]: value }));
   }, []);
-  const modelOnboarding = deriveModelOnboardingState(runtime, {
-    provider: resolvedProvider,
-    modelId: resolvedModelId,
-  });
+  const modelOnboarding = deriveModelOnboardingState(
+    runtime,
+    {
+      provider: resolvedProvider,
+      modelId: resolvedModelId,
+    },
+    t,
+  );
 
   const focusComposer = useCallback(() => {
     window.requestAnimationFrame(() => {

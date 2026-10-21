@@ -1,8 +1,9 @@
+import { translate, type Translate } from "../../i18n";
 import type { ReactNode } from "react";
 import { formatShortcut } from "../../../contracts/ipc";
 import type { BuiltinToolKind } from "../../../contracts/workbench";
 import type { ThreadAction } from "../threads/thread-actions";
-import { BUILTIN_TOOL_ENTRIES } from "../workbench/builtin-tools";
+import { builtinToolEntries } from "../workbench/builtin-tools";
 import type { SettingsSection } from "../settings/settings-view";
 import { sectionTitle } from "../settings/settings-sections";
 import {
@@ -71,13 +72,16 @@ export interface PaletteActionContext {
   readonly openPaletteMode: (mode: PaletteMode) => void;
 }
 
-export function buildPaletteActions(context: PaletteActionContext): readonly PaletteAction[] {
+export function buildPaletteActions(
+  context: PaletteActionContext,
+  t: Translate = translate,
+): readonly PaletteAction[] {
   const { platform, thread } = context;
   const actions: PaletteAction[] = [];
   if (context.hasWorkspace) {
     actions.push({
       id: "new-thread",
-      title: "New thread",
+      title: t("settings.shortcuts.newThread"),
       icon: <PlusIcon />,
       hint: formatShortcut(platform, "N"),
       run: context.newThread,
@@ -85,7 +89,7 @@ export function buildPaletteActions(context: PaletteActionContext): readonly Pal
   }
   actions.push({
     id: "open-folder",
-    title: "Open folder…",
+    title: t("palette.openFolder"),
     icon: <FolderIcon />,
     run: context.openFolder,
   });
@@ -93,7 +97,7 @@ export function buildPaletteActions(context: PaletteActionContext): readonly Pal
     actions.push(
       {
         id: "go-to-file",
-        title: "Go to file…",
+        title: t("palette.goToFile"),
         icon: <FileIcon />,
         hint: formatShortcut(platform, "P"),
         keepsOpen: true,
@@ -101,7 +105,7 @@ export function buildPaletteActions(context: PaletteActionContext): readonly Pal
       },
       {
         id: "find-in-thread",
-        title: "Find in thread",
+        title: t("settings.shortcuts.findInThread"),
         icon: <SearchIcon />,
         hint: formatShortcut(platform, "F"),
         run: context.findInThread,
@@ -110,16 +114,16 @@ export function buildPaletteActions(context: PaletteActionContext): readonly Pal
     if (thread.canSwitchModel) {
       actions.push({
         id: "switch-model",
-        title: "Switch model…",
+        title: t("palette.switchModel"),
         icon: <ModelIcon />,
         keepsOpen: true,
         run: () => context.openPaletteMode("models"),
       });
     }
-    for (const { kind, label, Icon, shortcutKey } of BUILTIN_TOOL_ENTRIES) {
+    for (const { kind, label, Icon, shortcutKey } of builtinToolEntries(t)) {
       actions.push({
         id: `toggle-${kind}`,
-        title: `Toggle ${label.toLowerCase()}`,
+        title: t("palette.toggleTool", { label: label.toLowerCase() }),
         icon: <Icon />,
         hint: shortcutKey ? formatShortcut(platform, shortcutKey) : undefined,
         run: () => context.toggleTool(kind),
@@ -127,7 +131,7 @@ export function buildPaletteActions(context: PaletteActionContext): readonly Pal
     }
     actions.push({
       id: "toggle-side-panel",
-      title: "Toggle side panel",
+      title: t("settings.shortcuts.toggleSidePanel"),
       icon: <SidePanelIcon />,
       hint: formatShortcut(platform, "B", { alt: true }),
       run: context.toggleSidePanel,
@@ -135,7 +139,7 @@ export function buildPaletteActions(context: PaletteActionContext): readonly Pal
     for (const view of context.extensionViews) {
       actions.push({
         id: `extension-view:${view.id}`,
-        title: `Open ${view.title}`,
+        title: t("palette.openView", { title: view.title }),
         icon: <ExtensionIcon />,
         run: view.open,
       });
@@ -145,7 +149,7 @@ export function buildPaletteActions(context: PaletteActionContext): readonly Pal
   if (context.canToggleSidebar) {
     actions.push({
       id: "toggle-sidebar",
-      title: "Toggle sidebar",
+      title: t("settings.shortcuts.toggleSidebar"),
       icon: <SidebarToggleIcon />,
       hint: formatShortcut(platform, "B"),
       run: context.toggleSidebar,
@@ -153,16 +157,16 @@ export function buildPaletteActions(context: PaletteActionContext): readonly Pal
   }
   actions.push({
     id: "scheduled-tasks",
-    title: "Scheduled tasks",
+    title: t("scheduledTasks.view.title"),
     icon: <ClockIcon />,
     run: context.openScheduledTasks,
   });
   if (context.hasWorkspace) {
     actions.push(
-      { id: "skills", title: "Skills", icon: <SkillIcon />, run: context.openSkills },
+      { id: "skills", title: t("nav.skills"), icon: <SkillIcon />, run: context.openSkills },
       {
         id: "extensions",
-        title: "Extensions",
+        title: t("nav.extensions"),
         icon: <ExtensionIcon />,
         run: context.openExtensions,
       },
@@ -170,7 +174,7 @@ export function buildPaletteActions(context: PaletteActionContext): readonly Pal
   }
   actions.push({
     id: "settings",
-    title: "Settings",
+    title: t("settings.title"),
     icon: <SettingsIcon />,
     hint: formatShortcut(platform, ","),
     run: () => context.openSettings("general"),
@@ -178,7 +182,7 @@ export function buildPaletteActions(context: PaletteActionContext): readonly Pal
   for (const section of SETTINGS_SECTIONS) {
     actions.push({
       id: `settings-${section}`,
-      title: `Settings: ${sectionTitle(section)}`,
+      title: t("palette.openSettings", { title: sectionTitle(section, t) }),
       icon: <SettingsIcon />,
       run: () => context.openSettings(section),
     });

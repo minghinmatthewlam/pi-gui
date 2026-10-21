@@ -1,3 +1,4 @@
+import { useTranslation } from "../../i18n";
 import { useEffect, useRef, type ReactNode } from "react";
 import { SettingsSwitch } from "../settings/settings-controls";
 
@@ -24,6 +25,8 @@ export function ResourceDetail({
   readonly onBack: () => void;
   readonly children: ReactNode;
 }) {
+  const { t } = useTranslation();
+
   const backButtonRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     // The row that opened this page is gone, so keyboard focus starts here instead of the body.
@@ -62,7 +65,7 @@ export function ResourceDetail({
           <SettingsSwitch
             checked={enabled}
             disabled={!onToggle}
-            label="Enabled"
+            label={t("settings.notifications.access.enabled")}
             onChange={(next) => onToggle?.(next)}
           />
         </div>

@@ -79,16 +79,6 @@ export interface ScheduledTaskOrigin {
   readonly title: string;
 }
 
-const WEEKDAY_NAMES = [
-  "Sunday",
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
-  "Saturday",
-] as const;
-const WEEKDAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 const WEEKDAY_ALIASES: Readonly<Record<string, Weekday>> = {
   sun: 0,
   sunday: 0,
@@ -306,99 +296,6 @@ export function assertScheduledTaskTarget(value: unknown, name = "target"): Sche
   throw new TypeError(`${name}.kind must be new-thread or existing-thread`);
 }
 
-export function formatClockTime(hour: number, minute: number): string {
-  const period = hour >= 12 ? "PM" : "AM";
-  const hour12 = hour % 12 === 0 ? 12 : hour % 12;
-  return `${hour12}:${String(minute).padStart(2, "0")} ${period}`;
-}
-
-function joinNames(names: readonly string[]): string {
-  if (names.length === 0) {
-    return "";
-  }
-  if (names.length === 1) {
-    return names[0]!;
-  }
-  if (names.length === 2) {
-    return `${names[0]} and ${names[1]}`;
-  }
-  return `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}`;
-}
-
-export function formatScheduledTaskRecurrence(schedule: ScheduledTaskSchedule): string {
-  if (schedule.kind === "once") {
-    const at = Date.parse(schedule.at);
-    if (Number.isNaN(at)) {
-      return "Once";
-    }
-    return `Once at ${new Date(at).toLocaleString(undefined, {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    })}`;
-  }
-  if (schedule.kind === "interval") {
-    const minutes = Math.round(schedule.everyMs / 60_000);
-    if (minutes % (24 * 60) === 0) {
-      const days = minutes / (24 * 60);
-      return days === 1 ? "Every day" : `Every ${days} days`;
-    }
-    if (minutes % 60 === 0) {
-      const hours = minutes / 60;
-      return hours === 1 ? "Every hour" : `Every ${hours} hours`;
-    }
-    return minutes === 1 ? "Every minute" : `Every ${minutes} minutes`;
-  }
-  const time = formatClockTime(schedule.hour, schedule.minute);
-  if (schedule.kind === "daily") {
-    return `Daily at ${time}`;
-  }
-  const names = [...schedule.days]
-    .sort((left, right) => left - right)
-    .map((day) => WEEKDAY_SHORT[day]!);
-  return `${joinNames(names)} at ${time}`;
-}
-
-export function formatScheduledTaskNextRun(nextRunAt: string, now = new Date()): string {
-  const timestamp = Date.parse(nextRunAt);
-  if (Number.isNaN(timestamp)) {
-    return "";
-  }
-  const diffMs = timestamp - now.getTime();
-  if (diffMs <= 0) {
-    return "Due now";
-  }
-  const diffMinutes = Math.floor(diffMs / 60_000);
-  if (diffMinutes < 1) {
-    return "Next run in under a minute";
-  }
-  if (diffMinutes < 60) {
-    return `Next run in ${diffMinutes} minute${diffMinutes === 1 ? "" : "s"}`;
-  }
-  const diffHours = Math.floor(diffMinutes / 60);
-  if (diffHours < 24) {
-    return `Next run in ${diffHours} hour${diffHours === 1 ? "" : "s"}`;
-  }
-  const diffDays = Math.floor(diffHours / 24);
-  return `Next run in ${diffDays} day${diffDays === 1 ? "" : "s"}`;
-}
-
-export function formatScheduledTaskRowMeta(task: ScheduledTaskRecord, now = new Date()): string {
-  const recurrence = formatScheduledTaskRecurrence(task.schedule);
-  if (task.status === "completed") {
-    return recurrence;
-  }
-  if (task.status === "paused") {
-    return `${recurrence} · Paused`;
-  }
-  if (!task.nextRunAt) {
-    return recurrence;
-  }
-  return `${recurrence} · ${formatScheduledTaskNextRun(task.nextRunAt, now)}`;
-}
-
 export function nonCompletedBindingForSession(
   tasks: readonly ScheduledTaskRecord[],
   sessionId: string,
@@ -409,25 +306,6 @@ export function nonCompletedBindingForSession(
       task.target.kind === "existing-thread" &&
       task.target.sessionId === sessionId,
   );
-}
-
-export function filterScheduledTasks(
-  tasks: readonly ScheduledTaskRecord[],
-  filter: ScheduledTaskFilter,
-  query = "",
-): readonly ScheduledTaskRecord[] {
-  const normalized = query.trim().toLowerCase();
-  return tasks.filter((task) => {
-    if (filter !== "all" && task.status !== filter) {
-      return false;
-    }
-    if (!normalized) {
-      return true;
-    }
-    return [task.title, task.instruction, formatScheduledTaskRecurrence(task.schedule)].some(
-      (value) => value.toLowerCase().includes(normalized),
-    );
-  });
 }
 
 interface OriginMessage {
@@ -490,5 +368,3 @@ export function scheduledOriginsByMessageId(
   }
   return origins;
 }
-
-export { WEEKDAY_NAMES };

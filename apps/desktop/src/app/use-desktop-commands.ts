@@ -1,3 +1,4 @@
+import { useTranslation } from "../i18n";
 import {
   useCallback,
   useEffect,
@@ -92,6 +93,7 @@ interface DesktopCommandsInput {
  * command palette. Every command has one handler; palette entries call the same actions.
  */
 export function useDesktopCommands(input: DesktopCommandsInput) {
+  const { t } = useTranslation();
   const {
     api,
     snapshot,
@@ -406,41 +408,46 @@ export function useDesktopCommands(input: DesktopCommandsInput) {
 
   const paletteActions: readonly PaletteAction[] =
     paletteMode && threadSidebarModel && api
-      ? buildPaletteActions({
-          platform: api.platform,
-          hasWorkspace: input.hasWorkspace,
-          thread: selectedThread,
-          canToggleSidebar: canTogglePrimarySidebar(snapshot?.activeView),
-          newThread: openNewThread,
-          openFolder: () => {
-            void updateSnapshot(setSnapshot, () => api.pickWorkspace()).catch((error: unknown) => {
-              console.error("[renderer] pickWorkspace failed", error);
-            });
+      ? buildPaletteActions(
+          {
+            platform: api.platform,
+            hasWorkspace: input.hasWorkspace,
+            thread: selectedThread,
+            canToggleSidebar: canTogglePrimarySidebar(snapshot?.activeView),
+            newThread: openNewThread,
+            openFolder: () => {
+              void updateSnapshot(setSnapshot, () => api.pickWorkspace()).catch(
+                (error: unknown) => {
+                  console.error("[renderer] pickWorkspace failed", error);
+                },
+              );
+            },
+            openSettings: (section) => input.openSettings(selectedRootWorkspaceId, section),
+            openSkills: () => input.openSkills(selectedRootWorkspaceId),
+            openExtensions: () => input.openExtensions(selectedRootWorkspaceId),
+            openScheduledTasks: () => input.setActiveView("scheduled"),
+            toggleSidebar: togglePrimarySidebar,
+            toggleTool: toggleWorkbenchTool,
+            toggleSidePanel,
+            extensionViews: input.extensionViews
+              .filter((view) => view.state === "ready")
+              .map((view) => {
+                const tool = {
+                  kind: "extension",
+                  extensionId: view.extensionId,
+                  viewId: view.id,
+                } as const;
+                return {
+                  id: toolRefId(tool),
+                  title: view.title,
+                  open: () => workbench.openTool(tool),
+                };
+              }),
+            findInThread: threadSearch.open,
+            openPaletteMode: setPaletteMode,
           },
-          openSettings: (section) => input.openSettings(selectedRootWorkspaceId, section),
-          openSkills: () => input.openSkills(selectedRootWorkspaceId),
-          openExtensions: () => input.openExtensions(selectedRootWorkspaceId),
-          openScheduledTasks: () => input.setActiveView("scheduled"),
-          toggleSidebar: togglePrimarySidebar,
-          toggleTool: toggleWorkbenchTool,
-          toggleSidePanel,
-          extensionViews: input.extensionViews
-            .filter((view) => view.state === "ready")
-            .map((view) => {
-              const tool = {
-                kind: "extension",
-                extensionId: view.extensionId,
-                viewId: view.id,
-              } as const;
-              return {
-                id: toolRefId(tool),
-                title: view.title,
-                open: () => workbench.openTool(tool),
-              };
-            }),
-          findInThread: threadSearch.open,
-          openPaletteMode: setPaletteMode,
-        })
+          t,
+        )
       : [];
 
   return { paletteMode, setPaletteMode, paletteActions, toggleSidePanel, togglePrimarySidebar };

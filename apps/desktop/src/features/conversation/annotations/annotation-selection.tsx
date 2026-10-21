@@ -1,3 +1,4 @@
+import { useTranslation } from "../../../i18n";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CloseIcon } from "../../../ui/icons";
 import { ANNOTATION_ROOT_ATTRIBUTE, type OpenAnnotation } from "./annotation-markers";
@@ -272,6 +273,8 @@ function AddToChatButton({
   readonly platform: NodeJS.Platform;
   readonly onAdd: () => void;
 }) {
+  const { t } = useTranslation();
+
   return (
     <div
       className="annotation-popover annotation-add"
@@ -285,7 +288,7 @@ function AddToChatButton({
         onMouseDown={(event) => event.preventDefault()}
         onClick={onAdd}
       >
-        <span>Add to Chat</span>
+        <span>{t("ui.addToChat")}</span>
         <span className="annotation-add__keys" aria-hidden="true">
           {addToChatShortcutKeys(platform).map((key) => (
             <kbd key={key}>{key}</kbd>
@@ -309,6 +312,8 @@ function AnnotationEditor({
   readonly onRemove: () => void;
   readonly onClose: () => void;
 }) {
+  const { t } = useTranslation();
+
   const [value, setValue] = useState(note);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const closingRef = useRef(false);
@@ -337,9 +342,9 @@ function AnnotationEditor({
       style={{ top: popoverTop(anchor, 44), left: Math.max(POPOVER_GAP, anchor.left - 24) }}
     >
       <input
-        aria-label="Annotation comment"
+        aria-label={t("ui.annotationComment")}
         className="annotation-editor__input"
-        placeholder="Add an optional comment…"
+        placeholder={t("ui.addAnOptionalComment")}
         ref={inputRef}
         value={value}
         onBlur={() => finish(true)}
@@ -356,10 +361,10 @@ function AnnotationEditor({
         }}
       />
       <button
-        aria-label="Remove annotation"
+        aria-label={t("ui.removeAnnotation")}
         className="annotation-editor__remove"
         data-testid="annotation-remove"
-        title="Remove annotation"
+        title={t("ui.removeAnnotation")}
         type="button"
         onMouseDown={(event) => event.preventDefault()}
         onClick={() => {

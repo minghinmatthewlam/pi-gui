@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useTranslation } from "../i18n";
 import { SearchIcon } from "../ui/icons";
 
 export interface SecondarySurfaceNavItem {
@@ -29,6 +30,7 @@ export function SecondarySurface({
   testId,
   children,
 }: SecondarySurfaceProps) {
+  const { t } = useTranslation();
   const backRef = useRef(onBack);
   backRef.current = onBack;
   useEffect(() => {
@@ -55,14 +57,14 @@ export function SecondarySurface({
       <aside className="secondary-surface__sidebar">
         <button className="secondary-surface__back" type="button" onClick={onBack}>
           <span aria-hidden="true">←</span>
-          <span>Back to app</span>
+          <span>{t("secondarySurface.backToApp")}</span>
         </button>
         {navItems.length > 0 ? (
           <SecondarySurfaceNav
             activeNavId={activeNavId}
             items={navItems}
-            label={`${title} sections`}
-            searchLabel={`Search ${title.toLowerCase()}`}
+            label={t("secondarySurface.sectionsLabel", { title })}
+            searchLabel={t("secondarySurface.searchLabel", { title: title.toLowerCase() })}
             onSelect={(id) => onSelectNav?.(id)}
           />
         ) : (
@@ -89,6 +91,7 @@ function SecondarySurfaceNav({
   readonly searchLabel: string;
   readonly onSelect: (id: string) => void;
 }) {
+  const { t } = useTranslation();
   const [query, setQuery] = useState("");
   const matches = filterNavItems(items, query);
   const groups = [...new Set(matches.map((item) => item.group))];
@@ -99,7 +102,7 @@ function SecondarySurfaceNav({
         <SearchIcon />
         <input
           aria-label={searchLabel}
-          placeholder="Search"
+          placeholder={t("secondarySurface.searchPlaceholder")}
           spellCheck={false}
           type="search"
           value={query}
@@ -137,7 +140,9 @@ function SecondarySurfaceNav({
           </div>
         ))}
         {matches.length === 0 ? (
-          <p className="secondary-surface__nav-empty">No matches for “{query.trim()}”</p>
+          <p className="secondary-surface__nav-empty">
+            {t("secondarySurface.noMatches", { query: query.trim() })}
+          </p>
         ) : null}
       </nav>
     </>

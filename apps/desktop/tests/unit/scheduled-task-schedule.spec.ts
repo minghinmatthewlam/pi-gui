@@ -4,14 +4,18 @@ import {
   earliestScheduledWakeAt,
 } from "../../electron/scheduled-tasks/scheduled-task-schedule";
 import {
-  formatScheduledTaskRecurrence,
-  formatScheduledTaskNextRun,
   isIanaTimeZone,
   onceActivationNeedsNewTime,
   scheduledOriginsByMessageId,
   scheduledTaskSchedulesEqual,
   type ScheduledTaskRecord,
 } from "../../contracts/scheduled-tasks";
+import { translatorFor } from "../../src/i18n/translate";
+import {
+  formatScheduledTaskNextRun,
+  formatScheduledTaskRecurrence,
+  weekdayShortNames,
+} from "../../src/features/scheduled-tasks/scheduled-task-display";
 
 test("nextRunAt advances daily and weekly wall-clock times in the given zone", () => {
   const from = new Date("2026-09-21T16:00:00.000Z");
@@ -54,21 +58,53 @@ test("earliestScheduledWakeAt uses due-now for overdue active tasks", () => {
 });
 
 test("recurrence and next-run copy match the list format", () => {
-  expect(
-    formatScheduledTaskRecurrence({
-      kind: "weekly",
-      days: [1, 3, 5],
-      hour: 22,
-      minute: 0,
-      timeZone: "UTC",
-    }),
-  ).toBe("Mon, Wed, and Fri at 10:00 PM");
-  expect(formatScheduledTaskRecurrence({ kind: "interval", everyMs: 10 * 60_000 })).toBe(
-    "Every 10 minutes",
+  const english = translatorFor("en");
+  const weekly = {
+    kind: "weekly" as const,
+    days: [1, 3, 5],
+    hour: 22,
+    minute: 0,
+    timeZone: "UTC",
+  };
+  expect(formatScheduledTaskRecurrence(weekly, english, "en")).toBe(
+    "Mon, Wed, and Fri at 10:00 PM",
   );
   expect(
-    formatScheduledTaskNextRun("2026-09-22T12:00:00.000Z", new Date("2026-09-21T12:00:00.000Z")),
+    formatScheduledTaskRecurrence({ kind: "interval", everyMs: 10 * 60_000 }, english, "en"),
+  ).toBe("Every 10 minutes");
+  expect(
+    formatScheduledTaskNextRun(
+      "2026-09-22T12:00:00.000Z",
+      english,
+      new Date("2026-09-21T12:00:00.000Z"),
+    ),
   ).toBe("Next run in 1 day");
+});
+
+test("recurrence copy follows the active locale's weekdays, list and clock", () => {
+  const chinese = translatorFor("zh-CN");
+  expect(
+    formatScheduledTaskRecurrence(
+      { kind: "weekly", days: [1, 3, 5], hour: 22, minute: 0, timeZone: "UTC" },
+      chinese,
+      "zh-CN",
+    ),
+  ).toBe("每周一、周三和周五 22:00");
+  expect(
+    formatScheduledTaskRecurrence({ kind: "interval", everyMs: 10 * 60_000 }, chinese, "zh-CN"),
+  ).toBe("每 10 分钟");
+  expect(
+    formatScheduledTaskNextRun(
+      "2026-09-22T12:00:00.000Z",
+      chinese,
+      new Date("2026-09-21T12:00:00.000Z"),
+    ),
+  ).toBe("1 天后运行");
+
+  // Weekday buttons are Sunday-first in both languages, and English keeps the
+  // abbreviations the editor shipped with.
+  expect(weekdayShortNames("en")).toEqual(["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]);
+  expect(weekdayShortNames("zh-CN")[0]).toBe("周日");
 });
 
 test("overlay matches unmatched runs by instruction and firedAt window", () => {
