@@ -11,12 +11,13 @@ import { CustomizePage } from "../features/extensions/customize-page";
 import { SettingsView, type SettingsSection } from "../features/settings/settings-view";
 import {
   CUSTOMIZE_SECTION_ID,
-  SETTINGS_NAV_ITEMS,
-  SETTINGS_SECTIONS,
+  settingsNavItems,
+  settingsSections,
 } from "../features/settings/settings-sections";
 import { SettingsSelect } from "../features/settings/settings-controls";
 import type { McpSettingsActions } from "../features/settings/settings-mcp-section";
 import { SecondarySurface } from "./secondary-surface";
+import { t, useLocale } from "../lib/i18n";
 
 interface SecondarySurfacesProps {
   readonly api: NonNullable<typeof window.piApp>;
@@ -56,9 +57,14 @@ export function SecondarySurfaces({
   onSelectView,
   onTrySkill,
 }: SecondarySurfacesProps) {
+  // Subscribing makes the settings shell re-render when the user picks a new locale.
+  useLocale();
   const [notificationPermissionStatus, setNotificationPermissionStatus] =
     useState<DesktopNotificationPermissionStatus>("unknown");
   const [notificationPermissionPending, setNotificationPermissionPending] = useState(false);
+
+  const navItems = settingsNavItems();
+  const sections = settingsSections();
 
   const settingsWorkspace = settingsWorkspaceId
     ? rootWorkspaceOptions.find((workspace) => workspace.id === settingsWorkspaceId)
@@ -193,7 +199,7 @@ export function SecondarySurfaces({
     apiKey: string,
   ): Promise<string | undefined> => {
     if (!settingsWorkspace) {
-      return "Select a workspace first.";
+      return t("settings.errors.select_workspace_first");
     }
     const state = await updateSnapshot(setSnapshot, () =>
       api.setProviderApiKey(settingsWorkspace.id, providerId, apiKey),
@@ -203,7 +209,7 @@ export function SecondarySurfaces({
 
   const handleRemoveProviderApiKey = async (providerId: string): Promise<string | undefined> => {
     if (!settingsWorkspace) {
-      return "Select a workspace first.";
+      return t("settings.errors.select_workspace_first");
     }
     const state = await updateSnapshot(setSnapshot, () =>
       api.logoutProvider(settingsWorkspace.id, providerId),
@@ -215,7 +221,7 @@ export function SecondarySurfaces({
     config: CustomProviderConfig,
   ): Promise<string | undefined> => {
     if (!settingsWorkspace) {
-      return "Select a workspace first.";
+      return t("settings.errors.select_workspace_first");
     }
     const state = await updateSnapshot(setSnapshot, () =>
       api.setCustomProvider(settingsWorkspace.id, config),
@@ -225,7 +231,7 @@ export function SecondarySurfaces({
 
   const handleDeleteCustomProvider = async (providerId: string): Promise<string | undefined> => {
     if (!settingsWorkspace) {
-      return "Select a workspace first.";
+      return t("settings.errors.select_workspace_first");
     }
     const state = await updateSnapshot(setSnapshot, () =>
       api.deleteCustomProvider(settingsWorkspace.id, providerId),
@@ -237,7 +243,7 @@ export function SecondarySurfaces({
     update: (workspaceId: string) => Promise<DesktopAppState>,
   ): Promise<string | undefined> => {
     if (!settingsWorkspace) {
-      return "Select a workspace first.";
+      return t("settings.errors.select_workspace_first");
     }
     const state = await updateSnapshot(setSnapshot, () => update(settingsWorkspace.id));
     return state.lastError;
@@ -369,7 +375,7 @@ export function SecondarySurfaces({
   ) =>
     rootWorkspaceOptions.length > 0 ? (
       <SettingsSelect
-        label="Workspace"
+        label={t("settings.select.workspace_label")}
         options={rootWorkspaceOptions.map((workspace) => ({
           value: workspace.id,
           label: workspace.name,
@@ -382,14 +388,14 @@ export function SecondarySurfaces({
   return (
     <SecondarySurface
       activeNavId={customizeTab ? CUSTOMIZE_SECTION_ID : settingsSection}
-      navItems={SETTINGS_NAV_ITEMS}
+      navItems={navItems}
       onBack={onBack}
       onSelectNav={(id) => {
         if (id === CUSTOMIZE_SECTION_ID) {
           if (!customizeTab) onSelectView("skills");
           return;
         }
-        const section = SETTINGS_SECTIONS.find((definition) => definition.id === id);
+        const section = sections.find((definition) => definition.id === id);
         if (!section) return;
         onSelectSettingsSection(section.id);
         if (customizeTab) onSelectView("settings");

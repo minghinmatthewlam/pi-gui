@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { SearchIcon } from "../../ui/icons";
+import { t, useLocale } from "../../lib/i18n";
 
 export interface PaletteItem {
   readonly id: string;
@@ -63,6 +64,8 @@ export function CommandPalette<F extends string>({
   onBack,
   onClose,
 }: CommandPaletteProps<F>) {
+  // Subscribing makes the palette re-render when the user picks a new locale.
+  useLocale();
   const listId = useId();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -202,7 +205,7 @@ export function CommandPalette<F extends string>({
             onChange={(event) => onQueryChange(event.target.value)}
           />
           <button
-            aria-label="Close"
+            aria-label={t("palette.close")}
             className="command-palette__close"
             type="button"
             onClick={onClose}
@@ -212,7 +215,11 @@ export function CommandPalette<F extends string>({
         </div>
 
         {filters && filters.length > 0 ? (
-          <div aria-label="Filters" className="command-palette__filters" role="tablist">
+          <div
+            aria-label={t("palette.filters")}
+            className="command-palette__filters"
+            role="tablist"
+          >
             {filters.map((filter) => (
               <button
                 key={filter.id}
@@ -295,23 +302,23 @@ export function CommandPalette<F extends string>({
         <div className="command-palette__footer" aria-hidden="true">
           <span>
             <kbd>↑</kbd>
-            <kbd>↓</kbd> Navigate
+            <kbd>↓</kbd> {t("palette.hint.navigate")}
           </span>
           <span>
-            <kbd>↵</kbd> Open
+            <kbd>↵</kbd> {t("palette.hint.open")}
           </span>
           {filters && filters.length > 0 ? (
             <span>
-              <kbd>Tab</kbd> Filters
+              <kbd>Tab</kbd> {t("palette.hint.filters")}
             </span>
           ) : null}
           {onBack ? (
             <span>
-              <kbd>⌫</kbd> Back
+              <kbd>⌫</kbd> {t("palette.hint.back")}
             </span>
           ) : null}
           <span>
-            <kbd>Esc</kbd> Close
+            <kbd>Esc</kbd> {t("palette.hint.close")}
           </span>
         </div>
       </div>
