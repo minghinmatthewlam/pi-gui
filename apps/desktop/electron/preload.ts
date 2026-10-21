@@ -22,6 +22,8 @@ import {
   type DesktopNotificationPermissionStatus,
   type WorkspaceFilePreview,
   type PiDesktopCommand,
+  type PiDesktopStateListener,
+  type PiDesktopStatePush,
   type TerminalDataEvent,
   type TerminalErrorEvent,
   type TerminalExitEvent,
@@ -161,8 +163,8 @@ contextBridge.exposeInMainWorld("piApp", {
       desktopIpc.changeReviewFileStage,
       input,
     ) as Promise<ChangeReviewFileStageResult>,
-  onStateChanged: (listener: (state: DesktopAppState) => void) => {
-    const handle = (_event: Electron.IpcRendererEvent, state: DesktopAppState) => {
+  onStateChanged: (listener: PiDesktopStateListener) => {
+    const handle = (_event: Electron.IpcRendererEvent, state: PiDesktopStatePush) => {
       listener(state);
     };
     ipcRenderer.on(desktopIpc.stateChanged, handle);
