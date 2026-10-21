@@ -140,6 +140,19 @@ export function useDesktopCommands(input: DesktopCommandsInput) {
   const toggleSidePanel = () => {
     if (sidePanelAvailable) workbench.toggleVisibility();
   };
+  /** Does what the side panel's Add tab button does, then focuses the first choice. */
+  const newSidePanelTab = () => {
+    // An open dialog keeps focus; the chooser would open behind it. The palette
+    // is the exception: any other command closes it first.
+    const dialogOpen = document.querySelector(
+      "[aria-modal='true']:not(.command-palette), .extension-dialog-backdrop",
+    );
+    if (!sidePanelAvailable || !workbench.ready || dialogOpen) return false;
+    workbench.showChooser();
+    window.requestAnimationFrame(() => {
+      document.querySelector<HTMLElement>('[data-testid="workbench-chooser"] button')?.focus();
+    });
+  };
   const selectSidePanelTab = (index: number) => {
     const tool = sidePanelAvailable ? workbench.view.tools[index] : undefined;
     if (tool) workbench.activateTool(toolRefId(tool));
@@ -208,6 +221,7 @@ export function useDesktopCommands(input: DesktopCommandsInput) {
       // that same-tick pair while preserving a deliberate second press.
       if (reviewToggleGate.current(performance.now())) toggleWorkbenchTool("changes");
     },
+    [desktopCommands.newSidePanelTab]: newSidePanelTab,
     [desktopCommands.closeFocusedSurface]: closeFocusedSurface,
     [desktopCommands.toggleSidebar]: togglePrimarySidebar,
     [desktopCommands.openCommandPalette]: (source) => togglePalette("commands", source),
@@ -289,6 +303,20 @@ export function useDesktopCommands(input: DesktopCommandsInput) {
       ) {
         event.preventDefault();
         handleCommandRef.current(command);
+      }
+      // The shell opens another terminal for New Tab; the terminal's own tabs and
+      // buttons have no use for it, so it opens the chooser from there.
+      if (
+        command === desktopCommands.newSidePanelTab &&
+        !event.repeat &&
+        !(event.target instanceof Element && event.target.closest(".xterm")) &&
+        platformShortcutModifier(api?.platform ?? "linux", {
+          meta: event.metaKey,
+          control: event.ctrlKey,
+        }) &&
+        handleCommandRef.current(command)
+      ) {
+        event.preventDefault();
       }
       return;
     }
