@@ -146,6 +146,10 @@ export class PiSdkDriver implements SessionDriver {
     return this.supervisor.closeSession(sessionRef);
   }
 
+  releaseSession(sessionRef: SessionRef): Promise<boolean> {
+    return this.supervisor.releaseSession(sessionRef);
+  }
+
   listWorkspaces(): Promise<WorkspaceCatalogSnapshot> {
     return this.supervisor.listWorkspaces();
   }

@@ -415,6 +415,11 @@ export interface SessionDriver {
   respondToHostUiRequest(sessionRef: SessionRef, response: HostUiResponse): Promise<void>;
   subscribe(sessionRef: SessionRef, listener: SessionEventListener): Unsubscribe;
   closeSession(sessionRef: SessionRef): Promise<void>;
+  /**
+   * Free an idle session's memory; it reopens from its file when next used. Returns false, and
+   * keeps it, while it is busy or waiting on the person.
+   */
+  releaseSession(sessionRef: SessionRef): Promise<boolean>;
 }
 
 export interface SessionSchemaInfo {
