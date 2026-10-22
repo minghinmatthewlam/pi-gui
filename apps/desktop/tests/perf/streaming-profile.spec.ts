@@ -9,13 +9,13 @@ import type { SessionDriverEvent, SessionRef } from "@pi-gui/session-driver";
 import {
   createSessionViaIpc,
   getDesktopState,
-  launchDesktop,
+  launchElectronDesktop,
   makeUserDataDir,
   makeWorkspace,
   selectSession,
   seedTranscriptMessages,
   waitForWorkspaceByPath,
-  type DesktopHarness,
+  type ElectronDesktopHarness,
 } from "../helpers/electron-app";
 
 test.describe.configure({ mode: "serial" });
@@ -39,7 +39,7 @@ interface MainCounters {
   readonly sendMs: number;
 }
 
-async function patchMain(harness: DesktopHarness): Promise<void> {
+async function patchMain(harness: ElectronDesktopHarness): Promise<void> {
   await harness.electronApp.evaluate(({ BrowserWindow }) => {
     const g = globalThis as unknown as Record<string, unknown>;
     g.__perfSends = {} as Record<string, number>;
@@ -81,7 +81,7 @@ async function patchMain(harness: DesktopHarness): Promise<void> {
   });
 }
 
-async function startMainSample(harness: DesktopHarness): Promise<void> {
+async function startMainSample(harness: ElectronDesktopHarness): Promise<void> {
   await harness.electronApp.evaluate(() => {
     const g = globalThis as unknown as Record<string, unknown>;
     g.__perfSends = {};
@@ -93,7 +93,7 @@ async function startMainSample(harness: DesktopHarness): Promise<void> {
   });
 }
 
-async function stopMainSample(harness: DesktopHarness): Promise<MainCounters> {
+async function stopMainSample(harness: ElectronDesktopHarness): Promise<MainCounters> {
   return harness.electronApp.evaluate(() => {
     const g = globalThis as unknown as {
       __perfSends: Record<string, number>;
@@ -173,7 +173,10 @@ async function stopRendererSample(window: Page): Promise<{
   });
 }
 
-async function emitNoWait(harness: DesktopHarness, event: SessionDriverEvent): Promise<void> {
+async function emitNoWait(
+  harness: ElectronDesktopHarness,
+  event: SessionDriverEvent,
+): Promise<void> {
   await harness.electronApp.evaluate(async (_, payload) => {
     const hooks = (
       globalThis as {
@@ -190,7 +193,7 @@ async function emitNoWait(harness: DesktopHarness, event: SessionDriverEvent): P
 async function measure(label: string, seeded: number): Promise<void> {
   const userDataDir = await makeUserDataDir();
   const workspacePath = await makeWorkspace(`perf-${label}`);
-  const harness = await launchDesktop(userDataDir, {
+  const harness = await launchElectronDesktop(userDataDir, {
     initialWorkspaces: [workspacePath],
     testMode: "background",
   });
@@ -410,7 +413,7 @@ test("streaming cost on a long thread", async () => {
 // probe above. Run three times; timings are diagnostic, not CI pass thresholds.
 test("paced wheel scrolling during a growing answer", async ({}, info) => {
   test.setTimeout(90_000);
-  const h = await launchDesktop(await makeUserDataDir(), {
+  const h = await launchElectronDesktop(await makeUserDataDir(), {
     initialWorkspaces: [await makeWorkspace("perf-wheel")],
     testMode: "background",
   });

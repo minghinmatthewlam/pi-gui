@@ -1,0 +1,25 @@
+[package]
+name = "pi-gui-core"
+version = "0.1.0"
+description = "pi-gui's app logic in Rust: saved data now, more parts as they move over from Electron main."
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+dunce = "1"
+icu_collator = "2"
+ignore = "0.4"
+indexmap = { version = "2", features = ["serde"] }
+# The bundled time zone database, so zones read the same on every computer.
+jiff = { version = "0.2", default-features = false, features = ["std", "tz-system", "tz-fat", "tzdb-bundle-always", "perf-inline"] }
+portable-pty = "0.9"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+sha2 = "0.10"
+url = "2"
+uuid = { version = "1", features = ["v4"] }
+tokio = { version = "1.53.2", features = ["rt", "macros", "io-util", "io-std", "process", "sync", "time", "fs", "net"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

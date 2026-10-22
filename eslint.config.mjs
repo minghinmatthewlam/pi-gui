@@ -40,6 +40,8 @@ export default [
           ".artifacts",
           "test-results",
           "playwright-report",
+          // Cargo output, including Tauri's generated asset bundles.
+          "target",
         ].map((directory) => `${root}${directory}/**`),
       ),
       "**/*.d.{ts,mts,cts}",
@@ -92,9 +94,37 @@ export default [
     files: ["apps/desktop/src/app/App.tsx"],
     rules: { "max-lines": ["error", { max: 1447 }] },
   },
+  {
+    // These specs must also run against the Rust test host and the Tauri app, so they reach
+    // the app only through DesktopHarness (tests/helpers/desktop-harness.ts).
+    files: ["apps/desktop/tests/{core,native,live}/**/*.{ts,tsx,mts,cts}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["electron", "playwright", "**/electron-harness"],
+              message: "Use DesktopHarness.",
+            },
+            {
+              group: ["**/helpers/electron-app"],
+              importNames: ["launchElectronDesktop", "ElectronDesktopHarness"],
+              message: "Use launchDesktop and DesktopHarness.",
+            },
+          ],
+        },
+      ],
+    },
+  },
   typedProject(["apps/desktop/src/**/*.{ts,tsx,mts,cts}"], "apps/desktop/tsconfig.json"),
   typedProject(
-    ["apps/desktop/electron/**/*.{ts,tsx,mts,cts}"],
+    [
+      "apps/desktop/electron/**/*.{ts,tsx,mts,cts}",
+      "apps/desktop/pi-host/**/*.{ts,tsx,mts,cts}",
+      "apps/desktop/rpc/**/*.{ts,tsx,mts,cts}",
+      "apps/desktop/core-process/**/*.{ts,tsx,mts,cts}",
+    ],
     "apps/desktop/tsconfig.electron.json",
   ),
   typedProject(

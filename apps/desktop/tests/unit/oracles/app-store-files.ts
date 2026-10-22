@@ -1,11 +1,14 @@
+// The TypeScript implementation the Rust core replaced, kept only as the oracle for
+// rust-core-git.spec.ts. The app does not import it.
+
 import { execFile } from "node:child_process";
 import { open, readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import ignore from "ignore";
 import type { WorkspaceFilePreview } from "../../../contracts/ipc";
-import { isolatedGitEnvironment } from "./git-environment";
-import { resolveExistingWorkspacePath } from "./workspace-paths";
+import { isolatedGitEnvironment } from "../../../electron/platform/files/git-environment";
+import { resolveExistingWorkspacePath } from "../../../electron/platform/files/workspace-paths";
 
 const fileCache = new Map<string, { files: string[]; timestamp: number }>();
 const CACHE_TTL_MS = 30_000;

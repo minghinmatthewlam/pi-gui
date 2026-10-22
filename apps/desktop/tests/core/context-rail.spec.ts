@@ -56,9 +56,7 @@ test("turn timing markers render without a prompt rail", async () => {
   const run = await launchDesktop(userDataDir, { testMode: "background" });
   try {
     const window = await run.firstWindow();
-    await run.electronApp.evaluate(({ BrowserWindow }) => {
-      BrowserWindow.getAllWindows()[0]?.setBounds({ x: 40, y: 40, width: 1500, height: 950 });
-    });
+    await run.windows.setBounds({ x: 40, y: 40, width: 1500, height: 950 });
     await waitForWorkspaceByPath(window, workspacePath);
     await waitForSelectedSessionReady(window, { workspaceId, sessionId });
     await expect(window.getByTestId("transcript")).toBeVisible({ timeout: 15_000 });

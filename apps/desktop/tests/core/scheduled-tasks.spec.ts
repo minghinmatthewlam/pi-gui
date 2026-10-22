@@ -1,6 +1,6 @@
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { expect, test } from "@playwright/test";
-import type { PiSdkDriver } from "@pi-gui/pi-sdk-driver";
+import type { SessionRef } from "@pi-gui/session-driver";
 import {
   createNamedThread,
   fireDueScheduledTasks,
@@ -9,6 +9,7 @@ import {
   launchDesktop,
   makeUserDataDir,
   makeWorkspace,
+  runScheduledTaskRuntimeTool,
   seedAgentDir,
 } from "../helpers/electron-app";
 import { SCHEDULED_TASK_INTERVIEW_PROMPT } from "../../contracts/scheduled-tasks";
@@ -177,52 +178,24 @@ test("a scheduled run can use the scheduled-task tools while it is still running
       { workspaceId: state.selectedWorkspaceId, sessionId: state.selectedSessionId },
     );
     // The fired run calls list_scheduled_tasks before it finishes, as an agent would.
-    const listedDuringRun = await harness.electronApp.evaluate(
-      async (_, input) => {
-        type ToolHook = (input: {
-          toolName: string;
-          sessionRef: { workspaceId: string; sessionId: string };
-          params: Record<string, unknown>;
-        }) => Promise<{ content: readonly { text?: string }[] }>;
-        const hooks = (
-          globalThis as {
-            __PI_APP_TEST_HOOKS?: {
-              runScheduledTaskRuntimeTool?: ToolHook;
-              fireDueScheduledTasks?: (nowIso?: string) => Promise<unknown>;
-            };
-          }
-        ).__PI_APP_TEST_HOOKS;
-        const runTool = hooks?.runScheduledTaskRuntimeTool;
-        const fire = hooks?.fireDueScheduledTasks;
-        if (!runTool || !fire) {
-          throw new Error("Scheduled-task test hooks are unavailable");
-        }
-        const { createRequire } = process.getBuiltinModule("module");
-        const { PiSdkDriver: Driver } = createRequire(input.entry)("@pi-gui/pi-sdk-driver") as {
-          PiSdkDriver: typeof PiSdkDriver;
-        };
-        let listed = "";
-        Driver.prototype.sendUserMessage = async function (ref) {
-          const result = await runTool({
-            toolName: "list_scheduled_tasks",
-            sessionRef: ref,
-            params: {},
-          });
-          listed = result.content[0]?.text ?? "";
-        };
-        await Promise.race([
-          fire(input.nowIso),
-          new Promise((_, reject) =>
-            setTimeout(() => reject(new Error("Scheduled run blocked on its own tools")), 10_000),
-          ),
-        ]);
-        return listed;
-      },
-      {
-        entry: resolve("apps/desktop/out/main/main.js"),
-        nowIso: new Date(Date.now() + 10 * 60_000).toISOString(),
-      },
-    );
+    const sends = await harness.driver.intercept("sendUserMessage");
+    const firing = fireDueScheduledTasks(harness, new Date(Date.now() + 10 * 60_000).toISOString());
+    const listedDuringRun = await Promise.race([
+      (async () => {
+        const send = await sends.nextCall();
+        const result = await runScheduledTaskRuntimeTool(harness, {
+          toolName: "list_scheduled_tasks",
+          sessionRef: send.args[0] as SessionRef,
+          params: {},
+        });
+        await send.complete();
+        await firing;
+        return result.content[0]?.text ?? "";
+      })(),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("Scheduled run blocked on its own tools")), 10_000),
+      ),
+    ]);
     expect(listedDuringRun).toContain("Self-checking task");
     const after = await getDesktopState(window);
     expect(after.scheduledTasks[0]?.runs.map((run) => run.outcome)).toEqual(["started"]);

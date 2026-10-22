@@ -23,8 +23,8 @@ import { acceptComposerAttachments } from "../../../../contracts/composer-attach
 import { updateSnapshot } from "../../../app/desktop-app-state";
 import {
   extractFilesFromDataTransfer,
-  extractImageFilesFromClipboardData,
   handleClipboardImageShortcut,
+  handleComposerImagePaste,
   readComposerAttachmentsFromFiles,
 } from "../../conversation/composer-attachments";
 import { buildModelOptions, parseTreeComposerCommand } from "../../conversation/composer-commands";
@@ -352,12 +352,7 @@ export function useNewThreadController(params: UseNewThreadControllerParams) {
 
   const handleComposerPaste = useCallback(
     (event: ClipboardEvent<HTMLDivElement>) => {
-      const files = extractImageFilesFromClipboardData(event.clipboardData);
-      if (files.length === 0) {
-        return;
-      }
-      event.preventDefault();
-      addAttachments(files);
+      handleComposerImagePaste(event, addAttachments);
     },
     [addAttachments],
   );
@@ -376,16 +371,12 @@ export function useNewThreadController(params: UseNewThreadControllerParams) {
 
   const handleComposerKeyDown = useCallback(
     (event: KeyboardEvent<HTMLTextAreaElement>) => {
-      if (
-        handleClipboardImageShortcut(
-          event,
-          api?.readClipboardImage,
-          appendAttachment,
-          setComposerError,
-        )
-      ) {
-        return;
-      }
+      handleClipboardImageShortcut(
+        event,
+        api?.readClipboardImage,
+        appendAttachment,
+        setComposerError,
+      );
 
       if (mentionMenu.handleMentionKeyDown(event)) {
         return;

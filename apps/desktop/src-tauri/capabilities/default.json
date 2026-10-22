@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "The app windows: Tauri's events (for file drops) and window dragging. Extension view frames get nothing.",
+  "windows": ["w*"],
+  "permissions": ["core:event:default", "core:window:allow-start-dragging"]
+}

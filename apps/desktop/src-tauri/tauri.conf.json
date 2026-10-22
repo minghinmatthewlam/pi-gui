@@ -1,0 +1,19 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "pi",
+  "identifier": "dev.pi-gui.app",
+  "build": {
+    "frontendDist": "../out/renderer"
+  },
+  "app": {
+    "windows": [],
+    "withGlobalTauri": false,
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": false,
+    "icon": ["../resources/icon.png"]
+  }
+}

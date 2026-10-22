@@ -4,7 +4,8 @@ import { once } from "node:events";
 import assert from "node:assert/strict";
 import { mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
 import { hostname, tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { createInterface } from "node:readline";
 import {
   acquireLeaseFile,
   buildOwnLease,
@@ -251,15 +252,23 @@ await test("releaseLeaseFile removes only the caller's own lease", async () => {
   });
 });
 
+/**
+ * Spawn `processes` children that each try to acquire `leasePath` at the same
+ * moment. Node startup and module loading take unbounded time on a loaded
+ * machine, so the start is a barrier, not a wall-clock deadline: each child
+ * loads the lease module, prints "ready", and spins until the parent creates
+ * the go file, which it does only once every child is ready.
+ */
 async function raceForLease(leasePath: string, processes: number): Promise<string[]> {
-  const startAt = Date.now() + 1_000;
+  const goPath = join(dirname(leasePath), "race.go");
   const leaseModule = new URL("../dist/session-lease.js", import.meta.url).href;
-  // Each child waits for a shared start time, races, prints its result, then
-  // stays alive (so its lease is live) until the parent closes stdin.
+  // After racing, each child prints its result and stays alive (so its lease
+  // is live) until the parent closes stdin.
   const script = `
+    const { existsSync } = await import("node:fs");
     const { acquireLeaseFile, currentLeaseIdentity, defaultIsPidAlive } = await import(${JSON.stringify(leaseModule)});
-    if (Date.now() > ${startAt}) { process.stdout.write("late\\n"); }
-    while (Date.now() < ${startAt}) {}
+    process.stdout.write("ready\\n");
+    while (!existsSync(${JSON.stringify(goPath)})) {}
     const result = await acquireLeaseFile(${JSON.stringify(leasePath)}, {
       now: Date.now(), ttlMs: 60000, self: currentLeaseIdentity(), isPidAlive: defaultIsPidAlive,
     });
@@ -272,22 +281,21 @@ async function raceForLease(leasePath: string, processes: number): Promise<strin
       stdio: ["pipe", "pipe", "inherit"],
     }),
   );
-  try {
-    return await Promise.all(
-      children.map(
-        (child) =>
-          new Promise<string>((resolve, reject) => {
-            let out = "";
-            child.stdout.on("data", (chunk: Buffer) => {
-              out += chunk.toString();
-              const lines = out.split("\n").filter(Boolean);
-              if (lines.includes("late")) reject(new Error("child started after the race"));
-              if (lines.length > 0) resolve(lines[0]!);
-            });
-            child.on("exit", (code) => reject(new Error(`child exited early (${code})`)));
-          }),
-      ),
+  const outputs = children.map((child) =>
+    createInterface({ input: child.stdout })[Symbol.asyncIterator](),
+  );
+  const nextLines = () =>
+    Promise.all(
+      outputs.map(async (lines) => {
+        const line = await lines.next();
+        if (line.done) throw new Error("child exited early");
+        return line.value;
+      }),
     );
+  try {
+    assert.deepEqual(await nextLines(), Array(processes).fill("ready"));
+    await writeFile(goPath, "", "utf8");
+    return await nextLines();
   } finally {
     const running = children.filter((child) => child.exitCode === null);
     for (const child of running) {

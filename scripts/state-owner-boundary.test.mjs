@@ -14,26 +14,21 @@ const ownerFiles = [
 ];
 
 const reviewedStore = "apps/desktop/electron/workbench/reviewed-store.ts";
-const checkpointStore = "apps/desktop/electron/workbench/checkpoint-store.ts";
+const checkpointClient = "apps/desktop/electron/workbench/checkpoint-client.ts";
 // Durable files and the atomic writer may appear only in the modules that own them.
 const durableStateOwners = [
   { token: /reviewed-files\.json/, name: "reviewed-files.json", owners: [reviewedStore] },
   {
     token: /\bturn-checkpoints\b|\bcheckpoints\.json|\bobjects\.git\b/,
     name: "the checkpoint store paths",
-    owners: [checkpointStore],
+    // The Rust core (crates/pi-gui-core/src/checkpoints) owns them; no TypeScript module does.
+    owners: [],
   },
   {
     token: /\bwriteFileAtomicQueued\b/,
     name: "writeFileAtomicQueued",
-    owners: [
-      "apps/desktop/electron/persistence/atomic-file-write.ts",
-      "apps/desktop/electron/persistence/app-store-persistence.ts",
-      "apps/desktop/electron/persistence/attachment-store.ts",
-      "apps/desktop/electron/scheduled-tasks/scheduled-task-store.ts",
-      reviewedStore,
-      checkpointStore,
-    ],
+    // The Rust core (crates/pi-gui-core/src/persistence/backup_json.rs) writes these files.
+    owners: [],
   },
 ];
 const productSourceRoots = [
@@ -133,8 +128,8 @@ test("the state-owner guard rejects durable review and checkpoint state outside 
     ],
   );
   assert.deepEqual(
-    durableStateViolations(checkpointStore, 'join(directory, "checkpoints.json")'),
-    [],
+    durableStateViolations(checkpointClient, 'join(directory, "checkpoints.json")'),
+    [`${checkpointClient}: uses the checkpoint store paths outside its owner module`],
   );
 });
 

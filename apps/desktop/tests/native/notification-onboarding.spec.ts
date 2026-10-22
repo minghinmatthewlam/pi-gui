@@ -31,10 +31,7 @@ test("requests notification permission when the user minimizes a running session
 
     await expect.poll(() => readOptionalLog(requestLogPath), { timeout: 5_000 }).toBe("");
     await setSessionVisibilityOverride(harness, null);
-    await harness.electronApp.evaluate(({ BrowserWindow }) => {
-      const appWindow = BrowserWindow.getAllWindows()[0];
-      appWindow?.minimize();
-    });
+    await harness.windows.minimize();
     await expect.poll(() => readOptionalLog(requestLogPath), { timeout: 5_000 }).not.toBe("");
   } finally {
     await harness.close();

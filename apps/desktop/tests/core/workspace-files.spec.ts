@@ -4,6 +4,7 @@ import { expect, test, type Page } from "@playwright/test";
 import {
   createNamedThread,
   launchDesktop,
+  selectSession,
   selectSidePanel,
   makeUserDataDir,
   makeWorkspace,
@@ -118,7 +119,8 @@ test("Files explorer drops the previous workspace tree after a folder switch", a
       tree.locator('.file-workbench__tree-row--file[data-file-path="bravo-only.md"]'),
     ).toHaveCount(0);
 
-    await window.locator(".session-row__select", { hasText: "Bravo files" }).click();
+    // Wait for the switch to land: until then the previous task's Files panel is still shown.
+    await selectSession(window, "Bravo files");
     const workbench = window.getByTestId("file-workbench");
     if ((await workbench.count()) === 0) {
       await selectSidePanel(window, "Files");

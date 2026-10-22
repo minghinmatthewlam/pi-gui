@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sessionKey } from "@pi-gui/session-driver";
 import type { SessionConfig, SessionQueuedMessage, SessionRef } from "@pi-gui/session-driver";
-import type { PiSdkDriver } from "@pi-gui/pi-sdk-driver";
+import type { PiDriverPort } from "../../pi-host/protocol";
 import type { RuntimeCommandRecord, RuntimeSnapshot } from "@pi-gui/session-driver/runtime-types";
 import type {
   ComposerAttachment,
@@ -50,7 +50,7 @@ type ConversationMutableState = Pick<
 >;
 
 type ConversationDriver = Pick<
-  PiSdkDriver,
+  PiDriverPort,
   | "cancelCurrentRun"
   | "compactSession"
   | "reloadSession"

@@ -30,19 +30,13 @@ test("ignores persisted multiple app instance opt-in and hides the setting", asy
     const window = await harness.firstWindow();
     await waitForWorkspaceByPath(window, workspacePath);
 
-    await expect
-      .poll(async () => harness.electronApp.evaluate(({ app }) => app.hasSingleInstanceLock()))
-      .toBe(true);
+    await expect.poll(async () => harness.app.hasSingleInstanceLock()).toBe(true);
     secondProcess = await spawnDesktopProcess(userDataDir, {
       initialWorkspaces: [workspacePath],
       testMode: "background",
     });
     await expect(await waitForProcessExit(secondProcess)).toEqual({ code: 0, signal: null });
-    await expect
-      .poll(async () =>
-        harness.electronApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length),
-      )
-      .toBe(1);
+    await expect.poll(async () => harness.windows.count()).toBe(1);
     await expect
       .poll(async () => {
         const persisted = JSON.parse(

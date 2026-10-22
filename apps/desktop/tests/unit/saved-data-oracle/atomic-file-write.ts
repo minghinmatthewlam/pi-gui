@@ -1,3 +1,5 @@
+// The TypeScript implementation the Rust core replaced (`persistence/backup_json.rs`), kept
+// unchanged for the oracle stores beside it and its own spec. The app no longer uses it.
 import { randomUUID } from "node:crypto";
 import { copyFile, mkdir, open, readFile, rename, unlink } from "node:fs/promises";
 import { dirname } from "node:path";

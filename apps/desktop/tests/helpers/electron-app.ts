@@ -5,7 +5,7 @@ import { delimiter, dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { promisify } from "node:util";
 import { expect, type Page } from "@playwright/test";
-import { _electron as electron, type ElectronApplication } from "playwright";
+import { _electron as electron } from "playwright";
 import type { SessionDriverEvent, SessionRef } from "@pi-gui/session-driver";
 import type { PiDesktopApi } from "../../contracts/ipc";
 import type {
@@ -17,6 +17,14 @@ import type {
 } from "../../contracts/desktop-state";
 import { resolvePackagedAppExecutable } from "./packaged-app";
 import { TINY_PNG_BASE64 } from "./native-input";
+import {
+  desktopTestTarget,
+  type DesktopHarness,
+  type RuntimeToolTestInput,
+  type RuntimeToolTestResult,
+} from "./desktop-harness";
+import { launchTestHost } from "./testhost";
+import { createElectronHarness, type ElectronDesktopHarness } from "./electron-harness";
 
 export {
   copyAppBundle,
@@ -28,15 +36,15 @@ export {
   resolvePackagedReleaseZip,
 } from "./packaged-app";
 export * from "./native-input";
+export type { DesktopHarness } from "./desktop-harness";
+export { HYDRATE_TEST_SENTINEL } from "./desktop-harness";
+export type { ElectronDesktopHarness } from "./electron-harness";
 
 const desktopDir = resolve(__dirname, "..", "..");
 const execFileAsync = promisify(execFile);
 const require = createRequire(__filename);
 const electronExecutablePath = require("electron") as string;
 const REAL_AUTH_ENV_VAR = "PI_APP_REAL_AUTH";
-// Quit is bounded at a few seconds in main; past this the app is stuck, not slow.
-const APP_EXIT_TIMEOUT_MS = 30_000;
-const APP_OUTPUT_TAIL_LINES = 40;
 const REAL_AUTH_SOURCE_DIR_ENV_VAR = "PI_APP_REAL_AUTH_SOURCE_DIR";
 const REQUIRED_REAL_AUTH_FILES = ["auth.json"] as const;
 const OPTIONAL_REAL_AUTH_FILES = ["settings.json", "models.json"] as const;
@@ -58,20 +66,13 @@ const NON_API_KEY_PROVIDER_ENV_VARS = [
 // which silently poisons "no providers connected" assertions on developer
 // machines that export keys the hardcoded list happened to miss. Scrub the full
 // class instead: every `*_API_KEY` var plus the documented non-suffixed ones.
-function isProviderAuthEnvVar(key: string): boolean {
+export function isProviderAuthEnvVar(key: string): boolean {
   return (
     key.endsWith("_API_KEY") || (NON_API_KEY_PROVIDER_ENV_VARS as readonly string[]).includes(key)
   );
 }
 export type PiAppWindow = Window & { piApp?: PiDesktopApi };
 export type DesktopTestMode = "foreground" | "background";
-
-export interface DesktopHarness {
-  electronApp: ElectronApplication;
-  firstWindow(): Promise<Page>;
-  focusWindow(): Promise<void>;
-  close(): Promise<void>;
-}
 
 export interface LaunchDesktopOptions {
   readonly initialWorkspaces?: readonly string[];
@@ -143,10 +144,22 @@ function electronCliArgs(entry?: string): string[] {
   return args;
 }
 
+/** Launches the app the specs target (`PI_APP_TEST_TARGET`, Electron by default). */
 export async function launchDesktop(
   userDataDir: string,
   options: readonly string[] | LaunchDesktopOptions = [],
 ): Promise<DesktopHarness> {
+  if (desktopTestTarget() === "testhost") {
+    return launchTestHost(userDataDir, normalizeLaunchOptions(options));
+  }
+  return launchElectronDesktop(userDataDir, options);
+}
+
+/** For suites that only make sense on Electron (perf, product media, Electron verification). */
+export async function launchElectronDesktop(
+  userDataDir: string,
+  options: readonly string[] | LaunchDesktopOptions = [],
+): Promise<ElectronDesktopHarness> {
   const normalized = normalizeLaunchOptions(options);
   const agentDir = await prepareAgentDir(userDataDir, normalized);
   const env = buildDesktopLaunchEnv(userDataDir, agentDir, normalized);
@@ -169,7 +182,7 @@ export async function launchDesktop(
     ...recordVideo,
   });
 
-  return createDesktopHarness(electronApp);
+  return createElectronHarness(electronApp);
 }
 
 export async function spawnDesktopProcess(
@@ -189,7 +202,7 @@ export async function spawnDesktopProcess(
 export async function launchPackagedDesktop(
   userDataDir: string,
   options: readonly string[] | LaunchDesktopOptions = [],
-): Promise<DesktopHarness> {
+): Promise<ElectronDesktopHarness> {
   const normalized = normalizeLaunchOptions(options);
   const agentDir = await prepareAgentDir(userDataDir, normalized);
   const env = buildDesktopLaunchEnv(userDataDir, agentDir, normalized);
@@ -202,7 +215,7 @@ export async function launchDesktopByExecutable(
   executablePath: string,
   userDataDir: string,
   options: readonly string[] | LaunchDesktopOptions = [],
-): Promise<DesktopHarness> {
+): Promise<ElectronDesktopHarness> {
   const normalized = normalizeLaunchOptions(options);
   const agentDir = await prepareAgentDir(userDataDir, normalized);
   const env = buildDesktopLaunchEnv(userDataDir, agentDir, normalized);
@@ -212,7 +225,7 @@ export async function launchDesktopByExecutable(
 async function launchDesktopExecutable(
   executablePath: string,
   env: NodeJS.ProcessEnv,
-): Promise<DesktopHarness> {
+): Promise<ElectronDesktopHarness> {
   const electronApp = await electron.launch({
     executablePath,
     args: electronCliArgs(),
@@ -220,196 +233,7 @@ async function launchDesktopExecutable(
     env,
   });
 
-  return createDesktopHarness(electronApp);
-}
-
-function isPlaceholderElectronPage(page: Page): boolean {
-  const url = page.url();
-  return url === "" || url === "about:blank";
-}
-
-async function waitForDesktopRendererPage(
-  electronApp: ElectronApplication,
-  timeoutMs = 30_000,
-): Promise<Page> {
-  const deadline = Date.now() + timeoutMs;
-  const pick = () =>
-    electronApp.windows().find((candidate) => !isPlaceholderElectronPage(candidate));
-  const existing = pick();
-  if (existing) {
-    return existing;
-  }
-
-  while (Date.now() < deadline) {
-    const found = pick();
-    if (found) {
-      return found;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 50));
-  }
-
-  const urls = electronApp.windows().map((candidate) => candidate.url() || "<empty>");
-  throw new Error(
-    `Timed out waiting for desktop renderer window (urls: ${urls.join(", ") || "<none>"})`,
-  );
-}
-
-function createDesktopHarness(electronApp: ElectronApplication): DesktopHarness {
-  let page: Page | undefined;
-  const outputTail: string[] = [];
-  electronApp.process().stderr?.on("data", (chunk: Buffer) => {
-    outputTail.push(...chunk.toString("utf8").split("\n").filter(Boolean));
-    outputTail.splice(0, Math.max(0, outputTail.length - APP_OUTPUT_TAIL_LINES));
-  });
-
-  async function getWindow(): Promise<Page> {
-    if (!page) {
-      // Playwright's Electron video recorder can expose an empty page before the
-      // real BrowserWindow finishes loadURL. firstWindow() would attach to that
-      // placeholder and hang on domcontentloaded.
-      page = await waitForDesktopRendererPage(electronApp);
-      await page.waitForLoadState("domcontentloaded");
-      await page.waitForFunction(() => Boolean(globalThis.window.piApp), undefined, {
-        timeout: 15_000,
-      });
-    }
-    return page;
-  }
-
-  return {
-    electronApp,
-    firstWindow: () => getWindow(),
-    focusWindow: async () => {
-      const appPage = await getWindow();
-      await electronApp.evaluate(({ BrowserWindow, app }) => {
-        const window = BrowserWindow.getAllWindows()[0];
-        window?.restore();
-        window?.show();
-        app.focus({ steal: true });
-        window?.focus();
-      });
-      if (process.platform === "darwin") {
-        await focusElectronAppProcess(electronApp);
-      }
-      await electronApp.evaluate(({ BrowserWindow, app }) => {
-        const window = BrowserWindow.getAllWindows()[0];
-        app.focus({ steal: true });
-        window?.focus();
-      });
-      await appPage.bringToFront();
-      await expect
-        .poll(
-          async () => {
-            const nativeFocused = await electronApp.evaluate(({ BrowserWindow }) => {
-              const window = BrowserWindow.getAllWindows()[0];
-              return window?.isFocused() ?? false;
-            });
-            if (nativeFocused) {
-              return true;
-            }
-            return appPage.evaluate(() => document.hasFocus());
-          },
-          { timeout: 5_000 },
-        )
-        .toBe(true);
-    },
-    close: async () => {
-      // Playwright waits with no bound until the app and every process holding its output
-      // pipes are gone, and the worker's teardown then hangs on the same wait. Log quit's
-      // progress to the output and fail fast instead.
-      let timer: NodeJS.Timeout | undefined;
-      const timedOut = new Promise<false>((resolveTimeout) => {
-        timer = setTimeout(() => resolveTimeout(false), APP_EXIT_TIMEOUT_MS);
-      });
-      const closed = electronApp
-        .evaluate(({ app, BrowserWindow }) => {
-          const log = (stage: string) => process.stderr.write(`[test quit] ${stage}\n`);
-          app.prependListener("before-quit", () => log("before-quit"));
-          app.once("will-quit", () => log("will-quit"));
-          for (const window of BrowserWindow.getAllWindows()) {
-            window.on("close", (event) =>
-              log(`window ${window.id} close${event.defaultPrevented ? " held" : ""}`),
-            );
-          }
-        })
-        .catch(() => undefined)
-        .then(() => electronApp.close())
-        .then(() => true);
-      const exited = await Promise.race([closed, timedOut]).finally(() => clearTimeout(timer));
-      if (exited) return;
-      closed.catch(() => undefined);
-      const appProcess = electronApp.process();
-      const exitState =
-        appProcess.exitCode === null && appProcess.signalCode === null
-          ? "is still running"
-          : `exited (${appProcess.exitCode ?? appProcess.signalCode})`;
-      const leftovers = await processGroupListing(appProcess.pid);
-      // Playwright launches the app as a process group leader, so this also ends the
-      // processes it started that still hold its output pipes.
-      if (appProcess.pid && process.platform !== "win32") {
-        try {
-          process.kill(-appProcess.pid, "SIGKILL");
-        } catch {
-          // The group is already gone.
-        }
-      } else {
-        appProcess.kill("SIGKILL");
-      }
-      throw new Error(
-        [
-          `The app did not finish closing within ${APP_EXIT_TIMEOUT_MS / 1000} s of quitting, so it was killed. The app ${exitState}.`,
-          `Processes left in its group:\n${leftovers}`,
-          `Last app output:\n${outputTail.join("\n")}`,
-        ].join("\n"),
-      );
-    },
-  };
-}
-
-async function processGroupListing(groupId: number | undefined): Promise<string> {
-  if (!groupId || process.platform === "win32") return "(not listed on this platform)";
-  try {
-    const { stdout } = await execFileAsync("ps", ["-A", "-o", "pid=,pgid=,command="], {
-      timeout: 5_000,
-    });
-    const rows = stdout.split("\n").filter((row) => row.trim().split(/\s+/)[1] === String(groupId));
-    return rows.join("\n") || "(none)";
-  } catch (error) {
-    return `(ps failed: ${String(error)})`;
-  }
-}
-
-async function focusElectronAppProcess(electronApp: ElectronApplication): Promise<void> {
-  const pid = await electronApp.evaluate(() => process.pid);
-  const electronAppBundle = resolve(electronExecutablePath, "..", "..");
-  try {
-    await execFileAsync("open", ["-a", electronAppBundle], { timeout: 5_000 });
-  } catch {
-    // The bundle activate path is best-effort; continue with AppleScript/Electron focus.
-  }
-  try {
-    await execFileAsync("osascript", ["-e", 'tell application "Electron" to activate'], {
-      timeout: 5_000,
-    });
-  } catch {
-    // Fall through to System Events when the Electron app name is unavailable.
-  }
-  try {
-    await execFileAsync(
-      "osascript",
-      [
-        "-e",
-        `tell application "System Events"
-          set targetProcess to first application process whose unix id is ${pid}
-          set frontmost of targetProcess to true
-          return name of targetProcess
-        end tell`,
-      ],
-      { timeout: 2_000 },
-    );
-  } catch {
-    // Fall back to Electron/Playwright focus APIs when System Events access is unavailable.
-  }
+  return createElectronHarness(electronApp);
 }
 
 function buildDesktopLaunchEnv(
@@ -1281,106 +1105,39 @@ export async function scrollTimelineAwayFromBottom(window: Page, pixels = 160): 
     .toBeGreaterThan(minimumRemainingFromBottom);
 }
 
-export interface OrchestrationRuntimeToolTestInput {
-  readonly toolName: string;
-  readonly toolCallId?: string;
-  readonly sessionRef: SessionRef;
-  readonly params: unknown;
-}
-
-export interface OrchestrationRuntimeToolTestResult {
-  readonly content: readonly { readonly type: string; readonly text?: string }[];
-  readonly details?: Readonly<Record<string, unknown>>;
-}
-
 export async function runOrchestrationRuntimeTool(
   harness: DesktopHarness,
-  input: OrchestrationRuntimeToolTestInput,
-): Promise<OrchestrationRuntimeToolTestResult> {
-  await harness.firstWindow();
-  return harness.electronApp.evaluate(async (_, payload) => {
-    const hooks = (
-      globalThis as {
-        __PI_APP_TEST_HOOKS?: {
-          runOrchestrationRuntimeTool?: (
-            input: OrchestrationRuntimeToolTestInput,
-          ) => Promise<OrchestrationRuntimeToolTestResult>;
-        };
-      }
-    ).__PI_APP_TEST_HOOKS;
-    if (!hooks?.runOrchestrationRuntimeTool) {
-      throw new Error("Orchestration runtime-tool hook is unavailable");
-    }
-    return hooks.runOrchestrationRuntimeTool(payload);
-  }, input);
+  input: RuntimeToolTestInput,
+): Promise<RuntimeToolTestResult> {
+  return harness.hooks.runOrchestrationRuntimeTool(input);
 }
 
 export async function runScheduledTaskRuntimeTool(
   harness: DesktopHarness,
-  input: OrchestrationRuntimeToolTestInput,
-): Promise<OrchestrationRuntimeToolTestResult> {
-  await harness.firstWindow();
-  return harness.electronApp.evaluate(async (_, payload) => {
-    const hooks = (
-      globalThis as {
-        __PI_APP_TEST_HOOKS?: {
-          runScheduledTaskRuntimeTool?: (
-            input: OrchestrationRuntimeToolTestInput,
-          ) => Promise<OrchestrationRuntimeToolTestResult>;
-        };
-      }
-    ).__PI_APP_TEST_HOOKS;
-    if (!hooks?.runScheduledTaskRuntimeTool) {
-      throw new Error("Scheduled-task runtime-tool hook is unavailable");
-    }
-    return hooks.runScheduledTaskRuntimeTool(payload);
-  }, input);
+  input: RuntimeToolTestInput,
+): Promise<RuntimeToolTestResult> {
+  return harness.hooks.runScheduledTaskRuntimeTool(input);
 }
 
 export async function fireDueScheduledTasks(
   harness: DesktopHarness,
   nowIso?: string,
 ): Promise<DesktopAppState> {
-  await harness.firstWindow();
-  return harness.electronApp.evaluate(async (_, payload) => {
-    const hooks = (
-      globalThis as {
-        __PI_APP_TEST_HOOKS?: {
-          fireDueScheduledTasks?: (nowIso?: string) => Promise<DesktopAppState>;
-        };
-      }
-    ).__PI_APP_TEST_HOOKS;
-    if (!hooks?.fireDueScheduledTasks) {
-      throw new Error("Scheduled-task fire hook is unavailable");
-    }
-    return hooks.fireDueScheduledTasks(payload);
-  }, nowIso);
+  return harness.hooks.fireDueScheduledTasks(nowIso);
 }
 
 export async function emitTestSessionEvent(
   harness: DesktopHarness,
   event: SessionDriverEvent,
 ): Promise<void> {
-  await emitTestSessionEvents(harness, [event]);
+  await harness.hooks.emitSessionEvents([event]);
 }
 
 export async function emitTestSessionEvents(
   harness: DesktopHarness,
   events: readonly SessionDriverEvent[],
 ): Promise<void> {
-  await harness.electronApp.evaluate(async (_, payloads) => {
-    const hooks = (
-      globalThis as {
-        __PI_APP_TEST_HOOKS?: { emitSessionEvent?: (event: SessionDriverEvent) => Promise<void> };
-      }
-    ).__PI_APP_TEST_HOOKS;
-    if (!hooks?.emitSessionEvent) {
-      throw new Error("Test session-event hook is unavailable");
-    }
-    for (const payload of payloads) {
-      await hooks.emitSessionEvent(payload);
-    }
-  }, events);
+  await harness.hooks.emitSessionEvents(events);
 }
 
 /**
@@ -1389,54 +1146,25 @@ export async function emitTestSessionEvents(
  * depending on flaky native focus stealing.
  */
 export async function triggerWindowActivation(harness: DesktopHarness): Promise<void> {
-  await harness.electronApp.evaluate(async () => {
-    const hooks = (
-      globalThis as {
-        __PI_APP_TEST_HOOKS?: { handleWindowActivation?: () => void };
-      }
-    ).__PI_APP_TEST_HOOKS;
-    if (!hooks?.handleWindowActivation) {
-      throw new Error("Window-activation hook is unavailable");
-    }
-    hooks.handleWindowActivation();
-  });
+  await harness.hooks.handleWindowActivation();
 }
 
 export async function setDeferredThreadTitleMode(harness: DesktopHarness): Promise<void> {
-  await harness.electronApp.evaluate(async () => {
-    const hooks = (
-      globalThis as {
-        __PI_APP_TEST_HOOKS?: { setDeferredThreadTitleMode?: () => void };
-      }
-    ).__PI_APP_TEST_HOOKS;
-    if (!hooks?.setDeferredThreadTitleMode) {
-      throw new Error("Deferred thread-title hook is unavailable");
-    }
-    hooks.setDeferredThreadTitleMode();
-  });
+  await harness.hooks.deferThreadTitles();
+}
+
+export async function resolveDeferredThreadTitle(
+  harness: DesktopHarness,
+  title: string,
+): Promise<void> {
+  await harness.hooks.resolveDeferredThreadTitle(title);
 }
 
 export async function waitForDeferredThreadTitleRequest(
   harness: DesktopHarness,
   timeout = 15_000,
 ): Promise<void> {
-  await expect
-    .poll(
-      async () =>
-        harness.electronApp.evaluate(async () => {
-          const hooks = (
-            globalThis as {
-              __PI_APP_TEST_HOOKS?: { hasDeferredThreadTitle?: () => boolean };
-            }
-          ).__PI_APP_TEST_HOOKS;
-          if (!hooks?.hasDeferredThreadTitle) {
-            throw new Error("Deferred thread-title hook is unavailable");
-          }
-          return hooks.hasDeferredThreadTitle();
-        }),
-      { timeout },
-    )
-    .toBe(true);
+  await expect.poll(() => harness.hooks.hasDeferredThreadTitle(), { timeout }).toBe(true);
 }
 
 export async function resolveDeferredThreadTitleEventually(
@@ -1452,7 +1180,7 @@ export async function resolveDeferredThreadTitleEventually(
           return "resolved";
         }
         try {
-          await resolveDeferredThreadTitle(harness, title);
+          await harness.hooks.resolveDeferredThreadTitle(title);
           resolved = true;
           return "resolved";
         } catch (error) {
@@ -1465,37 +1193,6 @@ export async function resolveDeferredThreadTitleEventually(
       { timeout },
     )
     .toBe("resolved");
-}
-
-export async function resolveDeferredThreadTitle(
-  harness: DesktopHarness,
-  title: string,
-): Promise<void> {
-  await harness.electronApp.evaluate(async (_, nextTitle) => {
-    const hooks = (
-      globalThis as {
-        __PI_APP_TEST_HOOKS?: { resolveDeferredThreadTitle?: (title: string) => void };
-      }
-    ).__PI_APP_TEST_HOOKS;
-    if (!hooks?.resolveDeferredThreadTitle) {
-      throw new Error("Deferred thread-title resolve hook is unavailable");
-    }
-    hooks.resolveDeferredThreadTitle(nextTitle);
-  }, title);
-}
-
-export async function rejectDeferredThreadTitle(harness: DesktopHarness): Promise<void> {
-  await harness.electronApp.evaluate(async () => {
-    const hooks = (
-      globalThis as {
-        __PI_APP_TEST_HOOKS?: { rejectDeferredThreadTitle?: () => void };
-      }
-    ).__PI_APP_TEST_HOOKS;
-    if (!hooks?.rejectDeferredThreadTitle) {
-      throw new Error("Deferred thread-title reject hook is unavailable");
-    }
-    hooks.rejectDeferredThreadTitle();
-  });
 }
 
 export async function seedTranscriptMessages(
@@ -2086,166 +1783,10 @@ export async function createSessionViaIpc(
   });
 }
 
-export const HYDRATE_TEST_SENTINEL = "hydrate-test-sentinel-token=/private/secret-path";
-
-export type IpcInvokeControlMode = "passthrough" | "reject" | "replace" | "record";
-
-export interface IpcInvokeControlSnapshot {
-  readonly mode: IpcInvokeControlMode;
-  readonly invokeCount: number;
-  readonly rejectCount: number;
-  readonly sentinel: string;
-}
-
-export async function installIpcInvokeControl(
-  harness: DesktopHarness,
-  channel: string,
-  options: {
-    readonly mode: IpcInvokeControlMode;
-    readonly sentinel?: string;
-    readonly replacement?: unknown;
-  },
-): Promise<void> {
-  await harness.electronApp.evaluate(
-    ({ ipcMain }, payload) => {
-      type InvokeHandler = (...args: unknown[]) => unknown;
-      type Control = {
-        mode: "passthrough" | "reject" | "replace" | "record";
-        invokeCount: number;
-        rejectCount: number;
-        sentinel: string;
-        replacement?: unknown;
-        original: InvokeHandler;
-      };
-      const invokeHandlers = (
-        ipcMain as typeof ipcMain & { readonly _invokeHandlers?: Map<string, InvokeHandler> }
-      )._invokeHandlers;
-      const originalHandler = invokeHandlers?.get(payload.channel);
-      if (!originalHandler) {
-        throw new Error(`No IPC handler registered for ${payload.channel}`);
-      }
-
-      const store = globalThis as typeof globalThis & {
-        __PI_TEST_IPC_INVOKE_CONTROL__?: Record<string, Control>;
-      };
-      store.__PI_TEST_IPC_INVOKE_CONTROL__ ??= {};
-      const existing = store.__PI_TEST_IPC_INVOKE_CONTROL__[payload.channel];
-      if (existing) {
-        existing.mode = payload.mode;
-        existing.sentinel = payload.sentinel;
-        existing.replacement = payload.replacement;
-        return;
-      }
-
-      const control: Control = {
-        mode: payload.mode,
-        invokeCount: 0,
-        rejectCount: 0,
-        sentinel: payload.sentinel,
-        replacement: payload.replacement,
-        original: originalHandler,
-      };
-      store.__PI_TEST_IPC_INVOKE_CONTROL__[payload.channel] = control;
-
-      ipcMain.removeHandler(payload.channel);
-      ipcMain.handle(payload.channel, async (...args) => {
-        control.invokeCount += 1;
-        if (control.mode === "reject") {
-          control.rejectCount += 1;
-          throw new Error(control.sentinel);
-        }
-        if (control.mode === "replace") {
-          return control.replacement;
-        }
-        if (control.mode === "record") {
-          return undefined;
-        }
-        return control.original(...args);
-      });
-    },
-    {
-      channel,
-      mode: options.mode,
-      sentinel: options.sentinel ?? HYDRATE_TEST_SENTINEL,
-      replacement: options.replacement,
-    },
-  );
-}
-
-export async function setIpcInvokeControl(
-  harness: DesktopHarness,
-  channel: string,
-  patch: {
-    readonly mode?: IpcInvokeControlMode;
-    readonly replacement?: unknown;
-  },
-): Promise<void> {
-  await harness.electronApp.evaluate(
-    (_electron, payload) => {
-      type Control = {
-        mode: "passthrough" | "reject" | "replace" | "record";
-        invokeCount: number;
-        rejectCount: number;
-        sentinel: string;
-        replacement?: unknown;
-      };
-      const store = globalThis as typeof globalThis & {
-        __PI_TEST_IPC_INVOKE_CONTROL__?: Record<string, Control>;
-      };
-      const control = store.__PI_TEST_IPC_INVOKE_CONTROL__?.[payload.channel];
-      if (!control) {
-        throw new Error(`No IPC invoke control installed for ${payload.channel}`);
-      }
-      if (payload.mode !== undefined) {
-        control.mode = payload.mode;
-      }
-      if (payload.replacement !== undefined) {
-        control.replacement = payload.replacement;
-      }
-    },
-    { channel, mode: patch.mode, replacement: patch.replacement },
-  );
-}
-
-export async function readIpcInvokeControl(
-  harness: DesktopHarness,
-  channel: string,
-): Promise<IpcInvokeControlSnapshot> {
-  return harness.electronApp.evaluate((_electron, targetChannel) => {
-    type Control = {
-      mode: "passthrough" | "reject" | "replace" | "record";
-      invokeCount: number;
-      rejectCount: number;
-      sentinel: string;
-    };
-    const store = globalThis as typeof globalThis & {
-      __PI_TEST_IPC_INVOKE_CONTROL__?: Record<string, Control>;
-    };
-    const control = store.__PI_TEST_IPC_INVOKE_CONTROL__?.[targetChannel];
-    if (!control) {
-      throw new Error(`No IPC invoke control installed for ${targetChannel}`);
-    }
-    return {
-      mode: control.mode,
-      invokeCount: control.invokeCount,
-      rejectCount: control.rejectCount,
-      sentinel: control.sentinel,
-    };
-  }, channel);
-}
-
 export async function reloadDesktopRenderer(window: Page): Promise<void> {
   await window.reload();
   await window.waitForLoadState("domcontentloaded");
   await window.waitForFunction(() => Boolean(globalThis.window.piApp), undefined, {
     timeout: 15_000,
   });
-}
-
-export async function rejectIpcInvokes(
-  harness: DesktopHarness,
-  channel: string,
-  sentinel = HYDRATE_TEST_SENTINEL,
-): Promise<void> {
-  await installIpcInvokeControl(harness, channel, { mode: "reject", sentinel });
 }

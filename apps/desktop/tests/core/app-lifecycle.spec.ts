@@ -19,18 +19,16 @@ async function launchLifecycleApp(testMode: string | undefined): Promise<Desktop
 }
 
 async function closeLastWindow(harness: DesktopHarness): Promise<void> {
-  await harness.electronApp.evaluate(({ BrowserWindow }) => {
-    const windows = BrowserWindow.getAllWindows();
-    if (windows.length !== 1) {
-      throw new Error(`Expected one app window before close, received ${windows.length}.`);
-    }
-    windows[0]?.close();
-  });
+  const windowCount = await harness.windows.count();
+  if (windowCount !== 1) {
+    throw new Error(`Expected one app window before close, received ${windowCount}.`);
+  }
+  await harness.windows.close();
 }
 
 async function appClosesWithin(harness: DesktopHarness, timeoutMs: number): Promise<boolean> {
   return Promise.race([
-    harness.electronApp.waitForEvent("close").then(() => true),
+    harness.app.waitForExit().then(() => true),
     new Promise<false>((resolve) => {
       setTimeout(() => resolve(false), timeoutMs);
     }),
@@ -38,8 +36,8 @@ async function appClosesWithin(harness: DesktopHarness, timeoutMs: number): Prom
 }
 
 async function quitDesktop(harness: DesktopHarness): Promise<void> {
-  const closed = harness.electronApp.waitForEvent("close");
-  await harness.electronApp.evaluate(({ app }) => app.quit());
+  const closed = harness.app.waitForExit();
+  await harness.app.quit();
   await closed;
 }
 
@@ -53,17 +51,13 @@ test.describe("macOS last-window lifecycle", () => {
     test(`quits after the last window closes in ${mode} test mode`, async () => {
       test.setTimeout(30_000);
       const harness = await launchLifecycleApp(mode);
-      let appClosed = false;
-      harness.electronApp.on("close", () => {
-        appClosed = true;
-      });
 
       try {
-        const closed = harness.electronApp.waitForEvent("close");
+        const closed = harness.app.waitForExit();
         await closeLastWindow(harness);
         await closed;
       } finally {
-        if (!appClosed) {
+        if (!harness.app.hasExited()) {
           await quitDesktop(harness);
         }
       }
@@ -74,31 +68,23 @@ test.describe("macOS last-window lifecycle", () => {
     test(`retains normal behavior when PI_APP_TEST_MODE is ${label}`, async () => {
       test.setTimeout(30_000);
       const harness = await launchLifecycleApp(value);
-      let appClosed = false;
-      harness.electronApp.on("close", () => {
-        appClosed = true;
-      });
 
       try {
         await closeLastWindow(harness);
         expect(await appClosesWithin(harness, STAYS_OPEN_ASSERTION_MS)).toBe(false);
-        expect(
-          await harness.electronApp.evaluate(({ app, BrowserWindow }) => ({
-            appReady: app.isReady(),
-            windowCount: BrowserWindow.getAllWindows().length,
-          })),
-        ).toEqual({
+        expect({
+          appReady: await harness.app.isReady(),
+          windowCount: await harness.windows.count(),
+        }).toEqual({
           appReady: true,
           windowCount: 0,
         });
 
-        const reopenedWindow = harness.electronApp.waitForEvent("window");
-        await harness.electronApp.evaluate(({ app }) => {
-          app.emit("activate");
-        });
+        const reopenedWindow = harness.windows.waitForNew();
+        await harness.app.activate();
         await expect(await reopenedWindow).toHaveURL(/index\.html/);
       } finally {
-        if (!appClosed) {
+        if (!harness.app.hasExited()) {
           await quitDesktop(harness);
         }
       }

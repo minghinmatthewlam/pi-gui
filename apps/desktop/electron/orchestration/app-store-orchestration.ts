@@ -11,7 +11,7 @@ import type {
   SessionSnapshot,
   WorkspaceRef,
 } from "@pi-gui/session-driver";
-import type { PiSdkDriver } from "@pi-gui/pi-sdk-driver";
+import type { PiDriverPort } from "../../pi-host/protocol";
 import type {
   DesktopAppState,
   OrchestrationEvidenceRecord,
@@ -67,7 +67,7 @@ interface OrchestrationStateView {
   readonly orchestrationChildren: readonly OrchestrationChildThread[];
 }
 
-type OrchestrationDriver = Pick<PiSdkDriver, "cancelCurrentRun" | "createSession">;
+type OrchestrationDriver = Pick<PiDriverPort, "cancelCurrentRun" | "createSession">;
 
 interface OrchestrationOwnerHost {
   readonly driver: OrchestrationDriver;

@@ -12,41 +12,6 @@ import {
  * These drive that modal on the real Electron surface via the test hook.
  */
 
-type PromptOutcome = { ok: true; value: string } | { ok: false; error: string };
-
-async function beginPrompt(
-  electronApp: Awaited<ReturnType<typeof launchDesktop>>["electronApp"],
-  message: string,
-  placeholder: string,
-): Promise<void> {
-  await electronApp.evaluate(
-    (_electron, payload) => {
-      const hooks = (
-        globalThis as {
-          __PI_APP_TEST_HOOKS?: {
-            promptForText?: (
-              message: string,
-              placeholder?: string,
-              allowEmpty?: boolean,
-            ) => Promise<string>;
-          };
-        }
-      ).__PI_APP_TEST_HOOKS;
-      if (!hooks?.promptForText) {
-        throw new Error("promptForText test hook is unavailable");
-      }
-      (globalThis as { __promptOutcome?: Promise<PromptOutcome> }).__promptOutcome = hooks
-        .promptForText(payload.message, payload.placeholder, false)
-        .then((value) => ({ ok: true as const, value }))
-        .catch((error: unknown) => ({
-          ok: false as const,
-          error: error instanceof Error ? error.message : String(error),
-        }));
-    },
-    { message, placeholder },
-  );
-}
-
 // Clicking OK or Cancel resolves the prompt, and main then destroys the modal.
 // That can land while Playwright is still finishing the click (the mouse-up
 // reply or its hit-target cleanup), which rejects the click with "Target page
@@ -62,16 +27,6 @@ async function clickAndWaitForClose(modal: Page, selector: string): Promise<void
   await closed;
 }
 
-async function readPromptOutcome(
-  electronApp: Awaited<ReturnType<typeof launchDesktop>>["electronApp"],
-): Promise<PromptOutcome> {
-  return electronApp.evaluate(
-    () =>
-      (globalThis as { __promptOutcome?: Promise<PromptOutcome> })
-        .__promptOutcome as Promise<PromptOutcome>,
-  );
-}
-
 test("resolves the login prompt from the modal input", async () => {
   const userDataDir = await makeUserDataDir();
   const workspacePath = await makeWorkspace("login-prompt-submit");
@@ -84,15 +39,16 @@ test("resolves the login prompt from the modal input", async () => {
     const window = await harness.firstWindow();
     await waitForWorkspaceByPath(window, workspacePath);
 
-    const modalPromise = harness.electronApp.waitForEvent("window");
-    await beginPrompt(harness.electronApp, "Enter your API key", "sk-...");
-    const modal = await modalPromise;
+    const { window: modal, outcome: readPromptOutcome } = await harness.dialogs.beginTextPrompt(
+      "Enter your API key",
+      "sk-...",
+    );
 
     await modal.waitForSelector("body[data-pi-ready='1']");
     await modal.fill("#pi-prompt-input", "  secret-token  ");
     await clickAndWaitForClose(modal, "#pi-prompt-ok");
 
-    const outcome = await readPromptOutcome(harness.electronApp);
+    const outcome = await readPromptOutcome();
     expect(outcome).toEqual({ ok: true, value: "secret-token" });
   } finally {
     await harness.close();
@@ -111,14 +67,15 @@ test("rejects the login prompt when cancelled", async () => {
     const window = await harness.firstWindow();
     await waitForWorkspaceByPath(window, workspacePath);
 
-    const modalPromise = harness.electronApp.waitForEvent("window");
-    await beginPrompt(harness.electronApp, "Enter your API key", "sk-...");
-    const modal = await modalPromise;
+    const { window: modal, outcome: readPromptOutcome } = await harness.dialogs.beginTextPrompt(
+      "Enter your API key",
+      "sk-...",
+    );
 
     await modal.waitForSelector("body[data-pi-ready='1']");
     await clickAndWaitForClose(modal, "#pi-prompt-cancel");
 
-    const outcome = await readPromptOutcome(harness.electronApp);
+    const outcome = await readPromptOutcome();
     expect(outcome.ok).toBe(false);
     if (!outcome.ok) {
       expect(outcome.error).toContain("cancelled");

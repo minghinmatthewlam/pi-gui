@@ -58,16 +58,16 @@ export function mount(root: HTMLElement, host: DesktopViewContext): () => void {
 
 ## Owners and flow
 
-| Owner                  | Responsibility and interface                                                                             | Implemented location                                                                        |
-| ---------------------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| Author helper          | Register/replay desktop declarations through the Pi extension API; no package scanning                   | `packages/extension-ui/src/index.ts`, `browser.ts`                                          |
-| Pi adapter             | Inject the per-session discovery bus before Pi loads extensions; forward registrations/lifecycle changes | `packages/pi-sdk-driver/src/desktop-extension-bridge.ts`                                    |
-| Desktop extension host | Own per-session Chord backend host, registration catalog, frontend capabilities and cleanup              | `apps/desktop/electron/extensions/extension-view-owner.ts`                                  |
-| Asset handler          | Validate loaded extension identity and contain browser asset reads                                       | `electron/extensions/extension-view-source.ts`, `extension-view-owner.ts`                   |
-| IPC and host actions   | Validate main-frame sender/connection, scope file navigation and draft creation                          | `electron/ipc/extension-view-requests.ts`, `electron/extensions/extension-view-actions.ts`  |
-| Frame controller       | Mount/unmount a view, exchange a dedicated message port, show unavailable/error states                   | `src/features/extensions/extension-view-panel.tsx`, `use-extension-views.ts`                |
-| Browser bootstrap      | Supply the host-owned bridge and mount the author's ES module                                            | `electron/extensions/extension-frame-document.ts`, `packages/extension-ui/src/transport.ts` |
-| Workbench              | Add/focus/close tool tabs; persist extension/view references                                             | `src/features/workbench`, `contracts/workbench.ts`                                          |
+| Owner                  | Responsibility and interface                                                                             | Implemented location                                                                            |
+| ---------------------- | -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Author helper          | Register/replay desktop declarations through the Pi extension API; no package scanning                   | `packages/extension-ui/src/index.ts`, `browser.ts`                                              |
+| Pi adapter             | Inject the per-session discovery bus before Pi loads extensions; forward registrations/lifecycle changes | `packages/pi-sdk-driver/src/desktop-extension-bridge.ts`                                        |
+| Desktop extension host | Own per-session Chord backend host, registration catalog, frontend capabilities and cleanup              | `apps/desktop/pi-host/extension-views/extension-view-owner.ts`                                  |
+| Asset handler          | Validate loaded extension identity and contain browser asset reads                                       | `pi-host/extension-views/extension-view-source.ts`, `extension-view-owner.ts`                   |
+| IPC and host actions   | Validate main-frame sender/connection, scope file navigation and draft creation                          | `electron/ipc/extension-view-requests.ts`, `electron/extensions/extension-view-actions.ts`      |
+| Frame controller       | Mount/unmount a view, exchange a dedicated message port, show unavailable/error states                   | `src/features/extensions/extension-view-panel.tsx`, `use-extension-views.ts`                    |
+| Browser bootstrap      | Supply the host-owned bridge and mount the author's ES module                                            | `pi-host/extension-views/extension-frame-document.ts`, `packages/extension-ui/src/transport.ts` |
+| Workbench              | Add/focus/close tool tabs; persist extension/view references                                             | `src/features/workbench`, `contracts/workbench.ts`                                              |
 
 Desktop paths in the table are relative to `apps/desktop`. Dependency direction remains renderer → narrow preload → desktop host → Pi adapter. Browser-safe desktop requests live in `contracts/extension-views.ts`; the local helper owns registration/action/wire types, and the Pi adapter owns its observer interface. Portable packages never import desktop implementation. The host does not export a general Pi object to the browser.
 

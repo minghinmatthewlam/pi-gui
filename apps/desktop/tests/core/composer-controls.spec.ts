@@ -177,16 +177,10 @@ test("supports keyboard shortcuts, slash menus, and topbar controls through the 
     expect(appRegions.topbar).toBe("drag");
     expect(appRegions.actionButton).toBe("no-drag");
 
-    const maximizedBefore = await harness.electronApp.evaluate(({ BrowserWindow }) => {
-      return BrowserWindow.getAllWindows()[0]?.isMaximized() ?? false;
-    });
+    const maximizedBefore = (await harness.windows.state())?.maximized ?? false;
     await window.getByTestId("topbar").dblclick({ position: { x: 140, y: 12 } });
     await expect
-      .poll(() =>
-        harness.electronApp.evaluate(
-          ({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.isMaximized() ?? false,
-        ),
-      )
+      .poll(async () => (await harness.windows.state())?.maximized ?? false)
       .toBe(!maximizedBefore);
   } finally {
     await harness.close();

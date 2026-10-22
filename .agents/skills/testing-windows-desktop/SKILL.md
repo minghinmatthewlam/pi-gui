@@ -1,6 +1,6 @@
 ---
 name: testing-windows-desktop
-description: End-to-end test the pi-gui Electron desktop app on Windows. Use when verifying Windows compatibility (dev launcher, PATH, folder picker, integrated terminal / node-pty) or any apps/desktop change on Windows.
+description: End-to-end test the pi-gui Electron desktop app on Windows. Use when verifying Windows compatibility (dev launcher, PATH, folder picker, integrated terminal / ConPTY) or any apps/desktop change on Windows.
 ---
 
 # Testing the pi-gui desktop app on Windows
@@ -17,12 +17,12 @@ description: End-to-end test the pi-gui Electron desktop app on Windows. Use whe
 - Empty state: sidebar (New thread / Threads / Skills / Extensions / Settings) + "Open a folder to start".
 - Navigation (Settings / Skills / Threads) is a good cheap proof the renderer is interactive.
 
-## Integrated terminal (node-pty / ConPTY) — IMPORTANT gotcha
+## Integrated terminal (Rust core, portable-pty / ConPTY) — IMPORTANT gotcha
 
 - The Terminal item in the Open side panel menu is disabled until there is an **active session**: `terminalAvailable={Boolean(selectedSessionKey)}` in `apps/desktop/src/app/App.tsx`.
 - Creating a session through the live UI requires a **connected provider/model**. Without provider credentials you CANNOT reach the terminal via the GUI ("No models available" blocks send).
 - Workaround that needs no credentials: run a **headless Playwright spec in background test mode**. Use helpers from `apps/desktop/tests/helpers/electron-app.ts`: `launchDesktop(userDataDir, { initialWorkspaces, testMode: "background" })` -> `createNamedThread(window, ...)` -> open Terminal from the Open side panel menu (or press Ctrl+J) -> type a command -> assert `.xterm-rows` text.
-- Use a **cross-platform command**: `echo <marker>` works in both `cmd.exe` (Windows default shell via `defaultShellForPlatform()`) and POSIX shells. The existing `tests/core/integrated-terminal.spec.ts` uses `printf`/`pwd`, which do NOT exist in `cmd.exe` — that lane runs on Linux and macOS CI only, so don't expect it to pass as-is on Windows.
+- Use a **cross-platform command**: `echo <marker>` works in both `cmd.exe` (Windows default shell via `default_shell()` in `crates/pi-gui-core/src/terminal/mod.rs`) and POSIX shells. The existing `tests/core/integrated-terminal.spec.ts` uses `printf`/`pwd`, which do NOT exist in `cmd.exe` — that lane runs on Linux and macOS CI only, so don't expect it to pass as-is on Windows.
 - Run a single spec: `pnpm --filter @pi-gui/desktop run test:e2e:runner -- apps/desktop/tests/core/<spec>.spec.ts`. Delete any temporary spec you add after the run.
 
 ## Native Windows folder picker

@@ -10,9 +10,7 @@ import {
 
 async function openWindowCount(harness: DesktopHarness): Promise<number> {
   try {
-    return await harness.electronApp.evaluate(
-      ({ BrowserWindow }) => BrowserWindow.getAllWindows().length,
-    );
+    return await harness.windows.count();
   } catch {
     return 0;
   }
@@ -20,13 +18,7 @@ async function openWindowCount(harness: DesktopHarness): Promise<number> {
 
 async function pressCloseShortcut(harness: DesktopHarness): Promise<void> {
   const modifier = process.platform === "darwin" ? "meta" : "control";
-  await harness.electronApp.evaluate(({ BrowserWindow }, keyModifier) => {
-    BrowserWindow.getAllWindows()[0]?.webContents.sendInputEvent({
-      type: "keyDown",
-      keyCode: "w",
-      modifiers: [keyModifier],
-    });
-  }, modifier);
+  await harness.keyboard.send({ keyCode: "w", modifiers: [modifier] });
 }
 
 async function expectFocusWithin(window: Page, selector: string): Promise<void> {

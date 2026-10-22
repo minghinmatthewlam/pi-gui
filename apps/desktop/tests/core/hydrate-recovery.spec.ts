@@ -5,13 +5,10 @@ import { desktopIpc } from "../../contracts/ipc";
 import {
   HYDRATE_TEST_SENTINEL,
   createNamedThread,
-  installIpcInvokeControl,
   launchDesktop,
   makeUserDataDir,
   makeWorkspace,
-  readIpcInvokeControl,
   reloadDesktopRenderer,
-  setIpcInvokeControl,
   waitForWorkspaceByPath,
 } from "../helpers/electron-app";
 
@@ -46,7 +43,7 @@ test("recovers from a rejected first state hydrate without rewriting persisted U
   const { harness, window, uiStatePath, persistedUiState } = await seedHydrateFixture();
 
   try {
-    await installIpcInvokeControl(harness, desktopIpc.stateRequest, { mode: "reject" });
+    await harness.ipc.control(desktopIpc.stateRequest, { mode: "reject" });
     await reloadDesktopRenderer(window);
 
     const card = window.getByTestId("shell-status-card");
@@ -56,16 +53,13 @@ test("recovers from a rejected first state hydrate without rewriting persisted U
     await expect(window.locator("body")).not.toContainText(HYDRATE_TEST_SENTINEL);
     expect(await readFile(uiStatePath)).toEqual(persistedUiState);
 
-    await installIpcInvokeControl(harness, desktopIpc.relaunchApplication, { mode: "record" });
-    const stateBeforeRelaunch = await readIpcInvokeControl(harness, desktopIpc.stateRequest);
+    await harness.ipc.control(desktopIpc.relaunchApplication, { mode: "record" });
+    const stateBeforeRelaunch = await harness.ipc.read(desktopIpc.stateRequest);
     await window.getByTestId("hydrate-relaunch").click();
     await expect
-      .poll(
-        async () =>
-          (await readIpcInvokeControl(harness, desktopIpc.relaunchApplication)).invokeCount,
-      )
+      .poll(async () => (await harness.ipc.read(desktopIpc.relaunchApplication)).invokeCount)
       .toBe(1);
-    expect((await readIpcInvokeControl(harness, desktopIpc.stateRequest)).invokeCount).toBe(
+    expect((await harness.ipc.read(desktopIpc.stateRequest)).invokeCount).toBe(
       stateBeforeRelaunch.invokeCount,
     );
     await expect(card).toHaveAttribute("data-status", "failed");
@@ -73,10 +67,10 @@ test("recovers from a rejected first state hydrate without rewriting persisted U
     await window.getByTestId("hydrate-retry").click();
     await expect(card).toHaveAttribute("data-status", "failed");
     await expect
-      .poll(async () => (await readIpcInvokeControl(harness, desktopIpc.stateRequest)).rejectCount)
+      .poll(async () => (await harness.ipc.read(desktopIpc.stateRequest)).rejectCount)
       .toBeGreaterThan(1);
 
-    await setIpcInvokeControl(harness, desktopIpc.stateRequest, { mode: "passthrough" });
+    await harness.ipc.update(desktopIpc.stateRequest, { mode: "passthrough" });
     await window.getByTestId("hydrate-retry").click();
     await expect(window.getByTestId("composer")).toHaveValue("draft survives hydrate failure");
     await expect(
@@ -94,7 +88,7 @@ test("keeps the shell usable when only the selected transcript hydrate rejects",
   const { harness, window, uiStatePath, persistedUiState } = await seedHydrateFixture();
 
   try {
-    await installIpcInvokeControl(harness, desktopIpc.selectedTranscriptRequest, {
+    await harness.ipc.control(desktopIpc.selectedTranscriptRequest, {
       mode: "reject",
     });
     await reloadDesktopRenderer(window);
@@ -110,7 +104,7 @@ test("keeps the shell usable when only the selected transcript hydrate rejects",
     await window.getByTestId("hydrate-retry").click();
     await expect(transcriptError).toBeVisible();
 
-    await setIpcInvokeControl(harness, desktopIpc.selectedTranscriptRequest, {
+    await harness.ipc.update(desktopIpc.selectedTranscriptRequest, {
       mode: "passthrough",
     });
     await window.getByTestId("hydrate-retry").click();
@@ -137,7 +131,7 @@ test("uncaught renderer errors show a recoverable fallback instead of a blank wi
     await waitForWorkspaceByPath(window, workspacePath);
     await expect(window.getByTestId("workspace-list")).toBeVisible();
 
-    await installIpcInvokeControl(harness, desktopIpc.stateRequest, {
+    await harness.ipc.control(desktopIpc.stateRequest, {
       mode: "replace",
       replacement: { revision: 1, lastError: HYDRATE_TEST_SENTINEL },
     });
@@ -149,7 +143,7 @@ test("uncaught renderer errors show a recoverable fallback instead of a blank wi
     await expect(window.locator("body")).not.toContainText(HYDRATE_TEST_SENTINEL);
     await expect(window.locator("body")).not.toContainText("secret-token");
 
-    await setIpcInvokeControl(harness, desktopIpc.stateRequest, { mode: "passthrough" });
+    await harness.ipc.update(desktopIpc.stateRequest, { mode: "passthrough" });
     await window.getByTestId("hydrate-retry").click();
     await expect(window.getByTestId("workspace-list")).toBeVisible();
     await expect(card).toHaveCount(0);

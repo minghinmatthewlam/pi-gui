@@ -15,6 +15,7 @@ Apply these rules under `apps/desktop/tests/`.
 - Prefer repo lanes over manual Computer Use. If the local Codex skill `$pi-gui-computer-use-smoke` is installed, use it only for release-readiness sweeps on the real installed app or for focus-hostile native surfaces where Playwright is the wrong proof shape.
 - The reasoning is the same as the global agent philosophy: optimize for tools plus clear success criteria, not ad hoc manual steps. Playwright remains the deterministic regression signal; Computer Use is an opt-in complement for believable real-surface proof.
 - Prefer shared helpers in `tests/helpers/electron-app.ts`; extend them instead of adding a second harness or new IPC glue.
+- Specs in `core`, `native` and `live` reach the app beyond its pages only through `DesktopHarness` (`tests/helpers/desktop-harness.ts`): windows, native keys, clipboard, dialogs, test hooks, IPC control and held pi calls (`harness.driver.intercept`). They must also run on the Rust test host and Tauri later, so add a method there, with its Electron backend in `electron-harness.ts`, rather than calling Electron from a spec. Lint enforces this.
 - Simulate user behavior through Playwright first. Do not add IPC/state shortcuts for visible behavior unless the product surface does not exist yet; if you need one, document the gap in the spec.
 - `pasteTinyPng()` proves the renderer paste handler and is suitable for background/core coverage.
 - `pasteTinyPngViaClipboard()` proves real Electron clipboard paste and belongs in foreground/native coverage.

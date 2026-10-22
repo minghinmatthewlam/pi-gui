@@ -347,7 +347,7 @@ function validateWorkflow(workflow, finalizerSource, linuxVerifierSource, window
     "dpkg-deb --control",
     "dpkg-deb --raw-extract",
     "ELECTRON_RUN_AS_NODE=1",
-    "native-node-pty-runtime.txt",
+    "core-terminal-runtime.txt",
     "chrome-sandbox-owner-mode.txt",
     "xvfb-run",
     "apt-get install -y",

@@ -52,9 +52,7 @@ test("Review picks up outside edits when the window regains focus, without blank
     // Edits made outside pi-gui while it was in the background, then its window regains focus.
     await writeFile(join(workspacePath, "notes.txt"), "first\nsecond\nthird\n");
     await writeFile(join(workspacePath, "extra.txt"), "added elsewhere\n");
-    await harness.electronApp.evaluate(({ BrowserWindow }) => {
-      for (const win of BrowserWindow.getAllWindows()) win.emit("focus");
-    });
+    await harness.windows.emitFocus("all");
 
     await expect(diff.locator(".diff-line--added .diff-line__content")).toHaveText([
       "second",

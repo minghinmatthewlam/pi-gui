@@ -41,7 +41,13 @@ export function Topbar({
       : selectedWorkspace?.branchName;
 
   return (
-    <header className="topbar" data-testid="topbar" onDoubleClick={handleDoubleClick}>
+    // Tauri's drag regions, matching the `-webkit-app-region` rules Electron reads from topbar.css.
+    <header
+      className="topbar"
+      data-testid="topbar"
+      data-tauri-drag-region="deep"
+      onDoubleClick={handleDoubleClick}
+    >
       <div className="topbar__title">
         <span
           className="topbar__workspace"
@@ -68,7 +74,7 @@ export function Topbar({
           </>
         ) : null}
       </div>
-      <div className="topbar__actions">
+      <div className="topbar__actions" data-tauri-drag-region="false">
         {children}
         {!panelVisible ? (
           <div className="shortcut-tooltip-wrap topbar__tooltip-wrap">

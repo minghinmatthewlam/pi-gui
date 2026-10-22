@@ -21,6 +21,7 @@ export default defineConfig(({ command }) => {
         rollupOptions: {
           input: {
             main: path.resolve(projectRoot, "electron/main.ts"),
+            "pi-host": path.resolve(projectRoot, "pi-host/host.ts"),
           },
         },
       },

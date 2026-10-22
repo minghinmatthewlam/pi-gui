@@ -24,11 +24,9 @@ test("default desktop launches keep real-auth mode disabled and seed fake auth i
 
   try {
     await harness.firstWindow();
-    expect(await harness.electronApp.evaluate(() => process.env.OPENAI_API_KEY)).toBeUndefined();
+    expect(await harness.app.env("OPENAI_API_KEY")).toBeUndefined();
 
-    const agentDir = await harness.electronApp.evaluate(
-      () => process.env.PI_CODING_AGENT_DIR ?? "",
-    );
+    const agentDir = (await harness.app.env("PI_CODING_AGENT_DIR")) ?? "";
     expect(agentDir).toBe(join(userDataDir, "agent"));
 
     const auth = JSON.parse(await readFile(join(agentDir, "auth.json"), "utf8")) as {

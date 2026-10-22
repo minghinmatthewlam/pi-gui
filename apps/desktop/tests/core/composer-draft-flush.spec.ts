@@ -108,13 +108,11 @@ function launcher(name: string): () => Promise<DesktopHarness> {
 }
 
 function processExit(harness: DesktopHarness): Promise<void> {
-  return new Promise((resolve) => harness.electronApp.process().once("exit", () => resolve()));
+  return harness.app.waitForExit();
 }
 
 async function closeFirstWindow(harness: DesktopHarness): Promise<void> {
-  await harness.electronApp.evaluate(({ BrowserWindow }) => {
-    BrowserWindow.getAllWindows()[0]?.close();
-  });
+  await harness.windows.close();
 }
 
 test("keeps a draft typed just before quitting", async () => {
@@ -159,7 +157,7 @@ test("keeps a draft when the window is closed while quit is saving drafts", asyn
   // Quit is still waiting for this renderer's draft when the window is closed.
   await holdRendererBusy(window);
   const exited = processExit(harness);
-  await harness.electronApp.evaluate(({ app }) => app.quit());
+  await harness.app.quit();
   await closeFirstWindow(harness);
   await exited;
 
@@ -176,7 +174,7 @@ test("keeps an edit React has not committed yet when quitting", async () => {
   await pauseRendererTimers(window);
   await holdRendererBusy(window, draft);
   const exited = processExit(harness);
-  await harness.electronApp.evaluate(({ app }) => app.quit());
+  await harness.app.quit();
   await exited;
 
   await expectDraftAfterRelaunch(launch, "Uncommitted edit");
@@ -221,15 +219,9 @@ test("keeps the drafts of every window when quitting straight after typing", asy
   const firstWindow = await harness.firstWindow();
   await createNamedThread(firstWindow, "Second");
   await createNamedThread(firstWindow, "First");
-  const opened = harness.electronApp.waitForEvent("window");
+  const opened = harness.windows.waitForNew();
   // Same route as the multi-window spec: a native key event reaches main's shortcut handler.
-  await harness.electronApp.evaluate(({ BrowserWindow }, modifier) => {
-    BrowserWindow.getAllWindows()[0]?.webContents.sendInputEvent({
-      type: "keyDown",
-      keyCode: "n",
-      modifiers: [modifier, "shift"],
-    });
-  }, nativeModifier);
+  await harness.keyboard.send({ keyCode: "n", modifiers: [nativeModifier, "shift"] });
   const secondWindow = await opened;
   await secondWindow.waitForFunction(() => Boolean(globalThis.window.piApp));
   await selectSession(secondWindow, "Second");

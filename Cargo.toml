@@ -1,0 +1,17 @@
+[workspace]
+resolver = "2"
+members = ["crates/pi-gui-core", "crates/pi-gui-testhost"]
+
+[workspace.package]
+edition = "2021"
+license = "MIT"
+
+[profile.release]
+codegen-units = 1
+lto = true
+strip = true
+
+# Line tables keep panics and backtraces readable while debug builds stay a fraction of the
+# size; full debug info filled the disk with several checkouts sharing one target folder.
+[profile.dev]
+debug = "line-tables-only"

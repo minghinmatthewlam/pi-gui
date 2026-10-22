@@ -16,10 +16,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 import type { TurnCaptureBoundary } from "@pi-gui/session-driver";
-import {
-  TurnCheckpointStore,
-  type CheckpointCapture,
-} from "../../electron/workbench/checkpoint-store";
+import type { CheckpointCapture } from "../../electron/workbench/checkpoint-client";
+import { stopCheckpointCores, TurnCheckpointStore } from "../helpers/rust-checkpoint-store";
+
+// Turn checkpoints live in the Rust core; each store below runs on a core of its own.
+test.afterEach(stopCheckpointCores);
 
 async function git(cwd: string, args: string[], input?: string): Promise<Buffer> {
   return new Promise((resolve, reject) => {

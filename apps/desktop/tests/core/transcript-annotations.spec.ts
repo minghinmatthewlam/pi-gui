@@ -1,6 +1,4 @@
-import { resolve } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import type { PiSdkDriver } from "@pi-gui/pi-sdk-driver";
 import type { SessionMessageInput } from "@pi-gui/session-driver";
 import {
   createNamedThread,
@@ -93,29 +91,7 @@ test("adds transcript selections to chat with comments and sends them before the
     await expect(sent.locator("details")).not.toHaveAttribute("open");
 
     // Record what reaches pi without a provider.
-    await harness.electronApp.evaluate(
-      (_electron, input) => {
-        const { createRequire } = process.getBuiltinModule("module");
-        const load = createRequire(input.entry);
-        const { PiSdkDriver: Driver } = load("@pi-gui/pi-sdk-driver") as {
-          PiSdkDriver: typeof PiSdkDriver;
-        };
-        const sent: SessionMessageInput[] = [];
-        const hooks = globalThis as {
-          __annotationSends?: SessionMessageInput[];
-          __failNextAnnotationSend?: boolean;
-        };
-        hooks.__annotationSends = sent;
-        Driver.prototype.sendUserMessage = async function (_ref, message) {
-          if (hooks.__failNextAnnotationSend) {
-            hooks.__failNextAnnotationSend = false;
-            throw new Error("Simulated send failure");
-          }
-          sent.push(message);
-        };
-      },
-      { entry: resolve("apps/desktop/out/main/main.js") },
-    );
+    const sends = await harness.driver.intercept("sendUserMessage");
 
     // Select, then add with the shortcut; the comment box opens on a numbered marker.
     await dragSelect(page, "hold up the reply");
@@ -175,11 +151,9 @@ test("adds transcript selections to chat with comments and sends them before the
     await expect(chip).toContainText("1 annotation");
 
     // A failed send gives back the typed text and the annotation, not the formatted blocks.
-    await harness.electronApp.evaluate(() => {
-      (globalThis as { __failNextAnnotationSend?: boolean }).__failNextAnnotationSend = true;
-    });
     await page.getByTestId("composer").fill("Thanks, one more thing.");
     await page.getByTestId("send").click();
+    await (await sends.nextCall()).fail("Simulated send failure");
     await expect(page.getByTestId("composer-error-banner")).toContainText("Simulated send failure");
     await expect(page.getByTestId("composer")).toHaveValue("Thanks, one more thing.");
     await expect(chip).toContainText("1 annotation");
@@ -187,14 +161,12 @@ test("adds transcript selections to chat with comments and sends them before the
 
     // Sending puts the annotation before the typed text and clears the markers.
     await page.getByTestId("send").click();
+    await (await sends.nextCall()).complete();
     await expect
-      .poll(() =>
-        harness.electronApp.evaluate(
-          () =>
-            (globalThis as { __annotationSends?: SessionMessageInput[] }).__annotationSends?.map(
-              (message) => message.text,
-            ) ?? [],
-        ),
+      .poll(async () =>
+        (await sends.calls())
+          .filter((call) => call.outcome === "completed")
+          .map((call) => (call.args[1] as SessionMessageInput).text),
       )
       .toEqual([
         formatAnnotatedPrompt(

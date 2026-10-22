@@ -79,9 +79,7 @@ test("opens task terminals with persistent output and independent shell tabs", a
     await expect(window.getByTestId("settings-surface")).toHaveCount(0);
     await window.keyboard.press(desktopShortcut("Shift+O"));
     await expect(window.getByTestId("new-thread-composer")).toHaveCount(0);
-    await harness.electronApp.evaluate(({ clipboard, nativeImage }, pngBase64) => {
-      clipboard.writeImage(nativeImage.createFromDataURL(`data:image/png;base64,${pngBase64}`));
-    }, TINY_PNG_BASE64);
+    await harness.clipboard.writeImage(TINY_PNG_BASE64);
     await window.keyboard.press(TERMINAL_PASTE_SHORTCUT);
     await expect
       .poll(async () => (await getDesktopState(window)).composerAttachments.length)
@@ -156,9 +154,7 @@ test("pastes clipboard text into the integrated terminal once", async () => {
       { timeout: 15_000 },
     );
 
-    await harness.electronApp.evaluate(({ clipboard }) => {
-      clipboard.writeText("PI_TERMINAL_PASTE_ONCE");
-    });
+    await harness.clipboard.writeText("PI_TERMINAL_PASTE_ONCE");
     await window.keyboard.press(TERMINAL_PASTE_SHORTCUT);
 
     // Join rows so a paste that soft-wraps after a long prompt still counts once.
@@ -220,9 +216,7 @@ test("writes an oversized terminal paste in chunks instead of dropping it", asyn
     await window.keyboard.press("Enter");
     await expect(terminal.locator(".xterm-rows")).toContainText(receiverReady, { timeout: 15_000 });
 
-    await harness.electronApp.evaluate(({ clipboard }, text) => {
-      clipboard.writeText(text);
-    }, payload);
+    await harness.clipboard.writeText(payload);
     await window.keyboard.press(TERMINAL_PASTE_SHORTCUT);
     // Check the receiver's file, not the terminal: drawing 192 KB of echo lags far behind
     // the PTY when several test apps share the machine.

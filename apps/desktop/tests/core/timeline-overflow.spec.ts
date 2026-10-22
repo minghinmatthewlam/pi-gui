@@ -51,14 +51,7 @@ async function setElectronWindowSize(
   window: Page,
   size: { readonly width: number; readonly height: number },
 ): Promise<void> {
-  const resized = await harness.electronApp.evaluate(({ BrowserWindow }, bounds) => {
-    const appWindow = BrowserWindow.getAllWindows()[0];
-    if (!appWindow) {
-      return false;
-    }
-    appWindow.setSize(bounds.width, bounds.height);
-    return true;
-  }, size);
+  const resized = await harness.windows.setSize(size);
   expect(resized).toBe(true);
   await expect
     .poll(() =>

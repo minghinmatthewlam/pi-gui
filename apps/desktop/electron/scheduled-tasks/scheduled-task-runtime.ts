@@ -270,7 +270,7 @@ function mergeScheduleFields(
 
 function createCreateScheduledTaskTool(
   bridge: ScheduledTaskRuntimeBridge,
-  fallbackWorkspaceId: (ctx: ExtensionContext) => string | undefined,
+  fallbackWorkspaceId: (ctx: ExtensionContext) => string | undefined | Promise<string | undefined>,
 ): ToolDefinition<any, ScheduledToolDetails> {
   return {
     name: createScheduledTaskToolName,
@@ -322,7 +322,7 @@ function createCreateScheduledTaskTool(
     },
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       try {
-        const input = parseCreateInput(params, fallbackWorkspaceId(ctx));
+        const input = parseCreateInput(params, await fallbackWorkspaceId(ctx));
         return bridge.createScheduledTask(ctx, input);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -408,7 +408,7 @@ function createUpdateScheduledTaskTool(
 
 export function createScheduledTaskRuntimeTools(
   bridge: ScheduledTaskRuntimeBridge,
-  fallbackWorkspaceId: (ctx: ExtensionContext) => string | undefined,
+  fallbackWorkspaceId: (ctx: ExtensionContext) => string | undefined | Promise<string | undefined>,
 ): readonly ToolDefinition<any, ScheduledToolDetails>[] {
   return [
     createCreateScheduledTaskTool(bridge, fallbackWorkspaceId),
@@ -419,7 +419,7 @@ export function createScheduledTaskRuntimeTools(
 
 export function createScheduledTaskRuntimeExtension(
   bridge: ScheduledTaskRuntimeBridge,
-  fallbackWorkspaceId: (ctx: ExtensionContext) => string | undefined,
+  fallbackWorkspaceId: (ctx: ExtensionContext) => string | undefined | Promise<string | undefined>,
 ): ExtensionFactory {
   return (pi: ExtensionAPI) => {
     for (const tool of createScheduledTaskRuntimeTools(bridge, fallbackWorkspaceId)) {

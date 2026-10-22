@@ -2,7 +2,7 @@ import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
-import { writeFileAtomicQueued } from "../../electron/persistence/atomic-file-write";
+import { writeFileAtomicQueued } from "./saved-data-oracle/atomic-file-write";
 
 test("keeps ui-state readable while a new version replaces it", async () => {
   const filePath = join(await mkdtemp(join(tmpdir(), "ui-state-replace-")), "ui-state.json");

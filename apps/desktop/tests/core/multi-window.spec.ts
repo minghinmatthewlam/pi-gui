@@ -29,9 +29,7 @@ async function waitForWindowCount(harness: DesktopHarness, count: number): Promi
     .poll(
       async () => {
         try {
-          return await harness.electronApp.evaluate(
-            ({ BrowserWindow }) => BrowserWindow.getAllWindows().length,
-          );
+          return await harness.windows.count();
         } catch (error) {
           const message = String(error);
           if (
@@ -46,47 +44,14 @@ async function waitForWindowCount(harness: DesktopHarness, count: number): Promi
       { timeout: 15_000 },
     )
     .toBe(count);
-  await expect.poll(() => harness.electronApp.windows().length, { timeout: 15_000 }).toBe(count);
-}
-
-async function browserWindowIndexForPage(harness: DesktopHarness, source: Page): Promise<number> {
-  const marker = `pi-gui-window-${Date.now()}-${Math.random()}`;
-  await source.evaluate((value) => {
-    Object.assign(window, { __piGuiTestWindowMarker: value });
-  }, marker);
-  const index = await harness.electronApp.evaluate(async ({ BrowserWindow }, value) => {
-    const windows = BrowserWindow.getAllWindows();
-    for (const [candidateIndex, candidateWindow] of windows.entries()) {
-      const candidateMarker: unknown = await candidateWindow.webContents
-        .executeJavaScript("window.__piGuiTestWindowMarker", true)
-        .catch(() => undefined);
-      if (candidateMarker === value) {
-        return candidateIndex;
-      }
-    }
-    return -1;
-  }, marker);
-  if (index === -1) {
-    throw new Error("Expected source page to belong to the Electron app.");
-  }
-  return index;
+  await expect.poll(() => harness.windows.pages().length, { timeout: 15_000 }).toBe(count);
 }
 
 async function openWindowViaShortcut(harness: DesktopHarness, source: Page): Promise<Page> {
-  const existing = new Set(harness.electronApp.windows());
-  const sourceIndex = await browserWindowIndexForPage(harness, source);
-  await harness.electronApp.evaluate(
-    ({ BrowserWindow }, payload) => {
-      BrowserWindow.getAllWindows()[payload.sourceIndex]?.webContents.sendInputEvent({
-        type: "keyDown",
-        keyCode: "n",
-        modifiers: [payload.modifier, "shift"],
-      });
-    },
-    { sourceIndex, modifier: platformModifier },
-  );
+  const existing = new Set(harness.windows.pages());
+  await harness.keyboard.send({ keyCode: "n", modifiers: [platformModifier, "shift"] }, source);
   await waitForWindowCount(harness, existing.size + 1);
-  const opened = harness.electronApp.windows().find((candidate) => !existing.has(candidate));
+  const opened = harness.windows.pages().find((candidate) => !existing.has(candidate));
   if (!opened) {
     throw new Error("Expected Shift+Cmd+N to create another Electron window.");
   }
@@ -98,27 +63,22 @@ async function expectSecondInstanceRestoresExistingWindow(
   harness: DesktopHarness,
   source: Page,
 ): Promise<void> {
-  const existingWindowCount = harness.electronApp.windows().length;
-  const sourceIndex = await browserWindowIndexForPage(harness, source);
-  await harness.electronApp.evaluate(({ app, BrowserWindow }, index) => {
-    const window = BrowserWindow.getAllWindows()[index];
-    window?.show();
-    window?.focus();
-    window?.emit("focus");
-    window?.minimize();
-    app.emit("second-instance");
-  }, sourceIndex);
+  const existingWindowCount = harness.windows.pages().length;
+  await harness.windows.show(source);
+  await harness.windows.focus(source);
+  await harness.windows.emitFocus(source);
+  await harness.windows.minimize(source);
+  await harness.app.secondInstance();
   await waitForWindowCount(harness, existingWindowCount);
   await expect
     .poll(
-      () =>
-        harness.electronApp.evaluate(({ BrowserWindow }, index) => {
-          const targetWindow = BrowserWindow.getAllWindows()[index];
-          return {
-            targetMinimized: targetWindow?.isMinimized() ?? true,
-            targetVisible: targetWindow?.isVisible() ?? false,
-          };
-        }, sourceIndex),
+      async () => {
+        const targetWindow = await harness.windows.state(source);
+        return {
+          targetMinimized: targetWindow?.minimized ?? true,
+          targetVisible: targetWindow?.visible ?? false,
+        };
+      },
       { timeout: 15_000 },
     )
     .toEqual({ targetMinimized: false, targetVisible: true });
@@ -214,52 +174,6 @@ async function selectSessionViaIpcAndCaptureStateEvents(
       unsubscribe();
     }
   }, title);
-}
-
-async function stubDelayedOpenDialog(
-  harness: DesktopHarness,
-  filePaths: readonly string[],
-): Promise<void> {
-  await harness.electronApp.evaluate(({ dialog }, nextFilePaths) => {
-    const original = dialog.showOpenDialog;
-    const globals = globalThis as {
-      __PI_TEST_OPEN_DIALOG_COUNT?: number;
-      __PI_TEST_RESOLVE_OPEN_DIALOG?: () => void;
-    };
-    globals.__PI_TEST_OPEN_DIALOG_COUNT = 0;
-    dialog.showOpenDialog = async () =>
-      new Promise((resolve) => {
-        globals.__PI_TEST_OPEN_DIALOG_COUNT = (globals.__PI_TEST_OPEN_DIALOG_COUNT ?? 0) + 1;
-        globals.__PI_TEST_RESOLVE_OPEN_DIALOG = () => {
-          dialog.showOpenDialog = original;
-          delete globals.__PI_TEST_RESOLVE_OPEN_DIALOG;
-          resolve({ canceled: false, filePaths: [...nextFilePaths] });
-        };
-      });
-  }, filePaths);
-}
-
-async function waitForDelayedOpenDialog(harness: DesktopHarness): Promise<void> {
-  await expect
-    .poll(() =>
-      harness.electronApp.evaluate(() => {
-        return (
-          (globalThis as { __PI_TEST_OPEN_DIALOG_COUNT?: number }).__PI_TEST_OPEN_DIALOG_COUNT ?? 0
-        );
-      }),
-    )
-    .toBe(1);
-}
-
-async function resolveDelayedOpenDialog(harness: DesktopHarness): Promise<void> {
-  await harness.electronApp.evaluate(() => {
-    const resolveOpenDialog = (globalThis as { __PI_TEST_RESOLVE_OPEN_DIALOG?: () => void })
-      .__PI_TEST_RESOLVE_OPEN_DIALOG;
-    if (!resolveOpenDialog) {
-      throw new Error("Delayed open dialog was not pending.");
-    }
-    resolveOpenDialog();
-  });
 }
 
 test("selects an empty workspace from the sidebar row", async () => {
@@ -452,7 +366,7 @@ test("keeps sender dialog actions scoped without blocking another window", async
     await expectSelected(firstWindow, workspacePath, "Attachment sender thread");
     await expectSelected(secondWindow, workspacePath, "Attachment focused thread");
 
-    await stubDelayedOpenDialog(harness, [attachmentPath]);
+    await harness.dialogs.holdNextOpenDialog([attachmentPath]);
     const pickPromise = firstWindow.evaluate(async () => {
       const app = globalThis.window.piApp;
       if (!app) {
@@ -460,10 +374,10 @@ test("keeps sender dialog actions scoped without blocking another window", async
       }
       await app.pickComposerAttachments();
     });
-    await waitForDelayedOpenDialog(harness);
+    await expect.poll(() => harness.dialogs.openDialogCount()).toBe(1);
 
     const settlePick = async () => {
-      await resolveDelayedOpenDialog(harness);
+      await harness.dialogs.releaseHeldOpenDialog();
       await pickPromise;
     };
     try {
@@ -479,13 +393,9 @@ test("keeps sender dialog actions scoped without blocking another window", async
       await selectSessionViaIpc(secondWindow, "Attachment focused thread");
       await expectSelected(secondWindow, workspacePath, "Attachment focused thread");
 
-      const secondWindowIndex = await browserWindowIndexForPage(harness, secondWindow);
-      await harness.electronApp.evaluate(({ BrowserWindow }, index) => {
-        const targetWindow = BrowserWindow.getAllWindows()[index];
-        targetWindow?.show();
-        targetWindow?.focus();
-        targetWindow?.emit("focus");
-      }, secondWindowIndex);
+      await harness.windows.show(secondWindow);
+      await harness.windows.focus(secondWindow);
+      await harness.windows.emitFocus(secondWindow);
     } catch (error) {
       await settlePick().catch(() => undefined);
       throw error;
@@ -664,10 +574,7 @@ test("cancels pending dialogs when the last visible same-session window closes",
 
     const secondWindow = await openWindowViaShortcut(harness, firstWindow);
     await expectSelected(secondWindow, workspacePath, "Shared dialog thread");
-    const secondWindowIndex = await browserWindowIndexForPage(harness, secondWindow);
-    await harness.electronApp.evaluate(({ BrowserWindow }, index) => {
-      BrowserWindow.getAllWindows()[index]?.show();
-    }, secondWindowIndex);
+    await harness.windows.show(secondWindow);
 
     const targetState = await getDesktopState(secondWindow);
     const sessionRef = {

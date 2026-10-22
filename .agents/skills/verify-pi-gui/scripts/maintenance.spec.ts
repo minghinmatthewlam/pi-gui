@@ -7,9 +7,9 @@ import { realpathSync } from "node:fs";
 import {
   commitAllInGitRepo,
   getDesktopState,
-  launchDesktop,
+  launchElectronDesktop,
   makeGitWorkspace,
-  type DesktopHarness,
+  type ElectronDesktopHarness,
 } from "../../../../apps/desktop/tests/helpers/electron-app";
 import { desktopShortcut } from "../../../../apps/desktop/tests/helpers/native-input";
 
@@ -59,7 +59,7 @@ test("maintenance: skills, pin, thread list, worktree, queued follow-ups", async
   await mkdir(followWorkspace, { recursive: true });
   const runs: Array<{ pid: number; closed: boolean }> = [];
   const completed: string[] = [];
-  let harness: DesktopHarness | undefined;
+  let harness: ElectronDesktopHarness | undefined;
   let page: Page;
   let traceStarted = false;
   let phase = "surfaces";
@@ -73,7 +73,7 @@ test("maintenance: skills, pin, thread list, worktree, queued follow-ups", async
     );
   };
   const launch = async (initialWorkspaces: string[], userDataDir = profile) => {
-    harness = await launchDesktop(userDataDir, {
+    harness = await launchElectronDesktop(userDataDir, {
       agentDir,
       initialWorkspaces,
       scrubProviderEnv: true,

@@ -95,11 +95,7 @@ test("selects and restores theme presets", async () => {
     await expect.poll(() => rootCssVariable(window, "--accent")).toBe("#7aa2f7");
     // The native window colour follows the change too, so resizing never flashes.
     await expect
-      .poll(() =>
-        harness.electronApp.evaluate(({ BrowserWindow }) =>
-          BrowserWindow.getAllWindows()[0]?.getBackgroundColor().toLowerCase(),
-        ),
-      )
+      .poll(async () => (await harness.windows.state())?.backgroundColor)
       .toBe(windowBackgroundFor("tokyo-night", "dark"));
   } finally {
     await harness.close();

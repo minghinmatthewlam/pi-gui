@@ -6,7 +6,7 @@ import type {
   SessionSnapshot,
   WorkspaceRef,
 } from "@pi-gui/session-driver";
-import type { PiSdkDriver } from "@pi-gui/pi-sdk-driver";
+import type { PiDriverPort } from "../../pi-host/protocol";
 import {
   MAX_SCHEDULED_TASK_RUNS,
   SCHEDULED_TASK_INTERVIEW_PROMPT,
@@ -36,7 +36,7 @@ import type {
   UpdateScheduledTaskToolDetails,
 } from "./scheduled-task-runtime";
 
-type ScheduledDriver = Pick<PiSdkDriver, "createSession">;
+type ScheduledDriver = Pick<PiDriverPort, "createSession">;
 
 export interface ScheduledTaskOwnerHost {
   readonly driver: ScheduledDriver;

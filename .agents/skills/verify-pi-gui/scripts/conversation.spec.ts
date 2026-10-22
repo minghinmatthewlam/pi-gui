@@ -3,8 +3,8 @@ import { chmod, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
-  launchDesktop,
-  type DesktopHarness,
+  launchElectronDesktop,
+  type ElectronDesktopHarness,
 } from "../../../../apps/desktop/tests/helpers/electron-app";
 
 test("real conversation: stream, switch, tool, stop, archive, restart", async () => {
@@ -48,7 +48,7 @@ test("real conversation: stream, switch, tool, stop, archive, restart", async ()
   const drafts = { alpha: "Unsent draft for Alpha", bravo: "Unsent draft for Bravo" };
   let alpha = "";
   let bravo = "";
-  let harness: DesktopHarness | undefined;
+  let harness: ElectronDesktopHarness | undefined;
   let page: Page;
   let traceStarted = false;
   let phase = "conversation";
@@ -71,7 +71,7 @@ test("real conversation: stream, switch, tool, stop, archive, restart", async ()
     );
   };
   const launch = async () => {
-    harness = await launchDesktop(profile, {
+    harness = await launchElectronDesktop(profile, {
       agentDir,
       initialWorkspaces: [workspace],
       scrubProviderEnv: true,

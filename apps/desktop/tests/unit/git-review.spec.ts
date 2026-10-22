@@ -15,15 +15,36 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { expect, test } from "@playwright/test";
+import type { CoreProcess } from "../../core-process/launch";
 import {
-  changeGitReviewFileStage,
-  checkGitReviewFileCurrent,
-  createGitReview,
-  readGitReviewFile,
+  gitReviewClient,
+  type GitReview,
   type GitReviewSnapshot,
 } from "../../electron/platform/files/git-review";
+import { startTestCore } from "../helpers/rust-core";
 
 const execute = promisify(execFile);
+
+// The review functions, run by the Rust core.
+let core: CoreProcess;
+let createGitReview: GitReview["createGitReview"];
+let checkGitReviewFileCurrent: GitReview["checkGitReviewFileCurrent"];
+let readGitReviewFile: GitReview["readGitReviewFile"];
+let changeGitReviewFileStage: GitReview["changeGitReviewFileStage"];
+
+function useCore(started: CoreProcess): void {
+  core = started;
+  ({ createGitReview, checkGitReviewFileCurrent, readGitReviewFile, changeGitReviewFileStage } =
+    gitReviewClient(started.peer));
+}
+
+test.beforeAll(async () => {
+  useCore(await startTestCore(await mkdtemp(join(tmpdir(), "pi-gui-git-review-core-"))));
+});
+
+test.afterAll(async () => {
+  await core.stop(1_000);
+});
 async function git(cwd: string, ...args: string[]): Promise<string> {
   return (await execute("git", args, { cwd, env: { ...process.env, GIT_CONFIG_NOSYSTEM: "1" } }))
     .stdout;
@@ -461,6 +482,10 @@ test("inherited Git repository overrides cannot redirect review reads or staging
   };
   const previous = Object.fromEntries(Object.keys(overrides).map((key) => [key, process.env[key]]));
   Object.assign(process.env, overrides);
+  // The core reads its environment when it starts, so this check runs in one started with
+  // the overrides.
+  const shared = core;
+  useCore(await startTestCore(await mkdtemp(join(tmpdir(), "pi-gui-git-review-core-")), overrides));
   try {
     const review = await uncommitted(cwd);
     expect(review.files.map((file) => file.path)).toEqual(["file.txt"]);
@@ -468,6 +493,8 @@ test("inherited Git repository overrides cannot redirect review reads or staging
       state: "applied",
     });
   } finally {
+    await core.stop(1_000);
+    useCore(shared);
     for (const [key, value] of Object.entries(previous)) {
       if (value === undefined) delete process.env[key];
       else process.env[key] = value;
