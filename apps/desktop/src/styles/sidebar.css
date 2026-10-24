@@ -685,6 +685,38 @@
   gap: 1px;
 }
 
+.session-tree__children {
+  margin-left: 28px;
+  padding-left: 5px;
+  border-left: 1px solid var(--line);
+}
+
+.session-row--parent {
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+}
+
+.session-row__tree-toggle {
+  flex: 0 0 18px;
+  width: 18px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  color: var(--muted-soft);
+}
+
+.session-row__tree-toggle svg {
+  width: 12px;
+  height: 12px;
+}
+
+.session-row__relationship {
+  font-size: 11px;
+  color: var(--muted-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .session-row__title-line {
   min-width: 0;
   display: flex;

@@ -354,7 +354,13 @@ export default function App() {
     dockExpandedBySession[selectedSessionKey] === selectedExtensionUiInstance;
   const threadSidebarModel = useMemo(
     () => (snapshot ? buildThreadSidebarModel(snapshot) : undefined),
-    [snapshot],
+    [
+      snapshot?.workspaces,
+      snapshot?.workspaceOrder,
+      snapshot?.worktreesByWorkspace,
+      snapshot?.pinnedSessionOrder,
+      snapshot?.orchestrationChildren,
+    ],
   );
   const threadSidebarModelRef = useRef(threadSidebarModel);
   threadSidebarModelRef.current = threadSidebarModel;

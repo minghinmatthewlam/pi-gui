@@ -28,6 +28,7 @@ import type {
 import { latestSessionActivityAt, previewFromTranscript } from "../application/app-store-utils";
 import type { RefreshStateOptions } from "../application/refresh-state-options";
 import {
+  archiveChildThreadsAction,
   createChildThreadAction,
   createChildThreadPromptFromToolOutput,
   createChildThreadToolName,
@@ -42,6 +43,7 @@ import {
   sendMessageToThreadToolName,
 } from "./orchestration-runtime";
 import type {
+  ArchiveChildThreadsToolDetails,
   CreateChildThreadToolDetails,
   ListThreadsToolDetails,
   OrchestrationThreadListEntry,
@@ -85,6 +87,7 @@ interface OrchestrationOwnerHost {
     | { archivedAt?: string; updatedAt: string; title: string; status: string; preview?: string }
     | undefined;
   ensureSessionReady(sessionRef: SessionRef): Promise<SessionSnapshot | undefined>;
+  archiveCompletedSession(sessionRef: SessionRef): Promise<void>;
   ensureSessionSubscription(sessionRef: SessionRef): Promise<void>;
   subscribeToSessionEvents(
     listener: (event: SessionDriverEvent, state: DesktopAppState) => void | Promise<void>,
@@ -110,6 +113,10 @@ interface OrchestrationOwnerHost {
 }
 
 export interface OrchestrationOwner {
+  archiveChildThreadsToolResult(
+    parentRef: SessionRef,
+    threadIds: readonly string[],
+  ): Promise<AgentToolResult<ArchiveChildThreadsToolDetails>>;
   reconcileDueSupervisionLoops(): { readonly changed: boolean };
   cancelChildRunsForParent(parentRef: SessionRef): Promise<void>;
   sendChildThreadFollowUp(input: SendChildThreadFollowUpInput): Promise<DesktopAppState>;
@@ -144,6 +151,8 @@ export interface OrchestrationOwner {
 
 export function createOrchestrationOwner(store: OrchestrationOwnerHost): OrchestrationOwner {
   return {
+    archiveChildThreadsToolResult: (parentRef, threadIds) =>
+      archiveChildThreadsToolResult(store, parentRef, threadIds),
     reconcileDueSupervisionLoops: () => reconcileDueSupervisionLoops(store),
     cancelChildRunsForParent: (parentRef) => cancelChildRunsForParent(store, parentRef),
     sendChildThreadFollowUp: (input) => sendChildThreadFollowUp(store, input),
@@ -601,6 +610,94 @@ async function updateSendMessageToThreadToolOutput(
     event,
     projectionFromToolResult(await sendMessageToThreadToolResult(store, event.sessionRef, request)),
   );
+}
+
+async function archiveChildThreadsToolResult(
+  store: OrchestrationOwnerHost,
+  parentRef: SessionRef,
+  threadIds: readonly string[],
+): Promise<AgentToolResult<ArchiveChildThreadsToolDetails>> {
+  await store.initialize();
+  const archived: string[] = [];
+  const skipped: { threadId: string; reason: string }[] = [];
+  for (const threadId of new Set(threadIds)) {
+    // Resolve within the caller's own children, never the selected UI session or workspace list.
+    const child = store
+      .orchestrationState()
+      .orchestrationChildren.find(
+        (entry) =>
+          entry.parentWorkspaceId === parentRef.workspaceId &&
+          entry.parentSessionId === parentRef.sessionId &&
+          (entry.id === threadId ||
+            entry.childSessionId === threadId ||
+            sessionKey(childSessionRef(entry)) === threadId),
+      );
+    try {
+      if (!child || sessionKey(childSessionRef(child)) === sessionKey(parentRef)) {
+        throw new Error("Only direct child threads created by the calling parent can be archived.");
+      }
+      const ref = childSessionRef(child);
+      const session = store.sessionFromState(ref);
+      if (!session) throw new Error("Child session was not found; it was not archived.");
+      if (session.archivedAt) throw new Error("Child thread is already archived.");
+      if (session.status !== "idle" || store.getQueuedComposerMessages(ref).length > 0) {
+        throw new Error("Child thread is running or has queued messages; it was not archived.");
+      }
+      if (
+        store
+          .orchestrationState()
+          .orchestrationChildren.some(
+            (entry) =>
+              entry.parentWorkspaceId === ref.workspaceId &&
+              entry.parentSessionId === ref.sessionId &&
+              !store.sessionFromState(childSessionRef(entry))?.archivedAt,
+          )
+      )
+        throw new Error("This child has unarchived descendants; handle those threads first.");
+      const snapshot = await store.ensureSessionReady(ref);
+      if (
+        (snapshot &&
+          (snapshot.status !== "idle" ||
+            snapshot.runningRunId ||
+            snapshot.queuedMessages?.length)) ||
+        store.sessionFromState(ref)?.status !== "idle" ||
+        store.getQueuedComposerMessages(ref).length > 0
+      ) {
+        throw new Error(
+          "Cannot confirm that the child is idle with an empty queue; it was not archived.",
+        );
+      }
+      // Already-open sessions return no new snapshot from ensureSessionReady.
+      // The driver repeats the busy/completion checks atomically at the write boundary.
+      await store.archiveCompletedSession(ref);
+      updateChildSupervisionLoop(
+        store,
+        child.id,
+        "stop",
+        "Child thread archived at the user's request.",
+      );
+      archived.push(child.id);
+    } catch (error) {
+      skipped.push({ threadId, reason: errorMessage(error) });
+    }
+  }
+  if (archived.length) {
+    await store.persistUiState();
+    store.emit();
+  }
+  return {
+    content: [
+      {
+        type: "text",
+        text: [
+          `Archived ${archived.length} child thread(s). History and drafts are preserved; restore them from the sidebar.`,
+          ...archived.map((id) => `Archived: ${id}`),
+          ...skipped.map((item) => `Skipped ${item.threadId}: ${item.reason}`),
+        ].join("\n"),
+      },
+    ],
+    details: { action: archiveChildThreadsAction, archived, skipped },
+  };
 }
 
 function listThreadsToolResult(
@@ -1532,7 +1629,7 @@ function listThreadsForContext(
 
   for (const child of parentChildren) {
     const key = sessionKey(childSessionRef(child));
-    if (entries.has(key)) {
+    if (entries.has(key) || store.sessionFromState(childSessionRef(child))?.archivedAt) {
       continue;
     }
     entries.set(key, {

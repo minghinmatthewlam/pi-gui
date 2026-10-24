@@ -141,6 +141,33 @@ test("create_child_thread returns after a slow worker starts, before its turn co
       `.session-row[data-session-id="${child?.childSessionId}"] .session-row__status--running`,
     );
     await expect(childRunningIndicator).toBeVisible();
+    const archivedWhileRunning = await runOrchestrationRuntimeTool(harness, {
+      toolName: "archive_child_threads",
+      sessionRef: parentRef,
+      params: { thread_ids: [child!.id] },
+    });
+    expect(archivedWhileRunning.details?.archived).toEqual([]);
+    expect(archivedWhileRunning.details?.skipped).toHaveLength(1);
+    const queued = await runOrchestrationRuntimeTool(harness, {
+      toolName: "send_message_to_thread",
+      sessionRef: parentRef,
+      params: { thread_id: child!.id, message: "Finish the current work, then verify it." },
+    });
+    expect(queued.details?.queuedMessageCount).toBeGreaterThan(0);
+    const skippedQueue = await runOrchestrationRuntimeTool(harness, {
+      toolName: "archive_child_threads",
+      sessionRef: parentRef,
+      params: { thread_ids: [child!.id] },
+    });
+    expect(skippedQueue.details?.archived).toEqual([]);
+    expect(skippedQueue.details?.skipped).toHaveLength(1);
+    expect(server.pendingRequestCount()).toBeGreaterThan(0);
+    const afterArchiveAttempt = await getDesktopState(window);
+    expect(
+      afterArchiveAttempt.workspaces
+        .flatMap((ws) => ws.sessions)
+        .find((session) => session.id === child?.childSessionId)?.archivedAt,
+    ).toBeUndefined();
     if (proofDir) {
       await window.screenshot({
         path: join(proofDir, "orchestration-child-running.png"),

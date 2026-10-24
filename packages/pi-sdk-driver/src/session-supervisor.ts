@@ -952,6 +952,46 @@ export class SessionSupervisor {
     await this.updateArchivedState(sessionRef, nowIso());
   }
 
+  /** Opt-in guard for agent-requested archiving; never stops or drains a session. */
+  async archiveCompletedSession(sessionRef: SessionRef): Promise<void> {
+    const record = await this.ensureRecord(sessionRef);
+    const session = this.requireSession(record);
+    if (
+      isRecordBusy(record) ||
+      record.status !== "idle" ||
+      record.queuedMessages.length > 0 ||
+      record.queuedStartScheduled ||
+      record.queuedStartRecheck ||
+      session.pendingMessageCount > 0 ||
+      record.startingQueuedMessage ||
+      record.pendingHostUiRequests.size > 0
+    ) {
+      throw new Error(
+        "Child thread is running, waiting for tools, or has queued messages; it was not archived.",
+      );
+    }
+    let last: (typeof session.messages)[number] | undefined;
+    for (let i = session.messages.length - 1; i >= 0; i--) {
+      const message = session.messages[i]!;
+      if (
+        message.role === "user" ||
+        message.role === "assistant" ||
+        message.role === "toolResult"
+      ) {
+        last = message;
+        break;
+      }
+    }
+    if (last?.role !== "assistant" || last.stopReason !== "stop") {
+      throw new Error(
+        "Cannot confirm that the child thread finished normally; it was not archived.",
+      );
+    }
+    // updateArchivedState sets the loaded record synchronously before its first
+    // await, so a new prompt cannot slip between the busy check and the mutation.
+    await this.updateArchivedState(sessionRef, nowIso());
+  }
+
   async unarchiveSession(sessionRef: SessionRef): Promise<void> {
     await this.updateArchivedState(sessionRef, undefined);
   }

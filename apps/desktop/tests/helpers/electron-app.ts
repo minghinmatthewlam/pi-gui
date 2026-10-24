@@ -1825,7 +1825,15 @@ export function reviewScopeButton(window: Page) {
 }
 
 export async function clickSession(window: Page, sessionTitle: string): Promise<void> {
-  await window.locator(".session-row__select", { hasText: sessionTitle }).click();
+  // Parent names also appear in child relationship labels; select by the title itself.
+  await window
+    .locator(".session-row__select")
+    .filter({
+      has: window
+        .locator(".session-row__title")
+        .and(window.getByText(sessionTitle, { exact: true })),
+    })
+    .click();
 }
 
 export async function openNewThread(window: Page): Promise<void> {

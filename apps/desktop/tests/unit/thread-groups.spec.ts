@@ -8,6 +8,7 @@ import {
 } from "../../contracts/desktop-state";
 import {
   buildThreadSidebarModel,
+  flattenThreadTrees,
   recencyHistoryExpansionKey,
   sessionThreadKey,
   threadHistoryPreview,
@@ -408,4 +409,126 @@ test("caps a history list at five until it is expanded", () => {
   });
   expect(threadHistoryPreview(threads, true).visible).toEqual(threads);
   expect(threadHistoryPreview(threads.slice(0, 5), false).overflow).toBe(false);
+});
+
+function relationship(
+  id: string,
+  parentId: string,
+  childId: string,
+  parentWorkspaceId = "ws",
+  childWorkspaceId = "ws",
+): DesktopAppState["orchestrationChildren"][number] {
+  return {
+    id,
+    parentWorkspaceId,
+    parentSessionId: parentId,
+    childWorkspaceId,
+    childSessionId: childId,
+    title: childId,
+    goal: "fixture",
+    status: "complete",
+    latestTranscript: "",
+    transcript: [],
+    evidence: [],
+    createdAt: isoDaysAgo(0),
+    updatedAt: isoDaysAgo(0),
+  };
+}
+
+test("nests children under their actual parent across recency buckets and workspaces", () => {
+  const model = buildThreadSidebarModel(
+    state(
+      [
+        workspace("ws", "Main", [
+          session("parent", "Main task", { updatedAt: isoDaysAgo(40) }),
+          session("unrelated", "Other task", { updatedAt: isoDaysAgo(2) }),
+        ]),
+        workspace("other", "Child folder", [
+          session("child", "Worker", { updatedAt: isoDaysAgo(0) }),
+        ]),
+      ],
+      { orchestrationChildren: [relationship("child-record", "parent", "child", "ws", "other")] },
+    ),
+    nowMs,
+  );
+  expect(model.recencySections[0]?.bucket).toBe("today");
+  const parent = model.recencySections[0]!.threads[0]!;
+  expect(parent.session.id).toBe("parent");
+  expect(parent.isParent).toBe(true);
+  expect(parent.children?.[0]?.parent).toEqual({ key: "ws:parent", title: "Main task" });
+  expect(model.workspaceGroups[1]?.threads).toEqual([]);
+  expect(visibleThreadShortcutOrder({ grouping: "time", model }).map(sessionThreadKey)).toEqual([
+    "ws:parent",
+    "other:child",
+    "ws:unrelated",
+  ]);
+  expect(
+    visibleThreadShortcutOrder({
+      grouping: "time",
+      model,
+      collapsedThreadKeys: new Set(["ws:parent"]),
+    }).map(sessionThreadKey),
+  ).toEqual(["ws:parent", "ws:unrelated"]);
+});
+
+test("pins, archives and orphaned children remain reachable with their parent identity", () => {
+  const model = buildThreadSidebarModel(
+    state(
+      [
+        workspace("ws", "Main", [
+          session("parent", "Main task", { updatedAt: isoDaysAgo(3) }),
+          session("nested", "Nested", { updatedAt: isoDaysAgo(0) }),
+          session("pin", "Pinned child", { updatedAt: isoDaysAgo(0), pinnedAt: isoDaysAgo(0) }),
+          session("archive", "Archived child", {
+            updatedAt: isoDaysAgo(0),
+            archivedAt: isoDaysAgo(0),
+          }),
+          session("orphan", "Orphan", { updatedAt: isoDaysAgo(0) }),
+        ]),
+      ],
+      {
+        orchestrationChildren: [
+          relationship("n", "parent", "nested"),
+          relationship("p", "parent", "pin"),
+          relationship("a", "parent", "archive"),
+          relationship("o", "missing", "orphan"),
+        ],
+      },
+    ),
+    nowMs,
+  );
+  expect(model.pinnedThreads[0]?.session.id).toBe("pin");
+  expect(model.pinnedThreads[0]?.parent?.key).toBe("ws:parent");
+  expect(model.archivedThreads[0]?.parent?.title).toBe("Main task");
+  const visible = visibleThreadShortcutOrder({ grouping: "time", model, archivedOpen: true });
+  expect(new Set(visible.map(sessionThreadKey)).size).toBe(5);
+  expect(visible).toHaveLength(5);
+  expect(
+    model.recencyOrder.find((t) => t.session.id === "parent")?.children?.map((t) => t.session.id),
+  ).toEqual(["nested"]);
+});
+
+test("malformed cycles cannot hide sessions or loop during hierarchy traversal", () => {
+  const model = buildThreadSidebarModel(
+    state(
+      [
+        workspace(
+          "ws",
+          "Main",
+          ["a", "b", "c"].map((id) => session(id, id, { updatedAt: isoDaysAgo(0) })),
+        ),
+      ],
+      {
+        orchestrationChildren: [
+          relationship("a", "b", "a"),
+          relationship("b", "c", "b"),
+          relationship("c", "a", "c"),
+        ],
+      },
+    ),
+    nowMs,
+  );
+  const visible = flattenThreadTrees(model.recencySections.flatMap((section) => section.threads));
+  expect(new Set(visible.map(sessionThreadKey)).size).toBe(3);
+  expect(visible).toHaveLength(3);
 });

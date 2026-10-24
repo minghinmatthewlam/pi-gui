@@ -1,5 +1,6 @@
 import type {
   DesktopAppState,
+  OrchestrationChildThreadStatus,
   SessionRecord,
   ThreadGrouping,
   WorkspaceRecord,
@@ -26,6 +27,11 @@ export interface ThreadListEntry {
   readonly session: SessionRecord;
   readonly environment: ThreadEnvironmentMeta;
   readonly contextLabel: string;
+  readonly parent?: { readonly key: string; readonly title: string };
+  readonly isParent?: boolean;
+  readonly childStatus?: OrchestrationChildThreadStatus;
+  readonly children?: readonly ThreadListEntry[];
+  readonly latestActivityAt?: string;
 }
 
 export interface WorkspaceThreadGroup {
@@ -66,12 +72,22 @@ export function buildThreadSidebarModel(
   nowMs: number = Date.now(),
 ): ThreadSidebarModel {
   const entries = collectThreadEntries(state);
+  const nestedKeys = attachThreadHierarchy(entries, state.orchestrationChildren);
   const pinnedThreads = entries
     .filter((entry) => !entry.session.archivedAt && Boolean(entry.session.pinnedAt))
     .sort((left, right) => comparePinnedThreads(left, right, state.pinnedSessionOrder));
   const historyThreads = entries
-    .filter((entry) => !entry.session.archivedAt && !entry.session.pinnedAt)
-    .sort((left, right) => compareByRecency(left.session, right.session));
+    .filter(
+      (entry) =>
+        !entry.session.archivedAt &&
+        !entry.session.pinnedAt &&
+        !nestedKeys.has(sessionThreadKey(entry)),
+    )
+    .sort(
+      (left, right) =>
+        threadActivityAt(right).localeCompare(threadActivityAt(left)) ||
+        compareByRecency(left.session, right.session),
+    );
   const archivedThreads = entries
     .filter((entry) => Boolean(entry.session.archivedAt))
     .sort((left, right) => compareByRecency(left.session, right.session));
@@ -89,13 +105,99 @@ export function buildThreadSidebarModel(
     pinnedThreads,
     recencySections: RECENCY_BUCKET_ORDER.flatMap((bucket) => {
       const threads = historyThreads.filter(
-        (entry) => recencyBucketId(sessionLastInteractedAt(entry.session), nowMs) === bucket,
+        (entry) => recencyBucketId(threadActivityAt(entry), nowMs) === bucket,
       );
       return threads.length > 0 ? [{ bucket, label: RECENCY_BUCKET_LABELS[bucket], threads }] : [];
     }),
     archivedThreads,
     recencyOrder,
   };
+}
+
+function threadActivityAt(thread: ThreadListEntry): string {
+  return thread.latestActivityAt ?? sessionLastInteractedAt(thread.session);
+}
+
+/** View-only links: no transcript reads, persistence, or changes to task execution. */
+function attachThreadHierarchy(
+  entries: ThreadListEntry[],
+  relationships: DesktopAppState["orchestrationChildren"],
+): ReadonlySet<string> {
+  type Node = Omit<ThreadListEntry, "parent" | "childStatus" | "children" | "latestActivityAt"> & {
+    parent?: ThreadListEntry["parent"];
+    childStatus?: OrchestrationChildThreadStatus;
+    children?: Node[];
+    latestActivityAt?: string;
+    isParent?: boolean;
+  };
+  const nodes = new Map(entries.map((entry) => [sessionThreadKey(entry), entry as Node]));
+  const parents = new Map<string, string>();
+  for (const relation of relationships) {
+    const key = `${relation.childWorkspaceId}:${relation.childSessionId}`;
+    const parentKey = `${relation.parentWorkspaceId}:${relation.parentSessionId}`;
+    const child = nodes.get(key);
+    const parent = nodes.get(parentKey);
+    if (parent && key !== parentKey) parent.isParent = true;
+    if (!child || child.parent || key === parentKey) continue;
+    child.parent = { key: parentKey, title: parent?.session.title ?? "Original parent" };
+    child.childStatus = relation.status;
+    // Pins keep their existing location; archived/orphaned children keep a parent label.
+    if (
+      parent &&
+      !parent.session.archivedAt &&
+      !child.session.archivedAt &&
+      !child.session.pinnedAt
+    ) {
+      parents.set(key, parentKey);
+    }
+  }
+  // Break malformed saved cycles in linear time, so every session remains reachable.
+  const visited = new Set<string>();
+  for (const key of parents.keys()) {
+    const path = new Set<string>();
+    let cursor: string | undefined = key;
+    while (cursor && !visited.has(cursor)) {
+      if (path.has(cursor)) {
+        parents.delete(cursor);
+        break;
+      }
+      path.add(cursor);
+      cursor = parents.get(cursor);
+    }
+    for (const item of path) visited.add(item);
+  }
+  for (const [key, parentKey] of parents) {
+    const parent = nodes.get(parentKey)!;
+    (parent.children ??= []).push(nodes.get(key)!);
+  }
+  const roots = entries.filter((entry) => !parents.has(sessionThreadKey(entry)));
+  const ordered = flattenThreadTrees(roots);
+  for (let index = ordered.length - 1; index >= 0; index--) {
+    const node = ordered[index] as Node;
+    node.children?.sort((a, b) => threadActivityAt(b).localeCompare(threadActivityAt(a)));
+    node.latestActivityAt = node.children?.reduce(
+      (latest, child) => (latest > threadActivityAt(child) ? latest : threadActivityAt(child)),
+      sessionLastInteractedAt(node.session),
+    );
+  }
+  return new Set(parents.keys());
+}
+
+export function flattenThreadTrees(
+  roots: readonly ThreadListEntry[],
+  collapsed: ReadonlySet<string> = new Set(),
+): ThreadListEntry[] {
+  const result: ThreadListEntry[] = [];
+  const pending = [...roots].reverse();
+  while (pending.length) {
+    const entry = pending.pop()!;
+    result.push(entry);
+    if (!collapsed.has(sessionThreadKey(entry))) {
+      const children = entry.children ?? [];
+      for (let i = children.length - 1; i >= 0; i--) pending.push(children[i]!);
+    }
+  }
+  return result;
 }
 
 function listFolders(state: DesktopAppState): readonly WorkspaceRecord[] {
@@ -206,6 +308,7 @@ export interface VisibleThreadShortcutOptions {
   readonly archivedOpen?: boolean;
   /** Folder groups folded shut in the sidebar; their rows are not on screen. */
   readonly collapsedWorkspaceIds?: readonly string[];
+  readonly collapsedThreadKeys?: ReadonlySet<string>;
 }
 
 export function visibleThreadShortcutOrder(
@@ -231,11 +334,14 @@ export function visibleThreadShortcutOrder(
               expandedHistory.has(recencyHistoryExpansionKey(section.bucket)),
             ).visible,
         );
-  return [
-    ...options.model.pinnedThreads,
-    ...unpinned,
-    ...(options.archivedOpen ? options.model.archivedThreads : []),
-  ];
+  return flattenThreadTrees(
+    [
+      ...options.model.pinnedThreads,
+      ...unpinned,
+      ...(options.archivedOpen ? options.model.archivedThreads : []),
+    ],
+    options.collapsedThreadKeys,
+  );
 }
 
 export function comparePinnedThreads(

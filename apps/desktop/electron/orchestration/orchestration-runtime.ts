@@ -14,6 +14,15 @@ export const readThreadToolName = "read_thread";
 export const readThreadAction = "pi_gui_read_thread";
 export const sendMessageToThreadToolName = "send_message_to_thread";
 export const sendMessageToThreadAction = "pi_gui_send_message_to_thread";
+export const archiveChildThreadsToolName = "archive_child_threads";
+export const archiveChildThreadsAction = "pi_gui_archive_child_threads";
+
+export interface ArchiveChildThreadsToolDetails {
+  readonly action: typeof archiveChildThreadsAction;
+  readonly archived: readonly string[];
+  readonly skipped: readonly { readonly threadId: string; readonly reason: string }[];
+  readonly error?: string;
+}
 
 export interface CreateChildThreadToolDetails {
   readonly action: typeof createChildThreadAction;
@@ -79,6 +88,10 @@ export interface SendMessageToThreadToolDetails {
 }
 
 export interface OrchestrationRuntimeBridge {
+  readonly archiveChildThreads: (
+    ctx: ExtensionContext,
+    threadIds: readonly string[],
+  ) => Promise<AgentToolResult<ArchiveChildThreadsToolDetails>>;
   readonly createChildThread: (
     ctx: ExtensionContext,
     input: { readonly prompt: string; readonly toolCallId: string },
@@ -95,6 +108,7 @@ export interface OrchestrationRuntimeBridge {
 }
 
 type OrchestrationToolDetails =
+  | ArchiveChildThreadsToolDetails
   | CreateChildThreadToolDetails
   | ListThreadsToolDetails
   | ReadThreadToolDetails
@@ -242,6 +256,63 @@ function createSendMessageToThreadTool(
   };
 }
 
+function createArchiveChildThreadsTool(
+  bridge: OrchestrationRuntimeBridge,
+): ToolDefinition<any, OrchestrationToolDetails> {
+  return {
+    name: archiveChildThreadsToolName,
+    label: "Archive completed child threads",
+    description:
+      "Archive completed direct child threads of the current thread, preserving their history and drafts. Running, queued, incomplete and unrelated threads are skipped. Archived threads can be restored from the sidebar.",
+    promptSnippet:
+      "archive_child_threads: archive completed child threads only when the user requests it.",
+    promptGuidelines: [
+      "Only use archive_child_threads after the user explicitly asks to archive completed child threads; never archive proactively.",
+      "Use list_threads and read_thread to identify your own children and confirm their requested work is finished. A stopped model turn alone does not prove the task is done.",
+      "Pass exact thread ids and report the archived and skipped results. Never stop tasks or discard queued messages to make them eligible.",
+    ],
+    parameters: {
+      type: "object",
+      properties: {
+        thread_ids: {
+          type: "array",
+          items: { type: "string" },
+          minItems: 1,
+          maxItems: 100,
+          description: "Exact completed direct child thread ids returned by list_threads.",
+        },
+      },
+      required: ["thread_ids"],
+    },
+    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+      if (
+        !isRecord(params) ||
+        !Array.isArray(params.thread_ids) ||
+        params.thread_ids.length < 1 ||
+        params.thread_ids.length > 100 ||
+        !params.thread_ids.every(
+          (id): id is string => typeof id === "string" && id.trim().length > 0,
+        )
+      ) {
+        return {
+          content: [
+            { type: "text", text: "archive_child_threads requires 1–100 exact thread_ids." },
+          ],
+          details: {
+            action: archiveChildThreadsAction,
+            archived: [],
+            skipped: [],
+            error: "Invalid thread_ids",
+          },
+        };
+      }
+      return bridge.archiveChildThreads(ctx, [
+        ...new Set(params.thread_ids.map((id: string) => id.trim())),
+      ]);
+    },
+  };
+}
+
 export function createOrchestrationRuntimeTools(
   bridge: OrchestrationRuntimeBridge,
 ): readonly ToolDefinition<any, OrchestrationToolDetails>[] {
@@ -250,6 +321,7 @@ export function createOrchestrationRuntimeTools(
     createListThreadsTool(bridge),
     createReadThreadTool(bridge),
     createSendMessageToThreadTool(bridge),
+    createArchiveChildThreadsTool(bridge),
   ];
 }
 

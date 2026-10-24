@@ -37,6 +37,7 @@ export interface WorkspaceStateView {
 type WorkspaceDriver = Pick<
   PiSdkDriver,
   | "archiveSession"
+  | "archiveCompletedSession"
   | "createSession"
   | "forkSession"
   | "generateThreadTitle"
@@ -108,7 +109,10 @@ export interface WorkspaceOwner {
   selectWorkspace(workspaceId: string): Promise<DesktopAppState>;
   selectSession(target: WorkspaceSessionTarget): Promise<DesktopAppState>;
   renameSession(target: WorkspaceSessionTarget, title: string): Promise<DesktopAppState>;
-  archiveSession(target: WorkspaceSessionTarget): Promise<DesktopAppState>;
+  archiveSession(
+    target: WorkspaceSessionTarget,
+    requireCompleted?: boolean,
+  ): Promise<DesktopAppState>;
   unarchiveSession(target: WorkspaceSessionTarget): Promise<DesktopAppState>;
   createSession(input: CreateSessionInput): Promise<DesktopAppState>;
   syncCurrentWorkspace(): Promise<DesktopAppState>;
@@ -130,7 +134,7 @@ export function createWorkspaceOwner(store: WorkspaceOwnerHost): WorkspaceOwner 
     selectWorkspace: (workspaceId) => selectWorkspace(store, workspaceId),
     selectSession: (target) => selectSession(store, target),
     renameSession: (target, title) => renameSession(store, target, title),
-    archiveSession: (target) => archiveSession(store, target),
+    archiveSession: (target, requireCompleted) => archiveSession(store, target, requireCompleted),
     unarchiveSession: (target) => unarchiveSession(store, target),
     createSession: (input) => createSession(store, input),
     syncCurrentWorkspace: () => syncCurrentWorkspace(store),
@@ -305,16 +309,20 @@ async function renameSession(
 async function archiveSession(
   store: WorkspaceOwnerHost,
   target: WorkspaceSessionTarget,
+  requireCompleted = false,
 ): Promise<DesktopAppState> {
   await store.initialize();
 
-  return store.withErrorHandling(async () => {
+  const archive = async () => {
     const sessionRef = toSessionRef(target);
+    if (requireCompleted) await store.driver.archiveCompletedSession(sessionRef);
+    else await store.driver.archiveSession(sessionRef);
     store.clearPendingAutoTitle(sessionRef);
     store.unpinSession(sessionRef);
-    await store.driver.archiveSession(sessionRef);
     return store.refreshState(selectionAfterArchiving(store.workspaceState(), target));
-  });
+  };
+  // Tools need a per-child failure, rather than a successful-looking state reply.
+  return requireCompleted ? archive() : store.withErrorHandling(archive);
 }
 
 function selectionAfterArchiving(

@@ -66,6 +66,7 @@ import type { ThreadMenuState } from "./hooks/use-thread-actions";
 import { archiveThreadShortcut, ThreadActionsMenu } from "./thread-actions";
 import {
   recencyHistoryExpansionKey,
+  flattenThreadTrees,
   sessionThreadKey,
   threadHistoryPreview,
   visibleThreadShortcutOrder,
@@ -127,9 +128,15 @@ interface ThreadShortcutBadge {
   readonly label: string;
 }
 
-const ThreadShortcutContext = createContext<ReadonlyMap<string, ThreadShortcutBadge> | undefined>(
-  undefined,
-);
+const ThreadListContext = createContext<
+  | {
+      readonly shortcuts: ReadonlyMap<string, ThreadShortcutBadge> | undefined;
+      readonly props: SidebarProps;
+      readonly collapsed: ReadonlySet<string>;
+      readonly toggle: (key: string) => void;
+    }
+  | undefined
+>(undefined);
 
 export function Sidebar(props: SidebarProps) {
   const {
@@ -167,6 +174,13 @@ export function Sidebar(props: SidebarProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [archivedOpen, setArchivedOpen] = useState(false);
   const [expandedHistory, setExpandedHistory] = useState<ReadonlySet<string>>(() => new Set());
+  const [collapsedThreads, setCollapsedThreads] = useState<ReadonlySet<string>>(() => new Set());
+  const toggleThread = (key: string) =>
+    setCollapsedThreads((current) => {
+      const next = new Set(current);
+      if (!next.delete(key)) next.add(key);
+      return next;
+    });
   const commandHeld = useThreadShortcutHintsVisible(api.platform);
   const collapsedFolderIds = new Set(collapsedWorkspaceIds);
   const setFolderCollapsed = (workspaceId: string, collapsed: boolean) => {
@@ -182,6 +196,7 @@ export function Sidebar(props: SidebarProps) {
     expandedHistory,
     archivedOpen,
     collapsedWorkspaceIds,
+    collapsedThreadKeys: collapsedThreads,
   });
   threadShortcutOrderRef.current = shortcutOrder;
   const shortcutByKey = commandHeld
@@ -208,7 +223,7 @@ export function Sidebar(props: SidebarProps) {
   useEffect(() => {
     if (!renameSessionId) return;
     const holds = (threads: readonly ThreadListEntry[]) =>
-      threads.some((thread) => thread.session.id === renameSessionId);
+      flattenThreadTrees(threads).some((thread) => thread.session.id === renameSessionId);
     if (holds(threadSidebarModel.archivedThreads)) {
       setArchivedOpen(true);
       return;
@@ -233,6 +248,25 @@ export function Sidebar(props: SidebarProps) {
     }
     // Reveal once per rename; later list changes should not reopen groups.
   }, [renameSessionId]);
+
+  // Reveal ancestors when another surface selects or renames a nested thread.
+  useEffect(() => {
+    const entries = new Map(
+      threadSidebarModel.recencyOrder.map((entry) => [sessionThreadKey(entry), entry]),
+    );
+    let entry = renameSessionId
+      ? threadSidebarModel.recencyOrder.find((item) => item.session.id === renameSessionId)
+      : entries.get(`${selectedWorkspace?.id}:${selectedSession?.id}`);
+    const ancestors = new Set<string>();
+    while (entry?.parent && !ancestors.has(entry.parent.key)) {
+      ancestors.add(entry.parent.key);
+      entry = entries.get(entry.parent.key);
+    }
+    setCollapsedThreads((current) => {
+      if (![...ancestors].some((key) => current.has(key))) return current;
+      return new Set([...current].filter((key) => !ancestors.has(key)));
+    });
+  }, [selectedWorkspace?.id, selectedSession?.id, renameSessionId]);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
   const pinnedSortableId = (thread: ThreadListEntry) => `pinned:${sessionThreadKey(thread)}`;
@@ -521,7 +555,14 @@ export function Sidebar(props: SidebarProps) {
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
           >
-            <ThreadShortcutContext.Provider value={shortcutByKey}>
+            <ThreadListContext.Provider
+              value={{
+                shortcuts: shortcutByKey,
+                props,
+                collapsed: collapsedThreads,
+                toggle: toggleThread,
+              }}
+            >
               <div className="workspace-list" data-testid="workspace-list">
                 <SortableContext items={rootGroupIds} strategy={verticalListSortingStrategy}>
                   {rootGroups.map((group) => (
@@ -666,7 +707,7 @@ export function Sidebar(props: SidebarProps) {
                   </div>
                 ) : null}
               </DragOverlay>
-            </ThreadShortcutContext.Provider>
+            </ThreadListContext.Provider>
           </DndContext>
         )}
       </div>
@@ -1554,9 +1595,27 @@ const ThreadSessionRow = forwardRef<HTMLDivElement, ThreadSessionRowProps>(
     ref,
   ) {
     const indicatorVariant = sessionIndicatorVariant(thread);
+    const tree = useContext(ThreadListContext);
+    const threadKey = sessionThreadKey(thread);
+    const children = thread.children ?? [];
+    const childrenOpen = !tree?.collapsed.has(threadKey);
+    const roleLabel = thread.parent
+      ? "Child thread"
+      : thread.isParent
+        ? "Parent thread"
+        : undefined;
+    const childState = thread.childStatus
+      ? {
+          queued: "Not started",
+          running: "Running",
+          waiting: "Queued",
+          complete: "Finished",
+          failed: "Failed",
+        }[thread.childStatus]
+      : undefined;
     const pinned = Boolean(thread.session.pinnedAt);
     const actionContext = showContext ? ` in ${thread.contextLabel}` : "";
-    const shortcut = useContext(ThreadShortcutContext)?.get(sessionThreadKey(thread));
+    const shortcut = tree?.shortcuts?.get(sessionThreadKey(thread));
     const shortcutBadge = overlay ? undefined : shortcut;
     const menuOpen =
       !overlay &&
@@ -1564,6 +1623,7 @@ const ThreadSessionRow = forwardRef<HTMLDivElement, ThreadSessionRowProps>(
       threadMenu.openMenu.sessionId === thread.session.id;
     const classes = [
       "session-row",
+      children.length > 0 && !overlay ? "session-row--parent" : "",
       active ? "session-row--active" : "",
       pinned ? "session-row--pinned" : "",
       dragging ? "session-row--dragging" : "",
@@ -1581,6 +1641,8 @@ const ThreadSessionRow = forwardRef<HTMLDivElement, ThreadSessionRowProps>(
           data-sidebar-indicator={indicatorVariant}
           data-session-pinned={pinned ? "true" : "false"}
           data-session-id={thread.session.id}
+          data-parent-thread={thread.parent?.key}
+          data-thread-role={roleLabel}
           data-thread-shortcut={shortcutBadge ? String(shortcutBadge.slot) : undefined}
           aria-keyshortcuts={
             shortcutBadge ? `${IS_MAC ? "Meta" : "Control"}+${shortcutBadge.slot}` : undefined
@@ -1595,6 +1657,20 @@ const ThreadSessionRow = forwardRef<HTMLDivElement, ThreadSessionRowProps>(
             threadMenu.openSidebarMenu(thread.session.id);
           }}
         >
+          {children.length > 0 && !overlay ? (
+            <button
+              type="button"
+              className="session-row__tree-toggle"
+              aria-label={`${childrenOpen ? "Collapse" : "Expand"} children of ${thread.session.title}`}
+              aria-expanded={childrenOpen}
+              onClick={(event) => {
+                event.stopPropagation();
+                tree?.toggle(threadKey);
+              }}
+            >
+              {childrenOpen ? <ChevronDownIcon /> : <ChevronRightIcon />}
+            </button>
+          ) : null}
           <button
             className="session-row__select"
             onClick={(event) => {
@@ -1622,6 +1698,19 @@ const ThreadSessionRow = forwardRef<HTMLDivElement, ThreadSessionRowProps>(
               </span>
               {showContext ? (
                 <span className="session-row__context">{thread.contextLabel}</span>
+              ) : null}
+              {roleLabel ? (
+                <span
+                  className="session-row__relationship"
+                  title={thread.parent ? `Child of ${thread.parent.title}` : undefined}
+                >
+                  {roleLabel}
+                  {childState ? ` · ${childState}` : ""}
+                  {children.length
+                    ? ` · ${children.length} ${children.length === 1 ? "child" : "children"}`
+                    : ""}
+                  {thread.parent ? ` · ${thread.parent.title}` : ""}
+                </span>
               ) : null}
             </span>
           </button>
@@ -1726,6 +1815,28 @@ const ThreadSessionRow = forwardRef<HTMLDivElement, ThreadSessionRowProps>(
               </button>
             </div>
           </form>
+        ) : null}
+        {tree && !overlay && childrenOpen && children.length > 0 ? (
+          <div
+            className="session-tree__children"
+            data-parent-session-id={thread.session.id}
+            role="group"
+            aria-label={`Children of ${thread.session.title}`}
+          >
+            {children.map((child) => (
+              <HistoryThreadRow
+                key={sessionThreadKey(child)}
+                thread={child}
+                showContext={showContext}
+                selectedWorkspace={tree.props.selectedWorkspace}
+                selectedSession={tree.props.selectedSession}
+                threadMenu={tree.props.threadMenu}
+                onArchiveSession={tree.props.onArchiveSession}
+                onSelectSession={tree.props.onSelectSession}
+                onSetSessionPinned={tree.props.onSetSessionPinned}
+              />
+            ))}
+          </div>
         ) : null}
       </>
     );

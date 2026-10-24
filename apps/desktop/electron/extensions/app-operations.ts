@@ -1,4 +1,4 @@
-import { stat } from "node:fs/promises";
+import { realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import { parseExtensionUrl, type ExtensionAction, type SessionRef } from "@pi-gui/session-driver";
 import type { WorkspaceRecord } from "../../contracts/desktop-state";
@@ -40,7 +40,8 @@ export async function runExtensionAction(
       if (!(await stat(filePath)).isFile()) throw new Error(`${action.path} is not a file`);
       return {
         kind: "openFile",
-        path: path.relative(workspacePath, filePath),
+        // Both sides must use real paths: a checkout may be opened through a symlink.
+        path: path.relative(await realpath(workspacePath), filePath),
         ...(action.line ? { line: action.line } : {}),
       };
     }
