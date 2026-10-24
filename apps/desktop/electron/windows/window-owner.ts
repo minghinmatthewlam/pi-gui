@@ -21,7 +21,7 @@ export interface WindowStateOwner {
   applyView(view: DesktopAppViewState): DesktopAppState;
   projectStateForView(
     view: DesktopAppViewState,
-    state: DesktopAppState,
+    state?: DesktopAppState,
     previousView?: DesktopAppViewState,
   ): DesktopAppState;
   getState(): Promise<DesktopAppState>;
@@ -349,17 +349,6 @@ export class WindowOwner {
     if (!canPublishToWindow(window)) {
       return;
     }
-    const projected = this.projectState(webContentsId);
-    if (payload) {
-      if (
-        projected.selectedWorkspaceId !== payload.workspaceId ||
-        projected.selectedSessionId !== payload.sessionId
-      ) {
-        return;
-      }
-    } else if (projected.selectedSessionId) {
-      return;
-    }
     // Transcript arrays are replaced on writes, so identity detects changes
     // without serializing unchanged transcripts for unrelated session events.
     const previous = this.lastPublishedTranscript.get(webContentsId);
@@ -374,6 +363,19 @@ export class WindowOwner {
         return;
       }
     } else if (previous === null) {
+      return;
+    }
+    // Check for an unchanged transcript before projecting state. The internal
+    // projection is read-only and needs no full structuredClone via snapshot().
+    const projected = this.stateOwner.projectStateForView(this.viewForWindow(window));
+    if (payload) {
+      if (
+        projected.selectedWorkspaceId !== payload.workspaceId ||
+        projected.selectedSessionId !== payload.sessionId
+      ) {
+        return;
+      }
+    } else if (projected.selectedSessionId) {
       return;
     }
     this.lastPublishedTranscript.set(webContentsId, payload);

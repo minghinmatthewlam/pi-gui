@@ -1720,6 +1720,19 @@ function capEvidenceRecords(
   return [...priority, ...remaining].slice(0, MAX_EVIDENCE_RECORDS_PER_CHILD);
 }
 
+interface ParentEvidenceCacheEntry {
+  readonly transcript: readonly TranscriptMessage[];
+  readonly childrenSignature: string;
+  readonly records: readonly OrchestrationEvidenceRecord[];
+}
+
+// The owner and transcript arrays are immutable snapshots. Weak ownership avoids
+// retaining a closed app store; one entry per parent replaces older revisions.
+const parentEvidenceCaches = new WeakMap<
+  OrchestrationOwnerHost,
+  Map<string, ParentEvidenceCacheEntry>
+>();
+
 function parentEvidenceIndex(
   store: OrchestrationOwnerHost,
   children: readonly OrchestrationChildThread[],
@@ -1733,10 +1746,32 @@ function parentEvidenceIndex(
       }),
     ),
   );
+  let cache = parentEvidenceCaches.get(store);
+  if (!cache) {
+    cache = new Map();
+    parentEvidenceCaches.set(store, cache);
+  }
+  for (const key of cache.keys()) {
+    if (!parentKeys.has(key)) cache.delete(key);
+  }
+  // Evidence records include session identities, but not changing child status,
+  // previews or evidence arrays. New/replaced children must invalidate records.
+  const childrenSignature = JSON.stringify(
+    children.map((child) => [child.id, child.parentSessionId, child.childSessionId]),
+  );
   const index = new Map<string, OrchestrationEvidenceRecord[]>();
   for (const key of parentKeys) {
     const transcript = store.transcriptForKey(key);
-    for (const record of evidenceFromParentTranscript(childById, transcript)) {
+    let entry = cache.get(key);
+    if (entry?.transcript !== transcript || entry.childrenSignature !== childrenSignature) {
+      entry = {
+        transcript,
+        childrenSignature,
+        records: evidenceFromParentTranscript(childById, transcript),
+      };
+      cache.set(key, entry);
+    }
+    for (const record of entry.records) {
       const bucket = index.get(record.childThreadId) ?? [];
       bucket.push(record);
       index.set(record.childThreadId, bucket);

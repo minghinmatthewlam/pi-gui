@@ -214,9 +214,14 @@ export class DesktopAppStore {
    * Coalesce token-level assistantDelta / redundant sessionUpdated publishes so
    * the renderer does not apply a full DesktopAppState snapshot per token.
    */
-  private readonly streamingUiPublisher = new StreamingUiPublisher((sessionRef) => {
+  private readonly streamingUiPublisher = new StreamingUiPublisher((sessionRefs) => {
+    for (const sessionRef of sessionRefs) {
+      this.refreshOrchestrationForSession(sessionRef);
+    }
     this.emit();
-    this.publishSelectedTranscriptFor(sessionRef);
+    if (sessionRefs.some((sessionRef) => this.isSelectedSession(sessionRef))) {
+      this.publishSelectedTranscript();
+    }
   });
   /** Per-workspace serial queue so focus reconciles never overlap or race. */
   private readonly externalChangeQueues = new Map<string, Promise<void>>();
@@ -481,8 +486,10 @@ export class DesktopAppStore {
       orchestrationState: () => ({
         selectedWorkspaceId: this.state.selectedWorkspaceId,
         selectedSessionId: this.state.selectedSessionId,
-        workspaces: structuredClone(this.state.workspaces),
-        orchestrationChildren: structuredClone(this.state.orchestrationChildren),
+        // Internal owners read immutable state; copying every child for an identity
+        // lookup made each streaming delta proportional to all open threads.
+        workspaces: this.state.workspaces,
+        orchestrationChildren: this.state.orchestrationChildren,
       }),
       replaceOrchestrationChildren: (children) => {
         this.state = { ...this.state, orchestrationChildren: [...children] };
@@ -3521,17 +3528,10 @@ export class DesktopAppStore {
       }
       this.markSessionViewedIfActivelyViewed(event.sessionRef);
       this.state = this.syncDerivedSessionState(this.state, event.sessionRef);
-      if (
-        this.orchestrationOwner.hasOrchestrationChildSession(event.sessionRef) ||
-        this.orchestrationOwner.hasOrchestrationParentSession(event.sessionRef)
-      ) {
-        this.state = {
-          ...this.state,
-          orchestrationChildren: this.orchestrationOwner.projectOrchestrationChildrenForSession(
-            event.sessionRef,
-          ),
-        };
-        this.scheduleOrchestrationSupervision();
+      // Defer derived orchestration work as well as IPC. Otherwise token events
+      // still rescan parent evidence before the publisher coalesces them.
+      if (!this.streamingUiPublisher.shouldDefer(event)) {
+        this.refreshOrchestrationForSession(event.sessionRef);
       }
       if (shouldFollowSessionMutation && event.type !== "sessionClosed") {
         this.applyFastSessionSelection(event.sessionRef);
@@ -3562,6 +3562,21 @@ export class DesktopAppStore {
       }
       this.streamingUiPublisher.observe(event);
     }
+  }
+
+  private refreshOrchestrationForSession(sessionRef: SessionRef): void {
+    if (
+      !this.orchestrationOwner.hasOrchestrationChildSession(sessionRef) &&
+      !this.orchestrationOwner.hasOrchestrationParentSession(sessionRef)
+    ) {
+      return;
+    }
+    this.state = {
+      ...this.state,
+      orchestrationChildren:
+        this.orchestrationOwner.projectOrchestrationChildrenForSession(sessionRef),
+    };
+    this.scheduleOrchestrationSupervision();
   }
 
   workspaceRefFromState(workspaceId: string): WorkspaceRef | undefined {

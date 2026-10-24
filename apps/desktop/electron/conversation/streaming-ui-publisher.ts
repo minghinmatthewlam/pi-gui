@@ -21,7 +21,7 @@ export function shouldDeferStreamingUiPublish(
   event: SessionDriverEvent,
   trackedRunId: string | undefined,
 ): boolean {
-  if (event.type === "assistantDelta") {
+  if (event.type === "assistantDelta" || event.type === "toolUpdated") {
     return true;
   }
   if (event.type !== "sessionUpdated" || event.snapshot.status !== "running") {
@@ -32,19 +32,18 @@ export function shouldDeferStreamingUiPublish(
 }
 
 /**
- * At most one UI publish per session per interval. Later tokens in the window
- * reuse the pending timer; a discrete event cancels it because it is about to
- * `emit()` itself. Also owns last-seen runningRunId so Stop→Send is immediate.
+ * One app-wide UI publish per interval, including all dirty sessions. Separate
+ * per-session timers multiply full-state publishes when agents run in parallel.
+ * Discrete events cancel only their session; other sessions keep their flush.
+ * Also owns last-seen runningRunId so Stop→Send is immediate.
  */
 export class StreamingUiPublisher {
-  private readonly pending = new Map<
-    string,
-    { readonly sessionRef: SessionRef; readonly timer: ReturnType<typeof setTimeout> }
-  >();
+  private readonly pending = new Map<string, SessionRef>();
+  private timer: ReturnType<typeof setTimeout> | undefined;
   private readonly trackedRunId = new Map<string, string>();
 
   constructor(
-    private readonly publish: (sessionRef: SessionRef) => void,
+    private readonly publish: (sessionRefs: readonly SessionRef[]) => void,
     private readonly intervalMs: number = STREAMING_UI_PUBLISH_INTERVAL_MS,
   ) {}
 
@@ -75,31 +74,32 @@ export class StreamingUiPublisher {
   }
 
   schedule(sessionRef: SessionRef): void {
-    const key = sessionKey(sessionRef);
-    if (this.pending.has(key)) {
+    this.pending.set(sessionKey(sessionRef), sessionRef);
+    if (this.timer) {
       return;
     }
-    const timer = setTimeout(() => {
-      this.pending.delete(key);
-      this.publish(sessionRef);
+    this.timer = setTimeout(() => {
+      this.timer = undefined;
+      const sessions = [...this.pending.values()];
+      this.pending.clear();
+      this.publish(sessions);
     }, this.intervalMs);
-    this.pending.set(key, { sessionRef, timer });
   }
 
   cancel(sessionRef: SessionRef): void {
-    const key = sessionKey(sessionRef);
-    const entry = this.pending.get(key);
-    if (!entry) {
-      return;
+    this.pending.delete(sessionKey(sessionRef));
+    if (this.pending.size === 0 && this.timer) {
+      clearTimeout(this.timer);
+      this.timer = undefined;
     }
-    clearTimeout(entry.timer);
-    this.pending.delete(key);
   }
 
   clear(): void {
-    for (const entry of this.pending.values()) {
-      clearTimeout(entry.timer);
+    if (this.timer) {
+      clearTimeout(this.timer);
+      this.timer = undefined;
     }
     this.pending.clear();
+    this.trackedRunId.clear();
   }
 }
