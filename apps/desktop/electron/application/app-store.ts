@@ -484,6 +484,7 @@ export class DesktopAppStore {
         workspaces: structuredClone(this.state.workspaces),
         orchestrationChildren: structuredClone(this.state.orchestrationChildren),
       }),
+      orchestrationChildren: () => this.state.orchestrationChildren,
       replaceOrchestrationChildren: (children) => {
         this.state = { ...this.state, orchestrationChildren: [...children] };
       },
