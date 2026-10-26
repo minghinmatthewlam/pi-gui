@@ -7,7 +7,10 @@ interface WaitingFlush {
 }
 
 /**
- * Asks renderers to send their debounced composer drafts before their window goes away.
+ * Asks renderers to send their debounced composer drafts before their window goes away, or
+ * before main switches a window's thread on an extension's behalf: the renderer drops a
+ * pending draft when the selection changes under it. Call it outside the window's action
+ * queue, since the draft save goes through that queue.
  * Each request resolves when the window's main frame acknowledges it after its draft
  * writes settled, or when the window dies or the bound elapses, so shutdown never waits
  * on an unresponsive renderer.

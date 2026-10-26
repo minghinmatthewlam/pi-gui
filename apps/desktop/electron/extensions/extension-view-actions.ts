@@ -1,4 +1,4 @@
-import { webContents } from "electron";
+import { webContents, type BrowserWindow } from "electron";
 import { stat } from "node:fs/promises";
 import path from "node:path";
 import type { DesktopHostAction } from "@pi-gui/extension-ui/browser";
@@ -18,6 +18,8 @@ export async function performExtensionViewHostAction(
     readonly windows: WindowOwner;
     readonly views: DesktopExtensionViewOwner;
     readonly openExternal: (url: string) => Promise<void>;
+    /** Saves the window's debounced composer draft; it must not run inside the window's queue. */
+    readonly saveComposerDraft: (window: BrowserWindow) => Promise<void>;
   },
   context: DesktopExtensionConnectionContext & { readonly action: DesktopHostAction },
 ): Promise<void> {
@@ -49,21 +51,25 @@ export async function performExtensionViewHostAction(
       // the awaits that send it have unwound.
       selectThread: async (resolve) => {
         setImmediate(() => {
-          void owners.windows
-            .runStateAction(window, async () => {
-              try {
-                requireCurrentTask();
-              } catch {
-                // The user already left the view's task; there is nothing to switch from.
-                return owners.store.getState();
-              }
-              try {
-                return await owners.store.selectSession(resolve());
-              } catch (error) {
-                // The thread went away meanwhile: say so in the app, since the view is told ok.
-                return owners.store.withError(error);
-              }
-            })
+          // The switch drops the composer's debounced draft, so save it first.
+          void owners
+            .saveComposerDraft(window)
+            .then(() =>
+              owners.windows.runStateAction(window, async () => {
+                try {
+                  requireCurrentTask();
+                } catch {
+                  // The user already left the view's task; there is nothing to switch from.
+                  return owners.store.getState();
+                }
+                try {
+                  return await owners.store.selectSession(resolve());
+                } catch (error) {
+                  // The thread went away meanwhile: say so in the app, since the view is told ok.
+                  return owners.store.withError(error);
+                }
+              }),
+            )
             .catch((error: unknown) => console.error("[extension-view] open thread failed", error));
         });
       },
