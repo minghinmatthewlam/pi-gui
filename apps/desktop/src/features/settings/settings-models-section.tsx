@@ -13,7 +13,6 @@ import {
   SettingsRow,
   THINKING_LEVELS,
 } from "./settings-utils";
-import { modelMatchesPattern } from "./model-settings";
 
 interface SettingsModelsSectionProps {
   readonly runtime?: RuntimeSnapshot;
@@ -53,14 +52,7 @@ export function SettingsModelsSection({
   const savedPatterns = runtime?.settings.enabledModelPatterns ?? [];
   const activePatterns =
     savedPatterns.length === 0 ? availableModels.map(modelPattern) : savedPatterns;
-  const isEnabled = (model: RuntimeModelRecord) =>
-    activePatterns.some((pattern) => modelMatchesPattern(model, pattern));
-  // A glob like `openrouter/**` can't be switched off for one model, so its switch is locked.
-  const isGlobEnabled = (model: RuntimeModelRecord) =>
-    activePatterns.some(
-      (pattern) => pattern !== modelPattern(model) && modelMatchesPattern(model, pattern),
-    );
-  const enabledModels = availableModels.filter(isEnabled);
+  const enabledModels = availableModels.filter((model) => model.scope !== "off");
 
   const defaultProvider = runtime?.settings.defaultProvider;
   const defaultModelId = runtime?.settings.defaultModelId;
@@ -151,7 +143,7 @@ export function SettingsModelsSection({
           ) : (
             visibleAvailable.map((model) => {
               const pattern = modelPattern(model);
-              const enabled = isEnabled(model);
+              const enabled = model.scope !== "off";
               return (
                 <ModelRow
                   isDefault={
@@ -162,7 +154,9 @@ export function SettingsModelsSection({
                 >
                   <SettingsSwitch
                     checked={enabled}
-                    disabled={enabled && (activePatterns.length <= 1 || isGlobEnabled(model))}
+                    // Another entry, such as a glob, enables a `matched` model, so removing its
+                    // own entry would not turn it off.
+                    disabled={enabled && (activePatterns.length <= 1 || model.scope === "matched")}
                     label={`Enable ${pattern}`}
                     onChange={(next) => setEnabled(pattern, next)}
                   />

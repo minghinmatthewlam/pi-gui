@@ -1,31 +1,10 @@
-import { Minimatch } from "minimatch";
 import type {
   ModelSettingsSnapshot,
-  RuntimeModelRecord,
   RuntimeSettingsSnapshot,
   RuntimeSnapshot,
 } from "@pi-gui/session-driver/runtime-types";
 import type { DesktopAppState, WorkspaceRecord } from "../../../contracts/desktop-state";
 import { resolveRepoWorkspaceId } from "../../../contracts/workspace-roots";
-
-// Compiling a glob costs far more than matching it, and each pattern is checked against every
-// model. Patterns come from the user's settings, so this stays small.
-const compiledPatterns = new Map<string, Minimatch>();
-
-/** Matches an `enabledModels` entry the way pi does, including globs like `openrouter/**`. */
-export function modelMatchesPattern(model: RuntimeModelRecord, pattern: string): boolean {
-  const fullId = `${model.providerId}/${model.modelId}`;
-  if (pattern === fullId) return true;
-  if (!/[*?[]/.test(pattern)) return false;
-  let glob = compiledPatterns.get(pattern);
-  if (!glob) {
-    glob = new Minimatch(pattern.replace(/:(off|minimal|low|medium|high|xhigh|max)$/, ""), {
-      nocase: true,
-    });
-    compiledPatterns.set(pattern, glob);
-  }
-  return glob.match(fullId) || glob.match(model.modelId);
-}
 
 export function toModelSettingsSnapshot(
   settings: RuntimeSettingsSnapshot | ModelSettingsSnapshot,

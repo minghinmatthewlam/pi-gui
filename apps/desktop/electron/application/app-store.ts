@@ -2481,9 +2481,10 @@ export class DesktopAppStore {
               globalModelSettings,
             )
           : undefined;
-      const runtimeByWorkspace = this.serializeEffectiveRuntimeState(
+      const runtimeByWorkspace = await this.serializeEffectiveRuntimeState(
         workspaces,
         scopedModelSettingsByWorkspace,
+        globalModelSettings,
       );
       const pinnedSessionOrder = reconcilePinnedSessionOrder(
         this.sessionState.pinnedAtBySession,
@@ -3659,24 +3660,22 @@ export class DesktopAppStore {
   private async serializeRuntimeStateForCurrentWorkspaces(): Promise<
     Record<string, RuntimeSnapshot>
   > {
-    const runtimeByWorkspace = this.serializeRuntimeState();
-    if (this.state.modelSettingsScopeMode !== "per-repo") {
-      return runtimeByWorkspace;
-    }
-
-    const workspaceRefs = this.state.workspaces.map((workspace) => ({
-      workspaceId: workspace.id,
-      path: workspace.path,
-      displayName: workspace.name,
-    }));
-    const scopedModelSettingsByWorkspace = await this.loadScopedModelSettingsByWorkspace(
-      this.state.workspaces,
-      workspaceRefs,
-      this.state.globalModelSettings,
-    );
+    const scopedModelSettingsByWorkspace =
+      this.state.modelSettingsScopeMode === "per-repo"
+        ? await this.loadScopedModelSettingsByWorkspace(
+            this.state.workspaces,
+            this.state.workspaces.map((workspace) => ({
+              workspaceId: workspace.id,
+              path: workspace.path,
+              displayName: workspace.name,
+            })),
+            this.state.globalModelSettings,
+          )
+        : undefined;
     return this.serializeEffectiveRuntimeState(
       this.state.workspaces,
       scopedModelSettingsByWorkspace,
+      this.state.globalModelSettings,
     );
   }
 
@@ -3718,29 +3717,47 @@ export class DesktopAppStore {
     );
   }
 
-  private serializeEffectiveRuntimeState(
+  /**
+   * Runtime snapshots as windows see them. Per-repo mode shows a worktree its repo's model
+   * settings, and app-global mode shows every workspace the global ones (applied in the
+   * renderer), so each model's scope is re-resolved against the patterns actually shown.
+   */
+  private async serializeEffectiveRuntimeState(
     workspaces: DesktopAppState["workspaces"],
-    scopedModelSettingsByWorkspace?: Record<string, ModelSettingsSnapshot>,
-  ): Record<string, RuntimeSnapshot> {
+    scopedModelSettingsByWorkspace: Record<string, ModelSettingsSnapshot> | undefined,
+    globalModelSettings: ModelSettingsSnapshot,
+  ): Promise<Record<string, RuntimeSnapshot>> {
     const runtimeByWorkspace = this.serializeRuntimeState();
-    if (this.state.modelSettingsScopeMode !== "per-repo") {
-      return runtimeByWorkspace;
-    }
+    const perRepo = this.state.modelSettingsScopeMode === "per-repo";
 
-    for (const workspace of workspaces) {
-      const ownerWorkspaceId = resolveRepoWorkspaceId(workspaces, workspace.id);
-      const workspaceRuntime = runtimeByWorkspace[workspace.id];
-      const modelSettings = ownerWorkspaceId
-        ? scopedModelSettingsByWorkspace?.[ownerWorkspaceId]
-        : undefined;
-      if (!workspaceRuntime || !modelSettings) {
-        continue;
-      }
-      runtimeByWorkspace[workspace.id] = applyModelSettingsSnapshot(
-        workspaceRuntime,
-        modelSettings,
-      );
-    }
+    await Promise.all(
+      workspaces.map(async (workspace) => {
+        const workspaceRuntime = runtimeByWorkspace[workspace.id];
+        const ownerWorkspaceId = resolveRepoWorkspaceId(workspaces, workspace.id);
+        const modelSettings = perRepo
+          ? ownerWorkspaceId
+            ? scopedModelSettingsByWorkspace?.[ownerWorkspaceId]
+            : undefined
+          : globalModelSettings;
+        if (!workspaceRuntime || !modelSettings) {
+          return;
+        }
+        const patterns = modelSettings.enabledModelPatterns;
+        const runtime = samePatterns(workspaceRuntime.settings.enabledModelPatterns, patterns)
+          ? workspaceRuntime
+          : {
+              ...workspaceRuntime,
+              models: await this.driver.runtimeSupervisor.scopeModels(
+                workspaceRuntime.workspace,
+                workspaceRuntime.models,
+                patterns,
+              ),
+            };
+        runtimeByWorkspace[workspace.id] = perRepo
+          ? applyModelSettingsSnapshot(runtime, modelSettings)
+          : runtime;
+      }),
+    );
 
     return runtimeByWorkspace;
   }
@@ -4887,11 +4904,12 @@ function modelSettingsEqual(left: ModelSettingsSnapshot, right: ModelSettingsSna
     left.defaultProvider === right.defaultProvider &&
     left.defaultModelId === right.defaultModelId &&
     left.defaultThinkingLevel === right.defaultThinkingLevel &&
-    left.enabledModelPatterns.length === right.enabledModelPatterns.length &&
-    left.enabledModelPatterns.every(
-      (pattern, index) => pattern === right.enabledModelPatterns[index],
-    )
+    samePatterns(left.enabledModelPatterns, right.enabledModelPatterns)
   );
+}
+
+function samePatterns(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((pattern, index) => pattern === right[index]);
 }
 
 function mergeEnabledModelPatterns(
