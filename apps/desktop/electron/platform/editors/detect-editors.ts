@@ -71,13 +71,15 @@ export function createEditorDetectionHost(): EditorDetectionHost {
     listDirectory: (absolutePath) => readdir(absolutePath).catch(() => []),
     runCommand: (command, args) =>
       new Promise((resolve) => {
-        execFile(
+        const child = execFile(
           command,
           [...args],
           { encoding: "utf8", timeout: 2_000, windowsHide: true },
           // A missing binary or a non-zero exit just means this probe has no answer.
           (error, stdout) => resolve(error ? undefined : stdout),
         );
+        // Probes read nothing; closing stdin makes one that tries see EOF at once.
+        child.stdin?.end();
       }),
   };
 }
@@ -330,26 +332,23 @@ async function detectMacDefaultEditor(
   }
   // LaunchServices stores a bundle identifier, while detection records bundle
   // paths, so each detected app is read back for the id it actually carries.
-  for (const editor of editors) {
-    if (editor.launch.kind !== "mac-app") {
-      continue;
-    }
-    const infoPlist = pathApi.join(editor.launch.appPath, "Contents/Info.plist");
-    const candidate = (
-      await host.runCommand("plutil", [
-        "-extract",
-        "CFBundleIdentifier",
-        "raw",
-        "-o",
-        "-",
-        infoPlist,
-      ])
-    )?.trim();
-    if (candidate === bundleId) {
-      return editor.id;
-    }
-  }
-  return undefined;
+  const bundleIds = await Promise.all(
+    editors.map(async (editor) =>
+      editor.launch.kind === "mac-app"
+        ? (
+            await host.runCommand("plutil", [
+              "-extract",
+              "CFBundleIdentifier",
+              "raw",
+              "-o",
+              "-",
+              pathApi.join(editor.launch.appPath, "Contents/Info.plist"),
+            ])
+          )?.trim()
+        : undefined,
+    ),
+  );
+  return editors[bundleIds.indexOf(bundleId)]?.id;
 }
 
 function readMacFolderHandlerBundleId(json: string): string | undefined {

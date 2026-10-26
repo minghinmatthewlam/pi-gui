@@ -447,6 +447,22 @@ test("EditorService retries detection after a failed probe", async () => {
   expect(probes).toBe(2);
 });
 
+test("EditorService re-probes the OS default along with the editors", async () => {
+  let probes = 0;
+  const service = new EditorService({
+    detect: async () => {
+      probes += 1;
+      return probes === 1 ? [] : [detectedEditor];
+    },
+    detectDefault: async (editors) => editors[0]?.id,
+    launch: () => Promise.resolve(),
+  });
+
+  expect(await service.list()).toEqual({ editors: [] });
+  await expect(service.select("not-an-editor")).rejects.toThrow("Unknown editor");
+  expect((await service.list()).preferredEditorId).toBe("vscode");
+});
+
 test("EditorService.select records a pick without launching anything", async () => {
   let launches = 0;
   const service = new EditorService({
@@ -488,6 +504,7 @@ test("EditorService opens a known editor and remembers it as the preference", as
   const launches: { command: string; args: readonly string[] }[] = [];
   const service = new EditorService({
     detect: async () => [detectedEditor],
+    detectDefault: async () => undefined,
     launch: (command, args) => {
       launches.push({ command, args });
       return Promise.resolve();
