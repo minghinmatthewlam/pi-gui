@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import {
   createNamedThread,
+  createSessionViaIpc,
   getDesktopState,
   launchDesktop,
   makeUserDataDir,
@@ -11,9 +12,9 @@ import {
 } from "../helpers/electron-app";
 import { appendMessagesToSessionFile, sessionFilePathFromCatalog } from "../helpers/session-file";
 
-type LoadedThreads = { readonly subscribed: string[]; readonly transcripts: string[] };
+type LoadedThreads = { readonly released: string[]; readonly transcripts: string[] };
 
-/** Threads the app holds: a live driver subscription, and a cached transcript. */
+/** Threads whose runtime the app released, and threads whose transcript it holds. */
 async function loadedThreads(harness: DesktopHarness): Promise<LoadedThreads> {
   const loaded = await harness.electronApp.evaluate(() => {
     const hooks = (globalThis as { __PI_APP_TEST_HOOKS?: { loadedThreads?: () => LoadedThreads } })
@@ -23,15 +24,17 @@ async function loadedThreads(harness: DesktopHarness): Promise<LoadedThreads> {
     }
     return hooks.loadedThreads();
   });
-  return { subscribed: loaded.subscribed.sort(), transcripts: loaded.transcripts.sort() };
+  return { released: loaded.released.sort(), transcripts: loaded.transcripts.sort() };
 }
 
-/** Both the subscription and the transcript of exactly these threads are held. */
-async function expectLoadedThreads(harness: DesktopHarness, keys: string[]): Promise<void> {
-  const expected = [...keys].sort();
+/** Exactly these threads are held, and exactly these were released. */
+async function expectThreads(
+  harness: DesktopHarness,
+  expected: { readonly held: string[]; readonly released: string[] },
+): Promise<void> {
   await expect
     .poll(() => loadedThreads(harness))
-    .toEqual({ subscribed: expected, transcripts: expected });
+    .toEqual({ released: [...expected.released].sort(), transcripts: [...expected.held].sort() });
 }
 
 const titles = ["Thread one", "Thread two", "Thread three", "Thread four", "Thread five"];
@@ -106,14 +109,20 @@ test("releases idle threads that weren't viewed recently and reloads them when o
     }
 
     // Only the threads viewed most recently stay loaded.
-    await expectLoadedThreads(harness, refs.slice(-3).map(keyOf));
+    await expectThreads(harness, {
+      held: refs.slice(-3).map(keyOf),
+      released: refs.slice(0, 2).map(keyOf),
+    });
 
     // A released thread reloads from its file, with its messages, and still works.
     await selectSession(window, "Thread one");
     await expect(transcript).toContainText("question for Thread one");
     await expect(transcript).toContainText("answer from Thread one");
     await expect(transcript).not.toContainText("answer from Thread five");
-    await expectLoadedThreads(harness, [keyOf(refs[0]!), ...refs.slice(-2).map(keyOf)]);
+    await expectThreads(harness, {
+      held: [keyOf(refs[0]!), ...refs.slice(-2).map(keyOf)],
+      released: refs.slice(1, 3).map(keyOf),
+    });
     const composer = window.getByTestId("composer");
     await composer.fill("draft after reload");
     await expect(composer).toHaveValue("draft after reload");
@@ -138,7 +147,10 @@ test("a draft typed in a thread is still there after the thread is released and 
       await selectSession(window, title);
       await expect(transcript).toContainText(`answer from ${title}`);
     }
-    await expectLoadedThreads(harness, refs.slice(-3).map(keyOf));
+    await expectThreads(harness, {
+      held: refs.slice(-3).map(keyOf),
+      released: refs.slice(0, 2).map(keyOf),
+    });
 
     await selectSession(window, "Thread one");
     await expect(transcript).toContainText("answer from Thread one");
@@ -177,7 +189,10 @@ test("a thread showing in another window, even minimized, stays loaded while thi
       await selectSession(firstWindow, title);
       await expect(firstWindow.getByTestId("transcript")).toContainText(`answer from ${title}`);
     }
-    await expectLoadedThreads(harness, [keyOf(refs[0]!), ...refs.slice(-3).map(keyOf)]);
+    await expectThreads(harness, {
+      held: [keyOf(refs[0]!), ...refs.slice(-3).map(keyOf)],
+      released: [keyOf(refs[1]!)],
+    });
 
     // Restored, the second window still shows the thread, with its messages, and can use it.
     await harness.electronApp.evaluate(({ BrowserWindow }) => {
@@ -189,6 +204,34 @@ test("a thread showing in another window, even minimized, stays loaded while thi
     const composer = secondWindow.getByTestId("composer");
     await composer.fill("still here");
     await expect(composer).toHaveValue("still here");
+  } finally {
+    await harness.close();
+  }
+});
+
+test("starting new threads releases the ones not viewed recently", async () => {
+  test.setTimeout(120_000);
+  const userDataDir = await makeUserDataDir();
+  const workspacePath = await makeWorkspace("release-idle-new-threads");
+  const harness = await launchDesktop(userDataDir, {
+    initialWorkspaces: [workspacePath],
+    testMode: "background",
+  });
+  try {
+    const window = await harness.firstWindow();
+    await waitForWorkspaceByPath(window, workspacePath);
+    const refs: ThreadRef[] = [];
+    // Created threads open by themselves; nothing selects an existing thread here.
+    for (const title of titles) {
+      await createSessionViaIpc(window, workspacePath, title);
+      await expect(window.locator(".chat-header__title")).toHaveText(title);
+      const state = await getDesktopState(window);
+      refs.push({ workspaceId: state.selectedWorkspaceId, sessionId: state.selectedSessionId });
+    }
+    await expectThreads(harness, {
+      held: refs.slice(-3).map(keyOf),
+      released: refs.slice(0, 2).map(keyOf),
+    });
   } finally {
     await harness.close();
   }

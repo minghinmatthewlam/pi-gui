@@ -308,6 +308,8 @@ export class SessionSupervisor {
   private readonly ensureRecordInFlight = new Map<string, Promise<ManagedSessionRecord>>();
   /** Sessions being released; a reopen waits for these first. */
   private readonly releaseInFlight = new Map<string, Promise<void>>();
+  /** Caller operations running per session; a session in use is never released. */
+  private readonly operationsInFlight = new Map<string, number>();
   /** Preserve invocation order so stale touches cannot undo a later rename or removal. */
   private readonly workspaceMutationQueues = new Map<WorkspaceId, Promise<void>>();
   private readonly leaseIdentity: LeaseIdentity = currentLeaseIdentity();
@@ -1591,18 +1593,41 @@ export class SessionSupervisor {
   }
 
   /**
-   * Frees an idle session's runtime and loaded file. It reopens from its file the next time it
-   * is used. Unlike closeSession this emits nothing and changes nothing the person can see.
-   * Returns false, and keeps the session, while it runs, has queued messages, or waits on the
-   * person.
+   * Runs one caller operation on a session. While any is running the session is in use and
+   * releaseSession keeps it, so a release never disposes a runtime under an operation that
+   * already holds its record.
    */
-  async releaseSession(sessionRef: SessionRef): Promise<boolean> {
+  async trackOperation<T>(sessionRef: SessionRef, operation: () => Promise<T>): Promise<T> {
+    const key = sessionKey(sessionRef);
+    this.operationsInFlight.set(key, (this.operationsInFlight.get(key) ?? 0) + 1);
+    try {
+      return await operation();
+    } finally {
+      const remaining = (this.operationsInFlight.get(key) ?? 1) - 1;
+      if (remaining > 0) {
+        this.operationsInFlight.set(key, remaining);
+      } else {
+        this.operationsInFlight.delete(key);
+      }
+    }
+  }
+
+  /**
+   * Frees an idle session's runtime, its lease and its extensions. The record and its
+   * subscribers stay, so nothing the person sees changes and listeners keep receiving events
+   * once the session reopens from its file on next use. Writes nothing to the catalog: an idle
+   * session's entry is already current, and a late write could undo a concurrent archive.
+   * Returns false, and keeps the session, while it is in use, runs, has queued messages, or
+   * waits on the person.
+   */
+  releaseSession(sessionRef: SessionRef): boolean {
     const key = sessionKey(sessionRef);
     const record = this.records.get(key);
-    if (!record) {
+    if (!record?.session || record.closed) {
       return true;
     }
     if (
+      this.operationsInFlight.has(key) ||
       this.ensureRecordInFlight.has(key) ||
       isRecordBusy(record) ||
       record.queuedMessages.length > 0 ||
@@ -1616,25 +1641,19 @@ export class SessionSupervisor {
       return false;
     }
 
-    // Out of the map first, so a reopen builds a new record. The reopen waits for this release,
-    // so releasing the old lease can't remove the new one.
-    this.records.delete(key);
     record.closed = true;
     record.unsubscribeAgent?.();
     record.unsubscribeAgent = undefined;
-    record.listeners.clear();
-    // Dispose first, as closeSession does: the runtime, its lease and its extensions must go even
-    // if the catalog write fails, or they would outlive the record while a reopen builds another.
-    const released = (async () => {
-      await this.disposeRecordRuntimeSafely(record);
-      try {
-        await this.persistSnapshot(record);
-      } catch (error) {
-        console.warn(`[pi-sdk-driver] failed to persist released session ${key}:`, error);
+    // The extensions that set this UI are about to stop; the reopened ones set their own.
+    this.resetExtensionUi(record);
+    // disposeRecordRuntime clears the runtime and the lease path before its first await. A
+    // reopen waits for the rest, so releasing the old lease file can't remove the new one.
+    const released: Promise<void> = this.disposeRecordRuntimeSafely(record).finally(() => {
+      if (this.releaseInFlight.get(key) === released) {
+        this.releaseInFlight.delete(key);
       }
-    })().finally(() => this.releaseInFlight.delete(key));
+    });
     this.releaseInFlight.set(key, released);
-    await released;
     return true;
   }
 
@@ -1658,6 +1677,8 @@ export class SessionSupervisor {
     sessionRef: SessionRef,
     key: string,
   ): Promise<ManagedSessionRecord> {
+    // A release can start while ensureRecord awaits; its lease must be gone before this claims one.
+    await this.releaseInFlight.get(key)?.catch(() => undefined);
     const existing = this.records.get(key);
     if (existing && existing.session && !existing.closed) {
       return existing;

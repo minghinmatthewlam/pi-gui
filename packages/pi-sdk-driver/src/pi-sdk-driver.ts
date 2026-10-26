@@ -59,67 +59,97 @@ export class PiSdkDriver implements SessionDriver {
   }
 
   validateForkSession(sourceRef: SessionRef, options: ForkSessionOptions): Promise<void> {
-    return this.supervisor.validateForkSession(sourceRef, options);
+    return this.supervisor.trackOperation(sourceRef, () =>
+      this.supervisor.validateForkSession(sourceRef, options),
+    );
   }
 
   forkSession(sourceRef: SessionRef, options: ForkSessionOptions): Promise<ForkSessionResult> {
-    return this.supervisor.forkSession(sourceRef, options);
+    return this.supervisor.trackOperation(sourceRef, () =>
+      this.supervisor.forkSession(sourceRef, options),
+    );
   }
 
   openSession(sessionRef: SessionRef): Promise<SessionSnapshot> {
-    return this.supervisor.openSession(sessionRef);
+    return this.supervisor.trackOperation(sessionRef, () =>
+      this.supervisor.openSession(sessionRef),
+    );
   }
 
   archiveSession(sessionRef: SessionRef): Promise<void> {
-    return this.supervisor.archiveSession(sessionRef);
+    return this.supervisor.trackOperation(sessionRef, () =>
+      this.supervisor.archiveSession(sessionRef),
+    );
   }
 
   unarchiveSession(sessionRef: SessionRef): Promise<void> {
-    return this.supervisor.unarchiveSession(sessionRef);
+    return this.supervisor.trackOperation(sessionRef, () =>
+      this.supervisor.unarchiveSession(sessionRef),
+    );
   }
 
   sendUserMessage(sessionRef: SessionRef, input: SessionMessageInput): Promise<void> {
-    return this.supervisor.sendUserMessage(sessionRef, input);
+    return this.supervisor.trackOperation(sessionRef, () =>
+      this.supervisor.sendUserMessage(sessionRef, input),
+    );
   }
 
   replaceQueuedMessages(
     sessionRef: SessionRef,
     messages: readonly SessionQueuedMessage[],
   ): Promise<void> {
-    return this.supervisor.replaceQueuedMessages(sessionRef, messages);
+    return this.supervisor.trackOperation(sessionRef, () =>
+      this.supervisor.replaceQueuedMessages(sessionRef, messages),
+    );
   }
 
   cancelCurrentRun(sessionRef: SessionRef): Promise<void> {
-    return this.supervisor.cancelCurrentRun(sessionRef);
+    return this.supervisor.trackOperation(sessionRef, () =>
+      this.supervisor.cancelCurrentRun(sessionRef),
+    );
   }
 
   setSessionModel(sessionRef: SessionRef, selection: SessionModelSelection): Promise<void> {
-    return this.supervisor.setSessionModel(sessionRef, selection);
+    return this.supervisor.trackOperation(sessionRef, () =>
+      this.supervisor.setSessionModel(sessionRef, selection),
+    );
   }
 
   setSessionThinkingLevel(sessionRef: SessionRef, thinkingLevel: string): Promise<void> {
-    return this.supervisor.setSessionThinkingLevel(sessionRef, thinkingLevel);
+    return this.supervisor.trackOperation(sessionRef, () =>
+      this.supervisor.setSessionThinkingLevel(sessionRef, thinkingLevel),
+    );
   }
 
   renameSession(sessionRef: SessionRef, title: string): Promise<void> {
-    return this.supervisor.renameSession(sessionRef, title);
+    return this.supervisor.trackOperation(sessionRef, () =>
+      this.supervisor.renameSession(sessionRef, title),
+    );
   }
 
   compactSession(sessionRef: SessionRef, customInstructions?: string): Promise<void> {
-    return this.supervisor.compactSession(sessionRef, customInstructions);
+    return this.supervisor.trackOperation(sessionRef, () =>
+      this.supervisor.compactSession(sessionRef, customInstructions),
+    );
   }
 
   reloadSession(sessionRef: SessionRef): Promise<void> {
-    return this.supervisor.reloadSession(sessionRef);
+    return this.supervisor.trackOperation(sessionRef, () =>
+      this.supervisor.reloadSession(sessionRef),
+    );
   }
 
   /** Reloads now, or when the running turn or compaction ends. */
   reloadSessionWhenIdle(sessionRef: SessionRef): Promise<"reloaded" | "deferred"> {
-    return this.supervisor.reloadSessionWhenIdle(sessionRef);
+    return this.supervisor.trackOperation(sessionRef, () =>
+      this.supervisor.reloadSessionWhenIdle(sessionRef),
+    );
   }
 
   getSessionTree(sessionRef: SessionRef): Promise<SessionTreeSnapshot> {
-    return this.supervisor.getSessionTree(sessionRef);
+    return this.supervisor.trackOperation(sessionRef, () =>
+      this.supervisor.getSessionTree(sessionRef),
+    );
   }
 
   navigateSessionTree(
@@ -127,15 +157,21 @@ export class PiSdkDriver implements SessionDriver {
     targetId: string,
     options?: NavigateSessionTreeOptions,
   ): Promise<NavigateSessionTreeResult> {
-    return this.supervisor.navigateSessionTree(sessionRef, targetId, options);
+    return this.supervisor.trackOperation(sessionRef, () =>
+      this.supervisor.navigateSessionTree(sessionRef, targetId, options),
+    );
   }
 
   getSessionCommands(sessionRef: SessionRef) {
-    return this.supervisor.getSessionCommands(sessionRef);
+    return this.supervisor.trackOperation(sessionRef, () =>
+      this.supervisor.getSessionCommands(sessionRef),
+    );
   }
 
   respondToHostUiRequest(sessionRef: SessionRef, response: HostUiResponse): Promise<void> {
-    return this.supervisor.respondToHostUiRequest(sessionRef, response);
+    return this.supervisor.trackOperation(sessionRef, () =>
+      this.supervisor.respondToHostUiRequest(sessionRef, response),
+    );
   }
 
   subscribe(sessionRef: SessionRef, listener: SessionEventListener): Unsubscribe {
@@ -143,10 +179,12 @@ export class PiSdkDriver implements SessionDriver {
   }
 
   closeSession(sessionRef: SessionRef): Promise<void> {
-    return this.supervisor.closeSession(sessionRef);
+    return this.supervisor.trackOperation(sessionRef, () =>
+      this.supervisor.closeSession(sessionRef),
+    );
   }
 
-  releaseSession(sessionRef: SessionRef): Promise<boolean> {
+  releaseSession(sessionRef: SessionRef): boolean {
     return this.supervisor.releaseSession(sessionRef);
   }
 
@@ -167,7 +205,9 @@ export class PiSdkDriver implements SessionDriver {
   }
 
   getSessionFilePath(sessionRef: SessionRef): Promise<string | undefined> {
-    return this.supervisor.getSessionFilePath(sessionRef);
+    return this.supervisor.trackOperation(sessionRef, () =>
+      this.supervisor.getSessionFilePath(sessionRef),
+    );
   }
 
   renameWorkspace(workspaceId: WorkspaceId, displayName: string) {
@@ -180,11 +220,15 @@ export class PiSdkDriver implements SessionDriver {
   }
 
   getTranscript(sessionRef: SessionRef) {
-    return this.supervisor.getTranscript(sessionRef);
+    return this.supervisor.trackOperation(sessionRef, () =>
+      this.supervisor.getTranscript(sessionRef),
+    );
   }
 
   getSessionSchemaInfo(sessionRef: SessionRef) {
-    return this.supervisor.getSessionSchemaInfo(sessionRef);
+    return this.supervisor.trackOperation(sessionRef, () =>
+      this.supervisor.getSessionSchemaInfo(sessionRef),
+    );
   }
 
   generateThreadTitle(

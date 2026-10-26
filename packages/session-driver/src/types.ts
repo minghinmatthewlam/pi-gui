@@ -416,10 +416,11 @@ export interface SessionDriver {
   subscribe(sessionRef: SessionRef, listener: SessionEventListener): Unsubscribe;
   closeSession(sessionRef: SessionRef): Promise<void>;
   /**
-   * Free an idle session's memory; it reopens from its file when next used. Returns false, and
-   * keeps it, while it is busy or waiting on the person.
+   * Free an idle session's runtime; it reopens from its file when next used, and subscribers
+   * stay attached throughout. Decides synchronously: returns false, and keeps the session,
+   * while it is in use, busy or waiting on the person.
    */
-  releaseSession(sessionRef: SessionRef): Promise<boolean>;
+  releaseSession(sessionRef: SessionRef): boolean;
 }
 
 export interface SessionSchemaInfo {
