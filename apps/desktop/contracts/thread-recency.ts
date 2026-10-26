@@ -42,24 +42,32 @@ export function compareByRecency(
 }
 
 export function recencyBucketId(isoTimestamp: string, nowMs: number = Date.now()): RecencyBucketId {
-  const timestamp = Date.parse(isoTimestamp);
-  if (Number.isNaN(timestamp)) {
-    return "older";
-  }
+  return recencyBucketer(nowMs)(isoTimestamp);
+}
 
+/** Works out the day boundaries once, for bucketing many timestamps against the same "now". */
+export function recencyBucketer(
+  nowMs: number = Date.now(),
+): (isoTimestamp: string) => RecencyBucketId {
   const now = new Date(nowMs);
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
   const last7Start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7).getTime();
   const last30Start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30).getTime();
 
-  if (timestamp >= todayStart) {
-    return "today";
-  }
-  if (timestamp >= last7Start) {
-    return "last-7-days";
-  }
-  if (timestamp >= last30Start) {
-    return "last-30-days";
-  }
-  return "older";
+  return (isoTimestamp) => {
+    const timestamp = Date.parse(isoTimestamp);
+    if (Number.isNaN(timestamp)) {
+      return "older";
+    }
+    if (timestamp >= todayStart) {
+      return "today";
+    }
+    if (timestamp >= last7Start) {
+      return "last-7-days";
+    }
+    if (timestamp >= last30Start) {
+      return "last-30-days";
+    }
+    return "older";
+  };
 }
