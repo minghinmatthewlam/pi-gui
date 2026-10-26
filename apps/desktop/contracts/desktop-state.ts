@@ -221,9 +221,13 @@ export interface SelectedTranscriptRecord {
 
 // What changed since the transcript last sent to a window: `deleteCount` rows at `start` were
 // replaced by `rows`. Sending this instead of a tens-of-MB transcript keeps both processes free.
+// `baseLength` is the length of that last-sent transcript. A window holding a transcript of
+// another length asks for the whole transcript instead; this catches a lost or misapplied patch
+// that changed the length, not one that replaced rows and kept it.
 export interface SelectedTranscriptPatch {
   readonly workspaceId: string;
   readonly sessionId: string;
+  readonly baseLength: number;
   readonly start: number;
   readonly deleteCount: number;
   readonly rows: readonly TranscriptMessage[];
@@ -259,6 +263,7 @@ export function selectedTranscriptPatch(
   return {
     workspaceId: next.workspaceId,
     sessionId: next.sessionId,
+    baseLength: before.length,
     start,
     deleteCount: before.length - start - end,
     rows: after.slice(start, after.length - end),
@@ -274,7 +279,8 @@ export function applySelectedTranscriptPatch(
     !record ||
     record.workspaceId !== patch.workspaceId ||
     record.sessionId !== patch.sessionId ||
-    patch.start + patch.deleteCount > record.transcript.length
+    record.transcript.length !== patch.baseLength ||
+    patch.start + patch.deleteCount > patch.baseLength
   ) {
     return undefined;
   }
@@ -331,6 +337,16 @@ export interface SessionExtensionUiStateRecord {
   readonly notices: readonly SessionExtensionNoticeRecord[];
   readonly title?: string;
   readonly editorText?: string;
+}
+
+/**
+ * One session's extension UI, sent on its own when only its status, widgets or title changed.
+ * `revision` comes from the same counter as full state pushes, so a stale one is dropped.
+ */
+export interface SessionExtensionUiUpdate {
+  readonly sessionKey: string;
+  readonly ui: SessionExtensionUiStateRecord;
+  readonly revision: number;
 }
 
 export type ExtensionCommandCompatibilityStatus = "supported" | "terminal-only";

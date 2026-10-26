@@ -10,6 +10,7 @@ import {
   applySelectedTranscriptPatch,
   type DesktopAppState,
   type SelectedTranscriptRecord,
+  type SessionExtensionUiUpdate,
 } from "../../contracts/desktop-state";
 import type { PiDesktopApi } from "../../contracts/ipc";
 
@@ -76,6 +77,7 @@ export type DesktopHydrationEvent =
   | { readonly type: "state-pull-failed"; readonly attemptId: number }
   | { readonly type: "state-pushed"; readonly state: DesktopAppState }
   | { readonly type: "state-patched"; readonly snapshot: DesktopAppState | null }
+  | { readonly type: "extension-ui-pushed"; readonly update: SessionExtensionUiUpdate }
   | { readonly type: "transcript-pull-started"; readonly attemptId: number }
   | {
       readonly type: "transcript-pull-succeeded";
@@ -232,6 +234,24 @@ export function reduceDesktopHydration(
       };
     case "state-patched":
       return withLiveSnapshot(current, event.snapshot);
+    case "extension-ui-pushed": {
+      // Before the first state arrives there is nothing to patch; that state includes this UI.
+      const live = current.liveSnapshot;
+      if (!live || event.update.revision < live.revision) {
+        return current;
+      }
+      return {
+        ...current,
+        liveSnapshot: {
+          ...live,
+          revision: event.update.revision,
+          sessionExtensionUiBySession: {
+            ...live.sessionExtensionUiBySession,
+            [event.update.sessionKey]: event.update.ui,
+          },
+        },
+      };
+    }
     case "transcript-pull-started":
       return {
         ...current,
@@ -438,6 +458,11 @@ export function useDesktopAppState(): DesktopAppSession {
       resendRequested = false;
       apply({ type: "transcript-pushed", record: payload });
     });
+    const unsubscribeExtensionUi = api.onExtensionUiChanged((update) => {
+      if (active) {
+        apply({ type: "extension-ui-pushed", update });
+      }
+    });
 
     pullState(api);
     pullTranscript(api);
@@ -446,6 +471,7 @@ export function useDesktopAppState(): DesktopAppSession {
       active = false;
       unsubscribeState();
       unsubscribeTranscript();
+      unsubscribeExtensionUi();
     };
   }, [apply, pullState, pullTranscript]);
 

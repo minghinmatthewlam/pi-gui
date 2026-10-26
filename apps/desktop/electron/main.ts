@@ -25,6 +25,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { augmentPosixPath } from "../scripts/augment-path.cjs";
 import { DesktopAppStore } from "./application/app-store";
+import { TRANSCRIPT_IMAGE_SCHEME } from "./application/app-store-utils";
 import { WindowOwner } from "./windows/window-owner";
 import { PendingComposerDraftFlusher } from "./windows/pending-draft-flush";
 import { TurnCheckpointStore } from "./workbench/checkpoint-store";
@@ -89,6 +90,7 @@ protocol.registerSchemesAsPrivileged([
     scheme: DESKTOP_EXTENSION_SCHEME,
     privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true },
   },
+  { scheme: TRANSCRIPT_IMAGE_SCHEME, privileges: { standard: true, secure: true } },
 ]);
 
 const isDev = Boolean(process.env.ELECTRON_RENDERER_URL);
@@ -1043,6 +1045,9 @@ app
       generateThreadTitleOverride: async (workspace, options) =>
         generateThreadTitleOverride?.(workspace, options),
     });
+    protocol.handle(TRANSCRIPT_IMAGE_SCHEME, (request) =>
+      store.transcriptImageResponse(request.url),
+    );
     windowOwner = new WindowOwner(store, {
       onActiveWindowChanged: (window) => {
         mainWindow = window;

@@ -73,6 +73,8 @@ interface OrchestrationOwnerHost {
   readonly driver: OrchestrationDriver;
   initialize(): Promise<void>;
   orchestrationState(): OrchestrationStateView;
+  /** The current children without a copy, for read-only checks that run on every session event. */
+  orchestrationChildren(): readonly OrchestrationChildThread[];
   replaceOrchestrationChildren(children: readonly OrchestrationChildThread[]): void;
   refreshState(options?: RefreshStateOptions): Promise<DesktopAppState>;
   emit(): DesktopAppState;
@@ -156,9 +158,9 @@ export function createOrchestrationOwner(store: OrchestrationOwnerHost): Orchest
     handleOrchestrationThreadToolResult: (event) =>
       handleOrchestrationThreadToolResult(store, event),
     hasOrchestrationChildSession: (sessionRef) =>
-      hasOrchestrationChildSession(store.orchestrationState().orchestrationChildren, sessionRef),
+      hasOrchestrationChildSession(store.orchestrationChildren(), sessionRef),
     hasOrchestrationParentSession: (sessionRef) =>
-      hasOrchestrationParentSession(store.orchestrationState().orchestrationChildren, sessionRef),
+      hasOrchestrationParentSession(store.orchestrationChildren(), sessionRef),
     createChildThreadToolResult: (parentRef, input) =>
       createChildThreadToolResult(store, parentRef, input),
     listThreadsToolResult: (parentRef) => listThreadsToolResult(store, parentRef),
