@@ -11,8 +11,6 @@ import {
   runOrchestrationRuntimeTool,
   seedAgentDir,
 } from "../helpers/electron-app";
-// create_child_thread must return after the running acknowledgement rather than
-// await a model turn this server never answers.
 import { startHangingOpenAiServer } from "../helpers/hanging-openai-server";
 
 async function selectedSessionRef(
@@ -31,6 +29,8 @@ test("create_child_thread returns after a slow worker starts, before its turn co
   if (proofDir) {
     await mkdir(proofDir, { recursive: true });
   }
+  // create_child_thread must return after the running acknowledgement rather than
+  // await a model turn this server never answers.
   const server = await startHangingOpenAiServer();
   const userDataDir = await makeUserDataDir();
   const agentDir = join(userDataDir, "agent");

@@ -84,7 +84,23 @@ test("shows an image pasted while the thread is running", async () => {
       .poll(async () => (await getDesktopState(window)).composerAttachments.map((a) => a.name))
       .toEqual(["pasted-during-run.png"]);
     await expect(attachments).toHaveCount(1);
-    await expect(attachments.getByRole("button", { name: "Remove pasted-during-run.png" })).toBeVisible();
+    await expect(
+      attachments.getByRole("button", { name: "Remove pasted-during-run.png" }),
+    ).toBeVisible();
+
+    // The next message, queued behind the running turn, takes the image with it.
+    await composer.fill("And this one");
+    await composer.press("Enter");
+    await expect
+      .poll(async () =>
+        (await getDesktopState(window)).queuedComposerMessages.map((message) => ({
+          text: message.text,
+          attachments: message.attachments.map((attachment) => attachment.name),
+        })),
+      )
+      .toEqual([{ text: "And this one", attachments: ["pasted-during-run.png"] }]);
+    await expect(attachments).toHaveCount(0);
+    expect((await getDesktopState(window)).composerAttachments).toEqual([]);
   } finally {
     await harness.close();
     await server.close();
