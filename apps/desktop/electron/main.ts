@@ -1039,6 +1039,8 @@ app
       getWindow: () => mainWindow,
       shouldKeepSessionDialogs: (sessionRef) =>
         windowOwner?.isSessionVisibleInAnotherWindow(sessionRef) ?? false,
+      isSessionSelectedInAnyWindow: (sessionRef) =>
+        windowOwner?.isSessionSelectedInAnyWindow(sessionRef) ?? false,
       driverOptions,
       generateThreadTitleOverride: async (workspace, options) =>
         generateThreadTitleOverride?.(workspace, options),
@@ -1073,7 +1075,7 @@ app
       Object.assign(globalThis, {
         __PI_APP_TEST_HOOKS: {
           emitSessionEvent: (event: SessionDriverEvent) => store.emitTestSessionEvent(event),
-          loadedTranscriptSessionIds: () => store.loadedTranscriptSessionIdsForTest(),
+          loadedThreads: () => store.loadedThreadsForTest(),
           handleWindowActivation: () => {
             if (mainWindow) {
               windowOwner.activate(mainWindow);

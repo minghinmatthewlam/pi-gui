@@ -57,7 +57,6 @@ import {
   type SetChildSupervisionLoopInput,
   type SelectedTranscriptRecord,
   type SessionExtensionNoticeRecord,
-  type SessionRecord,
   type StartThreadInput,
   type StartupDiagnostic,
   type ThemeMode,
@@ -183,6 +182,8 @@ export interface DesktopAppStoreOptions {
   readonly initialWorkspacePaths: readonly string[];
   readonly getWindow?: () => BrowserWindow | null;
   readonly shouldKeepSessionDialogs?: (sessionRef: SessionRef) => boolean;
+  /** Whether some open window has the thread selected; such threads are never released. */
+  readonly isSessionSelectedInAnyWindow?: (sessionRef: SessionRef) => boolean;
   readonly driverOptions?: Pick<
     PiSdkDriverConfig,
     | "builtinExtensions"
@@ -269,6 +270,7 @@ export class DesktopAppStore {
   private readonly initialWorkspacePaths: readonly string[];
   private readonly getWindow: () => BrowserWindow | null;
   private readonly shouldKeepSessionDialogs: (sessionRef: SessionRef) => boolean;
+  private readonly isSessionSelectedInAnyWindow: (sessionRef: SessionRef) => boolean;
   private composerDraftSyncTarget: SessionRef | undefined;
   private composerDraftProjectionNonce = 0;
   private persistUiStateTimer: NodeJS.Timeout | undefined;
@@ -318,6 +320,7 @@ export class DesktopAppStore {
     this.initialWorkspacePaths = options.initialWorkspacePaths;
     this.getWindow = options.getWindow ?? (() => null);
     this.shouldKeepSessionDialogs = options.shouldKeepSessionDialogs ?? (() => false);
+    this.isSessionSelectedInAnyWindow = options.isSessionSelectedInAnyWindow ?? (() => false);
 
     this.conversationOwner = createConversationOwner({
       driver: this.driver,
@@ -839,9 +842,12 @@ export class DesktopAppStore {
     await this.handleSessionEvent(event);
   }
 
-  /** Test only: threads whose transcript is kept in memory. */
-  loadedTranscriptSessionIdsForTest(): string[] {
-    return [...this.sessionState.loadedTranscriptKeys];
+  /** Test only: threads with a live driver subscription, and threads whose transcript is cached. */
+  loadedThreadsForTest(): { readonly subscribed: string[]; readonly transcripts: string[] } {
+    return {
+      subscribed: [...this.sessionState.sessionSubscriptions.keys()],
+      transcripts: [...this.sessionState.loadedTranscriptKeys],
+    };
   }
 
   subscribe(listener: StateListener): () => void {
@@ -4298,10 +4304,10 @@ export class DesktopAppStore {
   /**
    * Every opened thread used to stay in memory until quit: its pi session and its transcript.
    * Free idle threads that weren't viewed recently; they reload from their files when opened.
-   * Threads that run, wait on the person, or take part in orchestration stay loaded.
+   * Threads that run, wait on the person, take part in orchestration, or show in a window stay
+   * loaded. Each thread is rechecked right before it is released, since earlier releases await.
    */
   private async releaseIdleSessions(): Promise<void> {
-    const keep = new Set(this.recentlyViewedSessionKeys);
     const loaded = new Set([
       ...this.sessionState.sessionSubscriptions.keys(),
       ...this.sessionState.loadedTranscriptKeys,
@@ -4309,41 +4315,46 @@ export class DesktopAppStore {
     for (const workspace of this.state.workspaces) {
       for (const session of workspace.sessions) {
         const sessionRef = { workspaceId: workspace.id, sessionId: session.id };
-        const key = sessionKey(sessionRef);
-        if (!loaded.has(key) || keep.has(key) || !this.canReleaseSession(sessionRef, session)) {
+        if (!loaded.has(sessionKey(sessionRef)) || !this.canReleaseSession(sessionRef)) {
           continue;
         }
-        this.sessionState.sessionSubscriptions.get(key)?.();
-        this.sessionState.sessionSubscriptions.delete(key);
-        this.sessionState.loadedTranscriptKeys.delete(key);
-        this.sessionState.transcriptCache.delete(key);
-        this.sessionState.sessionCommandsBySession.delete(key);
-        if (!(await this.driver.releaseSession(sessionRef))) {
-          // It became busy; keep listening. Its transcript reloads when it is next opened.
-          await this.ensureSessionSubscribed(sessionRef);
-        }
+        await this.releaseSession(sessionRef);
       }
     }
   }
 
-  private canReleaseSession(sessionRef: SessionRef, session: SessionRecord): boolean {
+  private async releaseSession(sessionRef: SessionRef): Promise<void> {
     const key = sessionKey(sessionRef);
-    const inOrchestration = this.state.orchestrationChildren.some(
-      (child) =>
-        (child.parentWorkspaceId === sessionRef.workspaceId &&
-          child.parentSessionId === sessionRef.sessionId) ||
-        (child.childWorkspaceId === sessionRef.workspaceId &&
-          child.childSessionId === sessionRef.sessionId),
-    );
+    this.sessionState.sessionSubscriptions.get(key)?.();
+    this.sessionState.sessionSubscriptions.delete(key);
+    this.sessionState.loadedTranscriptKeys.delete(key);
+    this.sessionState.transcriptCache.delete(key);
+    this.sessionState.sessionCommandsBySession.delete(key);
+    let released = false;
+    try {
+      released = await this.driver.releaseSession(sessionRef);
+    } catch (error) {
+      console.error(`[app-store] releasing thread ${key} failed`, error);
+    }
+    if (!released) {
+      // It became busy, or the release failed: keep listening. Its transcript reloads when it
+      // is next opened.
+      await this.ensureSessionSubscribed(sessionRef);
+    }
+  }
+
+  private canReleaseSession(sessionRef: SessionRef): boolean {
+    const key = sessionKey(sessionRef);
+    const session = this.findSessionRecord(sessionRef);
     return (
+      session !== undefined &&
       session.status !== "running" &&
+      !this.recentlyViewedSessionKeys.includes(key) &&
       !this.sessionState.runningSinceBySession.has(key) &&
-      !(
-        this.state.selectedWorkspaceId === sessionRef.workspaceId &&
-        this.state.selectedSessionId === sessionRef.sessionId
-      ) &&
-      !this.shouldKeepSessionDialogs(sessionRef) &&
-      !inOrchestration &&
+      !this.isSelectedSession(sessionRef) &&
+      !this.isSessionSelectedInAnyWindow(sessionRef) &&
+      !this.orchestrationOwner.hasOrchestrationChildSession(sessionRef) &&
+      !this.orchestrationOwner.hasOrchestrationParentSession(sessionRef) &&
       (this.sessionState.queuedComposerMessagesBySession.get(key)?.length ?? 0) === 0 &&
       !this.sessionState.queuedComposerEditsBySession.has(key) &&
       (this.sessionState.extensionUiBySession.get(key)?.pendingDialogs.length ?? 0) === 0 &&

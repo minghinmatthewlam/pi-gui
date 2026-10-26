@@ -1623,9 +1623,15 @@ export class SessionSupervisor {
     record.unsubscribeAgent?.();
     record.unsubscribeAgent = undefined;
     record.listeners.clear();
+    // Dispose first, as closeSession does: the runtime, its lease and its extensions must go even
+    // if the catalog write fails, or they would outlive the record while a reopen builds another.
     const released = (async () => {
-      await this.persistSnapshot(record);
       await this.disposeRecordRuntimeSafely(record);
+      try {
+        await this.persistSnapshot(record);
+      } catch (error) {
+        console.warn(`[pi-sdk-driver] failed to persist released session ${key}:`, error);
+      }
     })().finally(() => this.releaseInFlight.delete(key));
     this.releaseInFlight.set(key, released);
     await released;

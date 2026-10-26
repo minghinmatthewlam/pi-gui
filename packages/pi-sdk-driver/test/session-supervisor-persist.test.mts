@@ -98,3 +98,38 @@ await test("a discrete agent event still writes the catalog", async () => {
   assert.ok(emitted.length > 0, "expected the discrete event to emit");
   assert.equal(catalogWrites, 1);
 });
+
+await test("releasing a session still disposes its runtime when the catalog write fails", async () => {
+  const supervisor = new SessionSupervisor({
+    catalogStorage: {
+      sessions: {
+        upsertSession: async () => {
+          throw new Error("catalog is read-only");
+        },
+      },
+      setSessionFile: async () => undefined,
+    } as never,
+  });
+  const internals = supervisor as unknown as { records: Map<string, unknown> };
+  const { record } = makeRecord();
+  let disposals = 0;
+  Object.assign(record, {
+    status: "idle",
+    runningRunId: undefined,
+    promptStarting: false,
+    extensionCommandsRunning: 0,
+    queuedStartScheduled: false,
+    reloadPending: false,
+    runtime: {
+      dispose: async () => {
+        disposals += 1;
+      },
+    },
+  });
+  internals.records.set("ws-1:sess-1", record);
+
+  assert.equal(await supervisor.releaseSession(record.ref), true);
+  assert.equal(disposals, 1, "the runtime, its lease and its extensions are released");
+  assert.equal(internals.records.has("ws-1:sess-1"), false);
+  assert.equal(record.runtime, undefined);
+});
