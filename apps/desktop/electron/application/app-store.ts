@@ -8,11 +8,13 @@ import { homedir, hostname } from "node:os";
 import { join, resolve, sep } from "node:path";
 import {
   applyHostUiRequestToExtensionUiState,
+  buildSuggestionExcerpt,
   type GenerateThreadTitleOptions,
   isExtensionUiDialogRequest,
   PiSdkDriver,
   type PiSdkDriverConfig,
   SessionLeasedError,
+  type SuggestionSourceMessage,
 } from "@pi-gui/pi-sdk-driver";
 import type { SessionCatalogEntry } from "@pi-gui/catalogs";
 import type {
@@ -76,6 +78,7 @@ import {
   appendAssistantDelta,
   clearActiveAssistantMessage,
   timelineFromDriverTranscript,
+  preserveLiveTimings,
 } from "../conversation/app-store-timeline";
 import {
   applySessionEventState,
@@ -260,6 +263,8 @@ export class DesktopAppStore {
     PendingRuntimeCommandExecution
   >();
   private readonly reportedCompatibilityIssuesBySession = new Map<string, Set<string>>();
+  /** Latest ghost-suggestion generation per session; stale completions are dropped. */
+  private readonly suggestionGenerations = new Map<string, number>();
   private readonly initialWorkspacePaths: readonly string[];
   private readonly getWindow: () => BrowserWindow | null;
   private readonly shouldKeepSessionDialogs: (sessionRef: SessionRef) => boolean;
@@ -1166,6 +1171,95 @@ export class DesktopAppStore {
     }
     await this.orchestrationOwner.cancelChildRunsForParent(sessionRef);
     return this.conversationOwner.cancelCurrentRun(sessionRef);
+  }
+
+  async dismissSuggestedNextPrompt(sessionRef: SessionRef | undefined): Promise<DesktopAppState> {
+    await this.initialize();
+    if (sessionRef) {
+      this.clearSuggestedNextPrompt(sessionRef);
+    }
+    return this.emit();
+  }
+
+  /**
+   * Kick off ghost-text generation after a clean run. Fire-and-forget: the
+   * async completion re-checks freshness before publishing anything.
+   */
+  private requestSuggestedNextPrompt(sessionRef: SessionRef, snapshot: SessionSnapshot): void {
+    const key = sessionKey(sessionRef);
+    const generation = (this.suggestionGenerations.get(key) ?? 0) + 1;
+    this.suggestionGenerations.set(key, generation);
+    if ((snapshot.queuedMessages ?? []).length > 0) {
+      return;
+    }
+    void this.generateSuggestedNextPrompt(sessionRef, generation).catch((error) => {
+      console.error(`[app-store] suggested prompt failed for ${key}`, error);
+    });
+  }
+
+  private async generateSuggestedNextPrompt(
+    sessionRef: SessionRef,
+    generation: number,
+  ): Promise<void> {
+    const key = sessionKey(sessionRef);
+    const transcript = this.sessionState.transcriptCache.get(key) ?? [];
+    const excerpt = buildSuggestionExcerpt(transcriptToSuggestionSources(transcript));
+    if (!excerpt) {
+      return;
+    }
+    const workspace = this.workspaceRefFromState(sessionRef.workspaceId);
+    if (!workspace) {
+      return;
+    }
+    const suggestion = await this.driver.runtimeSupervisor.suggestNextPrompt(workspace, excerpt);
+    if (!suggestion) {
+      return;
+    }
+    if (this.suggestionGenerations.get(key) !== generation) {
+      return;
+    }
+    const record = this.sessionFromState(sessionRef);
+    if (!record || record.status !== "idle") {
+      return;
+    }
+    this.sessionState.suggestedNextPromptBySession.set(key, suggestion);
+    this.setSessionSuggestedNextPrompt(sessionRef, suggestion);
+  }
+
+  private setSessionSuggestedNextPrompt(sessionRef: SessionRef, value: string | null): void {
+    const key = sessionKey(sessionRef);
+    const transcript = this.sessionState.transcriptCache.get(key) ?? [];
+    this.state = {
+      ...this.state,
+      workspaces: this.state.workspaces.map((workspace) =>
+        workspace.id === sessionRef.workspaceId
+          ? {
+              ...workspace,
+              sessions: workspace.sessions.map((session) =>
+                session.id === sessionRef.sessionId
+                  ? updateSessionRecord(session, {
+                      transcript,
+                      preview: previewFromTranscript(transcript),
+                      runningSince: this.sessionState.runningSinceBySession.get(key),
+                      lastViewedAt: this.sessionState.lastViewedAtBySession.get(key),
+                      suggestedNextPrompt: value,
+                    })
+                  : session,
+              ),
+            }
+          : workspace,
+      ),
+    };
+    this.emit();
+  }
+
+  private clearSuggestedNextPrompt(sessionRef: SessionRef): void {
+    const key = sessionKey(sessionRef);
+    if (!this.sessionState.suggestedNextPromptBySession.has(key)) {
+      return;
+    }
+    this.sessionState.suggestedNextPromptBySession.delete(key);
+    this.setSessionSuggestedNextPrompt(sessionRef, null);
   }
 
   async getSessionTree(target: WorkspaceSessionTarget): Promise<SessionTreeSnapshot> {
@@ -2681,7 +2775,10 @@ export class DesktopAppStore {
       extensionToolLabels(this.runtimeByWorkspace.get(sessionRef.workspaceId)),
     );
     this.sessionState.loadedTranscriptKeys.add(key);
-    this.sessionState.transcriptCache.set(key, transcript);
+    this.sessionState.transcriptCache.set(
+      key,
+      preserveLiveTimings(transcript, this.sessionState.transcriptCache.get(key) ?? []),
+    );
     await this.recordSelectedTranscriptFileStat(sessionRef);
     this.publishSelectedTranscriptFor(sessionRef);
   }
@@ -3435,11 +3532,14 @@ export class DesktopAppStore {
 
       switch (event.type) {
         case "assistantDelta":
+        case "assistantThinkingDelta":
           appendAssistantDelta(
             this.sessionState.transcriptCache,
             this.sessionState.activeAssistantMessageBySession,
             event.sessionRef,
             event.text,
+            event.timestamp,
+            event.type === "assistantThinkingDelta",
           );
           break;
         case "sessionOpened":
@@ -3448,6 +3548,7 @@ export class DesktopAppStore {
           this.updateSessionUsage(event.sessionRef, event.snapshot.usage);
           this.updateQueuedComposerMessages(event.sessionRef, event.snapshot.queuedMessages);
           await this.refreshSessionCommands(event.sessionRef);
+          this.requestSuggestedNextPrompt(event.sessionRef, event.snapshot);
           break;
         case "sessionUpdated":
           this.updateSessionConfig(event.sessionRef, event.snapshot.config);
@@ -3455,6 +3556,8 @@ export class DesktopAppStore {
           this.updateQueuedComposerMessages(event.sessionRef, event.snapshot.queuedMessages);
           if (event.snapshot.status !== "running") {
             this.refreshSessionCommandsCoalesced(event.sessionRef);
+          } else {
+            this.clearSuggestedNextPrompt(event.sessionRef);
           }
           break;
         case "runFailed":
@@ -3462,6 +3565,7 @@ export class DesktopAppStore {
             ...this.state,
             lastError: event.error.message,
           };
+          this.clearSuggestedNextPrompt(event.sessionRef);
           await this.refreshSessionCommands(event.sessionRef);
           break;
         case "extensionCompatibilityIssue":
@@ -3469,6 +3573,8 @@ export class DesktopAppStore {
           break;
         case "sessionClosed":
           this.clearExtensionDialogTimeoutsForSession(event.sessionRef);
+          this.suggestionGenerations.delete(key);
+          this.sessionState.suggestedNextPromptBySession.delete(key);
           this.sessionState.extensionUiBySession.delete(key);
           this.sessionState.sessionCommandsBySession.delete(key);
           this.sessionState.sessionUsageBySession.delete(key);
@@ -4970,4 +5076,23 @@ function resolveSelectedSessionIdFromCatalog(
     return preferredSessionId;
   }
   return workspaceSessions[0]?.sessionRef.sessionId ?? "";
+}
+
+function transcriptToSuggestionSources(
+  transcript: readonly TranscriptMessage[],
+): SuggestionSourceMessage[] {
+  const sources: SuggestionSourceMessage[] = [];
+  for (const item of transcript) {
+    if (item.kind !== "message") {
+      continue;
+    }
+    if (item.role !== "user" && item.role !== "assistant") {
+      continue;
+    }
+    if (!item.text.trim()) {
+      continue;
+    }
+    sources.push({ role: item.role, text: item.text });
+  }
+  return sources;
 }

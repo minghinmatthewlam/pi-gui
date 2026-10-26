@@ -562,6 +562,27 @@
 
 /* ---- Turn timing marker ------------------------------------------------- */
 
+.timeline-item__thinking {
+  margin: 0 0 10px;
+  color: var(--text-secondary, #888);
+  font-size: 0.9em;
+}
+
+.timeline-item__thinking summary {
+  cursor: pointer;
+  user-select: none;
+}
+
+.timeline-item__thinking > :not(summary) {
+  margin: 8px 0 0 12px;
+}
+
+.timeline-item__timing {
+  margin-top: 8px;
+  color: var(--text-secondary, #888);
+  font-size: 0.78em;
+}
+
 .timeline-turn-marker {
   display: flex;
   align-items: center;

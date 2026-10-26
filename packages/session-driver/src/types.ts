@@ -196,6 +196,15 @@ export interface AssistantDeltaEvent extends SessionEventBase {
   readonly text: string;
 }
 
+export interface AssistantThinkingDeltaEvent extends SessionEventBase {
+  readonly type: "assistantThinkingDelta";
+  readonly text: string;
+}
+
+export interface AssistantMessageStartedEvent extends SessionEventBase {
+  readonly type: "assistantMessageStarted";
+}
+
 /** Finalizes one assistant message while the containing run may continue. */
 export interface AssistantMessageEndedEvent extends SessionEventBase {
   readonly type: "assistantMessageEnded";
@@ -369,6 +378,8 @@ export type SessionDriverEvent =
   | SessionOpenedEvent
   | SessionUpdatedEvent
   | AssistantDeltaEvent
+  | AssistantThinkingDeltaEvent
+  | AssistantMessageStartedEvent
   | AssistantMessageEndedEvent
   | AssistantMessagePersistedEvent
   | TranscriptItemAppendedEvent

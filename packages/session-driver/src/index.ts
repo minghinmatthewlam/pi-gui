@@ -1,5 +1,7 @@
 export type {
   AssistantDeltaEvent,
+  AssistantThinkingDeltaEvent,
+  AssistantMessageStartedEvent,
   AssistantMessageEndedEvent,
   AssistantMessagePersistedEvent,
   TranscriptItemAppendedEvent,

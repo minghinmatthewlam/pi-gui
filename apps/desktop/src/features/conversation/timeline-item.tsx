@@ -212,17 +212,38 @@ function TimelineMessage({
     );
   }
 
-  // The row stays while a run streams (Fork is disabled then), so the transcript never
-  // shifts by the row's height when a run starts or ends.
+  // The row stays while a run streams, so the transcript never shifts by the
+  // row's height when a run starts or ends. Forking mid-run branches the settled
+  // history; the running turn continues untouched in its own thread.
   const forkable = sourceMessageIndex !== undefined;
   return (
     <article className="timeline-item timeline-item--assistant" ref={articleRef}>
-      <MessageMarkdown
-        annotationRoot
-        onOpenWorkspaceFileLine={onOpenWorkspaceFileLine}
-        text={item.text}
-        workspacePath={workspacePath}
-      />
+      {item.thinking ? (
+        <details className="timeline-item__thinking" data-testid="thinking-trace">
+          <summary>Thinking</summary>
+          <MessageMarkdown text={item.thinking} />
+        </details>
+      ) : null}
+      {item.text ? (
+        <MessageMarkdown
+          annotationRoot
+          onOpenWorkspaceFileLine={onOpenWorkspaceFileLine}
+          text={item.text}
+          workspacePath={workspacePath}
+        />
+      ) : null}
+      {item.timeToFirstTokenMs !== undefined ? (
+        <div
+          className="timeline-item__timing"
+          data-testid="assistant-timing"
+          title="First text token since turn start (or last tool completion); generation from first to last text token."
+        >
+          First token {formatTiming(item.timeToFirstTokenMs)}
+          {item.generationMs !== undefined
+            ? ` · Generation ${formatTiming(item.generationMs)}`
+            : null}
+        </div>
+      ) : null}
       {forkable ? (
         <div className="timeline-item__actions">
           <button
@@ -322,6 +343,9 @@ function TimelineToolCallItem({
           <span className="timeline-tool__meta-inline">
             <span className="timeline-tool__status-pip" aria-hidden="true" />
             {`${item.toolName} \u00b7 ${statusLabel(item.status)}`}
+            {item.finishedAt
+              ? ` · ${formatTiming(Math.max(0, Date.parse(item.finishedAt) - Date.parse(item.createdAt)))}`
+              : null}
           </span>
         </button>
         {filePath && onViewFileInDiff ? (
@@ -485,6 +509,10 @@ function TimelineTurnMarkerItem({ item }: { readonly item: TimelineTurnMarker })
       <span className="timeline-turn-marker__label">{`Worked for ${formatWorkedDuration(item.durationMs)}`}</span>
     </div>
   );
+}
+
+function formatTiming(durationMs: number): string {
+  return durationMs < 1000 ? `${Math.round(durationMs)} ms` : `${(durationMs / 1000).toFixed(1)} s`;
 }
 
 function formatWorkedDuration(durationMs: number): string {

@@ -353,14 +353,16 @@ function transcriptFromSources(
     }
 
     const text = messageText(message);
+    const thinking = role === "assistant" ? messageThinking(message) : "";
     const attachments = messageAttachments(message);
-    if (text || attachments.length > 0) {
+    if (text || thinking || attachments.length > 0) {
       transcript.push({
         kind: "message",
         id: typeof message.id === "string" ? message.id : `${role}-${index}`,
         ...(typeof message.id === "string" ? { sourceMessageId: message.id } : {}),
         role,
         text,
+        ...(thinking ? { thinking } : {}),
         ...(attachments.length > 0 ? { attachments } : {}),
         createdAt,
       });
@@ -639,7 +641,7 @@ function applyToolResult(
   const index = toolIndexByCallId.get(callId);
   const existing = index !== undefined ? transcript[index] : undefined;
   if (index !== undefined && existing?.kind === "tool") {
-    transcript[index] = { ...existing, status, output };
+    transcript[index] = { ...existing, status, output, finishedAt: createdAt };
     return;
   }
 
@@ -651,11 +653,27 @@ function applyToolResult(
     status,
     output,
     createdAt,
+    finishedAt: createdAt,
   });
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
+}
+
+export function messageThinking(message: Record<string, unknown>): string {
+  if (message.role !== "assistant" || !Array.isArray(message.content)) return "";
+  return message.content
+    .filter(
+      (part) =>
+        isRecord(part) &&
+        part.type === "thinking" &&
+        typeof part.thinking === "string" &&
+        part.redacted !== true,
+    )
+    .map((part) => (part as { thinking: string }).thinking)
+    .filter(Boolean)
+    .join("\n\n");
 }
 
 export function messageText(message: Record<string, unknown>): string {

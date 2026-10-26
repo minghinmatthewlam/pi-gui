@@ -107,6 +107,7 @@ type ConversationOwner = Pick<
   | "startThread"
   | "forkThread"
   | "cancelCurrentRun"
+  | "dismissSuggestedNextPrompt"
   | "addComposerAttachments"
   | "removeComposerAttachment"
   | "editQueuedComposerMessage"
@@ -749,6 +750,10 @@ export function registerDesktopIpc({
     // A long slash command can still own the serialized action queue.
     // Stop must bypass that queue and cancel the captured target immediately.
     return immediate(event, () => owners.conversation.cancelCurrentRun(target));
+  });
+  ipcMain.handle(desktopIpc.dismissSuggestedNextPrompt, (event) => {
+    const target = windows.targetForSender(event.sender);
+    return immediate(event, () => owners.conversation.dismissSuggestedNextPrompt(target));
   });
   ipcMain.handle(desktopIpc.pickComposerAttachments, (event) =>
     runCatchingLimits(event, async () => {

@@ -21,7 +21,7 @@ export function shouldDeferStreamingUiPublish(
   event: SessionDriverEvent,
   trackedRunId: string | undefined,
 ): boolean {
-  if (event.type === "assistantDelta") {
+  if (event.type === "assistantDelta" || event.type === "assistantThinkingDelta") {
     return true;
   }
   if (event.type !== "sessionUpdated" || event.snapshot.status !== "running") {

@@ -1181,9 +1181,7 @@ export default function App() {
                     onExtensionAction={runExtensionCardAction}
                     extensionToolLabels={extensionToolLabels}
                     workspacePath={selectedWorkspace.path}
-                    onForkFromMessage={
-                      selectedSession.status === "running" ? undefined : openForkModal
-                    }
+                    onForkFromMessage={openForkModal}
                     scheduledOrigins={scheduledOrigins}
                     annotations={transcriptAnnotations}
                     platform={api?.platform ?? "linux"}

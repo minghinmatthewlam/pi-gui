@@ -107,11 +107,13 @@ function createCreateChildThreadTool(
     name: createChildThreadToolName,
     label: "Create child thread",
     description:
-      "Start a separate pi-gui child thread for a delegated investigation or implementation task.",
-    promptSnippet: "create_child_thread: start a separate pi-gui child thread for delegated work.",
+      "Delegate an independent investigation or implementation task to a separate pi-gui child thread that runs in parallel. Child threads run on the workspace default model.",
+    promptSnippet:
+      "create_child_thread: delegate independent work to a separate pi-gui child thread running in parallel.",
     promptGuidelines: [
-      "Use create_child_thread when the user asks you to spin up, delegate to, or run a separate child thread.",
+      "When a task splits into independent parts (parallel investigations, independent implementations), spawn one child thread per part proactively instead of doing everything serially in this thread.",
       "Keep the child prompt concrete and self-contained so the user can inspect the resulting thread.",
+      "Prefer reading a child thread before summarizing its status back to the user.",
     ],
     parameters: {
       type: "object",

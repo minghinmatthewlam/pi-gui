@@ -322,6 +322,38 @@ export function useSessionComposer(params: UseSessionComposerParams) {
   }
 
   const handleComposerKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    // Ghost-text next prompt: plain Tab accepts the grey suggestion into the
+    // draft when the composer is empty and the thread is idle. The suggestion
+    // only exists in that state (placeholder is hidden otherwise), so Tab
+    // never hijacks slash/mention menus or focus traversal here.
+    const ghostSuggestion =
+      selectedSession?.status !== "running" &&
+      !composerDraft &&
+      selectedSession?.suggestedNextPrompt
+        ? selectedSession.suggestedNextPrompt
+        : undefined;
+    if (
+      event.key === "Tab" &&
+      !event.shiftKey &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      !event.altKey &&
+      !event.nativeEvent.isComposing &&
+      ghostSuggestion &&
+      api &&
+      selectedSession
+    ) {
+      event.preventDefault();
+      setComposerDraft(ghostSuggestion);
+      composerDraftRef.current = ghostSuggestion;
+      void updateSnapshot(setSnapshot, () => api.dismissSuggestedNextPrompt()).catch(
+        (error: unknown) => {
+          console.error("[renderer] dismissSuggestedNextPrompt failed", error);
+        },
+      );
+      return;
+    }
+
     if (
       handleClipboardImageShortcut(
         event,

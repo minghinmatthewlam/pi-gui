@@ -46,6 +46,14 @@ const modelChecks = [
     requireImageInput: true,
   },
   {
+    provider: "meta",
+    id: "muse-wonder-1.0",
+    reason: "issue #288 Muse Wonder visibility",
+    requireReasoning: true,
+    requireImageInput: true,
+    requireMaxThinking: true,
+  },
+  {
     provider: "zai",
     id: "glm-5.3",
     reason: "issue #12 GLM visibility",
@@ -76,3 +84,63 @@ console.log(
     .map((check) => `Verified bundled Pi runtime exposes ${check.provider}/${check.id}.`)
     .join("\n"),
 );
+
+// Issue #288: Meta exposes muse-wonder-1.0-contributor via its subscription
+// /v1/models endpoint, but upstream Pi (including 1.4.0) only bundles
+// muse-wonder-1.0. Verify the models.json merge path pi-gui relies on for the
+// workaround can surface the contributor variant until upstream adds it.
+const overlayDir = await mkdtemp(join(tmpdir(), "pi-gui-runtime-models-overlay-"));
+await writeFile(join(overlayDir, "auth.json"), "{}\n");
+await writeFile(
+  join(overlayDir, "models.json"),
+  JSON.stringify({
+    providers: {
+      meta: {
+        models: [
+          {
+            id: "muse-wonder-1.0-contributor",
+            name: "Muse Wonder Contributor",
+            api: "openai-responses",
+            baseUrl: "https://api.meta.ai/v1",
+            reasoning: true,
+            input: ["text", "image"],
+            cost: { input: 0.1, output: 0.2, cacheRead: 0.002, cacheWrite: 0 },
+            contextWindow: 1048576,
+            maxTokens: 131072,
+            thinkingLevelMap: {
+              off: null,
+              minimal: "minimal",
+              low: "low",
+              medium: "medium",
+              high: "high",
+              xhigh: "xhigh",
+              max: null,
+            },
+            inputLimits: {
+              images: {
+                resize: { maxWidth: 2000, maxHeight: 2000, maxBytes: 4718592, jpegQuality: 80 },
+              },
+            },
+          },
+        ],
+      },
+    },
+  }),
+);
+const overlayRuntime = await ModelRuntime.create({
+  authPath: join(overlayDir, "auth.json"),
+  modelsPath: join(overlayDir, "models.json"),
+  refreshOnCreate: false,
+});
+const overlayModel = overlayRuntime
+  .getModels()
+  .find((entry) => entry.provider === "meta" && entry.id === "muse-wonder-1.0-contributor");
+if (!overlayModel) {
+  throw new Error(
+    "models.json overlay does not expose meta/muse-wonder-1.0-contributor for issue #288.",
+  );
+}
+if (!overlayModel.reasoning || !overlayModel.input.includes("image")) {
+  throw new Error("Overlay meta/muse-wonder-1.0-contributor is missing reasoning/image support.");
+}
+console.log("Verified models.json overlay exposes meta/muse-wonder-1.0-contributor.");

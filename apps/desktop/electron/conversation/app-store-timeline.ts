@@ -65,7 +65,44 @@ export function timelineFromDriverTranscript(
         },
       ),
       createdAt: item.createdAt,
+      ...(item.finishedAt ? { finishedAt: item.finishedAt } : {}),
     };
+  });
+}
+
+export function preserveLiveTimings(
+  items: TranscriptMessage[],
+  previous: readonly TranscriptMessage[],
+): TranscriptMessage[] {
+  const bySource = new Map(
+    previous.flatMap((item) =>
+      item.kind === "message" && item.sourceMessageId
+        ? [[item.sourceMessageId, item] as const]
+        : [],
+    ),
+  );
+  const tools = new Map(
+    previous.flatMap((item) => (item.kind === "tool" ? [[item.callId, item] as const] : [])),
+  );
+  return items.map((item) => {
+    if (item.kind === "message") {
+      const old = item.sourceMessageId ? bySource.get(item.sourceMessageId) : undefined;
+      return old?.kind === "message"
+        ? {
+            ...item,
+            firstTokenAt: old.firstTokenAt,
+            timeToFirstTokenMs: old.timeToFirstTokenMs,
+            generationMs: old.generationMs,
+          }
+        : item;
+    }
+    if (item.kind === "tool") {
+      const old = tools.get(item.callId);
+      return old?.kind === "tool" && !item.finishedAt && old.finishedAt
+        ? { ...item, createdAt: old.createdAt, finishedAt: old.finishedAt }
+        : item;
+    }
+    return item;
   });
 }
 
@@ -122,30 +159,42 @@ export function appendAssistantDelta(
   activeAssistantMessageBySession: Map<string, string>,
   sessionRef: SessionRef,
   text: string,
+  timestamp: string,
+  thinking = false,
 ): void {
+  if (!text) return;
   const key = sessionKey(sessionRef);
   const transcript = [...(transcriptCache.get(key) ?? [])];
   const activeId = activeAssistantMessageBySession.get(key);
-
-  if (activeId) {
-    const index = transcript.findIndex((message) => message.id === activeId);
-    const current = index >= 0 ? transcript[index] : undefined;
-    if (current?.kind === "message") {
-      transcript[index] = {
-        ...current,
-        text: `${current.text}${text}`,
-      };
-    } else {
-      const message = makeTranscriptMessage("assistant", text);
-      transcript.push(message);
-      activeAssistantMessageBySession.set(key, message.id);
-    }
+  const index = transcript.findIndex((message) => message.id === activeId);
+  const current = index >= 0 ? transcript[index] : undefined;
+  if (current?.kind === "message") {
+    const firstTokenAt = current.firstTokenAt ?? timestamp;
+    transcript[index] = {
+      ...current,
+      ...(thinking
+        ? { thinking: `${current.thinking ?? ""}${text}` }
+        : {
+            text: `${current.text}${text}`,
+            firstTokenAt,
+            timeToFirstTokenMs: Math.max(
+              0,
+              Date.parse(firstTokenAt) - Date.parse(current.createdAt),
+            ),
+            generationMs: Math.max(0, Date.parse(timestamp) - Date.parse(firstTokenAt)),
+          }),
+    };
   } else {
-    const message = makeTranscriptMessage("assistant", text);
-    transcript.push(message);
+    const message = makeTranscriptMessage("assistant", thinking ? "" : text);
+    transcript.push({
+      ...message,
+      createdAt: timestamp,
+      ...(thinking
+        ? { thinking: text }
+        : { firstTokenAt: timestamp, timeToFirstTokenMs: 0, generationMs: 0 }),
+    });
     activeAssistantMessageBySession.set(key, message.id);
   }
-
   transcriptCache.set(key, transcript);
 }
 
@@ -161,7 +210,7 @@ export function applyTimelineEvent(
   event: SessionDriverEvent,
   state: TimelineRuntimeState,
 ): void {
-  if (event.type === "assistantDelta") {
+  if (event.type === "assistantDelta" || event.type === "assistantThinkingDelta") {
     return;
   }
 
@@ -170,8 +219,23 @@ export function applyTimelineEvent(
   const currentMetrics = state.runMetricsBySession.get(key);
 
   switch (event.type) {
+    case "assistantMessageStarted": {
+      const message = makeTranscriptMessage("assistant", "");
+      transcript.push({ ...message, createdAt: event.timestamp });
+      state.activeAssistantMessageBySession.set(key, message.id);
+      break;
+    }
     case "assistantMessageEnded": {
       const activeId = state.activeAssistantMessageBySession.get(key);
+      const activeIndex = transcript.findIndex((item) => item.id === activeId);
+      const active = activeIndex >= 0 ? transcript[activeIndex] : undefined;
+      if (active?.kind === "message" && !active.text && !active.thinking) {
+        transcript.splice(activeIndex, 1);
+        transcriptCache.set(key, transcript);
+        state.pendingAssistantMessageBySession.delete(key);
+        clearActiveAssistantMessage(state.activeAssistantMessageBySession, event.sessionRef);
+        return;
+      }
       if (activeId) state.pendingAssistantMessageBySession.set(key, activeId);
       else state.pendingAssistantMessageBySession.delete(key);
       clearActiveAssistantMessage(state.activeAssistantMessageBySession, event.sessionRef);
@@ -243,6 +307,8 @@ export function applyTimelineEvent(
           : extensionToolRowLabel(extensionLabel, event.input),
         undefined,
         event.input,
+        undefined,
+        event.timestamp,
       );
       break;
     }
@@ -266,6 +332,8 @@ export function applyTimelineEvent(
         detailFromOutput(event.output),
         undefined,
         event.output,
+        undefined,
+        event.timestamp,
       );
       break;
     case "runCompleted": {
@@ -380,6 +448,8 @@ function upsertToolRow(
   detail?: string,
   input?: unknown,
   output?: unknown,
+  startedAt?: string,
+  finishedAt?: string,
 ) {
   const index = transcript.findIndex((item) => item.kind === "tool" && item.callId === callId);
   const existing = index >= 0 ? transcript[index] : undefined;
@@ -400,12 +470,17 @@ function upsertToolRow(
   if (index >= 0) {
     transcript[index] = {
       ...next,
-      createdAt: existing?.createdAt ?? next.createdAt,
+      createdAt: existing?.createdAt ?? startedAt ?? next.createdAt,
+      ...(finishedAt ? { finishedAt } : {}),
     };
     return;
   }
 
-  transcript.push(next);
+  transcript.push({
+    ...next,
+    createdAt: startedAt ?? next.createdAt,
+    ...(finishedAt ? { finishedAt } : {}),
+  });
 }
 
 function removeWorkingActivity(

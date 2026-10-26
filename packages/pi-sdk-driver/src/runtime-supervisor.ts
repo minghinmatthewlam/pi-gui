@@ -30,6 +30,8 @@ import type {
 } from "@pi-gui/session-driver/runtime-types";
 import type { WorkspaceRef } from "@pi-gui/session-driver";
 import { createRuntimeDependencies } from "./runtime-deps.js";
+import { sanitizeSuggestedPrompt, SUGGESTION_SYSTEM_PROMPT } from "./suggestion-prompt.js";
+import { supportedThinkingLevels } from "./thinking-levels.js";
 import {
   createSettingsManagerWithoutNpmPackages,
   isGlobalNpmLookupError,
@@ -153,6 +155,71 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
     await this.reloadResources(context);
     await this.autoEnableModelsForAuthenticatedProviders(context);
     return this.buildSnapshot(context);
+  }
+
+  /**
+   * Ask a cheap available model for one follow-up prompt to show as ghost
+   * text after a run. Prefers the workspace default model and falls back to
+   * the cheapest available one. Never rejects: returns undefined when no
+   * model is usable or the reply has no prompt text.
+   */
+  async suggestNextPrompt(workspace: WorkspaceRef, excerpt: string): Promise<string | undefined> {
+    const trimmed = excerpt.trim();
+    if (!trimmed) {
+      return undefined;
+    }
+    let context: RuntimeContext;
+    try {
+      context = await this.ensureContext(workspace);
+      // The available snapshot starts empty; refresh from stored credentials
+      // (offline) like the snapshot builder does before reading it.
+      await context.modelRuntime.refresh({ allowNetwork: false });
+    } catch {
+      return undefined;
+    }
+    const available = context.modelRuntime.getAvailableSnapshot();
+    const defaultProvider = context.settingsManager.getDefaultProvider();
+    const defaultModelId = context.settingsManager.getDefaultModel();
+    const preferred =
+      defaultProvider && defaultModelId
+        ? available.find(
+            (model) => model.provider === defaultProvider && model.id === defaultModelId,
+          )
+        : undefined;
+    const model =
+      preferred ?? [...available].sort((left, right) => left.cost.input - right.cost.input)[0];
+    if (!model) {
+      return undefined;
+    }
+    let reply: Awaited<ReturnType<typeof context.modelRuntime.completeSimple>>;
+    try {
+      reply = await context.modelRuntime.completeSimple(
+        model,
+        {
+          systemPrompt: SUGGESTION_SYSTEM_PROMPT,
+          messages: [
+            {
+              role: "user",
+              content: [{ type: "text", text: trimmed }],
+              timestamp: Date.now(),
+            },
+          ],
+        },
+        // Minimal reasoning on a cheap model; the cap leaves room for the
+        // thinking trace plus the one-line reply (tiny replies hit `length`
+        // when the cap starves the thinking budget).
+        { reasoning: "minimal", maxTokens: 512 },
+      );
+    } catch {
+      return undefined;
+    }
+    const text = reply.content
+      .filter(
+        (part): part is Extract<typeof part, { readonly type: "text" }> => part.type === "text",
+      )
+      .map((part) => part.text)
+      .join(" ");
+    return sanitizeSuggestedPrompt(text);
   }
 
   async login(
@@ -821,6 +888,7 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
           authType: provider?.authType ?? "none",
           reasoning: Boolean(model.reasoning),
           supportsImages: model.input.includes("image"),
+          thinkingLevels: supportedThinkingLevels(model),
         };
       })
       .sort((left, right) =>

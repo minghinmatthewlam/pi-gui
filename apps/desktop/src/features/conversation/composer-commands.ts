@@ -190,6 +190,22 @@ const HOST_ACTION_SLASH_COMMANDS: readonly ComposerSlashCommand[] = [
   },
 ] as const;
 
+/**
+ * Offer only the thinking levels a model accepts. Levels come from the
+ * runtime model record (mirroring pi's supported-level computation), so a
+ * picked level never clamps back down. Unknown or empty levels fall back
+ * to the full list to preserve current behavior.
+ */
+export function filterThinkingOptionsForModelLevels(
+  thinkingLevels: readonly string[] | undefined,
+): readonly ComposerSlashOption[] {
+  if (!thinkingLevels || thinkingLevels.length === 0) {
+    return THINKING_OPTIONS;
+  }
+  const supported = new Set(thinkingLevels);
+  return THINKING_OPTIONS.filter((option) => supported.has(option.value));
+}
+
 export const THINKING_OPTIONS: readonly ComposerSlashOption[] = [
   {
     value: "low",

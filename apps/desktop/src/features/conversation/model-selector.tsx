@@ -2,8 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { RuntimeSnapshot } from "@pi-gui/session-driver/runtime-types";
 import {
   buildModelOptions,
+  filterThinkingOptionsForModelLevels,
   MODEL_OPTIONS_EMPTY_TITLE,
-  THINKING_OPTIONS,
   type ComposerModelOption,
 } from "./composer-commands";
 
@@ -55,6 +55,15 @@ export function ModelSelector({
   }, [modelOptions, modelFilter]);
 
   const groupedModels = useMemo(() => groupByProvider(filteredModels), [filteredModels]);
+  // Only offer levels the selected model accepts; the backend clamps anything
+  // else, which is what made "max" snap back to "xhigh" on contributor models.
+  const currentModelThinkingLevels = runtime?.models.find(
+    (model) => model.providerId === provider && model.modelId === modelId,
+  )?.thinkingLevels;
+  const visibleThinkingOptions = useMemo(
+    () => filterThinkingOptionsForModelLevels(currentModelThinkingLevels),
+    [currentModelThinkingLevels],
+  );
   const hasAvailableModelOptions = modelOptions.length > 0;
   const hasModelControl = Boolean(provider && modelId) || hasAvailableModelOptions;
   const shouldRenderModelControl = hasModelControl || showEmptyModelControl;
@@ -179,7 +188,7 @@ export function ModelSelector({
               onWheel={(event) => event.stopPropagation()}
             >
               <div className="model-selector__group-title">Thinking Level</div>
-              {THINKING_OPTIONS.map((option) => {
+              {visibleThinkingOptions.map((option) => {
                 const isActive = option.value === thinkingLevel;
                 return (
                   <button

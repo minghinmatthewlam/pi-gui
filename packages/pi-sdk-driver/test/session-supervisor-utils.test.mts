@@ -43,6 +43,33 @@ await test("messageText preserves Markdown newlines in array-shaped assistant co
   assert.equal(messageText(message), markdownReport);
 });
 
+await test("transcript retains visible thinking, excludes redactions, and times finished tools", () => {
+  const start = Date.parse("2026-01-01T00:00:00.000Z");
+  const items = transcriptFromMessages([
+    {
+      role: "assistant",
+      timestamp: start,
+      content: [
+        { type: "thinking", thinking: "Visible reasoning" },
+        { type: "thinking", thinking: "secret", redacted: true },
+        { type: "toolCall", id: "call-1", name: "bash", arguments: {} },
+      ],
+    },
+    {
+      role: "toolResult",
+      timestamp: start + 1250,
+      toolCallId: "call-1",
+      isError: false,
+      content: [],
+    },
+  ]);
+  assert.equal(items[0]?.kind, "message");
+  assert.equal(items[0]?.thinking, "Visible reasoning");
+  assert.equal(items[0]?.text, "");
+  assert.equal(items[1]?.kind, "tool");
+  assert.equal(items[1]?.finishedAt, "2026-01-01T00:00:01.250Z");
+});
+
 await test("only a requested SDK abort is cancellation; actual provider errors remain failures", () => {
   const aborted = [
     { role: "assistant", stopReason: "aborted", errorMessage: "Request was aborted" },

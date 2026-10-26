@@ -33,6 +33,13 @@ export interface RuntimeModelRecord {
   readonly authType: RuntimeAuthType;
   readonly reasoning: boolean;
   readonly supportsImages: boolean;
+  /**
+   * Thinking levels the backend will accept for this model, in
+   * lowest-to-highest order. Mirrors pi's getSupportedThinkingLevels:
+   * non-reasoning models expose only "off"; xhigh/max require a mapped
+   * entry. The picker offers exactly these so selections never clamp.
+   */
+  readonly thinkingLevels: readonly string[];
 }
 
 export interface RuntimeSkillRecord {

@@ -23,7 +23,13 @@ function fixture() {
   };
   const send = (event: SessionDriverEvent) => applyTimelineEvent(transcript, event, state);
   const append = (text: string) =>
-    appendAssistantDelta(transcript, state.activeAssistantMessageBySession, sessionRef, text);
+    appendAssistantDelta(
+      transcript,
+      state.activeAssistantMessageBySession,
+      sessionRef,
+      text,
+      timestamp,
+    );
   const ended = () => send({ type: "assistantMessageEnded", sessionRef, timestamp });
   const persisted = (sourceMessageId: string) =>
     send({ type: "assistantMessagePersisted", sessionRef, timestamp, sourceMessageId });

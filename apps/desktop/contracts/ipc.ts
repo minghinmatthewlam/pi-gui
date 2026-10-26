@@ -151,6 +151,7 @@ export const desktopIpc = {
   deleteScheduledTask: "pi-gui:delete-scheduled-task",
   beginScheduledTaskInterview: "pi-gui:begin-scheduled-task-interview",
   cancelCurrentRun: "pi-gui:cancel-current-run",
+  dismissSuggestedNextPrompt: "pi-gui:dismiss-suggested-next-prompt",
   setActiveView: "pi-gui:set-active-view",
   setSidebarCollapsed: "pi-gui:set-sidebar-collapsed",
   setThreadGrouping: "pi-gui:set-thread-grouping",
@@ -733,6 +734,7 @@ export interface PiDesktopApi {
   deleteScheduledTask(id: string): Promise<DesktopAppState>;
   beginScheduledTaskInterview(): Promise<DesktopAppState>;
   cancelCurrentRun(): Promise<DesktopAppState>;
+  dismissSuggestedNextPrompt(): Promise<DesktopAppState>;
   setActiveView(view: AppView): Promise<DesktopAppState>;
   setSidebarCollapsed(collapsed: boolean): Promise<DesktopAppState>;
   setThreadGrouping(grouping: ThreadGrouping): Promise<DesktopAppState>;

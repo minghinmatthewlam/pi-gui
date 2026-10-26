@@ -225,6 +225,8 @@ async function createChildThreadRecord(
     pendingCreateChildThreadToolCalls.add(pendingKey);
   }
   try {
+    // Child threads intentionally inherit the workspace default model (never the
+    // parent's per-thread override) so agent-spawned delegation stays cheap.
     const createOptions = await store.buildCreateSessionOptions(input.parentWorkspaceId);
     const session = await store.driver.createSession(workspace, {
       ...createOptions,

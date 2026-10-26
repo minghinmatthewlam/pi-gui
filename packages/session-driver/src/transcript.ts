@@ -24,6 +24,11 @@ export interface SessionTranscriptMessage {
   readonly kind: "message";
   readonly role: SessionTranscriptRole;
   readonly text: string;
+  /** Provider-visible reasoning only; redacted/opaque blocks are never displayed. */
+  readonly thinking?: string;
+  readonly timeToFirstTokenMs?: number;
+  readonly firstTokenAt?: string;
+  readonly generationMs?: number;
   readonly attachments?: readonly SessionTranscriptAttachment[];
   readonly createdAt: string;
   readonly id: string;
@@ -41,6 +46,7 @@ export interface SessionTranscriptToolCall {
   readonly input?: unknown;
   readonly output?: unknown;
   readonly createdAt: string;
+  readonly finishedAt?: string;
 }
 
 /**

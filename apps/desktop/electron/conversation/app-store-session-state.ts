@@ -59,6 +59,8 @@ export function updateSessionRecord(
     readonly preview: string | undefined;
     readonly runningSince: string | undefined;
     readonly lastViewedAt: string | undefined;
+    /** A string to set the ghost suggestion, null to clear, undefined to preserve. */
+    readonly suggestedNextPrompt?: string | null;
   },
 ): SessionRecord {
   const updatedAt = options.snapshot?.updatedAt ?? session.updatedAt;
@@ -69,7 +71,8 @@ export function updateSessionRecord(
     snapshotTitle === NEW_THREAD_PLACEHOLDER_TITLE && session.title !== NEW_THREAD_PLACEHOLDER_TITLE
       ? session.title
       : (snapshotTitle ?? session.title);
-  return {
+  type MutableSessionRecord = { -readonly [K in keyof SessionRecord]: SessionRecord[K] };
+  const next: MutableSessionRecord = {
     ...session,
     title,
     updatedAt,
@@ -86,6 +89,14 @@ export function updateSessionRecord(
     ),
     config: options.snapshot?.config ?? session.config,
   };
+  if (options.suggestedNextPrompt !== undefined) {
+    if (options.suggestedNextPrompt === null) {
+      delete next.suggestedNextPrompt;
+    } else {
+      next.suggestedNextPrompt = options.suggestedNextPrompt;
+    }
+  }
+  return next;
 }
 
 function snapshotForEvent(event: SessionDriverEvent) {

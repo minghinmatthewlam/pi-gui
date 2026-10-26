@@ -63,6 +63,8 @@ export class SessionStateMap {
   readonly runMetricsBySession = new Map<string, RunMetrics>();
   readonly activeWorkingActivityBySession = new Map<string, string>();
   readonly sessionCommandsBySession = new Map<string, RuntimeCommandRecord[]>();
+  /** Grey ghost-text follow-up prompt shown in the composer after a run. Ephemeral. */
+  readonly suggestedNextPromptBySession = new Map<string, string>();
   readonly sessionUsageBySession = new Map<string, SessionUsageSnapshot>();
   readonly extensionUiBySession = new Map<string, MutableSessionExtensionUiState>();
   readonly pendingAutoTitleBySession = new Map<string, PendingAutoTitle>();
@@ -109,6 +111,7 @@ export class SessionStateMap {
       this.runMetricsBySession,
       this.activeWorkingActivityBySession,
       this.sessionCommandsBySession,
+      this.suggestedNextPromptBySession,
       this.sessionUsageBySession,
       this.extensionUiBySession,
       this.pendingAutoTitleBySession,
@@ -173,6 +176,7 @@ export class SessionStateMap {
     this.pinnedSessionOrder = this.pinnedSessionOrder.filter((entry) => entry !== key);
     this.sessionErrorsBySession.delete(key);
     this.sessionCommandsBySession.delete(key);
+    this.suggestedNextPromptBySession.delete(key);
     this.sessionUsageBySession.delete(key);
     this.extensionUiBySession.delete(key);
     this.pendingAutoTitleBySession.delete(key);

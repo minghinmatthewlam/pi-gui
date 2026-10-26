@@ -207,6 +207,8 @@ interface ManagedSessionRecord {
   preview: string | undefined;
   config: SessionConfig | undefined;
   runningRunId: string | undefined;
+  /** Start of this model turn (or end of its preceding tool batch) for first-text latency. */
+  assistantRequestStartedAt?: string | undefined;
   cancellationRequested: boolean;
   /** A prompt is in Pi's pre-run steps (input handlers, auth, before_agent_start). */
   promptStarting: boolean;
@@ -2606,10 +2608,21 @@ export class SessionSupervisor {
         record.status = "running";
         return [sessionUpdatedEvent(record)];
       case "turn_start":
+        record.assistantRequestStartedAt = timestamp;
         record.status = "running";
         return [sessionUpdatedEvent(record)];
       case "message_start":
       case "message_end":
+        if (event.type === "message_start" && event.message.role === "assistant") {
+          return toDriverEvents(
+            {
+              type: "assistantMessageStarted" as const,
+              sessionRef: record.ref,
+              timestamp: record.assistantRequestStartedAt ?? timestamp,
+            },
+            record,
+          );
+        }
         // pi emits both for a user message; only the start may match, or a second queued
         // message with the same text would count as started too.
         if (event.type === "message_start" && event.message.role === "user") {
@@ -2635,6 +2648,7 @@ export class SessionSupervisor {
           this.appendCustomMessageItem(record, event.message);
         }
         if (event.type === "message_end" && event.message.role === "assistant") {
+          record.assistantRequestStartedAt = undefined;
           return toDriverEvents(
             { type: "assistantMessageEnded", sessionRef: record.ref, timestamp },
             record,
@@ -2643,6 +2657,22 @@ export class SessionSupervisor {
         return [sessionUpdatedEvent(record)];
       case "message_update":
         this.updatePreviewFromMessage(record, event.message);
+        if (
+          event.message.role === "assistant" &&
+          event.assistantMessageEvent.type === "thinking_delta"
+        ) {
+          const block = event.message.content[event.assistantMessageEvent.contentIndex];
+          if (block?.type === "thinking" && block.redacted) return [sessionUpdatedEvent(record)];
+          return toDriverEvents(
+            {
+              type: "assistantThinkingDelta" as const,
+              sessionRef: record.ref,
+              timestamp,
+              text: event.assistantMessageEvent.delta ?? "",
+            },
+            record,
+          );
+        }
         if (
           event.message.role === "assistant" &&
           event.assistantMessageEvent.type === "text_delta"
@@ -2684,6 +2714,7 @@ export class SessionSupervisor {
           record,
         );
       case "tool_execution_end":
+        record.assistantRequestStartedAt = timestamp;
         return toDriverEvents(
           {
             type: "toolFinished" as const,

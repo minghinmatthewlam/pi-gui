@@ -384,6 +384,9 @@ function isSameDisplayItem(a: DisplayTimelineItem, b: DisplayTimelineItem): bool
     return (
       a.role === b.role &&
       a.text === b.text &&
+      a.thinking === b.thinking &&
+      a.timeToFirstTokenMs === b.timeToFirstTokenMs &&
+      a.generationMs === b.generationMs &&
       a.attachments === b.attachments &&
       a.sourceMessageId === b.sourceMessageId
     );
@@ -398,7 +401,8 @@ function isSameDisplayItem(a: DisplayTimelineItem, b: DisplayTimelineItem): bool
       a.toolName === b.toolName &&
       a.label === b.label &&
       a.detail === b.detail &&
-      a.metadata === b.metadata
+      a.metadata === b.metadata &&
+      a.finishedAt === b.finishedAt
     );
   }
   if (a.kind === "activity" && b.kind === "activity") {

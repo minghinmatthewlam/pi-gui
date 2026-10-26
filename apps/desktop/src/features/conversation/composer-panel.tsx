@@ -156,6 +156,16 @@ export function ComposerPanel({
   const hasComposerInput =
     composerDraft.trim().length > 0 || attachments.length > 0 || annotations.list.length > 0;
   const primaryActionIsStop = selectedSession.status === "running" && !hasComposerInput;
+  // Ghost-text next prompt: shown as grey placeholder while the composer is
+  // empty and the thread is idle. Tab accepts it (handled in the keydown
+  // hook); typing or submitting hides it, a new run clears it main-side.
+  const ghostSuggestion =
+    selectedSession.status === "running" || composerDraft.length > 0
+      ? undefined
+      : selectedSession.suggestedNextPrompt;
+  const textareaPlaceholder = ghostSuggestion
+    ? `${ghostSuggestion}  —  Tab to use`
+    : "Ask pi to inspect the repo, run a fix, or continue the current thread...";
 
   return (
     <footer className="composer" aria-busy={preparingTaskDraft}>
@@ -202,7 +212,7 @@ export function ComposerPanel({
           onEnableMentionExtension={onEnableMentionExtension}
           textareaLabel="Composer"
           textareaTestId="composer"
-          textareaPlaceholder="Ask pi to inspect the repo, run a fix, or continue the current thread..."
+          textareaPlaceholder={textareaPlaceholder}
           pinnedCards={pinnedCards}
           extensionDock={extensionDock}
           extensionDockExpanded={extensionDockExpanded}

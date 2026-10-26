@@ -270,6 +270,8 @@ contextBridge.exposeInMainWorld("piApp", {
     ipcRenderer.invoke(desktopIpc.beginScheduledTaskInterview) as Promise<DesktopAppState>,
   cancelCurrentRun: () =>
     ipcRenderer.invoke(desktopIpc.cancelCurrentRun) as Promise<DesktopAppState>,
+  dismissSuggestedNextPrompt: () =>
+    ipcRenderer.invoke(desktopIpc.dismissSuggestedNextPrompt) as Promise<DesktopAppState>,
   setActiveView: (view: AppView) =>
     ipcRenderer.invoke(desktopIpc.setActiveView, view) as Promise<DesktopAppState>,
   setSidebarCollapsed: (collapsed: boolean) =>

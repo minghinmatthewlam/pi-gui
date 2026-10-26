@@ -113,6 +113,8 @@ export interface SessionRecord {
   readonly runningSince?: string;
   readonly hasUnseenUpdate: boolean;
   readonly config?: SessionConfig;
+  /** Grey ghost-text follow-up shown in the composer placeholder after a run. Tab accepts it. */
+  readonly suggestedNextPrompt?: string;
 }
 
 export type OrchestrationChildThreadStatus =
