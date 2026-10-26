@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { CloseIcon } from "../../../ui/icons";
 import { ANNOTATION_ROOT_ATTRIBUTE, type OpenAnnotation } from "./annotation-markers";
 import { rangeToOffsets } from "./text-offsets";
@@ -128,6 +128,11 @@ const POPOVER_GAP = 8;
 function popoverTop(anchor: DOMRect, height: number): number {
   const above = anchor.top - height - POPOVER_GAP;
   return above >= POPOVER_GAP ? above : anchor.bottom + POPOVER_GAP;
+}
+
+/** Starts at `preferred` but stays inside the window's right edge, then its left edge. */
+function popoverLeft(preferred: number, width: number): number {
+  return Math.max(POPOVER_GAP, Math.min(preferred, window.innerWidth - width - POPOVER_GAP));
 }
 
 /**
@@ -286,6 +291,13 @@ function SelectionActions({
   readonly onAdd: () => void;
 }) {
   const [copied, setCopied] = useState(false);
+  const popoverRef = useRef<HTMLDivElement>(null);
+  // The pill is wide enough to run off the right edge; place it once its width is known.
+  useLayoutEffect(() => {
+    const popover = popoverRef.current;
+    if (popover)
+      popover.style.left = `${popoverLeft(anchor.left, popover.getBoundingClientRect().width)}px`;
+  });
   useEffect(() => {
     if (!copied) return undefined;
     const timer = window.setTimeout(() => setCopied(false), COPIED_FEEDBACK_MS);
@@ -304,7 +316,8 @@ function SelectionActions({
   return (
     <div
       className="annotation-popover annotation-add"
-      style={{ top: popoverTop(anchor, 32), left: Math.max(POPOVER_GAP, anchor.left) }}
+      ref={popoverRef}
+      style={{ top: popoverTop(anchor, 32) }}
       // Keep the transcript selection alive through a click on either button.
       onMouseDown={(event) => event.preventDefault()}
     >

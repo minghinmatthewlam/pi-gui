@@ -333,3 +333,49 @@ test("copies a transcript selection from the button beside Add to Chat", async (
     await harness.close();
   }
 });
+
+test("keeps the selection buttons inside the window when the selection ends at its right edge", async () => {
+  test.setTimeout(60_000);
+  const harness = await launchWithTranscript("transcript-actions-edge", [
+    { role: "user", text: "Ask" },
+    {
+      role: "assistant",
+      text: `${REPLY} Keep the approval notice with your passport and compare the dates before you travel.`,
+    },
+  ]);
+  try {
+    const page = await harness.firstWindow();
+    await expect(page.locator(".timeline-item--assistant").last()).toContainText("TN stamps");
+    await harness.electronApp.evaluate(({ BrowserWindow }) => {
+      BrowserWindow.getAllWindows()[0]?.setSize(760, 700);
+    });
+    await expect.poll(() => page.evaluate(() => window.innerWidth)).toBe(760);
+
+    // The word that ends furthest right; the buttons would start at its left edge.
+    const word = await page.evaluate(() => {
+      const root = document.querySelector(".timeline-item--assistant [data-annotation-root]");
+      if (!root) throw new Error("Missing reply text");
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      let best = { text: "", right: 0 };
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        for (const match of (node.nodeValue ?? "").matchAll(/\S+/g)) {
+          const range = document.createRange();
+          range.setStart(node, match.index);
+          range.setEnd(node, match.index + match[0].length);
+          const { right } = range.getBoundingClientRect();
+          if (right > best.right) best = { text: match[0], right };
+        }
+      }
+      return best.text;
+    });
+    await dragSelect(page, word);
+
+    const buttons = page.locator(".annotation-add");
+    await expect(page.getByTestId("add-to-chat")).toBeVisible();
+    const box = await buttons.boundingBox();
+    expect(box).not.toBeNull();
+    expect(box!.x + box!.width).toBeLessThanOrEqual(760 - 8);
+  } finally {
+    await harness.close();
+  }
+});
