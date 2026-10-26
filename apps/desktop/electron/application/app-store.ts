@@ -3718,46 +3718,67 @@ export class DesktopAppStore {
   }
 
   /**
-   * Runtime snapshots as windows see them. Per-repo mode shows a worktree its repo's model
-   * settings, and app-global mode shows every workspace the global ones (applied in the
-   * renderer), so each model's scope is re-resolved against the patterns actually shown.
+   * Runtime snapshots as windows see them: per-repo mode shows a worktree its repo's model
+   * settings, and app-global mode shows every workspace the global ones. Each model's scope is
+   * re-resolved by pi against the patterns shown when they differ from the workspace's own.
    */
   private async serializeEffectiveRuntimeState(
     workspaces: DesktopAppState["workspaces"],
     scopedModelSettingsByWorkspace: Record<string, ModelSettingsSnapshot> | undefined,
     globalModelSettings: ModelSettingsSnapshot,
   ): Promise<Record<string, RuntimeSnapshot>> {
-    const runtimeByWorkspace = this.serializeRuntimeState();
-    const perRepo = this.state.modelSettingsScopeMode === "per-repo";
+    const shownModelSettings = (workspaceId: string): ModelSettingsSnapshot | undefined => {
+      if (this.state.modelSettingsScopeMode !== "per-repo") {
+        return globalModelSettings;
+      }
+      const ownerWorkspaceId = resolveRepoWorkspaceId(workspaces, workspaceId);
+      return ownerWorkspaceId ? scopedModelSettingsByWorkspace?.[ownerWorkspaceId] : undefined;
+    };
 
+    const rescoped = new Map<RuntimeSnapshot, RuntimeSnapshot["models"]>();
     await Promise.all(
       workspaces.map(async (workspace) => {
-        const workspaceRuntime = runtimeByWorkspace[workspace.id];
-        const ownerWorkspaceId = resolveRepoWorkspaceId(workspaces, workspace.id);
-        const modelSettings = perRepo
-          ? ownerWorkspaceId
-            ? scopedModelSettingsByWorkspace?.[ownerWorkspaceId]
-            : undefined
-          : globalModelSettings;
-        if (!workspaceRuntime || !modelSettings) {
+        const runtime = this.runtimeByWorkspace.get(workspace.id);
+        const patterns = shownModelSettings(workspace.id)?.enabledModelPatterns;
+        if (
+          !runtime ||
+          !patterns ||
+          samePatterns(runtime.settings.enabledModelPatterns, patterns)
+        ) {
           return;
         }
-        const patterns = modelSettings.enabledModelPatterns;
-        const runtime = samePatterns(workspaceRuntime.settings.enabledModelPatterns, patterns)
-          ? workspaceRuntime
-          : {
-              ...workspaceRuntime,
-              models: await this.driver.runtimeSupervisor.scopeModels(
-                workspaceRuntime.workspace,
-                workspaceRuntime.models,
-                patterns,
-              ),
-            };
-        runtimeByWorkspace[workspace.id] = perRepo
-          ? applyModelSettingsSnapshot(runtime, modelSettings)
-          : runtime;
+        try {
+          const models = await this.driver.runtimeSupervisor.scopeModels(
+            runtime.workspace,
+            runtime.models,
+            patterns,
+          );
+          rescoped.set(runtime, models);
+        } catch (error) {
+          console.warn(
+            `[pi-gui] Failed to resolve enabled models for ${workspace.path}: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+        }
       }),
     );
+
+    // Serialize after the awaits so a runtime replaced meanwhile is not swapped for an older one.
+    // A replaced runtime keeps its own scopes until the next refresh rescopes it.
+    const runtimeByWorkspace = this.serializeRuntimeState();
+    for (const workspace of workspaces) {
+      const runtime = runtimeByWorkspace[workspace.id];
+      const modelSettings = shownModelSettings(workspace.id);
+      if (!runtime || !modelSettings) {
+        continue;
+      }
+      const models = rescoped.get(runtime);
+      runtimeByWorkspace[workspace.id] = applyModelSettingsSnapshot(
+        models ? { ...runtime, models } : runtime,
+        modelSettings,
+      );
+    }
 
     return runtimeByWorkspace;
   }

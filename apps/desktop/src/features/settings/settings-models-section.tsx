@@ -154,8 +154,6 @@ export function SettingsModelsSection({
                 >
                   <SettingsSwitch
                     checked={enabled}
-                    // Another entry, such as a glob, enables a `matched` model, so removing its
-                    // own entry would not turn it off.
                     disabled={enabled && (activePatterns.length <= 1 || model.scope === "matched")}
                     label={`Enable ${pattern}`}
                     onChange={(next) => setEnabled(pattern, next)}

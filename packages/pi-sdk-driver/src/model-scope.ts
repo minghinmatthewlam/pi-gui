@@ -19,15 +19,16 @@ export async function resolveModelScopes(
   if (patterns.length === 0) {
     return () => "all";
   }
-  const available = await modelRuntime.getAvailable();
-  const ownEntries = new Set(available.map((model) => keyOf(model.provider, model.id)));
-  const [enabled, matched] = await Promise.all([
-    resolvedKeys(patterns, modelRuntime),
-    resolvedKeys(
-      patterns.filter((pattern) => !ownEntries.has(pattern)),
-      modelRuntime,
-    ),
-  ]);
+  // pi's resolver reads availability itself; run it in sequence so both passes see the same set.
+  const enabled = await resolvedKeys(patterns, modelRuntime);
+  const ownEntries = new Set(
+    modelRuntime.getAvailableSnapshot().map((model) => keyOf(model.provider, model.id)),
+  );
+  const otherEntries = patterns.filter((pattern) => !ownEntries.has(pattern));
+  const matched =
+    otherEntries.length === patterns.length
+      ? enabled
+      : await resolvedKeys(otherEntries, modelRuntime);
   return (model) => {
     const key = keyOf(model.providerId, model.modelId);
     if (matched.has(key)) return "matched";

@@ -101,3 +101,10 @@ await test("single-star, bare-id, case-insensitive and thinking-suffix entries m
   // Clearing the patterns enables everything again.
   assert.equal((await scopeFor([]))[`${ZAI}/glm-5.3`], "all");
 });
+
+await test("refreshing keeps a glob-only enabledModels list instead of adding every connected model", async () => {
+  const { supervisor, workspace } = await supervisorWithEnabledModels([`${ROUTER}/**`]);
+  const snapshot = await supervisor.refreshRuntime(workspace);
+  assert.deepEqual(snapshot.settings.enabledModelPatterns, [`${ROUTER}/**`]);
+  assert.equal(scopes(snapshot.models)[`${DIRECT}/solo-model-7`], "off");
+});

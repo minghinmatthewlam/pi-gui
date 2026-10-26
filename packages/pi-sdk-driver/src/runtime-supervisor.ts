@@ -857,10 +857,7 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
 
     const providers = await this.buildProviderRecords(context);
     const models = await this.buildModelRecords(context);
-    const hasSelectableModels = models.some(
-      (model) =>
-        model.available && currentPatterns.includes(`${model.providerId}/${model.modelId}`),
-    );
+    const hasSelectableModels = models.some((model) => model.available && model.scope !== "off");
     const candidateProviderIds =
       providerIds && providerIds.length > 0
         ? providerIds
