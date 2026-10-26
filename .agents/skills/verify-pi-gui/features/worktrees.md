@@ -10,7 +10,7 @@ Users create a separate Git workspace or choose a worktree environment for a new
 
 ## How to get to it (user POV)
 
-- Open Workspace actions for the repository and choose Create permanent worktree. Under Time grouping the folder row is hidden once it has threads; switch Customize Sidebar → Grouping → Workspace first. The new worktree gets no sidebar row of its own; its threads show under the root folder with a worktree icon.
+- Open Workspace actions for the repository and choose Create permanent worktree. Under Time grouping the folder row is hidden once it has threads; switch Customize Sidebar → Grouping → Workspace first. The new worktree gets no sidebar row of its own; its threads show under the root folder with a worktree icon. Under Workspace grouping, clicking a folder row that has threads folds it instead of selecting it, and a folded root folder also hides its worktree threads; use `Workspace actions for <folder>` or the "+" (which unfolds first), not the row.
 - Only worktrees pi-gui created (under the profile's `worktrees` folder or the legacy `~/.pi/worktrees`) nest under a folder. A Git worktree the user made and opened is its own sidebar folder with its own threads, and worktrees created from it nest under it.
 - Remove worktree (with a confirmation) is in that menu only when a pi-gui worktree shows as its own row, which happens only when its root folder is not open. The app refuses to remove any other checkout.
 - The Fork modal offers Same worktree or New worktree; New worktree can be disabled.
