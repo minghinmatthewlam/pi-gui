@@ -6,6 +6,8 @@
 export interface ToolOutputImage {
   readonly data: string;
   readonly mimeType: string;
+  /** Set instead of the data when main sends the transcript; the image loads when shown. */
+  readonly src?: string;
 }
 
 /** Only these become data: URLs; anything else is left as text. */
@@ -13,10 +15,12 @@ const IMAGE_MIME_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image
 
 function isImageBlock(
   value: unknown,
-): value is { type: "image"; data: string; mimeType?: unknown } {
+): value is { type: "image"; data: string; mimeType?: unknown; src?: string } {
   if (typeof value !== "object" || value === null) return false;
   const block = value as Record<string, unknown>;
-  return block.type === "image" && typeof block.data === "string";
+  return (
+    block.type === "image" && (typeof block.data === "string" || typeof block.src === "string")
+  );
 }
 
 function isShownImage(value: unknown): value is { type: "image" } & ToolOutputImage {
@@ -31,11 +35,13 @@ export function toolOutputImages(output: unknown): readonly ToolOutputImage[] {
   if (typeof output !== "object" || output === null) return [];
   const { content } = output as Record<string, unknown>;
   if (!Array.isArray(content)) return [];
-  return content.filter(isShownImage).map(({ data, mimeType }) => ({ data, mimeType }));
+  return content
+    .filter(isShownImage)
+    .map(({ data, mimeType, src }) => (src ? { data: "", mimeType, src } : { data, mimeType }));
 }
 
 export function toolOutputImageSrc(image: ToolOutputImage): string {
-  return `data:${image.mimeType};base64,${image.data}`;
+  return image.src ?? `data:${image.mimeType};base64,${image.data}`;
 }
 
 /** JSON for the expanded row and Copy, with image data shown as a short placeholder. */
@@ -46,6 +52,7 @@ export function stringifyToolValue(value: unknown): string {
       isImageBlock(nested)
         ? {
             ...nested,
+            src: undefined,
             data: `[${typeof nested.mimeType === "string" ? nested.mimeType : "image"} image]`,
           }
         : nested,
