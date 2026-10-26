@@ -165,3 +165,36 @@ await test("a session is not released while an operation on it is running", asyn
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(disposals(), 1);
 });
+
+await test("extensions shutting down in a released session cannot open dialogs or change the UI", async () => {
+  const { record, emitted } = releasableRecord();
+  const { supervisor } = supervisorWith(record);
+  const ui = (
+    supervisor as unknown as {
+      createExtensionUiContext: (record: unknown) => {
+        confirm: (title: string, message: string) => Promise<boolean>;
+        setStatus: (key: string, text: string | undefined) => void;
+      };
+    }
+  ).createExtensionUiContext(record);
+  let confirmed: boolean | undefined;
+  Object.assign(record, {
+    runtime: {
+      // Like a session_shutdown handler that asks the person something and sets a status.
+      dispose: async () => {
+        ui.setStatus("shutdown", "stopping");
+        confirmed = await ui.confirm("Save?", "Save before stopping?");
+      },
+    },
+  });
+
+  assert.equal(supervisor.releaseSession(record.ref), true);
+  await new Promise((resolve) => setImmediate(resolve));
+  await record.eventQueue;
+
+  assert.equal(confirmed, false, "the dialog answers with its default instead of waiting");
+  const kinds = emitted
+    .filter((event) => event.type === "hostUiRequest")
+    .map((event) => (event as unknown as { request: { kind: string } }).request.kind);
+  assert.deepEqual(kinds, ["reset"]);
+});

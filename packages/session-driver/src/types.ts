@@ -421,6 +421,8 @@ export interface SessionDriver {
    * while it is in use, busy or waiting on the person.
    */
   releaseSession(sessionRef: SessionRef): boolean;
+  /** Whether the session has a live runtime: opened, and not released or closed since. */
+  isSessionLoaded(sessionRef: SessionRef): boolean;
 }
 
 export interface SessionSchemaInfo {

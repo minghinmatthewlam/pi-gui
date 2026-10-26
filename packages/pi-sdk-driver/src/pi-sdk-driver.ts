@@ -184,6 +184,10 @@ export class PiSdkDriver implements SessionDriver {
     );
   }
 
+  isSessionLoaded(sessionRef: SessionRef): boolean {
+    return this.supervisor.isSessionLoaded(sessionRef);
+  }
+
   releaseSession(sessionRef: SessionRef): boolean {
     return this.supervisor.releaseSession(sessionRef);
   }

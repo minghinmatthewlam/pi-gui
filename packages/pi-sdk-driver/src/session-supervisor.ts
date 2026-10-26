@@ -310,6 +310,8 @@ export class SessionSupervisor {
   private readonly releaseInFlight = new Map<string, Promise<void>>();
   /** Caller operations running per session; a session in use is never released. */
   private readonly operationsInFlight = new Map<string, number>();
+  /** Sessions released and not reopened since. */
+  private readonly releasedSessionKeys = new Set<string>();
   /** Preserve invocation order so stale touches cannot undo a later rename or removal. */
   private readonly workspaceMutationQueues = new Map<WorkspaceId, Promise<void>>();
   private readonly leaseIdentity: LeaseIdentity = currentLeaseIdentity();
@@ -615,6 +617,8 @@ export class SessionSupervisor {
   }
 
   async getTranscript(sessionRef: SessionRef): Promise<SessionTranscriptItem[]> {
+    // A released session's extensions may still write to its file while they shut down.
+    await this.releaseInFlight.get(sessionKey(sessionRef))?.catch(() => undefined);
     const record = this.records.get(sessionKey(sessionRef));
     if (record && record.session && !record.closed) {
       const diskMtimeMs = record.session.isStreaming
@@ -940,9 +944,14 @@ export class SessionSupervisor {
   }
 
   async openSession(sessionRef: SessionRef): Promise<SessionSnapshot> {
+    // Reopening a released session is not a resume the person asked for: they never saw it go.
+    const wasReleased = this.releasedSessionKeys.has(sessionKey(sessionRef));
     const record = await this.ensureRecord(sessionRef);
     await this.touchWorkspace(record.workspace.workspaceId);
     const snapshot = buildSnapshot(record);
+    if (wasReleased) {
+      return snapshot;
+    }
     await this.emit(record, {
       type: "sessionOpened",
       sessionRef: record.ref,
@@ -1565,6 +1574,7 @@ export class SessionSupervisor {
     }
 
     record.closed = true;
+    this.releasedSessionKeys.delete(sessionKey(sessionRef));
     record.runningRunId = undefined;
     record.status = "idle";
     this.clearExtensionUiState(record);
@@ -1590,6 +1600,12 @@ export class SessionSupervisor {
       timestamp: nowIso(),
       reason: "manual",
     });
+  }
+
+  /** Whether the session has a live runtime; false once it is released, closed or never opened. */
+  isSessionLoaded(sessionRef: SessionRef): boolean {
+    const record = this.records.get(sessionKey(sessionRef));
+    return Boolean(record?.session && !record.closed);
   }
 
   /**
@@ -1622,13 +1638,14 @@ export class SessionSupervisor {
    */
   releaseSession(sessionRef: SessionRef): boolean {
     const key = sessionKey(sessionRef);
+    if (this.operationsInFlight.has(key) || this.ensureRecordInFlight.has(key)) {
+      return false;
+    }
     const record = this.records.get(key);
     if (!record?.session || record.closed) {
       return true;
     }
     if (
-      this.operationsInFlight.has(key) ||
-      this.ensureRecordInFlight.has(key) ||
       isRecordBusy(record) ||
       record.queuedMessages.length > 0 ||
       record.startingQueuedMessage !== undefined ||
@@ -1642,6 +1659,7 @@ export class SessionSupervisor {
     }
 
     record.closed = true;
+    this.releasedSessionKeys.add(key);
     record.unsubscribeAgent?.();
     record.unsubscribeAgent = undefined;
     // The extensions that set this UI are about to stop; the reopened ones set their own.
@@ -1736,6 +1754,7 @@ export class SessionSupervisor {
     record.config = deriveSessionConfig(session.sessionManager);
     record.closed = false;
     record.leasePath = leasePath;
+    this.releasedSessionKeys.delete(key);
 
     this.records.set(key, record);
     this.syncLeaseHeartbeat();
@@ -2127,6 +2146,14 @@ export class SessionSupervisor {
 
   private createExtensionUiContext(record: ManagedSessionRecord): ExtensionUIContext {
     const noOpTheme = extensionUiThemeStub;
+    // While a released session's extensions shut down they can no longer reach the person: their
+    // UI was reset, and a dialog nobody can answer would hold up the release and every reopen.
+    const releasing = () => this.releaseInFlight.has(sessionKey(record.ref));
+    const emit = (request: HostUiRequest) => {
+      if (!releasing()) {
+        this.emitHostUiRequest(record, request);
+      }
+    };
 
     const createDialogPromise = <T>(
       opts: ExtensionUIDialogOptions | undefined,
@@ -2134,7 +2161,7 @@ export class SessionSupervisor {
       createRequest: (requestId: string) => HostUiRequest,
       parseResponse: (response: HostUiResponse) => T,
     ): Promise<T> => {
-      if (opts?.signal?.aborted) {
+      if (opts?.signal?.aborted || releasing()) {
         return Promise.resolve(defaultValue);
       }
       if (record.bindingExtensions && opts?.timeout === undefined) {
@@ -2239,7 +2266,7 @@ export class SessionSupervisor {
                 : undefined,
         ),
       notify: (message, level) => {
-        this.emitHostUiRequest(record, {
+        emit({
           kind: "notify",
           requestId: crypto.randomUUID(),
           message,
@@ -2248,7 +2275,7 @@ export class SessionSupervisor {
       },
       onTerminalInput: () => () => {},
       setStatus: (key, text) => {
-        this.emitHostUiRequest(record, {
+        emit({
           kind: "status",
           requestId: crypto.randomUUID(),
           key,
@@ -2262,7 +2289,7 @@ export class SessionSupervisor {
       setWidget: (key, content: unknown, options?: ExtensionWidgetOptions) => {
         if (content === undefined || Array.isArray(content)) {
           const lines = content as readonly string[] | undefined;
-          this.emitHostUiRequest(record, {
+          emit({
             kind: "widget",
             requestId: crypto.randomUUID(),
             key,
@@ -2274,7 +2301,7 @@ export class SessionSupervisor {
       setFooter: () => {},
       setHeader: () => {},
       setTitle: (title) => {
-        this.emitHostUiRequest(record, {
+        emit({
           kind: "title",
           requestId: crypto.randomUUID(),
           title,
@@ -2288,14 +2315,14 @@ export class SessionSupervisor {
         throw createUnsupportedHostUiError("custom");
       },
       pasteToEditor: (text) => {
-        this.emitHostUiRequest(record, {
+        emit({
           kind: "editorText",
           requestId: crypto.randomUUID(),
           text,
         });
       },
       setEditorText: (text) => {
-        this.emitHostUiRequest(record, {
+        emit({
           kind: "editorText",
           requestId: crypto.randomUUID(),
           text,

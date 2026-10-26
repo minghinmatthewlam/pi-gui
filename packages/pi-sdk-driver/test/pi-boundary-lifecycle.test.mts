@@ -464,10 +464,12 @@ await test(
     const firstRuntime = h.runtime;
 
     assert.equal(h.driver.releaseSession(h.ref), true);
+    assert.equal(h.driver.isSessionLoaded(h.ref), false);
     // Reopening builds a new runtime from the session file, with the same transcript. The
     // listener subscribed before the release still hears the reopened session.
     const reopened = await h.driver.openSession(h.ref);
     assert.equal(reopened.status, "idle");
+    assert.equal(h.driver.isSessionLoaded(h.ref), true);
     assert.notEqual(h.runtime, firstRuntime, "the released runtime is not reused");
     assert.deepEqual(await h.driver.getTranscript(h.ref), before);
 

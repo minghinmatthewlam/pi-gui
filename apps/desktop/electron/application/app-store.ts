@@ -217,8 +217,6 @@ export class DesktopAppStore {
   private readonly sessionCommandRefreshers = new Map<string, { dirty: boolean }>();
   /** Threads viewed most recently, newest first; these stay loaded when others are released. */
   private recentlyViewedSessionKeys: string[] = [];
-  /** Threads whose runtime was released; opening one starts its runtime again. */
-  private readonly releasedSessionKeys = new Set<string>();
   /**
    * Coalesce token-level assistantDelta / redundant sessionUpdated publishes so
    * the renderer does not apply a full DesktopAppState snapshot per token.
@@ -844,10 +842,25 @@ export class DesktopAppStore {
     await this.handleSessionEvent(event);
   }
 
-  /** Test only: threads whose runtime was released, and threads whose transcript is cached. */
+  /**
+   * Test only: threads still subscribed whose runtime the driver released, and threads whose
+   * transcript is cached.
+   */
   loadedThreadsForTest(): { readonly released: string[]; readonly transcripts: string[] } {
     return {
-      released: [...this.releasedSessionKeys],
+      released: this.state.workspaces
+        .flatMap((workspace) =>
+          workspace.sessions.map((session) => ({
+            workspaceId: workspace.id,
+            sessionId: session.id,
+          })),
+        )
+        .filter(
+          (sessionRef) =>
+            this.sessionState.sessionSubscriptions.has(sessionKey(sessionRef)) &&
+            !this.driver.isSessionLoaded(sessionRef),
+        )
+        .map(sessionKey),
       transcripts: [...this.sessionState.loadedTranscriptKeys],
     };
   }
@@ -2661,8 +2674,8 @@ export class DesktopAppStore {
   async ensureSessionReady(sessionRef: SessionRef): Promise<SessionSnapshot | undefined> {
     await this.ensureTranscriptLoaded(sessionRef);
     let snapshot: SessionSnapshot | undefined;
-    if (this.needsSessionOpen(sessionRef)) {
-      snapshot = await this.openSessionRuntime(sessionRef);
+    if (!this.isSessionOpen(sessionRef)) {
+      snapshot = await this.driver.openSession(sessionRef);
       this.updateSessionConfig(sessionRef, snapshot.config);
     }
     await this.ensureSessionSubscribed(sessionRef);
@@ -2671,23 +2684,24 @@ export class DesktopAppStore {
   }
 
   async ensureSessionSubscription(sessionRef: SessionRef): Promise<void> {
-    if (this.needsSessionOpen(sessionRef)) {
-      const snapshot = await this.openSessionRuntime(sessionRef);
+    if (!this.isSessionOpen(sessionRef)) {
+      const snapshot = await this.driver.openSession(sessionRef);
       this.updateSessionConfig(sessionRef, snapshot.config);
       this.updateQueuedComposerMessages(sessionRef, snapshot.queuedMessages);
     }
     await this.ensureSessionSubscribed(sessionRef);
   }
 
-  private needsSessionOpen(sessionRef: SessionRef): boolean {
-    const key = sessionKey(sessionRef);
-    return !this.sessionState.sessionSubscriptions.has(key) || this.releasedSessionKeys.has(key);
-  }
-
-  private async openSessionRuntime(sessionRef: SessionRef): Promise<SessionSnapshot> {
-    const snapshot = await this.driver.openSession(sessionRef);
-    this.releasedSessionKeys.delete(sessionKey(sessionRef));
-    return snapshot;
+  /**
+   * Whether the thread is open: subscribed, with a live runtime. A released thread keeps its
+   * subscription, so its events still arrive once it reopens, but it is not open: refreshes
+   * leave it alone, and opening it starts its runtime again.
+   */
+  private isSessionOpen(sessionRef: SessionRef): boolean {
+    return (
+      this.sessionState.sessionSubscriptions.has(sessionKey(sessionRef)) &&
+      this.driver.isSessionLoaded(sessionRef)
+    );
   }
 
   private async ensureTranscriptLoaded(sessionRef: SessionRef): Promise<void> {
@@ -3118,7 +3132,7 @@ export class DesktopAppStore {
       try {
         do {
           entry.dirty = false;
-          if (!this.sessionState.sessionSubscriptions.has(key)) {
+          if (!this.isSessionOpen(sessionRef)) {
             break;
           }
           try {
@@ -3136,7 +3150,7 @@ export class DesktopAppStore {
         // The session can close (deleting its commands + unsubscribing) while a
         // refresh is in flight; the resolved refresh would then resurrect a stale
         // commands entry for a gone session, so drop it instead of publishing.
-        if (!this.sessionState.sessionSubscriptions.has(key)) {
+        if (!this.isSessionOpen(sessionRef)) {
           this.sessionState.sessionCommandsBySession.delete(key);
         } else if (refreshed) {
           this.state = this.syncDerivedSessionState(this.state, sessionRef);
@@ -3262,7 +3276,7 @@ export class DesktopAppStore {
           (this.state.selectedWorkspaceId === workspaceId &&
             this.state.selectedSessionId === sessionRef.sessionId) ||
           this.sessionState.sessionCommandsBySession.has(key) ||
-          this.sessionState.sessionSubscriptions.has(key)
+          this.isSessionOpen(sessionRef)
         );
       });
   }
@@ -4329,17 +4343,13 @@ export class DesktopAppStore {
       for (const session of workspace.sessions) {
         const sessionRef = { workspaceId: workspace.id, sessionId: session.id };
         const key = sessionKey(sessionRef);
-        const subscribed = this.sessionState.sessionSubscriptions.has(key);
-        if (
-          this.releasedSessionKeys.has(key) ||
-          (!subscribed && !this.sessionState.loadedTranscriptKeys.has(key)) ||
-          !this.canReleaseSession(sessionRef) ||
-          !this.driver.releaseSession(sessionRef)
-        ) {
+        const holdsSomething =
+          this.isSessionOpen(sessionRef) || this.sessionState.loadedTranscriptKeys.has(key);
+        if (!holdsSomething || !this.canReleaseSession(sessionRef)) {
           continue;
         }
-        if (subscribed) {
-          this.releasedSessionKeys.add(key);
+        if (!this.driver.releaseSession(sessionRef)) {
+          continue;
         }
         this.sessionState.loadedTranscriptKeys.delete(key);
         this.sessionState.transcriptCache.delete(key);

@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import {
   createNamedThread,
@@ -8,6 +10,7 @@ import {
   makeWorkspace,
   selectSession,
   waitForWorkspaceByPath,
+  writeProjectExtension,
   type DesktopHarness,
 } from "../helpers/electron-app";
 import { appendMessagesToSessionFile, sessionFilePathFromCatalog } from "../helpers/session-file";
@@ -44,12 +47,34 @@ type ThreadRef = { workspaceId: string; sessionId: string };
 
 const keyOf = (ref: ThreadRef) => `${ref.workspaceId}:${ref.sessionId}`;
 
+/** An extension that logs the id of every session whose runtime starts. */
+const startLogExtension = String.raw`
+import { appendFileSync } from "node:fs";
+import { join } from "node:path";
+export default function startLog(pi) {
+  pi.on("session_start", async (_event, ctx) => {
+    appendFileSync(join(ctx.cwd, "runtime-starts.log"), ctx.sessionManager.getSessionId() + "\n");
+  });
+}
+`;
+
+/** How many times each session's runtime started. */
+async function runtimeStarts(workspacePath: string): Promise<Map<string, number>> {
+  const log = await readFile(join(workspacePath, "runtime-starts.log"), "utf8").catch(() => "");
+  const starts = new Map<string, number>();
+  for (const id of log.split("\n").filter(Boolean)) {
+    starts.set(id, (starts.get(id) ?? 0) + 1);
+  }
+  return starts;
+}
+
 /** Five threads whose files contain a message each, then a fresh launch of the app. */
 async function launchWithFiveThreads(
   name: string,
 ): Promise<{ harness: DesktopHarness; refs: ThreadRef[]; workspacePath: string }> {
   const userDataDir = await makeUserDataDir();
   const workspacePath = await makeWorkspace(name);
+  await writeProjectExtension(workspacePath, "start-log.ts", startLogExtension);
   const seed = await launchDesktop(userDataDir, {
     initialWorkspaces: [workspacePath],
     testMode: "background",
@@ -114,11 +139,29 @@ test("releases idle threads that weren't viewed recently and reloads them when o
       released: refs.slice(0, 2).map(keyOf),
     });
 
+    // Refreshing the workspace's runtime (Customize > Refresh) reloads open threads only: the
+    // released ones stay released, and their extensions do not start again.
+    const startsBeforeRefresh = await runtimeStarts(workspacePath);
+    await window.evaluate(async () => {
+      await globalThis.window.piApp?.refreshRuntime();
+    });
+    await expectThreads(harness, {
+      held: refs.slice(-3).map(keyOf),
+      released: refs.slice(0, 2).map(keyOf),
+    });
+    const startsAfterRefresh = await runtimeStarts(workspacePath);
+    expect(startsBeforeRefresh.get(refs[0]!.sessionId)).toBeGreaterThan(0);
+    for (const ref of refs.slice(0, 2)) {
+      expect(startsAfterRefresh.get(ref.sessionId)).toBe(startsBeforeRefresh.get(ref.sessionId));
+    }
+
     // A released thread reloads from its file, with its messages, and still works.
     await selectSession(window, "Thread one");
     await expect(transcript).toContainText("question for Thread one");
     await expect(transcript).toContainText("answer from Thread one");
     await expect(transcript).not.toContainText("answer from Thread five");
+    // The release was invisible, so reopening adds no "Resumed session" row.
+    await expect(transcript).not.toContainText("Resumed session");
     await expectThreads(harness, {
       held: [keyOf(refs[0]!), ...refs.slice(-2).map(keyOf)],
       released: refs.slice(1, 3).map(keyOf),
