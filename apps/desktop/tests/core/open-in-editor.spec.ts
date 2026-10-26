@@ -80,13 +80,14 @@ test("shows the detected editor beside the side panel toggle", async () => {
     await expect(menu).toHaveCount(0);
 
     // The menu has to match what main reported: every detected editor is listed,
-    // or the empty notice and the folder fallback are. Branching on the real
+    // or the empty notice is. Branching on the real
     // result keeps the assertion meaningful on an empty machine too.
     await trigger.click();
     await expect(menu).toBeVisible();
+    // The file manager fallback is offered whether or not an editor was found.
+    await expect(window.getByTestId("open-in-editor-folder")).toBeVisible();
     if (list.editors.length === 0) {
       await expect(window.getByTestId("open-in-editor-empty")).toBeVisible();
-      await expect(window.getByTestId("open-in-editor-folder")).toBeVisible();
     } else {
       for (const editor of list.editors) {
         const item = window.getByTestId(`open-in-editor-${editor.id}`);

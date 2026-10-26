@@ -245,6 +245,12 @@
   white-space: nowrap;
 }
 
+.open-in-editor__separator {
+  height: 1px;
+  margin: 3px 6px;
+  background: var(--line);
+}
+
 .open-in-editor__item-main {
   display: flex;
   align-items: center;

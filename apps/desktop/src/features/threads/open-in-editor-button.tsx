@@ -80,7 +80,11 @@ export function OpenInEditorButton({ state, onOpenFolder }: OpenInEditorButtonPr
               </button>
             ))
           )}
-          {!state.loading && state.editors.length === 0 ? (
+          {!state.loading && state.editors.length > 0 ? (
+            <div className="open-in-editor__separator" role="separator" />
+          ) : null}
+          {/* The OS file manager stays one click away even when editors exist. */}
+          {!state.loading ? (
             <button
               className="open-in-editor__item"
               data-testid="open-in-editor-folder"
