@@ -254,6 +254,8 @@ export function useAnnotationSelection({
       {selection && !editor ? (
         <SelectionActions
           anchor={selection.rect}
+          // A different selection starts without the "Copied" confirmation.
+          key={selection.quote}
           platform={platform}
           quote={selection.quote}
           onAdd={addSelection}
@@ -290,25 +292,26 @@ function SelectionActions({
   readonly quote: string;
   readonly onAdd: () => void;
 }) {
+  // Bumped on each successful copy, so a repeat copy restarts the confirmation.
+  const [copyCount, setCopyCount] = useState(0);
   const [copied, setCopied] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
-  // The pill is wide enough to run off the right edge; place it once its width is known.
+  // The pill is wide enough to run off the right edge, so measure it (the label changes its
+  // width) and place it before it paints.
+  const [width, setWidth] = useState(0);
   useLayoutEffect(() => {
-    const popover = popoverRef.current;
-    if (popover)
-      popover.style.left = `${popoverLeft(anchor.left, popover.getBoundingClientRect().width)}px`;
-  });
+    setWidth(popoverRef.current?.getBoundingClientRect().width ?? 0);
+  }, [copied]);
   useEffect(() => {
-    if (!copied) return undefined;
+    if (copyCount === 0) return undefined;
+    setCopied(true);
     const timer = window.setTimeout(() => setCopied(false), COPIED_FEEDBACK_MS);
     return () => window.clearTimeout(timer);
-  }, [copied]);
-  // A different selection starts without the confirmation.
-  useEffect(() => setCopied(false), [quote]);
+  }, [copyCount]);
 
   const copy = () => {
     navigator.clipboard.writeText(quote).then(
-      () => setCopied(true),
+      () => setCopyCount((count) => count + 1),
       (error: unknown) => console.error("[renderer] navigator.clipboard.writeText failed", error),
     );
   };
@@ -317,7 +320,7 @@ function SelectionActions({
     <div
       className="annotation-popover annotation-add"
       ref={popoverRef}
-      style={{ top: popoverTop(anchor, 32) }}
+      style={{ top: popoverTop(anchor, 32), left: popoverLeft(anchor.left, width) }}
       // Keep the transcript selection alive through a click on either button.
       onMouseDown={(event) => event.preventDefault()}
     >

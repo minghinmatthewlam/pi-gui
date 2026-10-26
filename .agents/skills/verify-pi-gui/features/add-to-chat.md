@@ -12,7 +12,7 @@ Users select text in a transcript message, attach an optional comment, and send 
 ## How to get to it (user POV)
 
 - Select text inside one transcript message. A pill appears over the selection with "Copy" (⌘ C, Ctrl C elsewhere) and "Add to Chat" (⌘ L, Ctrl L elsewhere); each shortcut does the same as its button.
-- Copy puts the trimmed quote on the clipboard, shows "Copied" for about a second, and keeps the selection, so Add to Chat still works on it. The ⌘ C shortcut is the normal Edit menu copy of the raw selection, so it can keep leading or trailing whitespace that the button trims.
+- Copy puts the trimmed quote on the clipboard, shows "Copied" for about a second, and keeps the selection, so Add to Chat still works on it. The ⌘ C shortcut is the normal Edit menu copy of the raw selection, so it can keep whitespace, or row text from a drag that runs past the message, that the button leaves out.
 - A comment box opens (`Annotation comment`, placeholder "Add an optional comment…"). Enter or leaving the box saves; Escape closes without saving the comment (the annotation stays); `Remove annotation` deletes it.
 - Numbered markers in the transcript (`Edit annotation N`) reopen the box.
 - An "N annotations" chip sits above the composer. Hovering or focusing it lists each quote and comment, with `Remove annotation N` buttons.

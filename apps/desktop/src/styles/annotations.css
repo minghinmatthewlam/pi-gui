@@ -58,6 +58,7 @@
   background: var(--surface);
   box-shadow: var(--elevation-popover);
   overflow: hidden;
+  white-space: nowrap;
 }
 
 .annotation-add__divider {

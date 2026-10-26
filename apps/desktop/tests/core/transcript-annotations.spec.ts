@@ -8,6 +8,7 @@ import {
   launchDesktop,
   makeUserDataDir,
   makeWorkspace,
+  waitForTimelineLayout,
   waitForWorkspaceByPath,
 } from "../helpers/electron-app";
 import { appendMessagesToSessionFile, sessionFilePathFromCatalog } from "../helpers/session-file";
@@ -350,31 +351,40 @@ test("keeps the selection buttons inside the window when the selection ends at i
       BrowserWindow.getAllWindows()[0]?.setSize(760, 700);
     });
     await expect.poll(() => page.evaluate(() => window.innerWidth)).toBe(760);
+    await waitForTimelineLayout(page);
 
-    // The word that ends furthest right; the buttons would start at its left edge.
+    // Drag across the word that ends furthest right; the buttons would start at its left edge.
     const word = await page.evaluate(() => {
       const root = document.querySelector(".timeline-item--assistant [data-annotation-root]");
       if (!root) throw new Error("Missing reply text");
       const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-      let best = { text: "", right: 0 };
+      let best = { left: 0, right: 0, y: 0 };
       for (let node = walker.nextNode(); node; node = walker.nextNode()) {
         for (const match of (node.nodeValue ?? "").matchAll(/\S+/g)) {
           const range = document.createRange();
           range.setStart(node, match.index);
           range.setEnd(node, match.index + match[0].length);
-          const { right } = range.getBoundingClientRect();
-          if (right > best.right) best = { text: match[0], right };
+          const rect = range.getBoundingClientRect();
+          if (rect.right > best.right) {
+            best = { left: rect.left, right: rect.right, y: rect.top + rect.height / 2 };
+          }
         }
       }
-      return best.text;
+      return best;
     });
-    await dragSelect(page, word);
+    await page.mouse.move(word.left + 1, word.y);
+    await page.mouse.down();
+    await page.mouse.move(word.right - 1, word.y, { steps: 6 });
+    await page.mouse.up();
 
-    const buttons = page.locator(".annotation-add");
     await expect(page.getByTestId("add-to-chat")).toBeVisible();
-    const box = await buttons.boundingBox();
+    const box = await page.locator(".annotation-add").boundingBox();
     expect(box).not.toBeNull();
+    // Placed at the word, the buttons would run past the window.
+    expect(word.left + box!.width).toBeGreaterThan(760);
+    expect(box!.x).toBeGreaterThanOrEqual(8);
     expect(box!.x + box!.width).toBeLessThanOrEqual(760 - 8);
+    expect(box!.height).toBe(32);
   } finally {
     await harness.close();
   }
