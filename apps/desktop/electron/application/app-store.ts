@@ -57,6 +57,7 @@ import {
   type SetChildSupervisionLoopInput,
   type SelectedTranscriptRecord,
   type SessionExtensionNoticeRecord,
+  type SessionExtensionUiUpdate,
   type StartThreadInput,
   type StartupDiagnostic,
   type ThemeMode,
@@ -109,6 +110,8 @@ import {
   previewFromTranscript,
   toSessionQueuedMessages,
   toSessionRef,
+  transcriptForWindow,
+  transcriptImageResponse,
 } from "./app-store-utils";
 import type {
   CustomProviderConfig,
@@ -201,6 +204,7 @@ export class DesktopAppStore {
   /** Serialize full-state refreshes so stale async builders cannot publish over newer state. */
   private refreshStateQueue: Promise<void> = Promise.resolve();
   private readonly selectedTranscriptListeners = new Set<SelectedTranscriptListener>();
+  private readonly extensionUiListeners = new Set<(update: SessionExtensionUiUpdate) => void>();
   private readonly sessionEventListeners = new Set<SessionEventListener>();
   private readonly sessionEventQueues = new Map<string, Promise<void>>();
   /**
@@ -484,6 +488,7 @@ export class DesktopAppStore {
         workspaces: structuredClone(this.state.workspaces),
         orchestrationChildren: structuredClone(this.state.orchestrationChildren),
       }),
+      orchestrationChildren: () => this.state.orchestrationChildren,
       replaceOrchestrationChildren: (children) => {
         this.state = { ...this.state, orchestrationChildren: [...children] };
       },
@@ -628,6 +633,11 @@ export class DesktopAppStore {
     return workspace?.sessions.some((session) => session.id === sessionId)
       ? { workspaceId: workspace.id, sessionId }
       : undefined;
+  }
+
+  /** Serves a tool-output image the window shows, by the URL its transcript row carries. */
+  transcriptImageResponse(requestUrl: string): Response {
+    return transcriptImageResponse(requestUrl, (key) => this.sessionState.transcriptCache.get(key));
   }
 
   async getStateForView(view: DesktopAppViewState): Promise<DesktopAppState> {
@@ -850,6 +860,13 @@ export class DesktopAppStore {
       .catch(() => undefined);
     return () => {
       this.selectedTranscriptListeners.delete(listener);
+    };
+  }
+
+  subscribeToExtensionUi(listener: (update: SessionExtensionUiUpdate) => void): () => void {
+    this.extensionUiListeners.add(listener);
+    return () => {
+      this.extensionUiListeners.delete(listener);
     };
   }
 
@@ -3393,6 +3410,9 @@ export class DesktopAppStore {
     if (subscriptionKey !== key) {
       this.migrateSessionSubscriptionKey(subscriptionKey, key);
     }
+    if (subscriptionKey === key && (await this.applyExtensionUiOnlyEvent(event))) {
+      return;
+    }
     // Apply-then-publish is wrapped so the finally always either emits or
     // schedules a coalesced emit. Token-level assistantDelta / redundant
     // sessionUpdated ticks must not publish a full app snapshot per token.
@@ -3745,6 +3765,40 @@ export class DesktopAppStore {
     return runtimeByWorkspace;
   }
 
+  /**
+   * Status, widget and title changes only touch one session's extension UI, and extensions can
+   * send them many times a second (a spinner in the title, for one). Send that session's UI on
+   * its own instead of the whole app state. Anything else returns false and takes the full path.
+   */
+  private async applyExtensionUiOnlyEvent(event: SessionDriverEvent): Promise<boolean> {
+    if (
+      event.type !== "hostUiRequest" ||
+      (event.request.kind !== "status" &&
+        event.request.kind !== "widget" &&
+        event.request.kind !== "title") ||
+      !this.sessionFromState(event.sessionRef)
+    ) {
+      return false;
+    }
+    const key = sessionKey(event.sessionRef);
+    const uiState = this.getOrCreateExtensionUiState(event.sessionRef);
+    applyHostUiRequestToExtensionUiState(uiState, event.request);
+    const ui = serializeExtensionUiState(uiState);
+    // Same counter as emit(), so the renderer orders this against full state pushes.
+    this.publishRevision = Math.max(this.publishRevision, this.state.revision) + 1;
+    this.state = {
+      ...this.state,
+      revision: this.publishRevision,
+      sessionExtensionUiBySession: { ...this.state.sessionExtensionUiBySession, [key]: ui },
+    };
+    const update = { sessionKey: key, ui, revision: this.publishRevision };
+    for (const listener of this.extensionUiListeners) {
+      listener(update);
+    }
+    await this.emitSessionEvent(event, this.state);
+    return true;
+  }
+
   private serializeSessionExtensionUiState() {
     return Object.fromEntries(
       [...this.sessionState.extensionUiBySession.entries()].map(
@@ -4073,7 +4127,11 @@ export class DesktopAppStore {
     return {
       workspaceId: sessionRef.workspaceId,
       sessionId: sessionRef.sessionId,
-      transcript: this.sessionState.transcriptCache.get(sessionKey(sessionRef)) ?? [],
+      // Image data stays here; the window loads each image when its row is shown.
+      transcript: transcriptForWindow(
+        sessionRef,
+        this.sessionState.transcriptCache.get(sessionKey(sessionRef)) ?? [],
+      ),
       ...(schemaInfo ? { schemaInfo } : {}),
     };
   }

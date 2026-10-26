@@ -8,7 +8,7 @@ import {
   compareByRecency,
   RECENCY_BUCKET_LABELS,
   RECENCY_BUCKET_ORDER,
-  recencyBucketId,
+  recencyBucketer,
   sessionLastInteractedAt,
   type RecencyBucketId,
 } from "../../../contracts/thread-recency";
@@ -79,6 +79,19 @@ export function buildThreadSidebarModel(
     .filter((entry) => !entry.session.archivedAt)
     .sort((left, right) => compareByRecency(left.session, right.session));
 
+  // Bucket each thread once, in recency order, instead of re-checking every thread per bucket.
+  const bucketOf = recencyBucketer(nowMs);
+  const historyByBucket = new Map<RecencyBucketId, ThreadListEntry[]>();
+  for (const entry of historyThreads) {
+    const bucket = bucketOf(sessionLastInteractedAt(entry.session));
+    const threads = historyByBucket.get(bucket);
+    if (threads) {
+      threads.push(entry);
+    } else {
+      historyByBucket.set(bucket, [entry]);
+    }
+  }
+
   const folders = listFolders(state);
   return {
     folders,
@@ -88,10 +101,8 @@ export function buildThreadSidebarModel(
     })),
     pinnedThreads,
     recencySections: RECENCY_BUCKET_ORDER.flatMap((bucket) => {
-      const threads = historyThreads.filter(
-        (entry) => recencyBucketId(sessionLastInteractedAt(entry.session), nowMs) === bucket,
-      );
-      return threads.length > 0 ? [{ bucket, label: RECENCY_BUCKET_LABELS[bucket], threads }] : [];
+      const threads = historyByBucket.get(bucket);
+      return threads ? [{ bucket, label: RECENCY_BUCKET_LABELS[bucket], threads }] : [];
     }),
     archivedThreads,
     recencyOrder,
