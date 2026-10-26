@@ -92,6 +92,23 @@ export default [
     files: ["apps/desktop/src/app/App.tsx"],
     rules: { "max-lines": ["error", { max: 1447 }] },
   },
+  {
+    // Electron main serves every window's IPC and input on one thread, so a
+    // child process it waits on freezes the whole app. Use the async APIs.
+    files: ["apps/desktop/electron/**/*.{ts,tsx,mts,cts}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: ["child_process", "node:child_process"].map((name) => ({
+            name,
+            importNames: ["execSync", "execFileSync", "spawnSync"],
+            message: "Blocks Electron main. Use execFile or spawn and await the result.",
+          })),
+        },
+      ],
+    },
+  },
   typedProject(["apps/desktop/src/**/*.{ts,tsx,mts,cts}"], "apps/desktop/tsconfig.json"),
   typedProject(
     ["apps/desktop/electron/**/*.{ts,tsx,mts,cts}"],

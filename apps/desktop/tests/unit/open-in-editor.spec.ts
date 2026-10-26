@@ -16,22 +16,34 @@ import {
  * without an editor actually installed.
  */
 
-function host(overrides: Partial<EditorDetectionHost> & Pick<EditorDetectionHost, "platform">) {
+/** Synchronous fakes for the host's reads, so each test states plain facts. */
+interface HostFacts {
+  readonly platform: NodeJS.Platform;
+  readonly homeDir?: string;
+  readonly env?: NodeJS.ProcessEnv;
+  readonly exists?: (absolutePath: string) => boolean;
+  readonly isExecutable?: (absolutePath: string) => boolean;
+  readonly listDirectory?: (absolutePath: string) => readonly string[];
+  readonly runCommand?: (command: string, args: readonly string[]) => string | undefined;
+}
+
+function host(facts: HostFacts): EditorDetectionHost {
+  const { exists, isExecutable, listDirectory, runCommand } = facts;
   return {
-    homeDir: "/home/dev",
-    env: {},
-    exists: () => false,
-    isExecutable: () => false,
-    listDirectory: () => [],
-    runCommand: () => undefined,
-    ...overrides,
-  } satisfies EditorDetectionHost;
+    platform: facts.platform,
+    homeDir: facts.homeDir ?? "/home/dev",
+    env: facts.env ?? {},
+    exists: async (candidate) => exists?.(candidate) ?? false,
+    isExecutable: async (candidate) => isExecutable?.(candidate) ?? false,
+    listDirectory: async (directory) => listDirectory?.(directory) ?? [],
+    runCommand: async (command, args) => runCommand?.(command, args),
+  };
 }
 
 const ids = (editors: readonly DetectedEditor[]) => editors.map((editor) => editor.id);
 
-test("macOS detection finds application bundles in both application folders", () => {
-  const editors = detectInstalledEditors(
+test("macOS detection finds application bundles in both application folders", async () => {
+  const editors = await detectInstalledEditors(
     host({
       platform: "darwin",
       homeDir: "/Users/dev",
@@ -48,8 +60,8 @@ test("macOS detection finds application bundles in both application folders", ()
   });
 });
 
-test("Linux detection prefers a PATH executable over the desktop entry", () => {
-  const editors = detectInstalledEditors(
+test("Linux detection prefers a PATH executable over the desktop entry", async () => {
+  const editors = await detectInstalledEditors(
     host({
       platform: "linux",
       homeDir: "/home/dev",
@@ -65,8 +77,8 @@ test("Linux detection prefers a PATH executable over the desktop entry", () => {
   expect(editors[0]?.launch).toEqual({ kind: "command", commandPath: "/usr/local/bin/studio" });
 });
 
-test("Linux detection falls back to the desktop entry when the PATH executable is absent", () => {
-  const editors = detectInstalledEditors(
+test("Linux detection falls back to the desktop entry when the PATH executable is absent", async () => {
+  const editors = await detectInstalledEditors(
     host({
       platform: "linux",
       homeDir: "/home/dev",
@@ -84,8 +96,8 @@ test("Linux detection falls back to the desktop entry when the PATH executable i
   });
 });
 
-test("Linux detection reads desktop entries and prefers gtk-launch", () => {
-  const editors = detectInstalledEditors(
+test("Linux detection reads desktop entries and prefers gtk-launch", async () => {
+  const editors = await detectInstalledEditors(
     host({
       platform: "linux",
       homeDir: "/home/dev",
@@ -106,8 +118,8 @@ test("Linux detection reads desktop entries and prefers gtk-launch", () => {
   });
 });
 
-test("Linux detection matches any known desktop entry id for an editor", () => {
-  const editors = detectInstalledEditors(
+test("Linux detection matches any known desktop entry id for an editor", async () => {
+  const editors = await detectInstalledEditors(
     host({
       platform: "linux",
       homeDir: "/home/dev",
@@ -121,8 +133,8 @@ test("Linux detection matches any known desktop entry id for an editor", () => {
   expect(ids(editors)).toEqual(["cursor"]);
 });
 
-test("Linux detection falls back to gio when gtk-launch is absent", () => {
-  const editors = detectInstalledEditors(
+test("Linux detection falls back to gio when gtk-launch is absent", async () => {
+  const editors = await detectInstalledEditors(
     host({
       platform: "linux",
       homeDir: "/home/dev",
@@ -136,8 +148,8 @@ test("Linux detection falls back to gio when gtk-launch is absent", () => {
   expect(editors[0]?.launch).toMatchObject({ kind: "desktop-entry", launcher: "gio" });
 });
 
-test("Windows detection finds program files installs without LOCALAPPDATA", () => {
-  const editors = detectInstalledEditors(
+test("Windows detection finds program files installs without LOCALAPPDATA", async () => {
+  const editors = await detectInstalledEditors(
     host({
       platform: "win32",
       homeDir: "C:\\Users\\dev",
@@ -153,7 +165,7 @@ test("Windows detection finds program files installs without LOCALAPPDATA", () =
   });
 });
 
-test("Windows detection resolves every install root from the environment", () => {
+test("Windows detection resolves every install root from the environment", async () => {
   const detectionHost = host({
     platform: "win32",
     env: {
@@ -172,8 +184,8 @@ test("Windows detection resolves every install root from the environment", () =>
   );
 });
 
-test("Windows detection finds the editors with known install paths", () => {
-  const editors = detectInstalledEditors(
+test("Windows detection finds the editors with known install paths", async () => {
+  const editors = await detectInstalledEditors(
     host({
       platform: "win32",
       homeDir: "C:\\Users\\dev",
@@ -202,8 +214,8 @@ test("Windows detection finds the editors with known install paths", () => {
   ]);
 });
 
-test("Windows detection ignores a .cmd shim on PATH", () => {
-  const editors = detectInstalledEditors(
+test("Windows detection ignores a .cmd shim on PATH", async () => {
+  const editors = await detectInstalledEditors(
     host({
       platform: "win32",
       homeDir: "C:\\Users\\dev",
@@ -216,8 +228,8 @@ test("Windows detection ignores a .cmd shim on PATH", () => {
   expect(ids(editors)).toEqual([]);
 });
 
-test("Windows detection checks installed programs before PATH", () => {
-  const editors = detectInstalledEditors(
+test("Windows detection checks installed programs before PATH", async () => {
+  const editors = await detectInstalledEditors(
     host({
       platform: "win32",
       homeDir: "C:\\Users\\dev",
@@ -238,8 +250,8 @@ test("Windows detection checks installed programs before PATH", () => {
   });
 });
 
-test("Windows detection skips program lookups without LOCALAPPDATA", () => {
-  const editors = detectInstalledEditors(
+test("Windows detection skips program lookups without LOCALAPPDATA", async () => {
+  const editors = await detectInstalledEditors(
     host({
       platform: "win32",
       homeDir: "C:\\Users\\dev",
@@ -251,8 +263,8 @@ test("Windows detection skips program lookups without LOCALAPPDATA", () => {
   expect(ids(editors)).toEqual(["cursor"]);
 });
 
-test("resolvePosixCommand keeps PATH order and rejects non-executables", () => {
-  const detected = resolvePosixCommand(
+test("resolvePosixCommand keeps PATH order and rejects non-executables", async () => {
+  const detected = await resolvePosixCommand(
     host({
       platform: "linux",
       env: { PATH: "/opt/bin:/usr/bin" },
@@ -264,7 +276,7 @@ test("resolvePosixCommand keeps PATH order and rejects non-executables", () => {
   expect(detected).toBe("/opt/bin/code");
 });
 
-test("launch commands hand the checkout to each launch kind", () => {
+test("launch commands hand the checkout to each launch kind", async () => {
   const workspacePath = "/tmp/project";
 
   expect(
@@ -327,26 +339,26 @@ const cursorEditor: DetectedEditor = {
   launch: { kind: "command", commandPath: "/usr/bin/cursor" },
 };
 
-test("EditorService lists detected editors without a preference", () => {
+test("EditorService lists detected editors without a preference", async () => {
   const service = new EditorService({
-    detect: () => [detectedEditor],
-    detectDefault: () => undefined,
+    detect: async () => [detectedEditor],
+    detectDefault: async () => undefined,
     launch: () => Promise.resolve(),
   });
 
-  expect(service.list()).toEqual({
+  expect(await service.list()).toEqual({
     editors: [{ id: "vscode", label: "Visual Studio Code", shortLabel: "vscode" }],
   });
 });
 
-test("EditorService falls back to the OS default handler", () => {
+test("EditorService falls back to the OS default handler", async () => {
   const service = new EditorService({
-    detect: () => [cursorEditor, detectedEditor],
-    detectDefault: () => "vscode",
+    detect: async () => [cursorEditor, detectedEditor],
+    detectDefault: async () => "vscode",
     launch: () => Promise.resolve(),
   });
 
-  expect(service.list()).toEqual({
+  expect(await service.list()).toEqual({
     editors: [
       { id: "cursor", label: "Cursor", shortLabel: "Cursor" },
       { id: "vscode", label: "Visual Studio Code", shortLabel: "vscode" },
@@ -357,54 +369,96 @@ test("EditorService falls back to the OS default handler", () => {
 
 test("EditorService keeps a user pick over the OS default", async () => {
   const service = new EditorService({
-    detect: () => [cursorEditor, detectedEditor],
-    detectDefault: () => "vscode",
+    detect: async () => [cursorEditor, detectedEditor],
+    detectDefault: async () => "vscode",
     launch: () => Promise.resolve(),
   });
 
   await service.open("/tmp/project", "cursor");
-  expect(service.list().preferredEditorId).toBe("cursor");
+  expect((await service.list()).preferredEditorId).toBe("cursor");
 });
 
-test("EditorService ignores an OS default that is not installed", () => {
+test("EditorService ignores an OS default that is not installed", async () => {
   const service = new EditorService({
-    detect: () => [detectedEditor],
-    detectDefault: () => "cursor",
+    detect: async () => [detectedEditor],
+    detectDefault: async () => "cursor",
     launch: () => Promise.resolve(),
   });
 
-  expect(service.list().preferredEditorId).toBeUndefined();
+  expect((await service.list()).preferredEditorId).toBeUndefined();
 });
 
-test("EditorService probes the OS default once and reuses the answer", () => {
+test("EditorService probes the OS default once and reuses the answer", async () => {
   let probes = 0;
   const service = new EditorService({
-    detect: () => [detectedEditor],
-    detectDefault: () => {
+    detect: async () => [detectedEditor],
+    detectDefault: async () => {
       probes += 1;
       return "vscode";
     },
     launch: () => Promise.resolve(),
   });
 
-  service.list();
-  service.list();
+  await service.list();
+  await service.list();
   expect(probes).toBe(1);
-  expect(service.list().preferredEditorId).toBe("vscode");
+  expect((await service.list()).preferredEditorId).toBe("vscode");
+});
+
+test("EditorService shares one in-flight probe between concurrent requests", async () => {
+  let probes = 0;
+  let finishProbe: (editors: readonly DetectedEditor[]) => void = () => {};
+  const service = new EditorService({
+    detect: () => {
+      probes += 1;
+      return new Promise((resolve) => {
+        finishProbe = resolve;
+      });
+    },
+    detectDefault: async () => undefined,
+    launch: () => Promise.resolve(),
+  });
+
+  const first = service.list();
+  const second = service.list();
+  finishProbe([detectedEditor]);
+
+  expect(await first).toEqual(await second);
+  expect((await first).editors.map((editor) => editor.id)).toEqual(["vscode"]);
+  expect(probes).toBe(1);
+});
+
+test("EditorService retries detection after a failed probe", async () => {
+  let probes = 0;
+  const service = new EditorService({
+    detect: async () => {
+      probes += 1;
+      if (probes === 1) {
+        throw new Error("probe failed");
+      }
+      return [detectedEditor];
+    },
+    detectDefault: async () => undefined,
+    launch: () => Promise.resolve(),
+  });
+
+  await expect(service.list()).rejects.toThrow("probe failed");
+  expect((await service.list()).editors).toHaveLength(1);
+  expect(probes).toBe(2);
 });
 
 test("EditorService.select records a pick without launching anything", async () => {
   let launches = 0;
   const service = new EditorService({
-    detect: () => [cursorEditor, detectedEditor],
-    detectDefault: () => "vscode",
+    detect: async () => [cursorEditor, detectedEditor],
+    detectDefault: async () => "vscode",
     launch: () => {
       launches += 1;
       return Promise.resolve();
     },
   });
 
-  expect(service.select("cursor")).toEqual({
+  expect(await service.select("cursor")).toEqual({
     editors: [
       { id: "cursor", label: "Cursor", shortLabel: "Cursor" },
       { id: "vscode", label: "Visual Studio Code", shortLabel: "vscode" },
@@ -417,23 +471,23 @@ test("EditorService.select records a pick without launching anything", async () 
 test("EditorService.select rejects an unknown editor without launching anything", async () => {
   let launches = 0;
   const service = new EditorService({
-    detect: () => [detectedEditor],
-    detectDefault: () => undefined,
+    detect: async () => [detectedEditor],
+    detectDefault: async () => undefined,
     launch: () => {
       launches += 1;
       return Promise.resolve();
     },
   });
 
-  expect(() => service.select("not-an-editor")).toThrow("Unknown editor: not-an-editor");
+  await expect(service.select("not-an-editor")).rejects.toThrow("Unknown editor: not-an-editor");
   expect(launches).toBe(0);
-  expect(service.list().preferredEditorId).toBeUndefined();
+  expect((await service.list()).preferredEditorId).toBeUndefined();
 });
 
 test("EditorService opens a known editor and remembers it as the preference", async () => {
   const launches: { command: string; args: readonly string[] }[] = [];
   const service = new EditorService({
-    detect: () => [detectedEditor],
+    detect: async () => [detectedEditor],
     launch: (command, args) => {
       launches.push({ command, args });
       return Promise.resolve();
@@ -450,8 +504,8 @@ test("EditorService opens a known editor and remembers it as the preference", as
 test("EditorService rejects an unknown editor without launching anything", async () => {
   let launched = 0;
   const service = new EditorService({
-    detect: () => [detectedEditor],
-    detectDefault: () => undefined,
+    detect: async () => [detectedEditor],
+    detectDefault: async () => undefined,
     launch: () => {
       launched += 1;
       return Promise.resolve();
@@ -467,15 +521,15 @@ test("EditorService rejects an unknown editor without launching anything", async
 test("EditorService re-probes when the cached list is stale", async () => {
   let probes = 0;
   const service = new EditorService({
-    detect: () => {
+    detect: async () => {
       probes += 1;
       return probes === 1 ? [] : [detectedEditor];
     },
-    detectDefault: () => undefined,
+    detectDefault: async () => undefined,
     launch: () => Promise.resolve(),
   });
 
-  expect(service.list().editors).toEqual([]);
+  expect((await service.list()).editors).toEqual([]);
   await service.open("/tmp/project", "vscode");
   expect(probes).toBe(2);
 });
@@ -483,20 +537,20 @@ test("EditorService re-probes when the cached list is stale", async () => {
 test("EditorService drops a failed editor and its preference", async () => {
   let probes = 0;
   const service = new EditorService({
-    detect: () => {
+    detect: async () => {
       probes += 1;
       return probes === 1 ? [detectedEditor] : [];
     },
-    detectDefault: () => undefined,
+    detectDefault: async () => undefined,
     launch: () => Promise.reject(new Error("ENOENT")),
   });
 
   await expect(service.open("/tmp/project", "vscode")).rejects.toThrow("ENOENT");
-  expect(service.list()).toEqual({ editors: [] });
+  expect(await service.list()).toEqual({ editors: [] });
 });
 
-test("OS default detection maps the Linux folder handler to a detected editor", () => {
-  const defaultId = detectDefaultEditorId(
+test("OS default detection maps the Linux folder handler to a detected editor", async () => {
+  const defaultId = await detectDefaultEditorId(
     host({
       platform: "linux",
       runCommand: (command, args) =>
@@ -510,8 +564,8 @@ test("OS default detection maps the Linux folder handler to a detected editor", 
   expect(defaultId).toBe("vscode");
 });
 
-test("OS default detection ignores a handler that is not a known editor", () => {
-  const defaultId = detectDefaultEditorId(
+test("OS default detection ignores a handler that is not a known editor", async () => {
+  const defaultId = await detectDefaultEditorId(
     host({ platform: "linux", runCommand: () => "org.gnome.Nautilus.desktop\n" }),
     [detectedEditor],
   );
@@ -519,8 +573,8 @@ test("OS default detection ignores a handler that is not a known editor", () => 
   expect(defaultId).toBeUndefined();
 });
 
-test("OS default detection ignores a known handler that is not installed", () => {
-  const defaultId = detectDefaultEditorId(
+test("OS default detection ignores a known handler that is not installed", async () => {
+  const defaultId = await detectDefaultEditorId(
     host({ platform: "linux", runCommand: () => "cursor.desktop\n" }),
     [detectedEditor],
   );
@@ -528,14 +582,14 @@ test("OS default detection ignores a known handler that is not installed", () =>
   expect(defaultId).toBeUndefined();
 });
 
-test("OS default detection answers nothing when the probe command is missing", () => {
-  const defaultId = detectDefaultEditorId(host({ platform: "linux" }), [detectedEditor]);
+test("OS default detection answers nothing when the probe command is missing", async () => {
+  const defaultId = await detectDefaultEditorId(host({ platform: "linux" }), [detectedEditor]);
 
   expect(defaultId).toBeUndefined();
 });
 
-test("macOS default detection matches the LaunchServices handler by bundle id", () => {
-  const defaultId = detectDefaultEditorId(
+test("macOS default detection matches the LaunchServices handler by bundle id", async () => {
+  const defaultId = await detectDefaultEditorId(
     host({
       platform: "darwin",
       homeDir: "/Users/dev",
@@ -570,8 +624,8 @@ test("macOS default detection matches the LaunchServices handler by bundle id", 
   expect(defaultId).toBe("vscode");
 });
 
-test("macOS default detection answers nothing without the preferences plist", () => {
-  const defaultId = detectDefaultEditorId(
+test("macOS default detection answers nothing without the preferences plist", async () => {
+  const defaultId = await detectDefaultEditorId(
     host({
       platform: "darwin",
       exists: () => false,
@@ -583,8 +637,8 @@ test("macOS default detection answers nothing without the preferences plist", ()
   expect(defaultId).toBeUndefined();
 });
 
-test("Windows default detection matches the Directory shell command to an install path", () => {
-  const defaultId = detectDefaultEditorId(
+test("Windows default detection matches the Directory shell command to an install path", async () => {
+  const defaultId = await detectDefaultEditorId(
     host({
       platform: "win32",
       runCommand: (command, args) => {
@@ -615,8 +669,8 @@ test("Windows default detection matches the Directory shell command to an instal
   expect(defaultId).toBe("vscode");
 });
 
-test("Windows default detection falls back to HKCR and matches without quotes", () => {
-  const defaultId = detectDefaultEditorId(
+test("Windows default detection falls back to HKCR and matches without quotes", async () => {
+  const defaultId = await detectDefaultEditorId(
     host({
       platform: "win32",
       runCommand: (command, args) => {
@@ -650,8 +704,8 @@ test("Windows default detection falls back to HKCR and matches without quotes", 
   expect(defaultId).toBe("cursor");
 });
 
-test("Windows default detection answers nothing when the command path is unknown", () => {
-  const defaultId = detectDefaultEditorId(
+test("Windows default detection answers nothing when the command path is unknown", async () => {
+  const defaultId = await detectDefaultEditorId(
     host({
       platform: "win32",
       runCommand: (command, args) =>

@@ -9,8 +9,8 @@ import {
 } from "./detect-editors";
 
 export interface EditorServiceDeps {
-  readonly detect: () => readonly DetectedEditor[];
-  readonly detectDefault: (editors: readonly DetectedEditor[]) => string | undefined;
+  readonly detect: () => Promise<readonly DetectedEditor[]>;
+  readonly detectDefault: (editors: readonly DetectedEditor[]) => Promise<string | undefined>;
   readonly launch: (command: string, args: readonly string[]) => Promise<void>;
 }
 
@@ -33,13 +33,16 @@ function launchWithSpawn(command: string, args: readonly string[]): Promise<void
 
 /**
  * Detects installed editors once, then answers list/open requests from that
- * cache. A launch failure clears the cache so the next menu reflects what is
- * still on disk, which covers an editor uninstalled while the app kept running.
+ * cache. Detection is asynchronous and shared: concurrent requests from several
+ * windows await one in-flight probe instead of starting their own. A launch
+ * failure clears the cache so the next menu reflects what is still on disk,
+ * which covers an editor uninstalled while the app kept running.
  */
 export class EditorService {
-  private detected: readonly DetectedEditor[] | undefined;
+  private detected: Promise<readonly DetectedEditor[]> | undefined;
+  private osDefaultEditorId: Promise<string | undefined> | undefined;
+  /** The user's pick for this app session; not persisted across restarts. */
   private preferredEditorId: string | undefined;
-  private osDefaultEditorId: string | null | undefined;
   private readonly deps: EditorServiceDeps;
 
   constructor(deps?: EditorServiceDeps) {
@@ -55,9 +58,9 @@ export class EditorService {
     };
   }
 
-  list(): DesktopEditorList {
-    const editors = this.detectedEditors();
-    const preferredEditorId = this.resolvePreferredEditorId(editors);
+  async list(): Promise<DesktopEditorList> {
+    const editors = await this.detectedEditors();
+    const preferredEditorId = await this.resolvePreferredEditorId(editors);
     return {
       editors: editors.map(({ id, label, shortLabel }) => ({ id, label, shortLabel })),
       ...(preferredEditorId ? { preferredEditorId } : {}),
@@ -65,10 +68,7 @@ export class EditorService {
   }
 
   async open(workspacePath: string, editorId: string): Promise<DesktopEditorList> {
-    const editor = this.findEditor(editorId) ?? this.redetect(editorId);
-    if (!editor) {
-      throw new Error(`Unknown editor: ${editorId}`);
-    }
+    const editor = await this.requireEditor(editorId);
     const { command, args } = buildEditorLaunchCommand(editor, workspacePath);
     try {
       await this.deps.launch(command, args);
@@ -81,43 +81,51 @@ export class EditorService {
   }
 
   /** Records the user's pick without launching anything. */
-  select(editorId: string): DesktopEditorList {
-    const editor = this.findEditor(editorId) ?? this.redetect(editorId);
-    if (!editor) {
-      throw new Error(`Unknown editor: ${editorId}`);
-    }
+  async select(editorId: string): Promise<DesktopEditorList> {
+    const editor = await this.requireEditor(editorId);
     this.preferredEditorId = editor.id;
     return this.list();
   }
 
-  private detectedEditors(): readonly DetectedEditor[] {
-    this.detected ??= this.deps.detect();
+  private detectedEditors(): Promise<readonly DetectedEditor[]> {
+    if (!this.detected) {
+      const probe = this.deps.detect().catch((error: unknown) => {
+        // A failed probe must not pin an empty answer; the next request retries.
+        if (this.detected === probe) {
+          this.detected = undefined;
+        }
+        throw error;
+      });
+      this.detected = probe;
+    }
     return this.detected;
   }
 
   /** The user's last pick wins; otherwise the OS default handler. */
-  private resolvePreferredEditorId(editors: readonly DetectedEditor[]): string | undefined {
+  private async resolvePreferredEditorId(
+    editors: readonly DetectedEditor[],
+  ): Promise<string | undefined> {
     if (this.preferredEditorId && editors.some((editor) => editor.id === this.preferredEditorId)) {
       return this.preferredEditorId;
     }
-    const osDefault = this.defaultEditorId(editors);
+    // Probed once: the OS handler rarely changes and the probe spawns commands.
+    this.osDefaultEditorId ??= this.deps.detectDefault(editors).catch(() => undefined);
+    const osDefault = await this.osDefaultEditorId;
     return osDefault && editors.some((editor) => editor.id === osDefault) ? osDefault : undefined;
   }
 
-  private defaultEditorId(editors: readonly DetectedEditor[]): string | undefined {
-    // Probed once: the OS handler rarely changes and the probe spawns commands.
-    if (this.osDefaultEditorId === undefined) {
-      this.osDefaultEditorId = this.deps.detectDefault(editors) ?? null;
+  /** A known editor, re-probing once in case it was installed after the first probe. */
+  private async requireEditor(editorId: string): Promise<DetectedEditor> {
+    const find = async () =>
+      (await this.detectedEditors()).find((editor) => editor.id === editorId);
+    let editor = await find();
+    if (!editor) {
+      this.detected = undefined;
+      editor = await find();
     }
-    return this.osDefaultEditorId ?? undefined;
-  }
-
-  private findEditor(editorId: string): DetectedEditor | undefined {
-    return this.detectedEditors().find((editor) => editor.id === editorId);
-  }
-
-  private redetect(editorId: string): DetectedEditor | undefined {
-    this.detected = undefined;
-    return this.findEditor(editorId);
+    if (!editor) {
+      throw new Error(`Unknown editor: ${editorId}`);
+    }
+    return editor;
   }
 }

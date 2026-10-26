@@ -1,5 +1,6 @@
-import { execFileSync } from "node:child_process";
-import { accessSync, constants, existsSync, readdirSync, statSync } from "node:fs";
+import { execFile } from "node:child_process";
+import { constants } from "node:fs";
+import { access, readdir, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import { EDITOR_CATALOG, type EditorDefinition, type WindowsInstallRoot } from "./editor-catalog";
@@ -21,19 +22,25 @@ export interface DetectedEditor {
   readonly launch: DetectedEditorLaunch;
 }
 
-/** Filesystem and environment facts a probe is allowed to read. */
+/**
+ * Filesystem and environment facts a probe is allowed to read. Every read is
+ * asynchronous because detection runs in Electron main, where a blocking
+ * filesystem walk or child process would stall every window's IPC and input.
+ */
 export interface EditorDetectionHost {
   readonly platform: NodeJS.Platform;
   readonly homeDir: string;
   readonly env: NodeJS.ProcessEnv;
-  readonly exists: (absolutePath: string) => boolean;
-  readonly isExecutable: (absolutePath: string) => boolean;
-  readonly listDirectory: (absolutePath: string) => readonly string[];
+  readonly exists: (absolutePath: string) => Promise<boolean>;
+  readonly isExecutable: (absolutePath: string) => Promise<boolean>;
+  readonly listDirectory: (absolutePath: string) => Promise<readonly string[]>;
   /** Runs a probe command and returns stdout, or undefined when it fails. */
-  readonly runCommand: (command: string, args: readonly string[]) => string | undefined;
+  readonly runCommand: (command: string, args: readonly string[]) => Promise<string | undefined>;
 }
 
-export function detectInstalledEditors(host: EditorDetectionHost): readonly DetectedEditor[] {
+export function detectInstalledEditors(
+  host: EditorDetectionHost,
+): Promise<readonly DetectedEditor[]> {
   if (host.platform === "darwin") {
     return detectMacEditors(host);
   }
@@ -48,35 +55,30 @@ export function createEditorDetectionHost(): EditorDetectionHost {
     platform: process.platform,
     homeDir: homedir(),
     env: process.env,
-    exists: (absolutePath) => existsSync(absolutePath),
-    isExecutable: (absolutePath) => {
+    exists: (absolutePath) =>
+      access(absolutePath).then(
+        () => true,
+        () => false,
+      ),
+    isExecutable: async (absolutePath) => {
       try {
-        accessSync(absolutePath, constants.X_OK);
-        return statSync(absolutePath).isFile();
+        await access(absolutePath, constants.X_OK);
+        return (await stat(absolutePath)).isFile();
       } catch {
         return false;
       }
     },
-    listDirectory: (absolutePath) => {
-      try {
-        return readdirSync(absolutePath);
-      } catch {
-        return [];
-      }
-    },
-    runCommand: (command, args) => {
-      try {
-        return execFileSync(command, [...args], {
-          encoding: "utf8",
-          timeout: 2_000,
-          stdio: ["ignore", "pipe", "ignore"],
-          windowsHide: true,
-        });
-      } catch {
-        // A missing binary or a non-zero exit just means this probe has no answer.
-        return undefined;
-      }
-    },
+    listDirectory: (absolutePath) => readdir(absolutePath).catch(() => []),
+    runCommand: (command, args) =>
+      new Promise((resolve) => {
+        execFile(
+          command,
+          [...args],
+          { encoding: "utf8", timeout: 2_000, windowsHide: true },
+          // A missing binary or a non-zero exit just means this probe has no answer.
+          (error, stdout) => resolve(error ? undefined : stdout),
+        );
+      }),
   };
 }
 
@@ -101,26 +103,26 @@ export function buildEditorLaunchCommand(
   }
 }
 
-function detectMacEditors(host: EditorDetectionHost): readonly DetectedEditor[] {
+async function detectMacEditors(host: EditorDetectionHost): Promise<readonly DetectedEditor[]> {
   const pathApi = path.posix;
   const appDirectories = ["/Applications", pathApi.join(host.homeDir, "Applications")];
-  const detected: DetectedEditor[] = [];
-  for (const definition of EDITOR_CATALOG) {
-    if (!definition.macAppName) {
-      continue;
-    }
-    const bundleName = `${definition.macAppName}.app`;
-    const appPath = appDirectories
-      .map((directory) => pathApi.join(directory, bundleName))
-      .find((candidate) => host.exists(candidate));
-    if (appPath) {
-      detected.push(toDetectedEditor(definition, { kind: "mac-app", appPath }));
-    }
-  }
-  return detected;
+  const matches = await Promise.all(
+    EDITOR_CATALOG.map(async (definition) => {
+      if (!definition.macAppName) {
+        return undefined;
+      }
+      const bundleName = `${definition.macAppName}.app`;
+      const appPath = await findFirst(
+        appDirectories.map((directory) => pathApi.join(directory, bundleName)),
+        host.exists,
+      );
+      return appPath ? toDetectedEditor(definition, { kind: "mac-app", appPath }) : undefined;
+    }),
+  );
+  return matches.filter(isDefined);
 }
 
-function detectLinuxEditors(host: EditorDetectionHost): readonly DetectedEditor[] {
+async function detectLinuxEditors(host: EditorDetectionHost): Promise<readonly DetectedEditor[]> {
   const pathApi = path.posix;
   const applicationDirectories = [
     "/usr/share/applications",
@@ -130,63 +132,92 @@ function detectLinuxEditors(host: EditorDetectionHost): readonly DetectedEditor[
     pathApi.join(host.homeDir, ".local/share/flatpak/exports/share/applications"),
     "/var/lib/snapd/desktop/applications",
   ];
-  const available = new Set(
-    applicationDirectories.flatMap((directory) => host.listDirectory(directory)),
-  );
-  const gtkLaunch = resolvePosixCommand(host, "gtk-launch");
-  const detected: DetectedEditor[] = [];
-  for (const definition of EDITOR_CATALOG) {
-    // A PATH executable is more reliable than a desktop entry: entries such as
-    // Android Studio ship an `Exec=` line without a `%f` field code, and
-    // gtk-launch then cannot forward the checkout path.
-    const commandPath = (definition.posixCommands ?? [])
-      .map((command) => resolvePosixCommand(host, command))
-      .find((candidate): candidate is string => Boolean(candidate));
-    if (commandPath) {
-      detected.push(toDetectedEditor(definition, { kind: "command", commandPath }));
-      continue;
-    }
-    const desktopId = definition.linuxDesktopIds?.find((id) => available.has(id));
-    if (!desktopId) {
-      continue;
-    }
-    const desktopDirectory = applicationDirectories.find((directory) =>
-      host.exists(pathApi.join(directory, desktopId)),
-    );
-    detected.push(
-      toDetectedEditor(definition, {
+  const [listings, gtkLaunch] = await Promise.all([
+    Promise.all(applicationDirectories.map((directory) => host.listDirectory(directory))),
+    resolvePosixCommand(host, "gtk-launch"),
+  ]);
+  const available = new Set(listings.flat());
+  const matches = await Promise.all(
+    EDITOR_CATALOG.map(async (definition): Promise<DetectedEditor | undefined> => {
+      // A PATH executable is more reliable than a desktop entry: entries such as
+      // Android Studio ship an `Exec=` line without a `%f` field code, and
+      // gtk-launch then cannot forward the checkout path.
+      const commandPath = await findFirstResult(definition.posixCommands ?? [], (command) =>
+        resolvePosixCommand(host, command),
+      );
+      if (commandPath) {
+        return toDetectedEditor(definition, { kind: "command", commandPath });
+      }
+      const desktopId = definition.linuxDesktopIds?.find((id) => available.has(id));
+      if (!desktopId) {
+        return undefined;
+      }
+      const desktopPath =
+        (await findFirst(
+          applicationDirectories.map((directory) => pathApi.join(directory, desktopId)),
+          host.exists,
+        )) ?? pathApi.join("/usr/share/applications", desktopId);
+      return toDetectedEditor(definition, {
         kind: "desktop-entry",
         desktopId,
-        desktopPath: desktopDirectory
-          ? pathApi.join(desktopDirectory, desktopId)
-          : pathApi.join("/usr/share/applications", desktopId),
+        desktopPath,
         launcher: gtkLaunch ? "gtk-launch" : "gio",
-      }),
-    );
-  }
-  return detected;
+      });
+    }),
+  );
+  return matches.filter(isDefined);
 }
 
-function detectWindowsEditors(host: EditorDetectionHost): readonly DetectedEditor[] {
+async function detectWindowsEditors(host: EditorDetectionHost): Promise<readonly DetectedEditor[]> {
   const pathApi = path.win32;
-  const detected: DetectedEditor[] = [];
-  for (const definition of EDITOR_CATALOG) {
-    const installed = (definition.windowsInstalls ?? [])
-      .map((install) => {
+  const matches = await Promise.all(
+    EDITOR_CATALOG.map(async (definition) => {
+      const installCandidates = (definition.windowsInstalls ?? []).flatMap((install) => {
         const root = resolveWindowsInstallRoot(host, install.root);
-        return root ? pathApi.join(root, install.directory, install.executable) : undefined;
-      })
-      .find((candidate): candidate is string => candidate !== undefined && host.exists(candidate));
-    const commandPath = installed
-      ? installed
-      : (definition.windowsCommands ?? [])
-          .map((command) => resolveWindowsCommand(host, `${command}.exe`))
-          .find((candidate): candidate is string => Boolean(candidate));
-    if (commandPath) {
-      detected.push(toDetectedEditor(definition, { kind: "command", commandPath }));
+        return root ? [pathApi.join(root, install.directory, install.executable)] : [];
+      });
+      const commandPath =
+        (await findFirst(installCandidates, host.exists)) ??
+        (await findFirstResult(definition.windowsCommands ?? [], (command) =>
+          resolveWindowsCommand(host, `${command}.exe`),
+        ));
+      return commandPath
+        ? toDetectedEditor(definition, { kind: "command", commandPath })
+        : undefined;
+    }),
+  );
+  return matches.filter(isDefined);
+}
+
+/** First candidate, in order, that passes the asynchronous check. */
+async function findFirst(
+  candidates: readonly string[],
+  check: (candidate: string) => Promise<boolean>,
+): Promise<string | undefined> {
+  for (const candidate of candidates) {
+    if (await check(candidate)) {
+      return candidate;
     }
   }
-  return detected;
+  return undefined;
+}
+
+/** First defined result, in order, of an asynchronous resolver. */
+async function findFirstResult(
+  inputs: readonly string[],
+  resolve: (input: string) => Promise<string | undefined>,
+): Promise<string | undefined> {
+  for (const input of inputs) {
+    const result = await resolve(input);
+    if (result) {
+      return result;
+    }
+  }
+  return undefined;
+}
+
+function isDefined<T>(value: T | undefined): value is T {
+  return value !== undefined;
 }
 
 /** Environment directory a `windowsInstalls` entry is relative to. */
@@ -219,33 +250,26 @@ function toDetectedEditor(
 export function resolvePosixCommand(
   host: EditorDetectionHost,
   command: string,
-): string | undefined {
+): Promise<string | undefined> {
   const pathApi = host.platform === "win32" ? path.win32 : path.posix;
-  for (const directory of (host.env.PATH ?? "").split(pathApi.delimiter)) {
-    if (!directory) {
-      continue;
-    }
-    const candidate = pathApi.join(directory, command);
-    if (host.isExecutable(candidate)) {
-      return candidate;
-    }
-  }
-  return undefined;
+  const candidates = (host.env.PATH ?? "")
+    .split(pathApi.delimiter)
+    .filter(Boolean)
+    .map((directory) => pathApi.join(directory, command));
+  return findFirst(candidates, host.isExecutable);
 }
 
-function resolveWindowsCommand(host: EditorDetectionHost, executable: string): string | undefined {
+function resolveWindowsCommand(
+  host: EditorDetectionHost,
+  executable: string,
+): Promise<string | undefined> {
   const pathApi = path.win32;
-  for (const directory of (host.env.PATH ?? "").split(pathApi.delimiter)) {
-    const entry = directory.replace(/^"|"$/g, "");
-    if (!entry) {
-      continue;
-    }
-    const candidate = pathApi.join(entry, executable);
-    if (host.exists(candidate)) {
-      return candidate;
-    }
-  }
-  return undefined;
+  const candidates = (host.env.PATH ?? "")
+    .split(pathApi.delimiter)
+    .map((directory) => directory.replace(/^"|"$/g, ""))
+    .filter(Boolean)
+    .map((entry) => pathApi.join(entry, executable));
+  return findFirst(candidates, host.exists);
 }
 
 /**
@@ -254,10 +278,10 @@ function resolveWindowsCommand(host: EditorDetectionHost, executable: string): s
  * that editor is not installed. Every branch maps the OS's answer back to an
  * entry that is present in `editors`, so callers never get a phantom id.
  */
-export function detectDefaultEditorId(
+export async function detectDefaultEditorId(
   host: EditorDetectionHost,
   editors: readonly DetectedEditor[],
-): string | undefined {
+): Promise<string | undefined> {
   if (editors.length === 0) {
     return undefined;
   }
@@ -270,11 +294,13 @@ export function detectDefaultEditorId(
   return detectLinuxDefaultEditor(host, editors);
 }
 
-function detectLinuxDefaultEditor(
+async function detectLinuxDefaultEditor(
   host: EditorDetectionHost,
   editors: readonly DetectedEditor[],
-): string | undefined {
-  const desktopId = host.runCommand("xdg-mime", ["query", "default", "inode/directory"])?.trim();
+): Promise<string | undefined> {
+  const desktopId = (
+    await host.runCommand("xdg-mime", ["query", "default", "inode/directory"])
+  )?.trim();
   if (!desktopId) {
     return undefined;
   }
@@ -285,19 +311,19 @@ function detectLinuxDefaultEditor(
     : undefined;
 }
 
-function detectMacDefaultEditor(
+async function detectMacDefaultEditor(
   host: EditorDetectionHost,
   editors: readonly DetectedEditor[],
-): string | undefined {
+): Promise<string | undefined> {
   const pathApi = path.posix;
   const preferencesPath = pathApi.join(
     host.homeDir,
     "Library/Preferences/com.apple.LaunchServices/com.apple.launchservices.secure.plist",
   );
-  if (!host.exists(preferencesPath)) {
+  if (!(await host.exists(preferencesPath))) {
     return undefined;
   }
-  const json = host.runCommand("plutil", ["-convert", "json", "-o", "-", preferencesPath]);
+  const json = await host.runCommand("plutil", ["-convert", "json", "-o", "-", preferencesPath]);
   const bundleId = json ? readMacFolderHandlerBundleId(json) : undefined;
   if (!bundleId) {
     return undefined;
@@ -309,9 +335,16 @@ function detectMacDefaultEditor(
       continue;
     }
     const infoPlist = pathApi.join(editor.launch.appPath, "Contents/Info.plist");
-    const candidate = host
-      .runCommand("plutil", ["-extract", "CFBundleIdentifier", "raw", "-o", "-", infoPlist])
-      ?.trim();
+    const candidate = (
+      await host.runCommand("plutil", [
+        "-extract",
+        "CFBundleIdentifier",
+        "raw",
+        "-o",
+        "-",
+        infoPlist,
+      ])
+    )?.trim();
     if (candidate === bundleId) {
       return editor.id;
     }
@@ -349,21 +382,21 @@ function readMacFolderHandlerBundleId(json: string): string | undefined {
   return undefined;
 }
 
-function detectWindowsDefaultEditor(
+async function detectWindowsDefaultEditor(
   host: EditorDetectionHost,
   editors: readonly DetectedEditor[],
-): string | undefined {
+): Promise<string | undefined> {
   const verb =
-    readWindowsRegistryDefault(host, "HKCU\\Software\\Classes\\Directory\\shell") ??
-    readWindowsRegistryDefault(host, "HKCR\\Directory\\shell");
+    (await readWindowsRegistryDefault(host, "HKCU\\Software\\Classes\\Directory\\shell")) ??
+    (await readWindowsRegistryDefault(host, "HKCR\\Directory\\shell"));
   if (!verb) {
     return undefined;
   }
   const command =
-    readWindowsRegistryDefault(
+    (await readWindowsRegistryDefault(
       host,
       `HKCU\\Software\\Classes\\Directory\\shell\\${verb}\\command`,
-    ) ?? readWindowsRegistryDefault(host, `HKCR\\Directory\\shell\\${verb}\\command`);
+    )) ?? (await readWindowsRegistryDefault(host, `HKCR\\Directory\\shell\\${verb}\\command`));
   const executable = command ? extractWindowsExecutable(command) : undefined;
   if (!executable) {
     return undefined;
@@ -376,8 +409,11 @@ function detectWindowsDefaultEditor(
   return match?.id;
 }
 
-function readWindowsRegistryDefault(host: EditorDetectionHost, key: string): string | undefined {
-  const output = host.runCommand("reg", ["query", key, "/ve"]);
+async function readWindowsRegistryDefault(
+  host: EditorDetectionHost,
+  key: string,
+): Promise<string | undefined> {
+  const output = await host.runCommand("reg", ["query", key, "/ve"]);
   if (!output) {
     return undefined;
   }
