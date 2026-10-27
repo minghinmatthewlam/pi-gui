@@ -69,7 +69,14 @@ test("the running turn has no marker until it finishes", () => {
     message("u2", "user", 10),
     message("a2", "assistant", 15),
   ];
-  expect(ids(transcript, true)).toEqual(["u1", "turn-marker:u1", "a1", "u2", "a2"]);
+  expect(ids(transcript, true)).toEqual([
+    "u1",
+    "turn-marker:u1",
+    "a1",
+    "u2",
+    "a2",
+    "working-indicator",
+  ]);
   expect(ids(transcript, false)).toEqual([
     "u1",
     "turn-marker:u1",
@@ -132,4 +139,20 @@ test("a keyed card updated long after its turn does not stretch that turn's mark
   ];
   const marker = buildDisplayTimelineItems(transcript).find((item) => item.kind === "turn-marker");
   expect(marker?.durationMs).toBe(60_000);
+});
+
+test("the working line follows the running turn's newest row and carries the run start", () => {
+  const transcript = [message("u1", "user", 0), message("a1", "assistant", 2), tool("t1", 5)];
+  const items = buildDisplayTimelineItems(transcript, {
+    lastTurnRunning: true,
+    runningSince: at(1),
+  });
+  expect(items.map((item) => item.id)).toEqual(["u1", "a1", "t1", "working-indicator"]);
+  expect(items.at(-1)).toEqual({ kind: "working", id: "working-indicator", startedAt: at(1) });
+
+  const grown = buildDisplayTimelineItems([...transcript, tool("t2", 8)], {
+    lastTurnRunning: true,
+  });
+  expect(grown.map((item) => item.id)).toEqual(["u1", "a1", "t1", "t2", "working-indicator"]);
+  expect(ids(transcript)).not.toContain("working-indicator");
 });

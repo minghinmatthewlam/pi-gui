@@ -26,11 +26,16 @@ function isUserMessage(item: TimelineTranscriptItem | undefined): boolean {
  * Each captured turn that changed files gets a changes card at the end of that turn: after
  * the last transcript item of the turn and any rows that follow it, before the next user
  * message or extension message.
+ *
+ * While the last turn runs, a "Working" line is appended after everything else so it sits
+ * where the newest output appears.
  */
 export function buildDisplayTimelineItems(
   transcript: readonly TimelineTranscriptItem[],
   options: {
     readonly lastTurnRunning?: boolean;
+    /** When the running turn started; shown as elapsed time on the "Working" line. */
+    readonly runningSince?: string;
     readonly turnChanges?: readonly TurnChangeSummary[];
   } = {},
 ): readonly DisplayTimelineItem[] {
@@ -91,7 +96,7 @@ export function buildDisplayTimelineItems(
   }
 
   const cardsAfter = turnChangeCardPositions(transcript, options.turnChanges ?? []);
-  if (markersBefore.size === 0 && cardsAfter.size === 0) {
+  if (markersBefore.size === 0 && cardsAfter.size === 0 && !options.lastTurnRunning) {
     return transcript;
   }
 
@@ -108,6 +113,9 @@ export function buildDisplayTimelineItems(
     for (const turn of cardsAfter.get(index) ?? []) {
       result.push({ kind: "turn-changes", id: `turn-changes:${turn.checkpointId}`, turn });
     }
+  }
+  if (options.lastTurnRunning) {
+    result.push({ kind: "working", id: "working-indicator", startedAt: options.runningSince });
   }
   return result;
 }

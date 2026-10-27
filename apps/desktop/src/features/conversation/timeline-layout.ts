@@ -18,6 +18,7 @@ export const TIMELINE_OVERSCAN = 720;
 export function estimateRowHeight(item: DisplayTimelineItem, width: number): number {
   switch (item.kind) {
     case "turn-marker":
+    case "working":
       return 32;
     case "turn-changes":
       return 74 + Math.min(item.turn.files.length, 6) * 36;
@@ -80,6 +81,9 @@ export function sameRowContent(a: DisplayTimelineItem, b: DisplayTimelineItem): 
     // A captured turn's marker and file list never change once drawn.
     case "turn-marker":
     case "turn-changes":
+      return true;
+    // The elapsed time ticks but never changes the line's height.
+    case "working":
       return true;
     default:
       return unhandledKind(a, false);

@@ -78,16 +78,30 @@ await test("Stop pressed while Pi is still starting a run cancels that run", asy
     }),
   );
 
-  // Hold the first prompt in before_agent_start, one of Pi's steps before its run begins.
-  let holdNext = true;
+  // Hold the next prompt in one of Pi's pre-run steps. In an input handler Pi has not
+  // started its run, so the driver defers the Stop; from before_agent_start on, Pi counts
+  // the run as active and aborts it at agent_start itself.
+  let holdIn: "input" | "before_agent_start" | undefined = "input";
   let release!: () => void;
-  const held = new Promise<void>((resolve) => {
-    release = resolve;
-  });
   let reachedHold!: () => void;
-  const reached = new Promise<void>((resolve) => {
-    reachedHold = resolve;
-  });
+  let held!: Promise<void>;
+  let reached!: Promise<void>;
+  const armHold = (step: "input" | "before_agent_start") => {
+    holdIn = step;
+    held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    reached = new Promise<void>((resolve) => {
+      reachedHold = resolve;
+    });
+  };
+  armHold("input");
+  const holdAt = async (step: "input" | "before_agent_start") => {
+    if (holdIn !== step) return;
+    holdIn = undefined;
+    reachedHold();
+    await held;
+  };
   let runtime!: AgentSessionRuntime;
   const driver = new PiSdkDriver({
     agentDir,
@@ -101,11 +115,12 @@ await test("Stop pressed while Pi is still starting a run cancels that run", asy
           extensionFactories: [
             ...(runtimeOptions.resourceLoaderOptions?.extensionFactories ?? []),
             (pi) => {
+              pi.on("input", async () => {
+                await holdAt("input");
+                return { action: "continue" as const };
+              });
               pi.on("before_agent_start", async () => {
-                if (!holdNext) return;
-                holdNext = false;
-                reachedHold();
-                await held;
+                await holdAt("before_agent_start");
               });
             },
           ],
@@ -179,5 +194,17 @@ await test("Stop pressed while Pi is still starting a run cancels that run", asy
   await driver.sendUserMessage(ref, { text: "third" });
   await runtime.session.waitForIdle();
   assert.equal(stopWhenMarkedRunning, false, "Stop was pressed");
+  assert.deepEqual(assistantReplies().at(-1), ["aborted", ""]);
+
+  // Stop during before_agent_start: Pi's abort waits for the handler, then stops the run.
+  armHold("before_agent_start");
+  const fourth = driver.sendUserMessage(ref, { text: "fourth" });
+  await reached;
+  assert.equal(runtime.session.isStreaming, true, "Pi counts the starting run as active");
+  const stopped = driver.cancelCurrentRun(ref);
+  release();
+  await stopped;
+  await fourth;
+  await runtime.session.waitForIdle();
   assert.deepEqual(assistantReplies().at(-1), ["aborted", ""]);
 });

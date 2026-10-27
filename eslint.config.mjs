@@ -92,6 +92,26 @@ export default [
     files: ["apps/desktop/src/app/App.tsx"],
     rules: { "max-lines": ["error", { max: 1447 }] },
   },
+  {
+    // Electron main serves every window's IPC and input on one thread, so a
+    // child process it waits on freezes the whole app. Import the async APIs by
+    // name; default and namespace imports are refused so a sync call cannot
+    // hide behind them. This covers child_process only, not fs.
+    files: ["apps/desktop/electron/**/*.{ts,tsx,mts,cts}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: ["child_process", "node:child_process"].map((name) => ({
+            name,
+            importNames: ["default", "execSync", "execFileSync", "spawnSync"],
+            message:
+              "Sync child_process calls block Electron main. Import execFile or spawn by name and await the result.",
+          })),
+        },
+      ],
+    },
+  },
   typedProject(["apps/desktop/src/**/*.{ts,tsx,mts,cts}"], "apps/desktop/tsconfig.json"),
   typedProject(
     ["apps/desktop/electron/**/*.{ts,tsx,mts,cts}"],
