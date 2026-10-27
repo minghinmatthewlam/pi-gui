@@ -18,6 +18,7 @@ import {
 } from "../../contracts/ipc";
 import type { DesktopAppStore } from "../application/app-store";
 import type { NotificationPermissionService } from "../platform/notification-permission";
+import type { EditorService } from "../platform/editors/editor-service";
 import type { TerminalService } from "../platform/terminal-service";
 import type { ThemeManager } from "../platform/theme-manager";
 import type { WindowOwner } from "../windows/window-owner";
@@ -183,6 +184,7 @@ export interface DesktopIpcOwners {
 export interface DesktopIpcCapabilities {
   readonly ping: () => string;
   readonly theme: ThemeManager;
+  readonly editors: EditorService;
   readonly openExternal: (url: string) => Promise<void>;
   readonly pickWorkspace: (window: BrowserWindow) => Promise<DesktopAppState>;
   readonly createLoginCallbacks: (
@@ -264,6 +266,15 @@ export function registerDesktopIpc({
     windows.runStateAction(senderWindow(windows, event), action);
   const immediate = (event: IpcMainInvokeEvent, action: () => Promise<DesktopAppState>) =>
     windows.runImmediateStateAction(senderWindow(windows, event), action);
+  const requireWorkspacePath = (event: IpcMainInvokeEvent, rawWorkspaceId: unknown): string => {
+    windows.windowForSender(event.sender);
+    const workspaceId = expectNonEmptyString(rawWorkspaceId, "workspaceId");
+    const workspacePath = owners.workspace.getWorkspacePath(workspaceId);
+    if (!workspacePath) {
+      throw new Error(`Unknown workspace: ${workspaceId}`);
+    }
+    return workspacePath;
+  };
   const reportLimit = (event: IpcMainInvokeEvent, error: ComposerAttachmentLimitError) =>
     run(event, () => owners.conversation.withError(error));
   const runCatchingLimits = async (
@@ -352,14 +363,24 @@ export function registerDesktopIpc({
     ),
   );
   ipcMain.handle(desktopIpc.openWorkspaceInFinder, async (event, rawWorkspaceId: unknown) => {
-    windows.windowForSender(event.sender);
-    const workspaceId = expectNonEmptyString(rawWorkspaceId, "workspaceId");
-    const workspacePath = owners.workspace.getWorkspacePath(workspaceId);
-    if (!workspacePath) {
-      throw new Error(`Unknown workspace: ${workspaceId}`);
-    }
-    await shell.openPath(workspacePath);
+    await shell.openPath(requireWorkspacePath(event, rawWorkspaceId));
   });
+  ipcMain.handle(desktopIpc.listEditors, (event) => {
+    windows.windowForSender(event.sender);
+    return capabilities.editors.list();
+  });
+  ipcMain.handle(desktopIpc.setPreferredEditor, (event, rawEditorId: unknown) => {
+    windows.windowForSender(event.sender);
+    return capabilities.editors.select(expectNonEmptyString(rawEditorId, "editorId"));
+  });
+  ipcMain.handle(
+    desktopIpc.openWorkspaceInEditor,
+    async (event, rawWorkspaceId: unknown, rawEditorId: unknown) => {
+      const workspacePath = requireWorkspacePath(event, rawWorkspaceId);
+      const editorId = expectNonEmptyString(rawEditorId, "editorId");
+      return capabilities.editors.open(workspacePath, editorId);
+    },
+  );
   ipcMain.handle(desktopIpc.createWorktree, (event, rawInput: unknown) =>
     run(event, () => owners.workspace.createWorktree(expectCreateWorktreeInput(rawInput))),
   );

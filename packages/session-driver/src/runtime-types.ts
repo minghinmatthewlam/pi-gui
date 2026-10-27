@@ -24,6 +24,14 @@ export interface RuntimeProviderRecord {
   readonly apiKeySetupSupported: boolean;
 }
 
+/**
+ * Where pi's `enabledModels` scope puts a model: `all` when the setting is unset, `listed` when
+ * only its own `provider/model` entry enables it, `matched` when another entry enables it (a glob,
+ * bare id, fuzzy name or `:thinking` suffix), so removing its own entry cannot turn it off, and
+ * `off` when no entry enables it.
+ */
+export type RuntimeModelScope = "all" | "listed" | "matched" | "off";
+
 export interface RuntimeModelRecord {
   readonly providerId: string;
   readonly providerName: string;
@@ -33,6 +41,7 @@ export interface RuntimeModelRecord {
   readonly authType: RuntimeAuthType;
   readonly reasoning: boolean;
   readonly supportsImages: boolean;
+  readonly scope: RuntimeModelScope;
 }
 
 export interface RuntimeSkillRecord {
@@ -180,6 +189,12 @@ export interface RuntimeResourceDriver {
     workspace: WorkspaceRef,
     patterns: readonly string[],
   ): Promise<RuntimeSnapshot>;
+  /** Re-resolves each model's scope against `patterns` instead of the workspace's own setting. */
+  scopeModels(
+    workspace: WorkspaceRef,
+    models: readonly RuntimeModelRecord[],
+    patterns: readonly string[],
+  ): Promise<readonly RuntimeModelRecord[]>;
   setSkillEnabled(
     workspace: WorkspaceRef,
     filePath: string,

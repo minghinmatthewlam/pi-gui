@@ -78,7 +78,6 @@ test("a live extension tool call uses its label and counts as a tool, not a file
   const state: Parameters<typeof applyTimelineEvent>[2] = {
     activeAssistantMessageBySession: new Map(),
     pendingAssistantMessageBySession: new Map(),
-    activeWorkingActivityBySession: new Map(),
     extensionToolLabels: () => labels,
     runningSinceBySession: new Map(),
     runMetricsBySession: new Map(),

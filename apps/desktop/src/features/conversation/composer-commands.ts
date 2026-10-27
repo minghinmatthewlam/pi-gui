@@ -310,16 +310,8 @@ export function buildModelOptions(
     return [];
   }
 
-  const enabledPatterns = runtime.settings.enabledModelPatterns;
-  const allAvailable = enabledPatterns.length === 0;
-  const enabledSet = allAvailable ? undefined : new Set(enabledPatterns);
-
-  return [...runtime.models]
-    .filter((model) => {
-      if (!model.available) return false;
-      if (!enabledSet) return true;
-      return enabledSet.has(`${model.providerId}/${model.modelId}`);
-    })
+  return runtime.models
+    .filter((model) => model.available && model.scope !== "off")
     .sort((left: RuntimeSnapshot["models"][number], right: RuntimeSnapshot["models"][number]) => {
       const providerCompare =
         providerRankForId(runtime.providers, left.providerId) -

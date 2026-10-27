@@ -13,6 +13,8 @@ interface TopbarProps {
   readonly api: PiDesktopApi;
   readonly panelAvailable: boolean;
   readonly panelVisible: boolean;
+  /** Rendered in the actions cluster, next to the side-panel toggle. */
+  readonly editorControl?: ReactNode;
   readonly onTogglePanel: () => void;
 }
 
@@ -26,6 +28,7 @@ export function Topbar({
   api,
   panelAvailable,
   panelVisible,
+  editorControl,
   onTogglePanel,
 }: TopbarProps) {
   const handleDoubleClick = (event: ReactMouseEvent<HTMLElement>) => {
@@ -70,6 +73,7 @@ export function Topbar({
       </div>
       <div className="topbar__actions">
         {children}
+        {editorControl}
         {!panelVisible ? (
           <div className="shortcut-tooltip-wrap topbar__tooltip-wrap">
             <button

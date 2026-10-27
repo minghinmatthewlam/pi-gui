@@ -55,6 +55,7 @@ import { NotificationManager } from "./platform/notification-manager";
 import { NotificationPermissionService } from "./platform/notification-permission";
 import { checkForUpdate, initUpdateChecker, openReleasesPage } from "./platform/update-checker";
 import { ThemeManager } from "./platform/theme-manager";
+import { EditorService } from "./platform/editors/editor-service";
 import { windowBackgroundFor } from "../contracts/theme";
 import { TerminalService } from "./platform/terminal-service";
 import type { DesktopAppState, DesktopAppViewState } from "../contracts/desktop-state";
@@ -102,6 +103,7 @@ let store: DesktopAppStore;
 let extensionViewOwner: DesktopExtensionViewOwner | undefined;
 let windowOwner: WindowOwner;
 const themeManager = new ThemeManager();
+const editorService = new EditorService();
 let mainWindow: BrowserWindow | null = null;
 let notificationManager: NotificationManager | undefined;
 let notificationPermissionService: NotificationPermissionService | undefined;
@@ -1176,6 +1178,7 @@ app
             ? `pi desktop ready:${MAIN_DEV_RELOAD_MARKER}`
             : "pi desktop ready",
         theme: themeManager,
+        editors: editorService,
         openExternal: openExternalLink,
         pickWorkspace: (window) => pickWorkspaceViaDialog(window),
         createLoginCallbacks: (window) => createRuntimeLoginCallbacks(window),

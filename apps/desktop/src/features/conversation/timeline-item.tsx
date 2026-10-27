@@ -9,10 +9,12 @@ import type {
   TimelineToolCall,
   TimelineSummary,
   TimelineTurnMarker,
+  TimelineWorkingIndicator,
 } from "../../../contracts/timeline-types";
 import type { ScheduledTaskOrigin } from "../../../contracts/scheduled-tasks";
 import { extensionToolRowLabel } from "../../../contracts/tool-labels";
 import { useExtensionToolLabel } from "../extensions/extension-tool-labels";
+import { useRunningLabel } from "./hooks/use-running-label";
 import {
   AnnotationMarkers,
   type AnnotationMarker,
@@ -70,6 +72,8 @@ export function TimelineItem({
   switch (item.kind) {
     case "turn-marker":
       return <TimelineTurnMarkerItem item={item} />;
+    case "working":
+      return <TimelineWorkingItem item={item} />;
     case "turn-changes":
       return <TurnChangesCard turn={item.turn} onOpen={onOpenTurnChange} />;
     case "message":
@@ -483,6 +487,15 @@ function TimelineTurnMarkerItem({ item }: { readonly item: TimelineTurnMarker })
   return (
     <div className="timeline-turn-marker" data-testid="timeline-turn-marker">
       <span className="timeline-turn-marker__label">{`Worked for ${formatWorkedDuration(item.durationMs)}`}</span>
+    </div>
+  );
+}
+
+function TimelineWorkingItem({ item }: { readonly item: TimelineWorkingIndicator }) {
+  const label = useRunningLabel(item.startedAt);
+  return (
+    <div className="timeline-working" data-testid="timeline-working">
+      <span className="timeline-working__label">{label}</span>
     </div>
   );
 }

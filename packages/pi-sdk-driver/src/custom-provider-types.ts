@@ -25,7 +25,7 @@ export const PI_GUI_CUSTOM_PROVIDER_MARKER = "piGuiCustomEndpoint";
 export const BUILT_IN_PROVIDER_IDS: ReadonlySet<string> = new Set([
   "amazon-bedrock",
   "anthropic",
-  "azure-openai-responses",
+  "azure",
   "cerebras",
   "deepseek",
   "fireworks",

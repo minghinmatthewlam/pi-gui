@@ -5,6 +5,7 @@ import type {
   DesktopAppState,
   DesktopAppViewState,
   SelectedTranscriptRecord,
+  SessionExtensionUiUpdate,
 } from "../../contracts/desktop-state";
 import { desktopIpc } from "../../contracts/ipc";
 import { SerializedActionQueue } from "./action-queue";
@@ -29,6 +30,7 @@ export interface WindowStateOwner {
   getSelectedTranscriptForView(view: DesktopAppViewState): Promise<SelectedTranscriptRecord | null>;
   subscribe(listener: (state: DesktopAppState) => void): () => void;
   subscribeToSelectedTranscript(listener: () => void): () => void;
+  subscribeToExtensionUi(listener: (update: SessionExtensionUiUpdate) => void): () => void;
   emit(): void;
   handleWindowActivation(): void;
 }
@@ -64,6 +66,7 @@ export class WindowOwner {
   private readonly views = new Map<number, WindowViewState>();
   private readonly stopPublishingState = new Map<number, () => void>();
   private readonly stopPublishingTranscript = new Map<number, () => void>();
+  private readonly stopPublishingExtensionUi = new Map<number, () => void>();
   private readonly stopTrackingActivation = new Map<number, () => void>();
   private readonly actionQueue = new SerializedActionQueue();
   private activeWindow: BrowserWindow | null = null;
@@ -95,6 +98,8 @@ export class WindowOwner {
     this.stopPublishingState.delete(webContentsId);
     this.stopPublishingTranscript.get(webContentsId)?.();
     this.stopPublishingTranscript.delete(webContentsId);
+    this.stopPublishingExtensionUi.get(webContentsId)?.();
+    this.stopPublishingExtensionUi.delete(webContentsId);
     this.stopTrackingActivation.get(webContentsId)?.();
     this.stopTrackingActivation.delete(webContentsId);
     this.windows.delete(window);
@@ -502,6 +507,15 @@ export class WindowOwner {
       this.lastPublishedTranscript.delete(webContentsId);
       this.stopPublishingState.get(webContentsId)?.();
       this.stopPublishingTranscript.get(webContentsId)?.();
+      this.stopPublishingExtensionUi.get(webContentsId)?.();
+      this.stopPublishingExtensionUi.set(
+        webContentsId,
+        this.stateOwner.subscribeToExtensionUi((update) => {
+          if (canPublishToWindow(window)) {
+            window.webContents.send(desktopIpc.extensionUiChanged, update);
+          }
+        }),
+      );
       this.stopPublishingState.set(
         webContentsId,
         this.stateOwner.subscribe((state) => {
@@ -519,6 +533,8 @@ export class WindowOwner {
       this.stopPublishingState.delete(webContentsId);
       this.stopPublishingTranscript.get(webContentsId)?.();
       this.stopPublishingTranscript.delete(webContentsId);
+      this.stopPublishingExtensionUi.get(webContentsId)?.();
+      this.stopPublishingExtensionUi.delete(webContentsId);
     };
 
     startPublishing();
