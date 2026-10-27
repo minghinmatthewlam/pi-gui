@@ -4430,8 +4430,8 @@ export class DesktopAppStore {
   /**
    * Every opened thread used to stay in memory until quit: its pi session and its transcript.
    * Free idle threads that weren't viewed recently; they reload from their files when opened.
-   * Threads that run, wait on the person, take part in orchestration, or show in a window stay
-   * loaded. The driver decides synchronously and keeps the subscription, so no event is lost.
+   * Threads that run, wait on the person, hold an unsent draft or attachments, take part in
+   * orchestration, or show in a window stay loaded. The driver decides synchronously and keeps the subscription, so no event is lost.
    */
   private releaseIdleSessions(): void {
     for (const workspace of this.state.workspaces) {
@@ -4463,6 +4463,10 @@ export class DesktopAppStore {
       !this.sessionState.runningSinceBySession.has(key) &&
       !this.isSelectedSession(sessionRef) &&
       !this.isSessionSelectedInAnyWindow(sessionRef) &&
+      // Reopening starts the thread's extensions again, and a session_start setEditorText
+      // would replace the unsent draft.
+      !this.sessionState.composerDraftsBySession.get(key) &&
+      (this.sessionState.composerAttachmentsBySession.get(key)?.length ?? 0) === 0 &&
       !this.orchestrationOwner.hasOrchestrationChildSession(sessionRef) &&
       !this.orchestrationOwner.hasOrchestrationParentSession(sessionRef) &&
       (this.sessionState.queuedComposerMessagesBySession.get(key)?.length ?? 0) === 0 &&

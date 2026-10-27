@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import {
@@ -8,6 +8,7 @@ import {
   launchDesktop,
   makeUserDataDir,
   makeWorkspace,
+  pasteTinyPng,
   selectSession,
   waitForWorkspaceByPath,
   writeProjectExtension,
@@ -47,13 +48,20 @@ type ThreadRef = { workspaceId: string; sessionId: string };
 
 const keyOf = (ref: ThreadRef) => `${ref.workspaceId}:${ref.sessionId}`;
 
-/** An extension that logs the id of every session whose runtime starts. */
+/**
+ * An extension that logs the id of every session whose runtime starts and, once the workspace
+ * holds a starter-text file, puts its text in the composer as the runtime starts.
+ */
 const startLogExtension = String.raw`
-import { appendFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 export default function startLog(pi) {
   pi.on("session_start", async (_event, ctx) => {
     appendFileSync(join(ctx.cwd, "runtime-starts.log"), ctx.sessionManager.getSessionId() + "\n");
+    const starter = join(ctx.cwd, "starter-text");
+    if (existsSync(starter)) {
+      ctx.ui.setEditorText(readFileSync(starter, "utf8"));
+    }
   });
 }
 `;
@@ -174,7 +182,11 @@ test("releases idle threads that weren't viewed recently and reloads them when o
   }
 });
 
-test("a draft typed in a thread is still there after the thread is released and reopened", async () => {
+/**
+ * Reopening a released thread starts its extensions again, and one that sets the composer text
+ * as it starts would replace an unsent draft. Threads with a draft or attachments stay loaded.
+ */
+test("a thread with an unsent draft or attachments stays loaded, so reopening never replaces them", async () => {
   test.setTimeout(120_000);
   const { harness, refs, workspacePath } = await launchWithFiveThreads("release-idle-draft");
   try {
@@ -182,22 +194,46 @@ test("a draft typed in a thread is still there after the thread is released and 
     await waitForWorkspaceByPath(window, workspacePath);
     const transcript = window.getByTestId("transcript");
     const composer = window.getByTestId("composer");
+    const attachment = window.locator(".composer-attachment--image");
+    const draft = "half-written question for thread one";
+
     await selectSession(window, "Thread one");
     await expect(transcript).toContainText("answer from Thread one");
-    await composer.fill("half-written question for thread one");
+    await composer.fill(draft);
+    await expect.poll(async () => (await getDesktopState(window)).composerDraft).toBe(draft);
 
-    for (const title of titles.slice(1)) {
+    await selectSession(window, "Thread two");
+    await expect(transcript).toContainText("answer from Thread two");
+    await pasteTinyPng(window);
+    await expect(attachment).toHaveCount(1);
+
+    for (const title of titles.slice(2)) {
       await selectSession(window, title);
       await expect(transcript).toContainText(`answer from ${title}`);
     }
-    await expectThreads(harness, {
-      held: refs.slice(-3).map(keyOf),
-      released: refs.slice(0, 2).map(keyOf),
-    });
+    await expectThreads(harness, { held: refs.map(keyOf), released: [] });
+
+    // From now on, an extension sets the composer text whenever a thread's runtime starts.
+    await writeFile(join(workspacePath, "starter-text"), "starter text");
 
     await selectSession(window, "Thread one");
     await expect(transcript).toContainText("answer from Thread one");
-    await expect(composer).toHaveValue("half-written question for thread one");
+    await expect(composer).toHaveValue(draft);
+    await expectThreads(harness, {
+      held: [refs[0]!, refs[1]!, refs[3]!, refs[4]!].map(keyOf),
+      released: [keyOf(refs[2]!)],
+    });
+
+    await selectSession(window, "Thread two");
+    await expect(transcript).toContainText("answer from Thread two");
+    await expect(attachment).toHaveCount(1);
+    await expect(composer).toHaveValue("");
+
+    // A thread without a draft was released, and reopening it ran the extension again: this is
+    // what would have replaced Thread one's draft.
+    await selectSession(window, "Thread three");
+    await expect(transcript).toContainText("answer from Thread three");
+    await expect(composer).toHaveValue("starter text");
   } finally {
     await harness.close();
   }
