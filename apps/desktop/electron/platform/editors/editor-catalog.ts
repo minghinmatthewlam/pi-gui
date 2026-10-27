@@ -154,6 +154,11 @@ export const EDITOR_CATALOG: readonly EditorDefinition[] = [
         directory: "Programs\\Android Studio",
         executable: "bin\\studio64.exe",
       },
+      {
+        root: "programFiles",
+        directory: "Android\\Android Studio",
+        executable: "bin\\studio64.exe",
+      },
     ],
     linuxDesktopIds: ["android-studio.desktop", "android-studio_android-studio.desktop"],
   },

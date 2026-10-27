@@ -25,7 +25,7 @@ import { SentAnnotations } from "./annotations/sent-annotations";
 import { ExtensionCardItem, type RunExtensionAction } from "./extension-card";
 import { ImageAttachmentThumb } from "./image-attachment-thumb";
 import { MessageMarkdown } from "./message-markdown";
-import { stringifyToolValue, toolOutputImageSrc, toolOutputImages } from "./tool-output-images";
+import { stringifyToolValue, toolOutputImages } from "./tool-output-images";
 import { TurnChangesCard, type OpenTurnChange } from "./turn-changes-card";
 import type { WorkspaceFileLine } from "./workspace-file-line";
 import { InlineDiff, extractDiffFromOutput } from "../../ui/diff-inline";
@@ -351,7 +351,7 @@ function TimelineToolCallItem({
               className="timeline-tool__image"
               key={`${item.callId}:${index}`}
               name={`${item.toolName} image ${index + 1}`}
-              src={toolOutputImageSrc(image)}
+              src={image.src}
             />
           ))}
         </div>

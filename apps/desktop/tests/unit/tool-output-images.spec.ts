@@ -9,7 +9,6 @@ import {
 } from "../../electron/application/app-store-utils";
 import {
   stringifyToolValue,
-  toolOutputImageSrc,
   toolOutputImages,
 } from "../../src/features/conversation/tool-output-images";
 
@@ -21,10 +20,56 @@ const output = {
   ],
 };
 
+const sessionRef = { workspaceId: "w s", sessionId: "s/1" };
+
+function toolRow(content: readonly unknown[]): TranscriptMessage {
+  return {
+    kind: "tool",
+    id: "call 1",
+    callId: "call 1",
+    toolName: "read",
+    status: "success",
+    label: "Read",
+    createdAt: "2026-10-01T21:00:00.000Z",
+    output: { content },
+  };
+}
+
+function shownImages(content: readonly unknown[]) {
+  const [sent] = transcriptForWindow(sessionRef, [toolRow(content)]);
+  return toolOutputImages((sent as { output?: unknown }).output);
+}
+
 test("only listed image types become thumbnails", () => {
-  expect(toolOutputImages(output)).toEqual([{ data: "UE5HREFUQQ==", mimeType: "image/png" }]);
+  expect(shownImages(output.content)).toEqual([
+    { mimeType: "image/png", src: "pi-gui-image://image/w%20s/s%2F1/call%201/1" },
+  ]);
   expect(toolOutputImages({ content: "text" })).toEqual([]);
   expect(toolOutputImages(undefined)).toEqual([]);
+});
+
+for (const src of [
+  "https://example.com/pixel.png",
+  "file:///etc/hosts",
+  "data:image/png;base64,UE5HREFUQQ==",
+]) {
+  test(`a tool image with its own src ${src.split(":")[0]}: is never loaded`, () => {
+    const block = { type: "image", mimeType: "image/png", src };
+    // Main drops the src before the window sees it…
+    const [sent] = transcriptForWindow(sessionRef, [toolRow([block])]);
+    expect(JSON.stringify(sent)).not.toContain(src);
+    expect(toolOutputImages((sent as { output?: unknown }).output)).toEqual([]);
+    // …and the window refuses it even if it arrives.
+    expect(toolOutputImages({ content: [block] })).toEqual([]);
+    // A block with data and a src still shows the data, from main's URL.
+    expect(shownImages([{ ...block, data: "UE5HREFUQQ==" }]).map((image) => image.src)).toEqual([
+      "pi-gui-image://image/w%20s/s%2F1/call%201/0",
+    ]);
+  });
+}
+
+test("the window never shows image data it is sent directly", () => {
+  expect(toolOutputImages(output)).toEqual([]);
 });
 
 test("the row's text hides every image's data, shown or not", () => {
@@ -69,7 +114,6 @@ test("a failed tool that returned only images names them in its detail", () => {
 });
 
 test("the window's transcript carries image URLs, not image data, and main serves each one", async () => {
-  const sessionRef = { workspaceId: "w s", sessionId: "s/1" };
   const tool = {
     kind: "tool",
     id: "call 1",
@@ -92,16 +136,15 @@ test("the window's transcript carries image URLs, not image data, and main serve
 
   const [image] = toolOutputImages((sent[1] as typeof tool).output);
   expect(image?.src).toMatch(/^pi-gui-image:\/\//);
-  expect(toolOutputImageSrc(image!)).toBe(image!.src);
   expect(stringifyToolValue((sent[1] as typeof tool).output)).toContain("[image/png image]");
 
   const lookup = (key: string) => (key === sessionKey(sessionRef) ? stored : undefined);
-  const served = transcriptImageResponse(image!.src!, lookup);
+  const served = transcriptImageResponse(image!.src, lookup);
   expect(served.status).toBe(200);
   expect(served.headers.get("content-type")).toBe("image/png");
   expect(Buffer.from(await served.arrayBuffer()).toString("base64")).toBe("UE5HREFUQQ==");
 
   // The SVG block (index 2) isn't shown, so it isn't served either.
-  expect(transcriptImageResponse(image!.src!.replace(/1$/, "2"), lookup).status).toBe(404);
-  expect(transcriptImageResponse(image!.src!.replace("s%2F1", "other"), lookup).status).toBe(404);
+  expect(transcriptImageResponse(image!.src.replace(/1$/, "2"), lookup).status).toBe(404);
+  expect(transcriptImageResponse(image!.src.replace("s%2F1", "other"), lookup).status).toBe(404);
 });

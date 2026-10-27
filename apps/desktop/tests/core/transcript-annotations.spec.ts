@@ -4,6 +4,7 @@ import type { PiSdkDriver } from "@pi-gui/pi-sdk-driver";
 import type { SessionMessageInput } from "@pi-gui/session-driver";
 import {
   createNamedThread,
+  desktopShortcut,
   getDesktopState,
   launchDesktop,
   makeUserDataDir,
@@ -351,6 +352,12 @@ test("keeps the selection buttons inside the window when the selection ends at i
       BrowserWindow.getAllWindows()[0]?.setSize(760, 700);
     });
     await expect.poll(() => page.evaluate(() => window.innerWidth)).toBe(760);
+    // At this width the open sidebar is a drawer whose backdrop takes pointer input. A user
+    // selects transcript text with it closed.
+    await expect(page.getByTestId("sidebar-drawer-backdrop")).toBeVisible();
+    await page.getByTestId("sidebar-toggle").click();
+    await expect(page.locator(".sidebar")).toHaveCount(0);
+    await expect(page.getByTestId("sidebar-drawer-backdrop")).toHaveCount(0);
     await waitForTimelineLayout(page);
 
     // Drag across the word that ends furthest right; the buttons would start at its left edge.
@@ -385,6 +392,55 @@ test("keeps the selection buttons inside the window when the selection ends at i
     expect(box!.x).toBeGreaterThanOrEqual(8);
     expect(box!.x + box!.width).toBeLessThanOrEqual(760 - 8);
     expect(box!.height).toBe(32);
+  } finally {
+    await harness.close();
+  }
+});
+
+test("the narrow sidebar drawer covers selection buttons left over from before it opened", async () => {
+  test.setTimeout(60_000);
+  const harness = await launchWithTranscript("transcript-actions-drawer", [
+    { role: "user", text: "Ask" },
+    { role: "assistant", text: REPLY },
+  ]);
+  try {
+    const page = await harness.firstWindow();
+    await expect(page.locator(".timeline-item--assistant").last()).toContainText("TN stamps");
+    await harness.electronApp.evaluate(({ BrowserWindow }) => {
+      BrowserWindow.getAllWindows()[0]?.setSize(760, 700);
+    });
+    await expect.poll(() => page.evaluate(() => window.innerWidth)).toBe(760);
+    await page.getByTestId("sidebar-toggle").click();
+    await expect(page.locator(".sidebar")).toHaveCount(0);
+    await waitForTimelineLayout(page);
+    // The reply's first words sit where the drawer opens.
+    await dragSelect(page, "I wouldn't hold up");
+    await expect(page.getByTestId("add-to-chat")).toBeVisible();
+
+    await page.keyboard.press(desktopShortcut("B"));
+    await expect(page.getByTestId("sidebar-drawer-backdrop")).toBeVisible();
+    // The buttons start over the drawer and end over the backdrop; each must cover its part.
+    const topmost = await page.evaluate(() => {
+      const buttons = document.querySelector(".annotation-add")?.getBoundingClientRect();
+      if (!buttons) return null;
+      const y = buttons.top + buttons.height / 2;
+      const owner = (x: number) => {
+        const hit = document.elementFromPoint(x, y);
+        if (hit?.closest(".sidebar")) return "drawer";
+        if (hit?.closest("[data-testid='sidebar-drawer-backdrop']")) return "backdrop";
+        return hit?.closest(".annotation-popover") ? "selection buttons" : "other";
+      };
+      const drawerRight = document.querySelector(".sidebar")?.getBoundingClientRect().right ?? 0;
+      return {
+        start: owner(buttons.left + 4),
+        end: owner(buttons.right - 4),
+        drawerRight,
+        buttonsRight: buttons.right,
+      };
+    });
+    expect(topmost).not.toBeNull();
+    expect(topmost!.buttonsRight).toBeGreaterThan(topmost!.drawerRight + 4);
+    expect(topmost).toMatchObject({ start: "drawer", end: "backdrop" });
   } finally {
     await harness.close();
   }
