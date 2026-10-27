@@ -50,6 +50,18 @@ test("defers token deltas and redundant running sessionUpdated ticks", () => {
       undefined,
     ),
   ).toBe(true);
+  expect(
+    shouldDeferStreamingUiPublish(
+      {
+        type: "toolUpdated",
+        sessionRef,
+        timestamp: "2026-10-24T00:00:00.000Z",
+        callId: "tool-1",
+        text: "streamed output",
+      },
+      undefined,
+    ),
+  ).toBe(true);
   expect(shouldDeferStreamingUiPublish(runningUpdated(), "run-1")).toBe(true);
   expect(shouldDeferStreamingUiPublish(runningUpdated(), undefined)).toBe(false);
   expect(shouldDeferStreamingUiPublish(runningUpdated("run-2"), "run-1")).toBe(false);
@@ -76,26 +88,27 @@ test("Stop then Send treats the next runningRunId as a first tick", () => {
   expect(publisher.shouldDefer(runningUpdated("run-2"))).toBe(false);
 });
 
-test("throttles publishes to one trailing flush per session", async () => {
-  const published: string[] = [];
-  const publisher = new StreamingUiPublisher((ref) => {
-    published.push(ref.sessionId);
+test("coalesces parallel sessions into one app-wide trailing publish", async () => {
+  const batches: string[][] = [];
+  const publisher = new StreamingUiPublisher((refs) => {
+    batches.push(refs.map((ref) => ref.sessionId).sort());
   }, 25);
 
   publisher.schedule(sessionRef);
   publisher.schedule(sessionRef);
   publisher.schedule({ workspaceId: "ws", sessionId: "other" });
-  expect(published).toEqual([]);
+  expect(batches).toEqual([]);
 
-  await expect.poll(() => published.slice().sort()).toEqual(["other", "sess"]);
+  await expect.poll(() => batches).toEqual([["other", "sess"]]);
   publisher.schedule(sessionRef);
-  await expect.poll(() => published.filter((id) => id === "sess")).toHaveLength(2);
+  await expect.poll(() => batches).toEqual([["other", "sess"], ["sess"]]);
+  publisher.clear();
 });
 
 test("cancel drops a pending flush so a discrete emit can publish itself", async () => {
   const published: string[] = [];
-  const publisher = new StreamingUiPublisher((ref) => {
-    published.push(ref.sessionId);
+  const publisher = new StreamingUiPublisher((refs) => {
+    published.push(...refs.map((ref) => ref.sessionId));
   }, 20);
   publisher.schedule(sessionRef);
   publisher.cancel(sessionRef);
@@ -104,4 +117,16 @@ test("cancel drops a pending flush so a discrete emit can publish itself", async
   });
   expect(published).toEqual([]);
   expect(STREAMING_UI_PUBLISH_INTERVAL_MS).toBe(50);
+});
+
+test("a completed session does not cancel another session's pending update", async () => {
+  const batches: string[][] = [];
+  const publisher = new StreamingUiPublisher((refs) => {
+    batches.push(refs.map((ref) => ref.sessionId));
+  }, 20);
+  publisher.schedule(sessionRef);
+  publisher.schedule({ ...sessionRef, sessionId: "still-running" });
+  publisher.cancel(sessionRef);
+  await expect.poll(() => batches).toEqual([["still-running"]]);
+  publisher.clear();
 });
