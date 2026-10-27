@@ -1611,13 +1611,17 @@ export class SessionSupervisor {
   /**
    * Runs one caller operation on a session. While any is running the session is in use and
    * releaseSession keeps it, so a release never disposes a runtime under an operation that
-   * already holds its record.
+   * already holds its record. The operation gets the supervisor as its argument: PiSdkDriver
+   * can reach session operations only through here.
    */
-  async trackOperation<T>(sessionRef: SessionRef, operation: () => Promise<T>): Promise<T> {
+  async trackOperation<T>(
+    sessionRef: SessionRef,
+    operation: (supervisor: SessionSupervisor) => Promise<T>,
+  ): Promise<T> {
     const key = sessionKey(sessionRef);
     this.operationsInFlight.set(key, (this.operationsInFlight.get(key) ?? 0) + 1);
     try {
-      return await operation();
+      return await operation(this);
     } finally {
       const remaining = (this.operationsInFlight.get(key) ?? 1) - 1;
       if (remaining > 0) {
