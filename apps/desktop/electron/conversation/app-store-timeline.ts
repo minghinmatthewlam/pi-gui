@@ -25,6 +25,8 @@ import {
 
 export interface RunMetrics {
   readonly startedAt: string;
+  /** The run these counts belong to; a Stop settles a run without runCompleted. */
+  readonly runId?: string;
   toolCount: number;
   searchCount: number;
   fileCount: number;
@@ -35,7 +37,6 @@ interface TimelineRuntimeState {
   readonly runningSinceBySession: Map<string, string>;
   readonly activeAssistantMessageBySession: Map<string, string>;
   readonly pendingAssistantMessageBySession: Map<string, string>;
-  readonly activeWorkingActivityBySession: Map<string, string>;
   /** Labels of the tools the session's folder extensions registered. */
   readonly extensionToolLabels: (sessionRef: SessionRef) => ExtensionToolLabels;
 }
@@ -166,7 +167,8 @@ export function applyTimelineEvent(
   }
 
   const key = sessionKey(event.sessionRef);
-  const transcript = [...(transcriptCache.get(key) ?? [])];
+  const previous = transcriptCache.get(key);
+  const transcript = [...(previous ?? [])];
   const currentMetrics = state.runMetricsBySession.get(key);
 
   switch (event.type) {
@@ -193,21 +195,22 @@ export function applyTimelineEvent(
       );
       break;
     case "sessionUpdated":
+      // A Stop publishes only idle, so a new run id (not a missing start) begins a new run.
       if (
         event.snapshot.status === "running" &&
         event.snapshot.runningRunId &&
-        !state.runningSinceBySession.has(key)
+        (!state.runningSinceBySession.has(key) ||
+          (currentMetrics?.runId !== undefined &&
+            currentMetrics.runId !== event.snapshot.runningRunId))
       ) {
         state.runningSinceBySession.set(key, event.timestamp);
         state.runMetricsBySession.set(key, {
           startedAt: event.timestamp,
+          runId: event.snapshot.runningRunId,
           toolCount: 0,
           searchCount: 0,
           fileCount: 0,
         });
-        const activity = makeActivityItem("Working…");
-        state.activeWorkingActivityBySession.set(key, activity.id);
-        transcript.push(activity);
       }
       break;
     case "queuedMessageStarted":
@@ -270,7 +273,7 @@ export function applyTimelineEvent(
       break;
     case "runCompleted": {
       const metrics = currentMetrics;
-      clearRunState(transcript, key, event.sessionRef, state);
+      clearRunState(key, event.sessionRef, state);
       if (metrics) {
         const label = summaryLabel(metrics);
         if (label) {
@@ -295,7 +298,7 @@ export function applyTimelineEvent(
         : undefined;
       const failureLabel = clearerRunFailureLabel(event.error.message, latestToolError);
       const failureDetail = event.error.code;
-      clearRunState(transcript, key, event.sessionRef, state);
+      clearRunState(key, event.sessionRef, state);
       transcript.push(
         makeActivityItem(failureLabel, {
           tone: "error",
@@ -306,7 +309,7 @@ export function applyTimelineEvent(
       break;
     }
     case "sessionClosed":
-      clearRunState(transcript, key, event.sessionRef, state);
+      clearRunState(key, event.sessionRef, state);
       transcript.push(makeActivityItem("Stopped", { metadata: relativeDetail(event.timestamp) }));
       break;
     case "transcriptItemAppended": {
@@ -356,7 +359,14 @@ export function applyTimelineEvent(
       break;
   }
 
+  // Keep the same array when nothing changed: the window skips publishing an unchanged
+  // transcript by identity, and frequent events (title updates, running ticks) change nothing.
+  if (previous ? sameItems(previous, transcript) : transcript.length === 0) return;
   transcriptCache.set(key, transcript);
+}
+
+function sameItems(a: readonly TranscriptMessage[], b: readonly TranscriptMessage[]): boolean {
+  return a.length === b.length && a.every((item, index) => item === b[index]);
 }
 
 /** Replaces a pin's earlier write, as the projection does; a pin written after removal is new. */
@@ -408,29 +418,9 @@ function upsertToolRow(
   transcript.push(next);
 }
 
-function removeWorkingActivity(
-  transcript: TranscriptMessage[],
-  activityId: string | undefined,
-): void {
-  if (!activityId) {
-    return;
-  }
-  const index = transcript.findIndex((item) => item.kind === "activity" && item.id === activityId);
-  if (index >= 0) {
-    transcript.splice(index, 1);
-  }
-}
-
-function clearRunState(
-  transcript: TranscriptMessage[],
-  key: string,
-  sessionRef: SessionRef,
-  state: TimelineRuntimeState,
-): void {
+function clearRunState(key: string, sessionRef: SessionRef, state: TimelineRuntimeState): void {
   clearActiveAssistantMessage(state.activeAssistantMessageBySession, sessionRef);
   state.pendingAssistantMessageBySession.delete(key);
-  removeWorkingActivity(transcript, state.activeWorkingActivityBySession.get(key));
-  state.activeWorkingActivityBySession.delete(key);
   state.runningSinceBySession.delete(key);
   state.runMetricsBySession.delete(key);
 }

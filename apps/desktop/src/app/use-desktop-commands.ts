@@ -7,6 +7,7 @@ import {
   type RefObject,
   type SetStateAction,
 } from "react";
+import { flushSync } from "react-dom";
 import type {
   AppView,
   DesktopAppState,
@@ -140,6 +141,20 @@ export function useDesktopCommands(input: DesktopCommandsInput) {
   const toggleSidePanel = () => {
     if (sidePanelAvailable) workbench.toggleVisibility();
   };
+  /** Does what the side panel's Add tab button does, then focuses the first choice. */
+  const newSidePanelTab = () => {
+    // An open dialog keeps focus; the chooser would open behind it. The palette
+    // is the exception: any other command closes it first.
+    const dialogOpen = document.querySelector(
+      "[aria-modal='true']:not(.command-palette), .extension-dialog-backdrop",
+    );
+    if (!sidePanelAvailable || !workbench.ready || dialogOpen) return false;
+    // Render the chooser now so its first choice can take focus in this press.
+    // A frame callback would not run while the window is hidden.
+    flushSync(() => workbench.showChooser());
+    document.querySelector<HTMLElement>('[data-testid="workbench-chooser"] button')?.focus();
+    return true;
+  };
   const selectSidePanelTab = (index: number) => {
     const tool = sidePanelAvailable ? workbench.view.tools[index] : undefined;
     if (tool) workbench.activateTool(toolRefId(tool));
@@ -157,19 +172,27 @@ export function useDesktopCommands(input: DesktopCommandsInput) {
         ?.focus();
     });
   };
-  const togglePrimarySidebar = useCallback(() => {
+  const setPrimarySidebarCollapsed = useCallback((collapsed: boolean) => {
     const sidebarState = sidebarToggleStateRef.current;
     const sidebarApi = sidebarState.api;
     if (!sidebarApi || !canTogglePrimarySidebar(sidebarState.activeView)) {
       return false;
     }
-    void updateSnapshot(setSnapshot, () =>
-      sidebarApi.setSidebarCollapsed(!sidebarState.sidebarCollapsed),
-    ).catch((error: unknown) => {
-      console.error("[renderer] updateSnapshot failed", error);
-    });
+    void updateSnapshot(setSnapshot, () => sidebarApi.setSidebarCollapsed(collapsed)).catch(
+      (error: unknown) => {
+        console.error("[renderer] updateSnapshot failed", error);
+      },
+    );
     return true;
   }, []);
+  const togglePrimarySidebar = useCallback(
+    () => setPrimarySidebarCollapsed(!sidebarToggleStateRef.current.sidebarCollapsed),
+    [setPrimarySidebarCollapsed],
+  );
+  const collapsePrimarySidebar = useCallback(
+    () => setPrimarySidebarCollapsed(true),
+    [setPrimarySidebarCollapsed],
+  );
   const togglePalette = (mode: "commands" | "files", source: ChordSource) => {
     if (threadSidebarModel && paletteGates.current[mode](source, performance.now())) {
       setPaletteMode((current) => (current === mode ? null : mode));
@@ -208,6 +231,7 @@ export function useDesktopCommands(input: DesktopCommandsInput) {
       // that same-tick pair while preserving a deliberate second press.
       if (reviewToggleGate.current(performance.now())) toggleWorkbenchTool("changes");
     },
+    [desktopCommands.newSidePanelTab]: newSidePanelTab,
     [desktopCommands.closeFocusedSurface]: closeFocusedSurface,
     [desktopCommands.toggleSidebar]: togglePrimarySidebar,
     [desktopCommands.openCommandPalette]: (source) => togglePalette("commands", source),
@@ -289,6 +313,20 @@ export function useDesktopCommands(input: DesktopCommandsInput) {
       ) {
         event.preventDefault();
         handleCommandRef.current(command);
+      }
+      // The shell opens another terminal for New Tab; the terminal's own tabs and
+      // buttons have no use for it, so it opens the chooser from there.
+      if (
+        command === desktopCommands.newSidePanelTab &&
+        !event.repeat &&
+        !(event.target instanceof Element && event.target.closest(".xterm")) &&
+        platformShortcutModifier(api?.platform ?? "linux", {
+          meta: event.metaKey,
+          control: event.ctrlKey,
+        }) &&
+        handleCommandRef.current(command)
+      ) {
+        event.preventDefault();
       }
       return;
     }
@@ -443,5 +481,12 @@ export function useDesktopCommands(input: DesktopCommandsInput) {
         })
       : [];
 
-  return { paletteMode, setPaletteMode, paletteActions, toggleSidePanel, togglePrimarySidebar };
+  return {
+    paletteMode,
+    setPaletteMode,
+    paletteActions,
+    toggleSidePanel,
+    togglePrimarySidebar,
+    collapsePrimarySidebar,
+  };
 }

@@ -958,7 +958,8 @@
 
 /* Narrow window: the sidebar becomes an overlay drawer over the main surface
    so content keeps the full width instead of being squeezed or stacked.
-   The always-visible titlebar toggle (z-index 80) stays reachable to dismiss it. */
+   A backdrop covers main while it is open; the backdrop, Escape, choosing a thread and the
+   always-visible titlebar toggle (z-index 80) all dismiss it. */
 @media (max-width: 760px) {
   .shell:not(.shell--sidebar-collapsed) {
     grid-template-columns: minmax(0, 1fr);
@@ -972,6 +973,15 @@
     width: min(var(--sidebar-width), 84vw);
     z-index: 40;
     box-shadow: var(--shadow-xl);
+  }
+
+  /* Above main's persistent layers and below the drawer (40); dialog backdrops sit above both. */
+  .sidebar-drawer-backdrop {
+    -webkit-app-region: no-drag;
+    position: absolute;
+    inset: 0;
+    z-index: 35;
+    background: var(--scrim);
   }
 }
 

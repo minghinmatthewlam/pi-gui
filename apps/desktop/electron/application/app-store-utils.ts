@@ -20,8 +20,97 @@ import type {
   WorkspaceRecord,
   WorkspaceSessionTarget,
 } from "../../contracts/desktop-state";
+import {
+  TOOL_IMAGE_SCHEME,
+  isShownToolImageData,
+  isToolImageBlock,
+} from "../../contracts/tool-output-images";
 
 export const LEGACY_TRANSCRIPT_HISTORY_LIMIT = 180;
+
+function toolOutputContent(message: TranscriptMessage): readonly unknown[] | undefined {
+  if (message.kind !== "tool" || typeof message.output !== "object" || message.output === null) {
+    return undefined;
+  }
+  const { content } = message.output as Record<string, unknown>;
+  return Array.isArray(content) ? content : undefined;
+}
+
+// Keyed by the stored objects, which are replaced rather than edited, so an unchanged transcript
+// maps to the same array and the window's unchanged-transcript check still holds.
+const transcriptsForWindow = new WeakMap<
+  readonly TranscriptMessage[],
+  readonly TranscriptMessage[]
+>();
+const messagesForWindow = new WeakMap<TranscriptMessage, TranscriptMessage>();
+
+/**
+ * The transcript as sent to a window: each tool-output image it can show becomes a URL main serves,
+ * loaded when shown. Every image block loses its data and any `src` the tool set.
+ */
+export function transcriptForWindow(
+  sessionRef: SessionRef,
+  transcript: readonly TranscriptMessage[],
+): readonly TranscriptMessage[] {
+  let result = transcriptsForWindow.get(transcript);
+  if (!result) {
+    result = transcript.map((message) => messageForWindow(sessionRef, message));
+    transcriptsForWindow.set(transcript, result);
+  }
+  return result;
+}
+
+function messageForWindow(sessionRef: SessionRef, message: TranscriptMessage): TranscriptMessage {
+  const content = toolOutputContent(message);
+  if (!content?.some(isToolImageBlock)) return message;
+  let result = messagesForWindow.get(message);
+  if (!result) {
+    const url = (index: number) =>
+      `${TOOL_IMAGE_SCHEME}://image/${[sessionRef.workspaceId, sessionRef.sessionId, message.id, String(index)].map(encodeURIComponent).join("/")}`;
+    result = {
+      ...message,
+      output: {
+        ...(message as { output: object }).output,
+        content: content.map((block, index) =>
+          isShownToolImageData(block)
+            ? { type: "image", mimeType: block.mimeType, src: url(index) }
+            : isToolImageBlock(block)
+              ? {
+                  type: "image",
+                  ...(typeof block.mimeType === "string" ? { mimeType: block.mimeType } : {}),
+                }
+              : block,
+        ),
+      },
+    } as TranscriptMessage;
+    messagesForWindow.set(message, result);
+  }
+  return result;
+}
+
+/** Serves one tool-output image by the URL `transcriptForWindow` gave it. */
+export function transcriptImageResponse(
+  requestUrl: string,
+  transcriptForKey: (key: string) => readonly TranscriptMessage[] | undefined,
+): Response {
+  const [workspaceId, sessionId, messageId, index] = new URL(requestUrl).pathname
+    .split("/")
+    .slice(1)
+    .map(decodeURIComponent);
+  const message =
+    workspaceId && sessionId
+      ? transcriptForKey(sessionKey({ workspaceId, sessionId }))?.find(
+          (item) => item.kind === "tool" && item.id === messageId,
+        )
+      : undefined;
+  const block = message ? toolOutputContent(message)?.[Number(index)] : undefined;
+  if (!isShownToolImageData(block)) {
+    return new Response("Not found", { status: 404 });
+  }
+  return new Response(new Uint8Array(Buffer.from(block.data, "base64")), {
+    headers: { "content-type": block.mimeType },
+  });
+}
 
 export function mapToRecord<V>(map: Map<string, V>): Record<string, V> {
   return Object.fromEntries(map.entries());

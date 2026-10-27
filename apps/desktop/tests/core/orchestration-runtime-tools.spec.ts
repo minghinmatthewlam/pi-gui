@@ -1,5 +1,3 @@
-import { createServer } from "node:http";
-import type { AddressInfo } from "node:net";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
@@ -13,46 +11,7 @@ import {
   runOrchestrationRuntimeTool,
   seedAgentDir,
 } from "../helpers/electron-app";
-
-async function startHangingOpenAiServer(): Promise<{
-  readonly baseUrl: string;
-  readonly pendingRequestCount: () => number;
-  readonly close: () => Promise<void>;
-}> {
-  const pending = new Set<import("node:http").ServerResponse>();
-  const sockets = new Set<import("node:net").Socket>();
-  const server = createServer((request, response) => {
-    pending.add(response);
-    response.on("close", () => pending.delete(response));
-    request.resume();
-    // Intentionally leave the response pending: create_child_thread must return
-    // after the running acknowledgement rather than await this model turn.
-  });
-  server.on("connection", (socket) => {
-    sockets.add(socket);
-    socket.on("close", () => sockets.delete(socket));
-  });
-  await new Promise<void>((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", () => {
-      server.off("error", reject);
-      resolve();
-    });
-  });
-  const address = server.address() as AddressInfo;
-  return {
-    baseUrl: `http://127.0.0.1:${address.port}/v1`,
-    pendingRequestCount: () => pending.size,
-    close: async () => {
-      for (const socket of sockets) {
-        socket.destroy();
-      }
-      await new Promise<void>((resolve, reject) =>
-        server.close((error) => (error ? reject(error) : resolve())),
-      );
-    },
-  };
-}
+import { startHangingOpenAiServer } from "../helpers/hanging-openai-server";
 
 async function selectedSessionRef(
   window: Parameters<typeof getDesktopState>[0],
@@ -70,6 +29,8 @@ test("create_child_thread returns after a slow worker starts, before its turn co
   if (proofDir) {
     await mkdir(proofDir, { recursive: true });
   }
+  // create_child_thread must return after the running acknowledgement rather than
+  // await a model turn this server never answers.
   const server = await startHangingOpenAiServer();
   const userDataDir = await makeUserDataDir();
   const agentDir = join(userDataDir, "agent");
@@ -119,6 +80,14 @@ test("create_child_thread returns after a slow worker starts, before its turn co
     const window = await harness.firstWindow();
     await createNamedThread(window, "Parent orchestration thread");
     const parentRef = await selectedSessionRef(window);
+    // Record what state pushes carry, to check they leave the children out.
+    await window.evaluate(() => {
+      const record = globalThis as typeof globalThis & { pushedChildCounts?: number[] };
+      record.pushedChildCounts = [];
+      globalThis.window.piApp?.onStateChanged((state) => {
+        record.pushedChildCounts?.push(state.orchestrationChildren.length);
+      });
+    });
     const prompt = "Keep this delegated worker running slowly.";
     // The server never answers, so the child's first turn cannot complete. A tool
     // that awaited the turn would never return, and the test timeout names this step.
@@ -141,6 +110,12 @@ test("create_child_thread returns after a slow worker starts, before its turn co
       `.session-row[data-session-id="${child?.childSessionId}"] .session-row__status--running`,
     );
     await expect(childRunningIndicator).toBeVisible();
+    // getState() returns the child, but state pushes to the window never carry it.
+    const pushedChildCounts = await window.evaluate(
+      () => (globalThis as typeof globalThis & { pushedChildCounts?: number[] }).pushedChildCounts,
+    );
+    expect(pushedChildCounts?.length).toBeGreaterThan(0);
+    expect(pushedChildCounts?.every((count) => count === 0)).toBe(true);
     if (proofDir) {
       await window.screenshot({
         path: join(proofDir, "orchestration-child-running.png"),

@@ -105,7 +105,7 @@ const notificationHelperPath =
     : undefined;
 const pnpmBinary = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 const piCodingAgentPackageName = "@earendil-works/pi-coding-agent";
-const requiredPiCodingAgentVersion = "1.0.0";
+const requiredPiCodingAgentVersion = "1.4.0";
 const modelChecks = [
   ...["openai", "openai-codex", "github-copilot"].flatMap((provider) =>
     ["sol", "luna"].map((variant) => ({
@@ -139,6 +139,14 @@ const modelChecks = [
     reason: "issue #12 Opus 4.7 visibility",
     requireReasoning: true,
     requireImageInput: true,
+  },
+  {
+    provider: "meta",
+    id: "muse-wonder-1.0",
+    reason: "issue #288 Muse Wonder visibility",
+    requireReasoning: true,
+    requireImageInput: true,
+    requireMaxThinking: true,
   },
   {
     provider: "zai",

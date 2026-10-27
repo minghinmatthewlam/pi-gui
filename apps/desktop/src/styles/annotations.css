@@ -44,21 +44,40 @@
   box-shadow: var(--focus-ring);
 }
 
+/* Above main's other layers and below the narrow-window sidebar drawer backdrop (35), so an
+   open drawer covers a selection's buttons and the annotation editor. */
 .annotation-popover {
   position: fixed;
-  z-index: 40;
+  z-index: 34;
+}
+
+.annotation-add {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--elevation-popover);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.annotation-add__divider {
+  align-self: stretch;
+  width: 1px;
+  margin: 6px 0;
+  background: var(--line);
 }
 
 .annotation-add__button {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  height: 32px;
+  height: 100%;
   padding: 0 6px 0 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  background: var(--surface);
-  box-shadow: var(--elevation-popover);
+  border: 0;
+  background: transparent;
   color: var(--ink);
   font-size: 13px;
   font-weight: var(--font-medium);

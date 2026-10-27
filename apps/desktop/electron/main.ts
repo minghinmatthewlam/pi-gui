@@ -25,6 +25,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { augmentPosixPath } from "../scripts/augment-path.cjs";
 import { DesktopAppStore } from "./application/app-store";
+import { TOOL_IMAGE_SCHEME } from "../contracts/tool-output-images";
 import { WindowOwner } from "./windows/window-owner";
 import { PendingComposerDraftFlusher } from "./windows/pending-draft-flush";
 import { TurnCheckpointStore } from "./workbench/checkpoint-store";
@@ -54,6 +55,7 @@ import { NotificationManager } from "./platform/notification-manager";
 import { NotificationPermissionService } from "./platform/notification-permission";
 import { checkForUpdate, initUpdateChecker, openReleasesPage } from "./platform/update-checker";
 import { ThemeManager } from "./platform/theme-manager";
+import { EditorService } from "./platform/editors/editor-service";
 import { windowBackgroundFor } from "../contracts/theme";
 import { TerminalService } from "./platform/terminal-service";
 import type { DesktopAppState, DesktopAppViewState } from "../contracts/desktop-state";
@@ -89,6 +91,7 @@ protocol.registerSchemesAsPrivileged([
     scheme: DESKTOP_EXTENSION_SCHEME,
     privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true },
   },
+  { scheme: TOOL_IMAGE_SCHEME, privileges: { standard: true, secure: true } },
 ]);
 
 const isDev = Boolean(process.env.ELECTRON_RENDERER_URL);
@@ -100,6 +103,7 @@ let store: DesktopAppStore;
 let extensionViewOwner: DesktopExtensionViewOwner | undefined;
 let windowOwner: WindowOwner;
 const themeManager = new ThemeManager();
+const editorService = new EditorService();
 let mainWindow: BrowserWindow | null = null;
 let notificationManager: NotificationManager | undefined;
 let notificationPermissionService: NotificationPermissionService | undefined;
@@ -590,8 +594,13 @@ function createWindow(): BrowserWindow {
       (terminalFocused || sidePanelFocusedWebContentsIds.has(webContentsId));
     if (terminalFocused) {
       // Control chords belong to the shell, so only macOS Command chords open
-      // a palette or act on the thread from the terminal.
-      if (process.platform === "darwin" && isSinglePressCommand(command)) {
+      // a palette or act on the thread from the terminal. New Tab stays with the
+      // terminal, which opens another shell.
+      if (
+        process.platform === "darwin" &&
+        isSinglePressCommand(command) &&
+        command !== desktopCommands.newSidePanelTab
+      ) {
         event.preventDefault();
         if (!input.isAutoRepeat) window.webContents.send(desktopIpc.appCommand, command);
       } else if (command === desktopCommands.toggleSidePanel) {
@@ -1043,6 +1052,7 @@ app
       generateThreadTitleOverride: async (workspace, options) =>
         generateThreadTitleOverride?.(workspace, options),
     });
+    protocol.handle(TOOL_IMAGE_SCHEME, (request) => store.transcriptImageResponse(request.url));
     windowOwner = new WindowOwner(store, {
       onActiveWindowChanged: (window) => {
         mainWindow = window;
@@ -1168,6 +1178,7 @@ app
             ? `pi desktop ready:${MAIN_DEV_RELOAD_MARKER}`
             : "pi desktop ready",
         theme: themeManager,
+        editors: editorService,
         openExternal: openExternalLink,
         pickWorkspace: (window) => pickWorkspaceViaDialog(window),
         createLoginCallbacks: (window) => createRuntimeLoginCallbacks(window),
