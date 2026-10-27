@@ -25,17 +25,38 @@ function verifyPathContract() {
   assert.equal(win.changed, false, "win32 PATH must not change");
   assert.equal(win.path, "C:\\Windows;C:\\Windows\\System32", "win32 PATH must be verbatim");
 
-  // POSIX with HOME set prepends the missing bin dirs using the POSIX delimiter.
+  // POSIX with HOME set prepends the missing bin dirs using the POSIX delimiter,
+  // including ~/.local/bin when it exists.
   const posix = augmentPosixPath({
     platform: "darwin",
     env: { PATH: "/usr/bin", HOME: "/Users/pi" },
     delimiter: POSIX_DELIMITER,
+    exists: (dir) => dir === "/Users/pi/.local/bin",
   });
   assert.equal(posix.changed, true, "posix PATH should be augmented");
   assert.deepEqual(
     posix.path.split(POSIX_DELIMITER),
-    ["/opt/homebrew/bin", "/usr/local/bin", "/Users/pi/.npm-global/bin", "/usr/bin"],
+    [
+      "/opt/homebrew/bin",
+      "/usr/local/bin",
+      "/Users/pi/.npm-global/bin",
+      "/Users/pi/.local/bin",
+      "/usr/bin",
+    ],
     "posix PATH must prepend missing bin dirs in order",
+  );
+
+  // ~/.local/bin is skipped when the directory does not exist.
+  const noLocalBin = augmentPosixPath({
+    platform: "darwin",
+    env: { PATH: "/usr/bin", HOME: "/Users/pi" },
+    delimiter: POSIX_DELIMITER,
+    exists: () => false,
+  });
+  assert.deepEqual(
+    noLocalBin.path.split(POSIX_DELIMITER),
+    ["/opt/homebrew/bin", "/usr/local/bin", "/Users/pi/.npm-global/bin", "/usr/bin"],
+    "missing ~/.local/bin must not be added",
   );
 
   // POSIX without HOME must not inject a literal `undefined/.npm-global/bin`.
@@ -43,8 +64,9 @@ function verifyPathContract() {
     platform: "linux",
     env: { PATH: "/usr/bin", HOME: undefined },
     delimiter: POSIX_DELIMITER,
+    exists: () => true,
   });
-  assert.ok(!noHome.path.includes("undefined"), "must not inject `undefined/.npm-global/bin`");
+  assert.ok(!noHome.path.includes("undefined"), "must not inject `undefined/...` home dirs");
   assert.deepEqual(noHome.path.split(POSIX_DELIMITER), [
     "/opt/homebrew/bin",
     "/usr/local/bin",
@@ -55,10 +77,11 @@ function verifyPathContract() {
   const already = augmentPosixPath({
     platform: "darwin",
     env: {
-      PATH: "/opt/homebrew/bin:/usr/local/bin:/Users/pi/.npm-global/bin:/usr/bin",
+      PATH: "/usr/bin:/Users/pi/.local/bin:/opt/homebrew/bin:/usr/local/bin:/Users/pi/.npm-global/bin",
       HOME: "/Users/pi",
     },
     delimiter: POSIX_DELIMITER,
+    exists: () => true,
   });
   assert.equal(already.changed, false, "already-present entries must not be re-added");
 

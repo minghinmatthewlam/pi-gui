@@ -10,10 +10,14 @@ import {
   type DesktopHydrationModel,
 } from "../../src/app/desktop-app-state";
 import {
+  applySelectedTranscriptPatch,
   createEmptyDesktopAppState,
+  selectedTranscriptPatch,
   type DesktopAppState,
+  type SelectedTranscriptPatch,
   type SelectedTranscriptRecord,
 } from "../../contracts/desktop-state";
+import type { TranscriptMessage } from "../../contracts/timeline-types";
 
 const SENTINEL = "secret-token=/private/path";
 
@@ -324,4 +328,101 @@ test("a session switch keeps a transcript that already matches the new selection
     snapshot: next,
     transcript: { kind: "ready", record },
   });
+});
+
+test("a transcript patch carries only the changed rows and rebuilds the same transcript", () => {
+  const row = (id: string, text = id): TranscriptMessage => ({
+    kind: "message",
+    id,
+    role: "assistant",
+    text,
+    createdAt: "2026-10-13T12:00:00.000Z",
+  });
+  const record = (transcript: TranscriptMessage[]): SelectedTranscriptRecord => ({
+    workspaceId: "ws",
+    sessionId: "live",
+    transcript,
+  });
+  const rows = Array.from({ length: 1000 }, (_, index) => row(`r${index}`));
+  const replaced = [...rows];
+  replaced[500] = row("r500", "finished");
+  const steps = [
+    record(rows),
+    record(replaced),
+    record([...replaced, row("new")]),
+    record([row("x"), ...replaced.slice(2, 10)]),
+    record([]),
+    record(rows),
+  ];
+
+  const one = selectedTranscriptPatch(steps[0]!, steps[1]!);
+  expect(one).toMatchObject({ start: 500, deleteCount: 1 });
+  expect(one?.rows).toEqual([row("r500", "finished")]);
+
+  let held: SelectedTranscriptRecord | null = steps[0]!;
+  for (const next of steps.slice(1)) {
+    // IPC structured-clones the patch, so the renderer never shares main's row objects.
+    const patch: SelectedTranscriptPatch = structuredClone(selectedTranscriptPatch(held!, next)!);
+    held = applySelectedTranscriptPatch(held, patch) ?? null;
+    expect(held).toEqual(next);
+  }
+
+  // A different thread, or a patch that does not fit, needs the whole transcript.
+  expect(selectedTranscriptPatch(record(rows), { ...record(rows), sessionId: "other" })).toBe(
+    undefined,
+  );
+  const tooFar = {
+    workspaceId: "ws",
+    sessionId: "live",
+    baseLength: 1,
+    start: 5,
+    deleteCount: 1,
+    rows: [],
+  };
+  expect(applySelectedTranscriptPatch(record([row("a")]), tooFar)).toBe(undefined);
+  expect(applySelectedTranscriptPatch(null, tooFar)).toBe(undefined);
+  // A patch made against a transcript of another length does not fit, even when its range does.
+  const otherBase = selectedTranscriptPatch(record([row("a"), row("b")]), record([row("a")]))!;
+  expect(applySelectedTranscriptPatch(record([row("a"), row("b")]), otherBase)).toEqual(
+    record([row("a")]),
+  );
+  expect(applySelectedTranscriptPatch(record([row("a"), row("b"), row("c")]), otherBase)).toBe(
+    undefined,
+  );
+});
+
+test("an extension UI update patches only that session's UI and ignores stale ones", () => {
+  const ui = (title: string) => ({
+    instanceId: "instance",
+    statuses: [],
+    widgets: [],
+    pendingDialogs: [],
+    notices: [],
+    title,
+  });
+  const base = snapshot(5, { sessionExtensionUiBySession: { "w:other": ui("other") } });
+  const ready = reduceAll([{ type: "state-pushed", state: base }]);
+
+  const patched = reduceDesktopHydration(ready, {
+    type: "extension-ui-pushed",
+    update: { sessionKey: "w:s", ui: ui("Spinner 1"), revision: 6 },
+  });
+  expect(patched.liveSnapshot?.revision).toBe(6);
+  expect(patched.liveSnapshot?.sessionExtensionUiBySession["w:s"]?.title).toBe("Spinner 1");
+  expect(patched.liveSnapshot?.sessionExtensionUiBySession["w:other"]).toBe(
+    base.sessionExtensionUiBySession["w:other"],
+  );
+  expect(patched.liveSnapshot?.workspaces).toBe(base.workspaces);
+
+  const stale = reduceDesktopHydration(patched, {
+    type: "extension-ui-pushed",
+    update: { sessionKey: "w:s", ui: ui("Spinner 0"), revision: 5 },
+  });
+  expect(stale).toBe(patched);
+
+  const beforeState = reduceDesktopHydration(initialDesktopHydrationModel(), {
+    type: "extension-ui-pushed",
+    update: { sessionKey: "w:s", ui: ui("Spinner 1"), revision: 6 },
+  });
+  expect(beforeState.liveSnapshot).toBeNull();
 });

@@ -101,7 +101,7 @@
 .scheduled-editor-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 36;
+  z-index: 44;
   display: flex;
   justify-content: flex-end;
   background: var(--scrim);

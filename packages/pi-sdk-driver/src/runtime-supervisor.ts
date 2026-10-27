@@ -34,6 +34,7 @@ import {
   createSettingsManagerWithoutNpmPackages,
   isGlobalNpmLookupError,
 } from "./npm-package-fallback.js";
+import { resolveModelScopes } from "./model-scope.js";
 import { skillSlashCommand } from "./runtime-command-utils.js";
 import {
   findBuiltinExtension,
@@ -408,6 +409,16 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
     await context.settingsManager.flush();
     await context.settingsManager.reload();
     return this.buildSnapshot(context);
+  }
+
+  async scopeModels(
+    workspace: WorkspaceRef,
+    models: readonly RuntimeModelRecord[],
+    patterns: readonly string[],
+  ): Promise<readonly RuntimeModelRecord[]> {
+    const context = await this.ensureContext(workspace);
+    const scopeOf = await resolveModelScopes(patterns, context.modelRuntime);
+    return models.map((model) => ({ ...model, scope: scopeOf(model) }));
   }
 
   async getGlobalModelSettings(workspace: WorkspaceRef): Promise<ModelSettingsSnapshot> {
@@ -807,6 +818,10 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
     const providers = new Map(
       (await this.buildProviderRecords(context)).map((provider) => [provider.id, provider]),
     );
+    const scopeOf = await resolveModelScopes(
+      context.settingsManager.getEnabledModels() ?? [],
+      runtime,
+    );
 
     return runtime
       .getModels()
@@ -821,6 +836,7 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
           authType: provider?.authType ?? "none",
           reasoning: Boolean(model.reasoning),
           supportsImages: model.input.includes("image"),
+          scope: scopeOf({ providerId: model.provider, modelId: model.id }),
         };
       })
       .sort((left, right) =>
@@ -841,10 +857,7 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
 
     const providers = await this.buildProviderRecords(context);
     const models = await this.buildModelRecords(context);
-    const hasSelectableModels = models.some(
-      (model) =>
-        model.available && currentPatterns.includes(`${model.providerId}/${model.modelId}`),
-    );
+    const hasSelectableModels = models.some((model) => model.available && model.scope !== "off");
     const candidateProviderIds =
       providerIds && providerIds.length > 0
         ? providerIds
@@ -1245,7 +1258,7 @@ async function readPackageMetadata(packageRoot: string): Promise<PackageMetadata
 }
 
 const DESKTOP_API_KEY_PROVIDER_IDS = new Set([
-  "azure-openai-responses",
+  "azure",
   "cerebras",
   "google",
   "groq",

@@ -108,6 +108,9 @@
 
 .chat-header__status {
   flex: 0 0 auto;
+  /* The running timer ticks every second; proportional figures resize the label
+     each tick and shift the chrome beside it. */
+  font-variant-numeric: tabular-nums;
   color: var(--muted-soft);
   font-size: 13px;
   font-weight: 520;
@@ -2887,10 +2890,11 @@
   }
 }
 
+/* Dialog backdrops stay above the narrow-window sidebar drawer (z-index 40). */
 .extension-dialog-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 30;
+  z-index: 42;
   display: grid;
   place-items: center;
   padding: 24px;
@@ -3000,7 +3004,7 @@
 .tree-modal-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 34;
+  z-index: 43;
   display: grid;
   place-items: center;
   padding: 24px;

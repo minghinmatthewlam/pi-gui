@@ -6,7 +6,12 @@ import {
   type Dispatch,
   type SetStateAction,
 } from "react";
-import type { DesktopAppState, SelectedTranscriptRecord } from "../../contracts/desktop-state";
+import {
+  applySelectedTranscriptPatch,
+  type DesktopAppState,
+  type SelectedTranscriptRecord,
+  type SessionExtensionUiUpdate,
+} from "../../contracts/desktop-state";
 import type { PiDesktopApi } from "../../contracts/ipc";
 
 export type HydrationOperation = "state" | "selected-transcript";
@@ -72,6 +77,7 @@ export type DesktopHydrationEvent =
   | { readonly type: "state-pull-failed"; readonly attemptId: number }
   | { readonly type: "state-pushed"; readonly state: DesktopAppState }
   | { readonly type: "state-patched"; readonly snapshot: DesktopAppState | null }
+  | { readonly type: "extension-ui-pushed"; readonly update: SessionExtensionUiUpdate }
   | { readonly type: "transcript-pull-started"; readonly attemptId: number }
   | {
       readonly type: "transcript-pull-succeeded";
@@ -228,6 +234,24 @@ export function reduceDesktopHydration(
       };
     case "state-patched":
       return withLiveSnapshot(current, event.snapshot);
+    case "extension-ui-pushed": {
+      // Before the first state arrives there is nothing to patch; that state includes this UI.
+      const live = current.liveSnapshot;
+      if (!live || event.update.revision < live.revision) {
+        return current;
+      }
+      return {
+        ...current,
+        liveSnapshot: {
+          ...live,
+          revision: event.update.revision,
+          sessionExtensionUiBySession: {
+            ...live.sessionExtensionUiBySession,
+            [event.update.sessionKey]: event.update.ui,
+          },
+        },
+      };
+    }
     case "transcript-pull-started":
       return {
         ...current,
@@ -412,9 +436,31 @@ export function useDesktopAppState(): DesktopAppSession {
         apply({ type: "state-pushed", state });
       }
     });
-    const unsubscribeTranscript = api.onSelectedTranscriptChanged((record) => {
+    let resendRequested = false;
+    const unsubscribeTranscript = api.onSelectedTranscriptChanged((payload) => {
+      if (!active) {
+        return;
+      }
+      if (payload && "rows" in payload) {
+        // A patch only fits the record main last pushed, not one this window pulled itself.
+        const current = modelRef.current;
+        const record = current.receivedPushedTranscript
+          ? applySelectedTranscriptPatch(current.transcriptRecord, payload)
+          : undefined;
+        if (record) {
+          apply({ type: "transcript-pushed", record });
+        } else if (!resendRequested) {
+          resendRequested = true;
+          api.resendSelectedTranscript();
+        }
+        return;
+      }
+      resendRequested = false;
+      apply({ type: "transcript-pushed", record: payload });
+    });
+    const unsubscribeExtensionUi = api.onExtensionUiChanged((update) => {
       if (active) {
-        apply({ type: "transcript-pushed", record });
+        apply({ type: "extension-ui-pushed", update });
       }
     });
 
@@ -425,6 +471,7 @@ export function useDesktopAppState(): DesktopAppSession {
       active = false;
       unsubscribeState();
       unsubscribeTranscript();
+      unsubscribeExtensionUi();
     };
   }, [apply, pullState, pullTranscript]);
 

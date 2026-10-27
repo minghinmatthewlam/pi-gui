@@ -57,7 +57,6 @@ test("only error notices add a transcript row", () => {
   const state: Parameters<typeof applyTimelineEvent>[2] = {
     activeAssistantMessageBySession: new Map(),
     pendingAssistantMessageBySession: new Map(),
-    activeWorkingActivityBySession: new Map(),
     extensionToolLabels: () => new Map(),
     runningSinceBySession: new Map(),
     runMetricsBySession: new Map(),

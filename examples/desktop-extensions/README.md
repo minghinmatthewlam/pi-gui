@@ -104,8 +104,8 @@ pnpm add \
   "$extension_tarballs/pi-gui-example-pr-review-0.0.0.tgz" \
   "$extension_tarballs/pi-gui-example-test-runs-0.0.0.tgz" \
   @earendil-works/chord@1.0.0 \
-  @earendil-works/pi-ai@1.0.0 \
-  @earendil-works/pi-coding-agent@1.0.0
+  @earendil-works/pi-ai@1.4.0 \
+  @earendil-works/pi-coding-agent@1.4.0
 ```
 
 Then add the installed **package directories** to the existing Pi `extensions`

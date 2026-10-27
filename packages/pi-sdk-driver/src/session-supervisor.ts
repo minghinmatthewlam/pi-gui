@@ -210,7 +210,10 @@ interface ManagedSessionRecord {
   cancellationRequested: boolean;
   /** A prompt is in Pi's pre-run steps (input handlers, auth, before_agent_start). */
   promptStarting: boolean;
-  /** Stop arrived during those steps, where Pi's abort is a no-op; abort at agent_start. */
+  /**
+   * Stop arrived before Pi started its run (input handlers, auth), where Pi's abort is a
+   * no-op; abort at agent_start. From before_agent_start on, Pi handles the abort itself.
+   */
   abortOnRunStart: boolean;
   pendingRunOutcome: RunOutcome | undefined;
   queuedMessages: SessionQueuedMessage[];
