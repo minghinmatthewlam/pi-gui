@@ -302,6 +302,28 @@ await test("setProviderApiKey persists into a later snapshot as a connected API 
   }
 });
 
+await test("Azure, renamed to azure in Pi 1.4, still offers and saves API-key setup", async () => {
+  const previousAzureKey = process.env.AZURE_OPENAI_API_KEY;
+  delete process.env.AZURE_OPENAI_API_KEY;
+  try {
+    const { agentDir, workspacePath } = await createAgentDir();
+    const supervisor = new RuntimeSupervisor({ agentDir });
+    const workspace = { workspaceId: "workspace-1", path: workspacePath };
+
+    const before = await supervisor.getRuntimeSnapshot(workspace);
+    const azure = before.providers.find((provider) => provider.id === "azure");
+    assert.equal(azure?.apiKeySetupSupported, true, "Azure should offer API-key setup");
+    const after = await supervisor.setProviderApiKey(workspace, "azure", "test-azure-key");
+    assert.equal(after.providers.find((provider) => provider.id === "azure")?.hasAuth, true);
+  } finally {
+    if (previousAzureKey === undefined) {
+      delete process.env.AZURE_OPENAI_API_KEY;
+    } else {
+      process.env.AZURE_OPENAI_API_KEY = previousAzureKey;
+    }
+  }
+});
+
 await test("extension providers survive a runtime refresh", async () => {
   const { agentDir, workspacePath } = await createAgentDir();
   const supervisor = createSupervisor(agentDir);

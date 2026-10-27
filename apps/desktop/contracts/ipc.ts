@@ -14,6 +14,7 @@ import type {
   SessionTreeSnapshot,
 } from "@pi-gui/session-driver/types";
 import type { ClipboardImageRead } from "./composer-attachments";
+import type { DesktopEditorList } from "./editors";
 import type { SessionRef } from "@pi-gui/session-driver/types";
 import type { SaveTaskWorkbenchTemplateInput, TaskWorkbenchTemplate } from "./workbench";
 import type {
@@ -41,6 +42,7 @@ import type {
   SendChildThreadFollowUpInput,
   SetChildSupervisionLoopInput,
   SelectedTranscriptRecord,
+  SessionExtensionUiUpdate,
   StartThreadInput,
   ThemePresetId,
   ThreadGrouping,
@@ -119,6 +121,7 @@ export const desktopIpc = {
   saveTaskWorkbenchTemplate: "pi-gui:save-task-workbench-template",
   selectedTranscriptRequest: "pi-gui:selected-transcript-request",
   selectedTranscriptChanged: "pi-gui:selected-transcript-changed",
+  extensionUiChanged: "pi-gui:extension-ui-changed",
   appCommand: "pi-gui:app-command",
   workspacePicked: "pi-gui:workspace-picked",
   clipboardImagePasted: "pi-gui:clipboard-image-pasted",
@@ -130,6 +133,9 @@ export const desktopIpc = {
   reorderWorkspaces: "pi-gui:reorder-workspaces",
   reorderPinnedSessions: "pi-gui:reorder-pinned-sessions",
   openWorkspaceInFinder: "pi-gui:open-workspace-in-finder",
+  listEditors: "pi-gui:list-editors",
+  setPreferredEditor: "pi-gui:set-preferred-editor",
+  openWorkspaceInEditor: "pi-gui:open-workspace-in-editor",
   createWorktree: "pi-gui:create-worktree",
   removeWorktree: "pi-gui:remove-worktree",
   openSkillInFinder: "pi-gui:open-skill-in-finder",
@@ -374,6 +380,7 @@ export type PiDesktopStateListener = (state: DesktopAppState) => void;
 export type PiDesktopSelectedTranscriptListener = (
   payload: SelectedTranscriptRecord | null,
 ) => void;
+export type PiDesktopExtensionUiListener = (update: SessionExtensionUiUpdate) => void;
 export type PiDesktopCommand = (typeof desktopCommands)[keyof typeof desktopCommands];
 
 export type ChangedFileStatus =
@@ -700,6 +707,7 @@ export interface PiDesktopApi {
   onStateChanged(listener: PiDesktopStateListener): () => void;
   getSelectedTranscript(): Promise<SelectedTranscriptRecord | null>;
   onSelectedTranscriptChanged(listener: PiDesktopSelectedTranscriptListener): () => void;
+  onExtensionUiChanged(listener: PiDesktopExtensionUiListener): () => void;
   onCommand(listener: (command: PiDesktopCommand) => void): () => void;
   onWorkspacePicked(listener: (workspaceId: string) => void): () => void;
   onClipboardImagePasted(listener: (result: ClipboardImageRead) => void): () => void;
@@ -712,6 +720,9 @@ export interface PiDesktopApi {
   reorderWorkspaces(workspaceOrder: readonly string[]): Promise<DesktopAppState>;
   reorderPinnedSessions(pinnedSessionOrder: readonly string[]): Promise<DesktopAppState>;
   openWorkspaceInFinder(workspaceId: string): Promise<void>;
+  listEditors(): Promise<DesktopEditorList>;
+  setPreferredEditor(editorId: string): Promise<DesktopEditorList>;
+  openWorkspaceInEditor(workspaceId: string, editorId: string): Promise<DesktopEditorList>;
   createWorktree(input: CreateWorktreeInput): Promise<DesktopAppState>;
   removeWorktree(input: RemoveWorktreeInput): Promise<DesktopAppState>;
   openSkillInFinder(workspaceId: string, filePath: string): Promise<void>;
