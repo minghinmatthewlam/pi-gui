@@ -18,7 +18,6 @@ function fixture() {
   const state: Parameters<typeof applyTimelineEvent>[2] = {
     activeAssistantMessageBySession: new Map(),
     pendingAssistantMessageBySession: new Map(),
-    activeWorkingActivityBySession: new Map(),
     extensionToolLabels: () => new Map(),
     runningSinceBySession: new Map(),
     runMetricsBySession: new Map(),
@@ -54,14 +53,17 @@ test("events that leave the transcript alone keep the same array", () => {
     request: { kind: "notify", requestId: "notify-1", message: "Saved", level: "info" },
   });
   h.send({ type: "assistantMessageEnded", sessionRef, timestamp });
-  // The first running update adds a "Working…" row; later ones for the same run must not copy.
+  // Running updates only start the run timer; the renderer draws the Working line.
   h.send({ type: "sessionUpdated", sessionRef, timestamp, snapshot: runningSnapshot });
-  const afterFirstRunning = h.transcript.get(key);
-  expect(afterFirstRunning).not.toBe(before);
-  h.send({ type: "sessionUpdated", sessionRef, timestamp, snapshot: runningSnapshot });
-  h.send({ type: "sessionUpdated", sessionRef, timestamp, snapshot: runningSnapshot });
+  h.send({
+    type: "sessionUpdated",
+    sessionRef,
+    timestamp: "2026-10-13T12:00:05.000Z",
+    snapshot: runningSnapshot,
+  });
 
-  expect(h.transcript.get(key)).toBe(afterFirstRunning);
+  expect(h.transcript.get(key)).toBe(before);
+  expect(h.state.runningSinceBySession.get(key)).toBe(timestamp);
 });
 
 test("an unknown session gets no empty transcript entry from an event that adds nothing", () => {
