@@ -1,4 +1,5 @@
-import { resolve } from "node:path";
+import { writeFile } from "node:fs/promises";
+import { join, resolve } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import type { PiSdkDriver } from "@pi-gui/pi-sdk-driver";
 import type { SessionMessageInput } from "@pi-gui/session-driver";
@@ -9,8 +10,10 @@ import {
   launchDesktop,
   makeUserDataDir,
   makeWorkspace,
+  seedAgentDir,
   waitForTimelineLayout,
   waitForWorkspaceByPath,
+  writeProjectExtension,
 } from "../helpers/electron-app";
 import { appendMessagesToSessionFile, sessionFilePathFromCatalog } from "../helpers/session-file";
 import { formatAnnotatedPrompt } from "../../src/features/conversation/annotations/annotation-prompt";
@@ -392,6 +395,117 @@ test("keeps the selection buttons inside the window when the selection ends at i
     expect(box!.x).toBeGreaterThanOrEqual(8);
     expect(box!.x + box!.width).toBeLessThanOrEqual(760 - 8);
     expect(box!.height).toBe(32);
+  } finally {
+    await harness.close();
+  }
+});
+
+// A model that streams one line of reply and then holds the run open until the app closes.
+const STREAMING_REPLY = "Halfway through a reply that is still streaming";
+const heldReplyProvider = String.raw`
+import { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
+
+export default function heldReplyProvider(pi) {
+  pi.registerProvider("held-reply", {
+    baseUrl: "http://127.0.0.1:9/never-contact",
+    apiKey: "LOCAL_TEST_CANARY",
+    api: "held-reply",
+    models: [{
+      id: "held", name: "Held reply", reasoning: false, input: ["text"],
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+      contextWindow: 200000, maxTokens: 4096,
+    }],
+    streamSimple(model, _context, options) {
+      const stream = createAssistantMessageEventStream();
+      const message = (text) => ({
+        role: "assistant", content: [{ type: "text", text }], api: model.api,
+        provider: model.provider, model: model.id,
+        usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+        stopReason: "stop", timestamp: Date.now(),
+      });
+      stream.push({ type: "start", partial: { ...message(""), content: [] } });
+      stream.push({ type: "text_start", contentIndex: 0, partial: message("") });
+      const text = ${JSON.stringify(STREAMING_REPLY)};
+      stream.push({ type: "text_delta", contentIndex: 0, delta: text, partial: message(text) });
+      options?.signal?.addEventListener("abort", () => {
+        stream.push({ type: "error", reason: "aborted", error: { ...message(text), stopReason: "aborted" } });
+      });
+      return stream;
+    },
+  });
+}
+`;
+
+test("a drag past the end of a streaming reply skips the Working line", async () => {
+  test.setTimeout(90_000);
+  const userDataDir = await makeUserDataDir();
+  const agentDir = join(userDataDir, "agent");
+  const workspacePath = await makeWorkspace("transcript-annotation-working");
+  await seedAgentDir(agentDir, { withOpenAiAuth: false, withDefaultModel: false });
+  await writeFile(
+    join(agentDir, "settings.json"),
+    JSON.stringify({
+      defaultProvider: "held-reply",
+      defaultModel: "held",
+      enabledModels: ["held-reply/held"],
+      packages: [],
+      cacheWarming: "off",
+      compaction: { enabled: false },
+    }),
+  );
+  await writeProjectExtension(workspacePath, "held-reply.ts", heldReplyProvider);
+  const harness = await launchDesktop(userDataDir, {
+    agentDir,
+    initialWorkspaces: [workspacePath],
+    scrubProviderEnv: true,
+    testMode: "background",
+  });
+  try {
+    const page = await harness.firstWindow();
+    await waitForWorkspaceByPath(page, workspacePath);
+    await page
+      .getByRole("complementary")
+      .getByRole("button", { name: "New thread", exact: true })
+      .click();
+    await page.getByLabel("New thread prompt", { exact: true }).fill("Start a long reply");
+    await page.getByRole("button", { name: "Start thread", exact: true }).click();
+    const reply = page.locator(".timeline-item--assistant [data-annotation-root]").last();
+    await expect(reply).toHaveText(STREAMING_REPLY);
+    const working = page.getByTestId("timeline-working");
+    await expect(working).toContainText("Working");
+
+    // Hold the clock so the label stops ticking: a tick rewrites its text and would drop it
+    // from a selection that should never have taken it.
+    await page.clock.setFixedTime(new Date());
+
+    // From inside the reply down onto the Working line under it.
+    const start = await reply.evaluate((root) => {
+      const range = document.createRange();
+      range.selectNodeContents(root);
+      const rect = range.getClientRects()[0]!;
+      return { x: rect.left + 1, y: rect.top + rect.height / 2 };
+    });
+    const end = await working.locator(".timeline-working__label").boundingBox();
+    if (!end) throw new Error("Missing Working line");
+    await page.mouse.move(start.x, start.y);
+    await page.mouse.down();
+    await page.mouse.move(end.x + end.width / 2, end.y + end.height / 2, { steps: 10 });
+    await page.mouse.up();
+    await expect(page.getByTestId("add-to-chat")).toBeVisible();
+    // A native copy of the selection leaves the status line out. (It still takes the Fork and
+    // popover button labels, as any drag past the last row does.)
+    await harness.electronApp.evaluate(({ clipboard }) => clipboard.writeText(""));
+    await page.evaluate(() => document.execCommand("copy"));
+    const copied = await harness.electronApp.evaluate(({ clipboard }) => clipboard.readText());
+    expect(copied).toContain(STREAMING_REPLY);
+    expect(copied).not.toContain("Working");
+    await page.getByTestId("add-to-chat").click();
+    await page.getByTestId("annotation-editor").getByRole("textbox").press("Enter");
+    await page.getByRole("button", { name: "1 annotation" }).hover();
+    await expect(
+      page.getByTestId("annotation-chip-popover").locator(".annotation-chip__quote"),
+    ).toHaveText([STREAMING_REPLY]);
   } finally {
     await harness.close();
   }

@@ -595,6 +595,8 @@
   font-size: 13px;
   /* Hold the width steady as the elapsed seconds tick, like the header timer. */
   font-variant-numeric: tabular-nums;
+  /* Status, not transcript: a drag past the end of the reply above leaves it out. */
+  user-select: none;
 }
 
 .timeline-working__label {
