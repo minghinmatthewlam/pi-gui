@@ -78,6 +78,7 @@ import {
 import { useThreadShortcutHintsVisible } from "./thread-shortcut-hints";
 import type { Dispatch, SetStateAction } from "react";
 import type { DesktopAppState } from "../../../contracts/desktop-state";
+import { applySnapshotIfNewer } from "../../app/desktop-app-state";
 
 interface SidebarProps {
   readonly activeView: AppView;
@@ -338,9 +339,8 @@ export function Sidebar(props: SidebarProps) {
       const newOrder = arrayMove(pinnedSortableIds, oldIndex, newIndex).map(
         pinnedSessionKeyFromSortableId,
       );
-      applyOptimisticReorder(
-        (prev) => ({ ...prev, pinnedSessionOrder: newOrder }),
-        () => api.reorderPinnedSessions(newOrder),
+      applyOptimisticReorder("pinnedSessionOrder", newOrder, () =>
+        api.reorderPinnedSessions(newOrder),
       );
       return;
     }
@@ -350,26 +350,31 @@ export function Sidebar(props: SidebarProps) {
     if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return;
 
     const newOrder = arrayMove(rootGroupIds, oldIndex, newIndex);
-    applyOptimisticReorder(
-      (prev) => ({ ...prev, workspaceOrder: newOrder }),
-      () => api.reorderWorkspaces(newOrder),
-    );
+    applyOptimisticReorder("workspaceOrder", newOrder, () => api.reorderWorkspaces(newOrder));
   }
 
   // Optimistically update local state to avoid snap-back animation, then reconcile with the
-  // authoritative state the IPC call returns; roll back to the pre-reorder snapshot on rejection.
+  // authoritative state the IPC call returns; on rejection, put back only the previous order.
+  // Neither path may restore an older whole snapshot: pushes only carry the model catalog when
+  // it changes, so an older snapshot would leave an old catalog in the window.
   function applyOptimisticReorder(
-    optimistic: (prev: DesktopAppState) => DesktopAppState,
+    field: "workspaceOrder" | "pinnedSessionOrder",
+    order: readonly string[],
     commit: () => Promise<DesktopAppState>,
   ) {
-    let previousSnapshot: DesktopAppState | null = null;
+    let previousOrder: readonly string[] | undefined;
     setSnapshot((prev) => {
-      previousSnapshot = prev;
-      return prev ? optimistic(prev) : prev;
+      previousOrder = prev?.[field];
+      return prev ? { ...prev, [field]: order } : prev;
     });
     void commit().then(
-      (state) => setSnapshot(state),
-      () => setSnapshot(previousSnapshot),
+      (state) => applySnapshotIfNewer(setSnapshot, state),
+      () =>
+        setSnapshot((current) =>
+          current && previousOrder && current[field] === order
+            ? { ...current, [field]: previousOrder }
+            : current,
+        ),
     );
   }
 
