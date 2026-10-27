@@ -98,8 +98,12 @@ On macOS you can also use Homebrew:
 
 ```bash
 brew tap minghinmatthewlam/tap
+brew trust minghinmatthewlam/tap
 brew install --cask pi-gui
 ```
+
+Homebrew refuses to load casks from untrusted third-party taps, so the
+`brew trust` step is required on first install.
 
 Update with `brew upgrade --cask pi-gui`. A Homebrew upgrade may ask you to
 re-confirm macOS permissions or Dock placement. Other installs tell you when a new release is

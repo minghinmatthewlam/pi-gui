@@ -42,6 +42,7 @@ import type {
   SendChildThreadFollowUpInput,
   SetChildSupervisionLoopInput,
   SelectedTranscriptRecord,
+  SessionExtensionUiUpdate,
   StartThreadInput,
   ThemePresetId,
   ThreadGrouping,
@@ -120,6 +121,7 @@ export const desktopIpc = {
   saveTaskWorkbenchTemplate: "pi-gui:save-task-workbench-template",
   selectedTranscriptRequest: "pi-gui:selected-transcript-request",
   selectedTranscriptChanged: "pi-gui:selected-transcript-changed",
+  extensionUiChanged: "pi-gui:extension-ui-changed",
   appCommand: "pi-gui:app-command",
   workspacePicked: "pi-gui:workspace-picked",
   clipboardImagePasted: "pi-gui:clipboard-image-pasted",
@@ -378,6 +380,7 @@ export type PiDesktopStateListener = (state: DesktopAppState) => void;
 export type PiDesktopSelectedTranscriptListener = (
   payload: SelectedTranscriptRecord | null,
 ) => void;
+export type PiDesktopExtensionUiListener = (update: SessionExtensionUiUpdate) => void;
 export type PiDesktopCommand = (typeof desktopCommands)[keyof typeof desktopCommands];
 
 export type ChangedFileStatus =
@@ -704,6 +707,7 @@ export interface PiDesktopApi {
   onStateChanged(listener: PiDesktopStateListener): () => void;
   getSelectedTranscript(): Promise<SelectedTranscriptRecord | null>;
   onSelectedTranscriptChanged(listener: PiDesktopSelectedTranscriptListener): () => void;
+  onExtensionUiChanged(listener: PiDesktopExtensionUiListener): () => void;
   onCommand(listener: (command: PiDesktopCommand) => void): () => void;
   onWorkspacePicked(listener: (workspaceId: string) => void): () => void;
   onClipboardImagePasted(listener: (result: ClipboardImageRead) => void): () => void;

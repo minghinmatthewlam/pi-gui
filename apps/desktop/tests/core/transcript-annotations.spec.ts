@@ -8,6 +8,7 @@ import {
   launchDesktop,
   makeUserDataDir,
   makeWorkspace,
+  waitForTimelineLayout,
   waitForWorkspaceByPath,
 } from "../helpers/electron-app";
 import { appendMessagesToSessionFile, sessionFilePathFromCatalog } from "../helpers/session-file";
@@ -296,6 +297,94 @@ test("a multi-line drag that runs past the text still adds its lines", async () 
     expect(selected).toContain("Third starts");
     expect(selected).toContain("A short last reply");
     await expect(page.getByTestId("add-to-chat")).toHaveCount(0);
+  } finally {
+    await harness.close();
+  }
+});
+
+test("copies a transcript selection from the button beside Add to Chat", async () => {
+  test.setTimeout(60_000);
+  const harness = await launchWithTranscript("transcript-copy", [
+    { role: "user", text: "Ask" },
+    { role: "assistant", text: REPLY },
+  ]);
+  try {
+    const page = await harness.firstWindow();
+    await expect(page.locator(".timeline-item--assistant").last()).toContainText("TN stamps");
+    await harness.electronApp.evaluate(({ clipboard }) => clipboard.writeText(""));
+
+    await dragSelect(page, "official admission record");
+    const copy = page.getByTestId("copy-selection");
+    await expect(copy).toContainText("Copy");
+    await expect(page.getByTestId("add-to-chat")).toBeVisible();
+    await copy.click();
+    await expect(copy).toContainText("Copied");
+    await expect
+      .poll(() => harness.electronApp.evaluate(({ clipboard }) => clipboard.readText()))
+      .toBe("official admission record");
+
+    // Copying keeps the selection and adds nothing; Add to Chat still works on it.
+    expect(await page.evaluate(() => window.getSelection()?.toString())).toBe(
+      "official admission record",
+    );
+    await expect(page.getByTestId("annotation-marker")).toHaveCount(0);
+    await page.getByTestId("add-to-chat").click();
+    await expect(page.getByTestId("annotation-editor")).toBeVisible();
+  } finally {
+    await harness.close();
+  }
+});
+
+test("keeps the selection buttons inside the window when the selection ends at its right edge", async () => {
+  test.setTimeout(60_000);
+  const harness = await launchWithTranscript("transcript-actions-edge", [
+    { role: "user", text: "Ask" },
+    {
+      role: "assistant",
+      text: `${REPLY} Keep the approval notice with your passport and compare the dates before you travel.`,
+    },
+  ]);
+  try {
+    const page = await harness.firstWindow();
+    await expect(page.locator(".timeline-item--assistant").last()).toContainText("TN stamps");
+    await harness.electronApp.evaluate(({ BrowserWindow }) => {
+      BrowserWindow.getAllWindows()[0]?.setSize(760, 700);
+    });
+    await expect.poll(() => page.evaluate(() => window.innerWidth)).toBe(760);
+    await waitForTimelineLayout(page);
+
+    // Drag across the word that ends furthest right; the buttons would start at its left edge.
+    const word = await page.evaluate(() => {
+      const root = document.querySelector(".timeline-item--assistant [data-annotation-root]");
+      if (!root) throw new Error("Missing reply text");
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      let best = { left: 0, right: 0, y: 0 };
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        for (const match of (node.nodeValue ?? "").matchAll(/\S+/g)) {
+          const range = document.createRange();
+          range.setStart(node, match.index);
+          range.setEnd(node, match.index + match[0].length);
+          const rect = range.getBoundingClientRect();
+          if (rect.right > best.right) {
+            best = { left: rect.left, right: rect.right, y: rect.top + rect.height / 2 };
+          }
+        }
+      }
+      return best;
+    });
+    await page.mouse.move(word.left + 1, word.y);
+    await page.mouse.down();
+    await page.mouse.move(word.right - 1, word.y, { steps: 6 });
+    await page.mouse.up();
+
+    await expect(page.getByTestId("add-to-chat")).toBeVisible();
+    const box = await page.locator(".annotation-add").boundingBox();
+    expect(box).not.toBeNull();
+    // Placed at the word, the buttons would run past the window.
+    expect(word.left + box!.width).toBeGreaterThan(760);
+    expect(box!.x).toBeGreaterThanOrEqual(8);
+    expect(box!.x + box!.width).toBeLessThanOrEqual(760 - 8);
+    expect(box!.height).toBe(32);
   } finally {
     await harness.close();
   }

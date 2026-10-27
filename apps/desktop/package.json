@@ -79,7 +79,7 @@
     "test:perf:scroll": "cross-env PI_APP_TEST_LANE=core PI_APP_REAL_AUTH=0 PI_APP_TEST_MODE=background pnpm run test:e2e:runner -- apps/desktop/tests/perf/streaming-profile.spec.ts --grep \"paced wheel\" --repeat-each=3"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "0.124.0",
+    "@anthropic-ai/sdk": "0.129.0",
     "@aws-crypto/sha256-browser": "5.2.0",
     "@aws-crypto/sha256-js": "5.2.0",
     "@aws-sdk/client-bedrock-runtime": "3.1127.0",
@@ -95,7 +95,7 @@
     "@aws-sdk/xml-builder": "^3.972.33",
     "@aws/lambda-invoke-store": "^0.2.2",
     "@earendil-works/chord": "^1.0.0",
-    "@earendil-works/pi-coding-agent": "^1.0.0",
+    "@earendil-works/pi-coding-agent": "^1.4.0",
     "@google/genai": "2.21.0",
     "@mistralai/mistralai": "2.2.6",
     "@opentelemetry/api": "1.9.0",

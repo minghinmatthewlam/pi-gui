@@ -114,7 +114,11 @@ export default function prReview(pi: ExtensionAPI) {
   pi.on("before_agent_start", (event, context) => {
     ctx = context;
     const review = snapshot.review;
-    if (review?.status !== "requested" || !event.prompt.includes(`[pr-review:${review.id}]`))
+    if (
+      review?.status !== "requested" ||
+      event.messageType !== "user" ||
+      !event.prompt.includes(`[pr-review:${review.id}]`)
+    )
       return;
     outcome = "completed";
     restoreTools = pi.getActiveTools();
