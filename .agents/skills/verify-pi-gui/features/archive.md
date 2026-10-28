@@ -31,5 +31,5 @@ Preconditions: isolated workspace with fixture threads Thread one and Thread two
 - Archiving a pinned thread also unpins it.
 - Sending a message to an archived thread restores it.
 - Archiving saves the open thread's pending draft first, so a draft typed just before archiving by any route is still there after restore.
-- Archiving a parent thread does not archive its child threads; they become top-level rows until the parent is restored. Agents have their own tool that archives only finished child threads (core `thread-hierarchy-archive.spec.ts`); a user archive has no such guard.
+- Archiving a parent thread does not archive its child threads; they become top-level rows until the parent is restored (source only, `thread-groups.ts`; no test archives a parent). Agents have their own tool that archives only their own direct child threads that have finished and have no unarchived children of their own (core `thread-hierarchy-archive.spec.ts`); a user archive has no such guard.
 - For a pi-gui worktree thread the archived context reads `<folder> / <worktree>`, so the Restore label ends `in <folder> / <worktree>`.

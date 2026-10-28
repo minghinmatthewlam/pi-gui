@@ -36,8 +36,8 @@ These user-facing surfaces have no feature file and no `prove.sh` checkpoint yet
 
 - Open in editor split button beside the sidebar toggle, `apps/desktop/src/features/threads/open-in-editor-button.tsx`; core `open-in-editor.spec.ts`. Main detects installed editors per host, so the spec asserts the menu shape and the IPC rejection path rather than a fixed editor list.
 - Side panel tabs on Control+1–9 (macOS) or Alt+1–9 elsewhere, `apps/desktop/src/features/workbench/side-panel-tab-hints.ts`; core `side-panel-tab-shortcuts.spec.ts`.
-- New side panel tab on Cmd/Ctrl+T, which opens the "Open a tool" picker, `apps/desktop/src/features/workbench/workbench.tsx`; core `workbench-tabs.spec.ts`.
-- Messages an agent in another project sends to a thread ("From project <name>" on the user bubble and the queued row), `apps/desktop/contracts/thread-message.ts`; core `cross-project-thread-messages.spec.ts`.
+- New side panel tab on Cmd/Ctrl+T, which opens the "Open a tool" picker (inside the terminal it opens a new shell instead), `apps/desktop/src/features/workbench/workbench.tsx`; core `workbench-tabs.spec.ts`.
+- Messages an agent in another project sends to a thread ("From project <name>" on the user bubble and the queued row), `apps/desktop/contracts/thread-message.ts`; core `cross-project-thread-messages.spec.ts` checks the bubble only.
 - Context ring beside the model picker, `apps/desktop/src/features/conversation/context-meter.tsx`.
 - Changes card after a turn that edited files, `apps/desktop/src/features/conversation/turn-changes-card.tsx`; core `turn-changes-card.spec.ts`.
 - Extension notify toast above the composer and extension messages in the transcript, `apps/desktop/src/features/extensions/extension-notices.tsx` and `apps/desktop/src/features/conversation/timeline-item.tsx`; core `extension-notices.spec.ts`, `extension-custom-messages.spec.ts`.
