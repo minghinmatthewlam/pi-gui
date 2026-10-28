@@ -30,4 +30,4 @@ Extensions (the Extensions tab and its pi-gui tools switches, the sidebar Extens
 ## Gotchas
 
 - Inserting a command does not prove executing the skill through a provider.
-- Settings > General > "Enable skill slash commands" can intentionally hide skill slash commands. Check it before interpreting a missing menu as a discovery failure.
+- Settings > General > "Skill slash commands" (switch label `Enable skill slash commands`) can intentionally hide skill slash commands. Check it before interpreting a missing menu as a discovery failure.

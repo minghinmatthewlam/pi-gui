@@ -13,7 +13,7 @@ Users can queue another prompt while an agent works or steer the current run. Th
 
 - While a thread runs, type in its composer and press Enter to queue.
 - Use Cmd+Enter on macOS (Control+Enter elsewhere) to steer the active run. A steer is added to the transcript at once and never appears in the queue list.
-- Clicking the send button with text in the composer also queues. Each queued item has Steer, Edit and Delete buttons, except that a queued message carrying Add to Chat annotations reads "<text> · N annotations" (or "1 annotation") and has no Edit; its Delete label uses the raw message text, not that preview. Stop run (empty composer) clears the whole queue.
+- Clicking the send button with text in the composer also queues. Each queued item has Steer, Edit and Delete buttons, except that a queued message carrying Add to Chat annotations reads "<text> · N annotations" (or "1 annotation") and has no Edit, as does a message another project's agent sent, which reads "From project <name> · <text>"; its Delete label uses the raw message text, not that preview. Stop run (empty composer) clears the whole queue. Images pasted while a thread runs stay in the composer and show as previews on the queued row.
 
 ## Driving it with Playwright
 
@@ -21,7 +21,7 @@ Preconditions: explicitly enabled real auth and a working provider/model. Defaul
 
 - **Visible recipe:** `.agents/skills/verify-pi-gui/scripts/prove.sh --maintenance` launches without test mode or test hooks. After a long tool run starts, type a follow-up and press Enter; require a `queued-composer-message` containing that prompt. Type a steer marker and press the platform-modified Enter shortcut (`Control+Enter` here, `Cmd+Enter` on macOS). Require `STEER_DONE` and `FOLLOW_UP_DONE` once each in assistant-only timeline text, the steered reply before the follow-up, idle, and no remaining queued messages. The per-item Steer/Edit/Delete buttons and Stop clearing the queue are not driven.
 - **Existing live spec:** `pnpm --filter @pi-gui/desktop run test:e2e:runner apps/desktop/tests/live/queued-messages.spec.ts` uses `PI_APP_REAL_AUTH=1` and `PI_APP_REAL_AUTH_SOURCE_DIR`. It currently launches in background mode; do not treat it as the visible proof.
-- **Queue edge cases:** `pnpm --filter @pi-gui/desktop run test:e2e:runner -- apps/desktop/tests/core/queued-messages.spec.ts` covers per-item editing, follow-ups versus steers in the timeline, and the long-token layout. The end-of-reply queue race is proven only by the driver test `packages/pi-sdk-driver/test/queue-after-settle.test.mts`; live UI timing cannot force it.
+- **Queue edge cases:** `pnpm --filter @pi-gui/desktop run test:e2e:runner -- apps/desktop/tests/core/queued-messages.spec.ts` covers per-item editing, follow-ups versus steers in the timeline, and the long-token layout. The end-of-reply queue race is proven only by the driver test `packages/pi-sdk-driver/test/queue-after-settle.test.mts`; live UI timing cannot force it. `composer-attachments-while-running.spec.ts` covers an image pasted during a run, and `cross-project-thread-messages.spec.ts` covers a message from another project's agent.
 
 ## Gotchas
 
