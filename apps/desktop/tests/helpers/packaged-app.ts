@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
-import { cp, mkdtemp, readdir, realpath, rename } from "node:fs/promises";
+import { constants } from "node:fs";
+import { access, cp, mkdtemp, readdir, realpath, rename } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { promisify } from "node:util";
@@ -35,6 +36,16 @@ export async function resolvePackagedAppBundle(releaseDir = packagedReleaseDir):
 export async function resolvePackagedAppExecutable(
   releaseDir = packagedReleaseDir,
 ): Promise<string> {
+  if (process.platform === "linux") {
+    const executablePath = join(releaseDir, "pi-gui");
+    try {
+      await access(executablePath, constants.X_OK);
+    } catch {
+      throw new Error(`No executable pi-gui package found under ${releaseDir}.`);
+    }
+    return realpath(executablePath);
+  }
+
   return resolveAppBundleExecutable(await resolvePackagedAppBundle(releaseDir));
 }
 

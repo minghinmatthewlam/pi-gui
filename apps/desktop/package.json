@@ -18,6 +18,8 @@
     "package:dir": "pnpm run build && electron-builder --mac --dir --publish never",
     "package:linux": "pnpm run build && node scripts/run-electron-builder.mjs --linux --publish never",
     "package:linux:dir": "pnpm run build && node scripts/run-electron-builder.mjs --linux --dir --publish never",
+    "package:linux:arm64": "pnpm run build && node scripts/run-electron-builder.mjs --linux --config electron-builder.linux-arm64.mjs --publish never",
+    "package:linux:arm64:dir": "pnpm run build && node scripts/run-electron-builder.mjs --linux --config electron-builder.linux-arm64.mjs --dir --publish never",
     "package:win": "pnpm run build && node scripts/package-windows.mjs --win --publish never --config.npmRebuild=false",
     "package:win:dir": "pnpm run build && node scripts/package-windows.mjs --win --dir --publish never --config.npmRebuild=false",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.electron.json --noEmit",

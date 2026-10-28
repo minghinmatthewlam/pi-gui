@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { validateConfiguration } from "app-builder-lib/out/util/config/config.js";
 import { DebugLogger } from "builder-util";
 import { parseDocument } from "yaml";
@@ -154,6 +154,15 @@ function validateBuilderConfig(config, desktopPackage, afterRemoveSource) {
   assert(
     desktopPackage.scripts?.["package:linux"]?.includes(linuxPackageCommand),
     "pnpm Linux packaging must build AppImage and deb for x64",
+  );
+  assert(
+    desktopPackage.scripts?.["package:linux:arm64"]?.includes(
+      "node scripts/run-electron-builder.mjs --linux --config electron-builder.linux-arm64.mjs --publish never",
+    ) &&
+      desktopPackage.scripts?.["package:linux:arm64:dir"]?.includes(
+        "node scripts/run-electron-builder.mjs --linux --config electron-builder.linux-arm64.mjs --dir --publish never",
+      ),
+    "pnpm Linux packaging must provide native ARM64 and directory builds",
   );
   assert(
     desktopPackage.scripts?.["package:linux:dir"]?.includes(
@@ -586,6 +595,7 @@ const [
   linuxVerifierSource,
   windowsVerifierSource,
   desktopPackageSource,
+  linuxArm64ConfigModule,
   afterRemoveSource,
   retrySource,
   packageWindowsSource,
@@ -598,6 +608,7 @@ const [
   readFile(path.join(scriptDir, "verify-linux-release.sh"), "utf8"),
   readFile(path.join(scriptDir, "verify-windows-release.ps1"), "utf8"),
   readFile(path.join(scriptDir, "..", "package.json"), "utf8"),
+  import(pathToFileURL(path.join(scriptDir, "..", "electron-builder.linux-arm64.mjs")).href),
   readFile(path.join(scriptDir, "..", "resources", "linux", "after-remove.sh"), "utf8"),
   readFile(path.join(scriptDir, "github-download-retry.mjs"), "utf8"),
   readFile(path.join(scriptDir, "package-windows.mjs"), "utf8"),
@@ -607,6 +618,17 @@ const [
 await assertWorkflowActionPolicy(repoDir);
 await validateConfiguration(builderConfig, new DebugLogger(false));
 validateBuilderConfig(builderConfig, JSON.parse(desktopPackageSource), afterRemoveSource);
+const linuxArm64Config = await linuxArm64ConfigModule.default({
+  projectDir: path.join(scriptDir, ".."),
+});
+assert(
+  JSON.stringify(linuxArm64Config.linux?.target) ===
+    JSON.stringify([
+      { target: "AppImage", arch: ["arm64"] },
+      { target: "deb", arch: ["arm64"] },
+    ]),
+  "Linux ARM64 packaging must replace the configured target architectures with arm64",
+);
 validateCiWorkflow(ciWorkflow);
 validateWorkflow(workflow, finalizerSource, linuxVerifierSource, windowsVerifierSource);
 validateGithubDownloadRetry(retrySource, packageWindowsSource, runElectronBuilderSource);
