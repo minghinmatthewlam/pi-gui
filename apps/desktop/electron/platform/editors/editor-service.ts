@@ -6,28 +6,51 @@ import {
   detectDefaultEditorId,
   detectInstalledEditors,
   type DetectedEditor,
+  type EditorLaunchCommand,
 } from "./detect-editors";
 
 export interface EditorServiceDeps {
   readonly detect: () => Promise<readonly DetectedEditor[]>;
   readonly detectDefault: (editors: readonly DetectedEditor[]) => Promise<string | undefined>;
-  readonly launch: (command: string, args: readonly string[]) => Promise<void>;
+  readonly launch: (launch: EditorLaunchCommand) => Promise<void>;
 }
 
-function launchWithSpawn(command: string, args: readonly string[]): Promise<void> {
+/**
+ * Starts `launch` and settles once its outcome is known. An editor process
+ * owns its window for as long as it is open, so it settles when it starts. A
+ * launcher hands the checkout over and exits, so it settles on its exit code;
+ * `open -a` exits non-zero when the app was removed. It settles on `exit`, not
+ * `close`: an editor the launcher starts can inherit its stdio and keep it open.
+ */
+export function launchEditorCommand({
+  command,
+  args,
+  waitForExit,
+}: EditorLaunchCommand): Promise<void> {
   return new Promise((resolve, reject) => {
-    // A foreground editor owns its own process for as long as it is open, so the
-    // launch must resolve when the process starts, not when it exits.
+    // Detached so the editor outlives pi-gui and its process group.
     const child = spawn(command, [...args], {
       detached: true,
       stdio: "ignore",
       windowsHide: true,
     });
-    child.once("spawn", () => {
-      child.unref();
-      resolve();
-    });
     child.once("error", reject);
+    if (!waitForExit) {
+      child.once("spawn", () => {
+        child.unref();
+        resolve();
+      });
+      return;
+    }
+    child.once("exit", (code, signal) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+      reject(
+        new Error(`${command} failed with ${signal ? `signal ${signal}` : `exit code ${code}`}`),
+      );
+    });
   });
 }
 
@@ -60,7 +83,7 @@ export class EditorService {
     this.deps = {
       detect: () => detectInstalledEditors(host),
       detectDefault: (editors) => detectDefaultEditorId(host, editors),
-      launch: launchWithSpawn,
+      launch: launchEditorCommand,
     };
   }
 
@@ -70,9 +93,8 @@ export class EditorService {
 
   async open(workspacePath: string, editorId: string): Promise<DesktopEditorList> {
     const { editor, detection } = await this.requireEditor(editorId);
-    const { command, args } = buildEditorLaunchCommand(editor, workspacePath);
     try {
-      await this.deps.launch(command, args);
+      await this.deps.launch(buildEditorLaunchCommand(editor, workspacePath));
     } catch (error) {
       this.invalidate(detection);
       throw error;

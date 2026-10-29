@@ -2,7 +2,7 @@
 
 .command-palette-backdrop {
   position: fixed;
-  inset: 0;
+  inset: var(--window-titlebar-height) 0 0;
   /* Above the top bar and sidebar toggle (z-index 60 to 80). */
   z-index: 100;
   display: flex;
@@ -15,7 +15,7 @@
 
 .command-palette {
   width: min(640px, 100%);
-  max-height: min(560px, calc(100vh - 160px));
+  max-height: min(560px, calc(100vh - var(--window-titlebar-height) - 160px));
   display: flex;
   flex-direction: column;
   border-radius: var(--radius-3xl);

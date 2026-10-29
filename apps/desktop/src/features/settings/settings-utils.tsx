@@ -3,6 +3,7 @@ import type {
   RuntimeSettingsSnapshot,
   RuntimeSnapshot,
 } from "@pi-gui/session-driver/runtime-types";
+import { useTranslation, type MessageKey, type Translate } from "../../i18n";
 
 export const THINKING_LEVELS: NonNullable<RuntimeSettingsSnapshot["defaultThinkingLevel"]>[] = [
   "low",
@@ -12,13 +13,23 @@ export const THINKING_LEVELS: NonNullable<RuntimeSettingsSnapshot["defaultThinki
   "max",
 ];
 
+const THINKING_LABEL_KEYS: Readonly<
+  Record<NonNullable<RuntimeSettingsSnapshot["defaultThinkingLevel"]>, MessageKey>
+> = {
+  off: "settings.thinking.off",
+  minimal: "settings.thinking.minimal",
+  low: "settings.thinking.low",
+  medium: "settings.thinking.medium",
+  high: "settings.thinking.high",
+  xhigh: "settings.thinking.xhigh",
+  max: "settings.thinking.max",
+};
+
 export function labelForThinking(
   level: NonNullable<RuntimeSettingsSnapshot["defaultThinkingLevel"]>,
+  t: Translate,
 ): string {
-  if (level === "xhigh") {
-    return "Extra High";
-  }
-  return level.charAt(0).toUpperCase() + level.slice(1);
+  return t(THINKING_LABEL_KEYS[level]);
 }
 
 export function filterProviders(
@@ -105,8 +116,10 @@ export function ProviderRow({
   readonly onLogoutProvider: (providerId: string) => void;
   readonly onConfigureApiKey: (provider: RuntimeSnapshot["providers"][number]) => void;
 }) {
+  const { t } = useTranslation();
   const actions = resolveProviderActions(
     provider,
+    t,
     onLoginProvider,
     onLogoutProvider,
     onConfigureApiKey,
@@ -115,7 +128,7 @@ export function ProviderRow({
     <div className="settings-row">
       <div className="settings-row__label">
         <div className="settings-row__title">{provider.name}</div>
-        <div className="settings-row__description">{describeProviderStatus(provider)}</div>
+        <div className="settings-row__description">{describeProviderStatus(provider, t)}</div>
       </div>
       {actions.length > 0 ? (
         <div className="settings-row__actions">
@@ -136,24 +149,33 @@ export function ProviderRow({
   );
 }
 
-function describeProviderStatus(provider: RuntimeSnapshot["providers"][number]): string {
+function describeProviderStatus(
+  provider: RuntimeSnapshot["providers"][number],
+  t: Translate,
+): string {
   switch (provider.authSource) {
     case "oauth":
-      return "OAuth · connected";
+      return t("settings.provider.status.oauth");
     case "auth_file":
-      return "API key · connected";
+      return t("settings.provider.status.authFile");
     case "env":
-      return "Environment variable · connected";
+      return t("settings.provider.status.env");
     case "external":
-      return provider.hasAuth ? "Configured externally · connected" : "Configure externally";
+      return provider.hasAuth
+        ? t("settings.provider.status.externalConnected")
+        : t("settings.provider.status.configureExternally");
     default:
       if (provider.oauthSupported) {
-        return provider.apiKeySetupSupported ? "OAuth or API key" : "OAuth";
+        return provider.apiKeySetupSupported
+          ? t("settings.provider.status.oauthOrApiKey")
+          : t("settings.provider.status.oauthOnly");
       }
       if (provider.apiKeySetupSupported) {
-        return "API key";
+        return t("settings.provider.status.apiKey");
       }
-      return provider.authType === "api_key" ? "API key" : "Built in";
+      return provider.authType === "api_key"
+        ? t("settings.provider.status.apiKey")
+        : t("settings.provider.status.builtIn");
   }
 }
 
@@ -166,17 +188,28 @@ interface ProviderAction {
 /** A provider with both sign-in and API keys (OpenAI, OpenRouter, xAI) offers both until connected. */
 function resolveProviderActions(
   provider: RuntimeSnapshot["providers"][number],
+  t: Translate,
   onLoginProvider: (providerId: string) => void,
   onLogoutProvider: (providerId: string) => void,
   onConfigureApiKey: (provider: RuntimeSnapshot["providers"][number]) => void,
 ): readonly ProviderAction[] {
   if (provider.authSource === "oauth") {
-    return [{ disabled: false, label: "Logout", onClick: () => onLogoutProvider(provider.id) }];
+    return [
+      {
+        disabled: false,
+        label: t("settings.provider.action.logout"),
+        onClick: () => onLogoutProvider(provider.id),
+      },
+    ];
   }
 
   const actions: ProviderAction[] = [];
   if (provider.oauthSupported && provider.authSource === "none") {
-    actions.push({ disabled: false, label: "Login", onClick: () => onLoginProvider(provider.id) });
+    actions.push({
+      disabled: false,
+      label: t("settings.provider.action.login"),
+      onClick: () => onLoginProvider(provider.id),
+    });
   }
   if (
     provider.apiKeySetupSupported &&
@@ -184,7 +217,10 @@ function resolveProviderActions(
   ) {
     actions.push({
       disabled: false,
-      label: provider.authSource === "auth_file" ? "Manage" : "Set API key",
+      label:
+        provider.authSource === "auth_file"
+          ? t("settings.provider.action.manage")
+          : t("settings.provider.action.setApiKey"),
       onClick: () => onConfigureApiKey(provider),
     });
   }
@@ -192,5 +228,5 @@ function resolveProviderActions(
     return actions;
   }
 
-  return [{ disabled: true, label: "Configure externally" }];
+  return [{ disabled: true, label: t("settings.provider.status.configureExternally") }];
 }

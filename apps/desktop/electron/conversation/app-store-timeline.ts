@@ -17,8 +17,10 @@ import {
   makeTranscriptMessageWithAttachments,
 } from "../application/app-store-utils";
 import {
+  archiveChildThreadsToolName,
   createChildThreadToolName,
   listThreadsToolName,
+  orchestrationToolNames,
   readThreadToolName,
   sendMessageToThreadToolName,
 } from "../orchestration/orchestration-runtime";
@@ -167,7 +169,8 @@ export function applyTimelineEvent(
   }
 
   const key = sessionKey(event.sessionRef);
-  const transcript = [...(transcriptCache.get(key) ?? [])];
+  const previous = transcriptCache.get(key);
+  const transcript = [...(previous ?? [])];
   const currentMetrics = state.runMetricsBySession.get(key);
 
   switch (event.type) {
@@ -227,11 +230,13 @@ export function applyTimelineEvent(
       };
       metrics.toolCount += 1;
       const extensionLabel = state.extensionToolLabels(event.sessionRef).get(event.toolName);
-      // An extension's tool is counted as a tool: its name says nothing about files or searches.
-      if (extensionLabel === undefined && looksLikeSearch(event.toolName, event.input)) {
+      // Extension and thread tools count as tools: their names say nothing about files or searches.
+      const nameHeuristics =
+        extensionLabel === undefined && !orchestrationToolNames.has(event.toolName);
+      if (nameHeuristics && looksLikeSearch(event.toolName, event.input)) {
         metrics.searchCount += 1;
       }
-      if (extensionLabel === undefined && looksLikeFileExplore(event.toolName, event.input)) {
+      if (nameHeuristics && looksLikeFileExplore(event.toolName, event.input)) {
         metrics.fileCount += 1;
       }
       state.runMetricsBySession.set(key, metrics);
@@ -358,7 +363,14 @@ export function applyTimelineEvent(
       break;
   }
 
+  // Keep the same array when nothing changed: the window skips publishing an unchanged
+  // transcript by identity, and frequent events (title updates, running ticks) change nothing.
+  if (previous ? sameItems(previous, transcript) : transcript.length === 0) return;
   transcriptCache.set(key, transcript);
+}
+
+function sameItems(a: readonly TranscriptMessage[], b: readonly TranscriptMessage[]): boolean {
+  return a.length === b.length && a.every((item, index) => item === b[index]);
 }
 
 /** Replaces a pin's earlier write, as the projection does; a pin written after removal is new. */
@@ -430,6 +442,9 @@ function toolLabel(toolName: string, input: unknown): string {
   }
   if (toolName === sendMessageToThreadToolName) {
     return detail ? `Sent message to thread: ${detail}` : "Sent message to thread";
+  }
+  if (toolName === archiveChildThreadsToolName) {
+    return "Archived child threads";
   }
   if (looksLikeSearch(toolName, input)) {
     return detail ? `Searched ${detail}` : `Searched with ${toolName}`;

@@ -1,3 +1,4 @@
+import { sessionKey } from "@pi-gui/session-driver";
 import type { WorkspaceCatalogEntry, SessionCatalogEntry, WorktreeCatalogEntry } from "../types.js";
 
 export type CatalogFileState = {
@@ -6,6 +7,8 @@ export type CatalogFileState = {
   sessions: SessionCatalogEntry[];
   worktrees: WorktreeCatalogEntry[];
   sessionFiles: Record<string, string>;
+  /** stoppedReplyId by session key, kept apart from entries so no entry rewrite drops it. */
+  stoppedReplies: Record<string, string>;
 };
 
 export function createEmptyState(): CatalogFileState {
@@ -15,6 +18,7 @@ export function createEmptyState(): CatalogFileState {
     sessions: [],
     worktrees: [],
     sessionFiles: {},
+    stoppedReplies: {},
   };
 }
 
@@ -37,7 +41,8 @@ export function parseState(raw: string, filePath: string): CatalogFileState {
     !isEntryArray(workspaces, isWorkspaceEntry) ||
     !isEntryArray(sessions, isSessionEntry) ||
     !isEntryArray(worktrees, isWorktreeEntry) ||
-    !isStringRecord(sessionFiles)
+    !isStringRecord(sessionFiles) ||
+    !(parsed.stoppedReplies === undefined || isStringRecord(parsed.stoppedReplies))
   ) {
     throw new Error(
       `Invalid catalog file contents in ${filePath}; original file was left unchanged.`,
@@ -47,9 +52,13 @@ export function parseState(raw: string, filePath: string): CatalogFileState {
   return {
     version: 2,
     workspaces: workspaces.map(cloneWorkspaceEntry),
-    sessions: sessions.map(cloneSessionEntry),
+    sessions: sessions.map(entryWithoutStoppedReply),
     worktrees: worktrees.map(cloneWorktreeEntry),
     sessionFiles: { ...sessionFiles },
+    stoppedReplies:
+      parsed.stoppedReplies === undefined
+        ? stoppedRepliesFromEntries(sessions)
+        : { ...parsed.stoppedReplies },
   };
 }
 
@@ -83,7 +92,12 @@ function isSessionEntry(value: unknown): value is SessionCatalogEntry {
   return (
     isRecord(value) &&
     hasStrings(value, ["workspaceId", "title", "updatedAt"]) &&
-    hasOptionalStrings(value, ["archivedAt", "previewSnippet", "sessionFilePath"]) &&
+    hasOptionalStrings(value, [
+      "archivedAt",
+      "previewSnippet",
+      "sessionFilePath",
+      "stoppedReplyId",
+    ]) &&
     isRecord(value.sessionRef) &&
     hasStrings(value.sessionRef, ["workspaceId", "sessionId"]) &&
     value.sessionRef.workspaceId === value.workspaceId &&
@@ -118,6 +132,26 @@ export function cloneSessionEntry(entry: SessionCatalogEntry): SessionCatalogEnt
     ...entry,
     sessionRef: { ...entry.sessionRef },
   };
+}
+
+/** Catalogs from before the separate map kept the mark on the entry; move it over. */
+function stoppedRepliesFromEntries(
+  sessions: readonly SessionCatalogEntry[],
+): Record<string, string> {
+  const marks: Record<string, string> = {};
+  for (const entry of sessions) {
+    if (entry.stoppedReplyId !== undefined) {
+      marks[sessionKey(entry.sessionRef)] = entry.stoppedReplyId;
+    }
+  }
+  return marks;
+}
+
+/** Entries never store stoppedReplyId; it lives in CatalogFileState.stoppedReplies. */
+export function entryWithoutStoppedReply(entry: SessionCatalogEntry): SessionCatalogEntry {
+  const next = cloneSessionEntry(entry);
+  delete next.stoppedReplyId;
+  return next;
 }
 
 export function cloneWorktreeEntry(entry: WorktreeCatalogEntry): WorktreeCatalogEntry {

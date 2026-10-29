@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test, { type TestContext } from "node:test";
@@ -11,6 +11,8 @@ import type {
   ExtensionFactory,
 } from "@earendil-works/pi-coding-agent";
 import type { SessionDriverEvent } from "@pi-gui/session-driver";
+import type { SessionFileCatalogStorage } from "@pi-gui/catalogs";
+import { JsonCatalogStore } from "@pi-gui/catalogs/node";
 import { PiSdkDriver } from "../dist/pi-sdk-driver.js";
 import { createAgentSessionRuntimeWithNpmFallback } from "../dist/npm-package-fallback.js";
 
@@ -60,6 +62,7 @@ async function fixture(
   t: TestContext,
   streamFunction: StreamFunction,
   extension?: ExtensionFactory,
+  wrapCatalog?: (catalog: JsonCatalogStore) => SessionFileCatalogStorage,
 ) {
   const root = await mkdtemp(join(tmpdir(), "pi-gui-boundary-lifecycle-"));
   const agentDir = join(root, "agent");
@@ -106,9 +109,10 @@ async function fixture(
   const events: SessionDriverEvent[] = [];
   const changed = new Set<() => void>();
   let runtime!: AgentSessionRuntime;
+  const catalog = new JsonCatalogStore({ catalogFilePath: join(root, "catalogs.json") });
   const driver = new PiSdkDriver({
     agentDir,
-    catalogFilePath: join(root, "catalogs.json"),
+    catalogStorage: wrapCatalog ? wrapCatalog(catalog) : catalog,
     createAgentSessionRuntimeImpl: async (options) => {
       runtime = await createAgentSessionRuntimeWithNpmFallback({
         ...options,
@@ -126,10 +130,11 @@ async function fixture(
       return runtime;
     },
   });
-  const snapshot = await driver.createSession(
-    { workspaceId: "boundary-workspace", path: cwd },
-    { initialModel: { provider: "boundary-test", modelId: "scripted" } },
-  );
+  // The workspace as the app registers it, so a later sync rebuilds this session's entry.
+  const { workspace } = await driver.syncWorkspace(cwd, "Boundary");
+  const snapshot = await driver.createSession(workspace, {
+    initialModel: { provider: "boundary-test", modelId: "scripted" },
+  });
   const ref = snapshot.ref;
   const unsubscribe = driver.subscribe(ref, (event) => {
     events.push(event);
@@ -155,9 +160,28 @@ async function fixture(
   return {
     driver,
     ref,
+    root,
+    workspacePath: cwd,
     // The latest runtime; reopening a released session creates a new one.
     get runtime() {
       return runtime;
+    },
+    /** A second driver on the same catalog and agent dir, as after an app restart. */
+    restartedDriver: () => {
+      const restarted = new PiSdkDriver({
+        agentDir,
+        catalogFilePath: join(root, "catalogs.json"),
+        createAgentSessionRuntimeImpl: async (options) => {
+          const reopened = await createAgentSessionRuntimeWithNpmFallback({
+            ...options,
+            tools: [],
+          });
+          reopened.session.agent.streamFunction = streamFunction;
+          return reopened;
+        },
+      });
+      t.after(() => restarted.closeSession(ref));
+      return restarted;
     },
     events,
     rawEvents,
@@ -486,5 +510,233 @@ await test(
     await h.until(() => h.completions().length === 2);
     const after = await h.driver.getTranscript(h.ref);
     assert.ok(after.some((item) => item.kind === "message" && item.text === "Reply 2"));
+  },
+);
+
+await test(
+  "a Stop while an extension's before-settle continuation is pending reads as stopped, not completed",
+  { timeout: 15000 },
+  async (t) => {
+    // The pr-review example's pattern: after a normal reply, the extension awaits and then
+    // continues the run. pi writes no aborted reply when the user stops during that await.
+    const beforeSettle = gate();
+    const continueRun = gate();
+    let requests = 0;
+    const h = await fixture(
+      t,
+      (model) => {
+        requests += 1;
+        return response(model, "Review in progress");
+      },
+      (pi) => {
+        pi.on("agent_before_settle", async () => {
+          beforeSettle.release();
+          await continueRun.promise;
+          return {
+            entries: [
+              {
+                type: "custom_message",
+                customType: "lifecycle-test",
+                content: "Keep reviewing",
+                display: false,
+              },
+            ],
+            continue: true,
+          };
+        });
+      },
+    );
+    const sending = h.driver.sendUserMessage(h.ref, { text: "Review the PR" });
+    await beforeSettle.promise;
+    const stopping = h.driver.cancelCurrentRun(h.ref);
+    continueRun.release();
+    await Promise.all([sending, stopping]);
+    await h.until(() => h.rawEvents.some((event) => event.type === "agent_settled"));
+    assert.equal(requests, 1, "the stopped run is not continued");
+    const replies = h.runtime.session.messages.filter((message) => message.role === "assistant");
+    assert.deepEqual(
+      replies.map((message) => message.stopReason),
+      ["stop"],
+      "pi adds no aborted reply, so the stop is only known to the driver",
+    );
+    const snapshot = await h.driver.openSession(h.ref);
+    assert.equal(snapshot.status, "idle");
+    assert.equal(snapshot.lastRunOutcome, "stopped");
+    await assert.rejects(
+      h.driver.archiveSessionIfIdle(h.ref, { lastRunOutcome: "completed" }),
+      /last run changed/,
+    );
+    assert.equal((await h.driver.openSession(h.ref)).archivedAt, undefined);
+
+    // pi's session file holds only the normal reply; after a restart the Stop must still count.
+    await h.driver.closeSession(h.ref);
+    assert.match(
+      await readFile(join(h.root, "catalogs.json"), "utf8"),
+      /"stoppedReplies": \{\s*"[^"]+": "[^"]+"/,
+    );
+    const restarted = h.restartedDriver();
+    // The app syncs the workspace at startup, which rebuilds every catalog entry.
+    const synced = await restarted.syncWorkspace(h.workspacePath, "Boundary");
+    assert.equal(synced.workspace.workspaceId, h.ref.workspaceId);
+    assert.ok(
+      synced.sessions.find((entry) => entry.sessionRef.sessionId === h.ref.sessionId)
+        ?.stoppedReplyId,
+      "the sync keeps this session's mark",
+    );
+    // Archiving and restoring the cold session rewrites its catalog entry; the mark stays.
+    await restarted.archiveSession(h.ref);
+    await restarted.unarchiveSession(h.ref);
+    assert.match(
+      await readFile(join(h.root, "catalogs.json"), "utf8"),
+      /"stoppedReplies": \{\s*"[^"]+": "[^"]+"/,
+    );
+    const reopened = await restarted.openSession(h.ref);
+    assert.equal(reopened.lastRunOutcome, "stopped");
+    await assert.rejects(
+      restarted.archiveSessionIfIdle(h.ref, { lastRunOutcome: "completed" }),
+      /last run changed/,
+    );
+    assert.equal((await restarted.openSession(h.ref)).archivedAt, undefined);
+
+    // The next run clears it, in memory and in the catalog.
+    await restarted.sendUserMessage(h.ref, { text: "Finish the review" });
+    const finished = await restarted.openSession(h.ref);
+    assert.equal(finished.status, "idle");
+    assert.equal(finished.lastRunOutcome, "completed");
+    assert.match(await readFile(join(h.root, "catalogs.json"), "utf8"), /"stoppedReplies": \{\}/);
+  },
+);
+
+await test(
+  "a Stop saved during a workspace sync survives when an extension switches session before the sync writes",
+  { timeout: 15000 },
+  async (t) => {
+    const beforeSettle = gate();
+    const continueRun = gate();
+    let holdReplace: ReturnType<typeof gate> | undefined;
+    let replaceReached!: () => void;
+    const replaceStarted = new Promise<void>((resolve) => {
+      replaceReached = resolve;
+    });
+    const h = await fixture(
+      t,
+      (model) => response(model, "Review in progress"),
+      (pi) => {
+        pi.registerCommand("fresh-thread", {
+          description: "Start a new session from an extension",
+          handler: async (_args, ctx) => {
+            await ctx.newSession();
+          },
+        });
+        pi.on("agent_before_settle", async () => {
+          beforeSettle.release();
+          await continueRun.promise;
+          return { continue: true };
+        });
+      },
+      (catalog) =>
+        Object.assign(Object.create(catalog) as JsonCatalogStore, {
+          replaceWorkspaceSessions: async (
+            ...args: Parameters<JsonCatalogStore["replaceWorkspaceSessions"]>
+          ) => {
+            if (holdReplace) {
+              replaceReached();
+              await holdReplace.promise;
+            }
+            return catalog.replaceWorkspaceSessions(...args);
+          },
+        }),
+    );
+    const sending = h.driver.sendUserMessage(h.ref, { text: "Review the PR" });
+    await beforeSettle.promise;
+    // The sync builds this session's entry now, before the Stop, and waits to write it.
+    holdReplace = gate();
+    const syncing = h.driver.syncWorkspace(h.workspacePath, "Boundary");
+    await replaceStarted;
+    const stopping = h.driver.cancelCurrentRun(h.ref);
+    continueRun.release();
+    await Promise.all([sending, stopping]);
+    // An extension moves the thread to a new session before the sync writes.
+    await h.driver.sendUserMessage(h.ref, { text: "/fresh-thread" });
+    holdReplace.release();
+    await syncing;
+
+    const restarted = h.restartedDriver();
+    const reopened = await restarted.openSession(h.ref);
+    assert.equal(reopened.lastRunOutcome, "stopped");
+    await assert.rejects(restarted.archiveSessionIfIdle(h.ref, { lastRunOutcome: "completed" }));
+  },
+);
+
+await test(
+  "after switching away, a Stop another owner saved for the session refuses the archive on return",
+  { timeout: 15000 },
+  async (t) => {
+    const h = await fixture(
+      t,
+      (model) => response(model, "Review done"),
+      (pi) => {
+        pi.registerCommand("fresh-thread", {
+          description: "Start a new session from an extension",
+          handler: async (_args, ctx) => {
+            await ctx.newSession();
+          },
+        });
+      },
+    );
+    await h.driver.sendUserMessage(h.ref, { text: "Review the PR" });
+    await h.until(() => h.completions().length > 0);
+    const reply = h.runtime.session.sessionManager
+      .getBranch()
+      .filter((entry) => entry.type === "message" && entry.message.role === "assistant")
+      .at(-1);
+    assert.ok(reply);
+    // An extension moves the thread to a new session; this process no longer holds the first.
+    await h.driver.sendUserMessage(h.ref, { text: "/fresh-thread" });
+    // Another owner opens the first session, stops a run whose newest reply is that one, saves.
+    const otherOwner = new JsonCatalogStore({ catalogFilePath: join(h.root, "catalogs.json") });
+    await otherOwner.sessions.setStoppedReplyId(h.ref, reply.id);
+    // Back to the first session here: the archive must read the catalog, not a stale copy.
+    await h.driver.openSession(h.ref);
+    await assert.rejects(
+      h.driver.archiveSessionIfIdle(h.ref, { lastRunOutcome: "completed" }),
+      /last run changed/,
+    );
+    assert.equal((await h.driver.openSession(h.ref)).archivedAt, undefined);
+  },
+);
+
+await test(
+  "a Stop while extension agent_settled handlers still run is not archived, then reads as stopped",
+  { timeout: 15000 },
+  async (t) => {
+    const settling = gate();
+    const finishSettling = gate();
+    const h = await fixture(
+      t,
+      (model) => response(model, "Review done"),
+      (pi) => {
+        pi.on("agent_settled", async () => {
+          settling.release();
+          await finishSettling.promise;
+        });
+      },
+    );
+    const sending = h.driver.sendUserMessage(h.ref, { text: "Review the PR" });
+    await settling.promise;
+    // pi already counts the run as over; the user's Stop ends the visible run.
+    await h.driver.cancelCurrentRun(h.ref);
+    await assert.rejects(
+      h.driver.archiveSessionIfIdle(h.ref, { lastRunOutcome: "completed" }),
+      /not archived/,
+    );
+    finishSettling.release();
+    await sending;
+    await h.until(() => h.rawEvents.some((event) => event.type === "agent_settled"));
+    assert.equal((await h.driver.openSession(h.ref)).lastRunOutcome, "stopped");
+    await assert.rejects(
+      h.driver.archiveSessionIfIdle(h.ref, { lastRunOutcome: "completed" }),
+      /last run changed/,
+    );
   },
 );

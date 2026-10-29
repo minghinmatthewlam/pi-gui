@@ -3,6 +3,7 @@ import {
   parseState,
   cloneWorkspaceEntry,
   cloneSessionEntry,
+  entryWithoutStoppedReply,
   cloneWorktreeEntry,
   type CatalogFileState,
 } from "./catalog-codec.js";
@@ -90,6 +91,11 @@ export class JsonCatalogStore implements SessionFileCatalogStorage {
             delete state.sessionFiles[key];
           }
         }
+        for (const key of Object.keys(state.stoppedReplies)) {
+          if (key.startsWith(`${workspaceId}:`)) {
+            delete state.stoppedReplies[key];
+          }
+        }
       });
     },
   };
@@ -154,7 +160,7 @@ export class JsonCatalogStore implements SessionFileCatalogStorage {
       const sessions = state.sessions
         .filter((entry) => (workspaceId ? entry.workspaceId === workspaceId : true))
         .sort(compareSessionEntries)
-        .map(cloneSessionEntry);
+        .map((entry) => withStoppedReply(entry, state));
       return { sessions };
     },
     getSession: async (sessionRef: SessionRef): Promise<SessionCatalogEntry | undefined> => {
@@ -162,7 +168,7 @@ export class JsonCatalogStore implements SessionFileCatalogStorage {
       const entry = state.sessions.find(
         (session) => sessionKey(session.sessionRef) === sessionKey(sessionRef),
       );
-      return entry ? cloneSessionEntry(entry) : undefined;
+      return entry ? withStoppedReply(entry, state) : undefined;
     },
     upsertSession: async (entry: SessionCatalogEntry): Promise<void> => {
       await this.mutateState((state) => {
@@ -171,10 +177,10 @@ export class JsonCatalogStore implements SessionFileCatalogStorage {
         );
         // The driver persists a session on every agent event, mostly with nothing changed;
         // skipping those writes keeps fsyncs from delaying the events behind them.
-        if (index >= 0 && areSessionEntriesEqual(state.sessions[index]!, entry)) {
+        const next = entryWithoutStoppedReply(entry);
+        if (index >= 0 && areSessionEntriesEqual(state.sessions[index]!, next)) {
           return false;
         }
-        const next = cloneSessionEntry(entry);
         if (index >= 0) {
           state.sessions[index] = next;
         } else {
@@ -182,11 +188,40 @@ export class JsonCatalogStore implements SessionFileCatalogStorage {
         }
       });
     },
+    setStoppedReplyId: async (
+      sessionRef: SessionRef,
+      replyId: string | undefined,
+    ): Promise<void> => {
+      await this.mutateState((state) => {
+        const key = sessionKey(sessionRef);
+        if (state.stoppedReplies[key] === replyId) return false;
+        if (replyId === undefined) delete state.stoppedReplies[key];
+        else state.stoppedReplies[key] = replyId;
+      });
+    },
+    archiveSessionUnlessStopped: async (
+      sessionRef: SessionRef,
+      archivedAt: string,
+      newestReplyId: string | undefined,
+    ): Promise<boolean> => {
+      let archived = false;
+      await this.mutateState((state) => {
+        const key = sessionKey(sessionRef);
+        const entry = state.sessions.find((session) => sessionKey(session.sessionRef) === key);
+        const mark = state.stoppedReplies[key];
+        if (!entry || (newestReplyId !== undefined && mark === newestReplyId)) return false;
+        archived = true;
+        if (entry.archivedAt === archivedAt) return false;
+        entry.archivedAt = archivedAt;
+      });
+      return archived;
+    },
     deleteSession: async (sessionRef: SessionRef): Promise<void> => {
       await this.mutateState((state) => {
         const key = sessionKey(sessionRef);
         state.sessions = state.sessions.filter((session) => sessionKey(session.sessionRef) !== key);
         delete state.sessionFiles[key];
+        delete state.stoppedReplies[key];
       });
     },
   };
@@ -216,7 +251,8 @@ export class JsonCatalogStore implements SessionFileCatalogStorage {
     sessionFiles: Readonly<Record<string, string>>,
   ): Promise<void> {
     await this.mutateState((state) => {
-      const nextEntries = entries.map(cloneSessionEntry);
+      // Marks stay in state.stoppedReplies: a sync never sets, clears, or drops them.
+      const nextEntries = entries.map(entryWithoutStoppedReply);
       const nextKeys = new Set(nextEntries.map((entry) => sessionKey(entry.sessionRef)));
 
       state.sessions = [
@@ -363,6 +399,17 @@ function areWorktreeListsEqual(
 
   const sortedRight = [...right].sort(compareWorktreeEntries);
   return left.every((entry, index) => areWorktreeEntriesEqual(entry, sortedRight[index]));
+}
+
+/** A copy of a stored entry with its stoppedReplyId, which is kept outside the entries. */
+function withStoppedReply(
+  entry: SessionCatalogEntry,
+  state: CatalogFileState,
+): SessionCatalogEntry {
+  const next = cloneSessionEntry(entry);
+  const replyId = state.stoppedReplies[sessionKey(entry.sessionRef)];
+  if (replyId !== undefined) next.stoppedReplyId = replyId;
+  return next;
 }
 
 function areSessionEntriesEqual(left: SessionCatalogEntry, right: SessionCatalogEntry): boolean {

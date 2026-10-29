@@ -1,3 +1,5 @@
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { expect, test, type Page } from "@playwright/test";
 import type { SessionDriverEvent, SessionRef } from "@pi-gui/session-driver";
 import {
@@ -27,6 +29,15 @@ test("shows images a tool returned in its row, not their base64 text", async () 
   test.setTimeout(90_000);
   const userDataDir = await makeUserDataDir();
   const workspacePath = await makeWorkspace("tool-output-images-workspace");
+  // A tool may set its own image src; the window must never load it.
+  const requests: string[] = [];
+  const server = createServer((request, response) => {
+    requests.push(request.url ?? "");
+    response.writeHead(200, { "content-type": "image/png" });
+    response.end(Buffer.from(PNG_BASE64, "base64"));
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const remoteSrc = `http://127.0.0.1:${(server.address() as AddressInfo).port}/pixel.png`;
   const harness = await launchDesktop(userDataDir, {
     initialWorkspaces: [workspacePath],
     testMode: "background",
@@ -57,6 +68,8 @@ test("shows images a tool returned in its row, not their base64 text", async () 
         content: [
           { type: "text", text: "Read image file [image/png]" },
           { type: "image", data: PNG_BASE64, mimeType: "image/png" },
+          { type: "image", mimeType: "image/png", src: remoteSrc },
+          { type: "image", mimeType: "image/png", src: `file://${workspacePath}/pixel.png` },
         ],
       },
     };
@@ -74,6 +87,8 @@ test("shows images a tool returned in its row, not their base64 text", async () 
           .evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth),
       )
       .toBe(4);
+    await expect(tool.locator("[data-testid=timeline-tool-images] img")).toHaveCount(1);
+    expect(requests).toEqual([]);
 
     await tool.locator(".timeline-tool__header").click();
     const body = tool.locator(".timeline-tool__pre");
@@ -82,7 +97,9 @@ test("shows images a tool returned in its row, not their base64 text", async () 
 
     await thumb.click();
     await expect(window.locator(".image-viewer")).toBeVisible();
+    expect(requests).toEqual([]);
   } finally {
     await harness.close();
+    server.close();
   }
 });

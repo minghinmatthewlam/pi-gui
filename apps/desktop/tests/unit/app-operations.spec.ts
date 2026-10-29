@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { SessionRef } from "@pi-gui/session-driver";
@@ -18,17 +18,19 @@ const runExtensionAction = async (host: AppOperationHost, target: SessionRef, ra
 
 const target = { workspaceId: "workspace", sessionId: "session" };
 
-async function fixture() {
+async function fixture(linkedRoot = false) {
   const root = await mkdtemp(join(tmpdir(), "pi-gui-app-ops-"));
   const checkout = join(root, "checkout");
   await mkdir(join(checkout, "src"), { recursive: true });
   await writeFile(join(checkout, "src", "a.ts"), "export const a = 1;\n");
   await writeFile(join(root, "outside.ts"), "secret\n");
+  const workspacePath = linkedRoot ? join(root, "linked-checkout") : checkout;
+  if (linkedRoot) await symlink(checkout, workspacePath, "junction");
   const opened: string[] = [];
   const commands: string[] = [];
   const selected: SessionRef[] = [];
   const host: AppOperationHost = {
-    workspacePath: (workspaceId) => (workspaceId === "workspace" ? checkout : undefined),
+    workspacePath: (workspaceId) => (workspaceId === "workspace" ? workspacePath : undefined),
     openExternal: async (url) => {
       opened.push(url);
     },
@@ -40,7 +42,7 @@ async function fixture() {
       selected.push(resolve());
     },
   };
-  return { host, opened, commands, selected };
+  return { host, opened, commands, selected, root, checkout, workspacePath };
 }
 
 const thread = (id: string, archivedAt?: string): SessionRecord => ({
@@ -158,4 +160,34 @@ test("main refuses what an extension or the renderer should not be able to ask f
   ).rejects.toThrow(/unavailable/);
   expect(opened).toEqual([]);
   expect(commands).toEqual([]);
+});
+
+test("file actions stay checkout-relative through a symlink and refuse linked outside files", async () => {
+  const { host, root, checkout, workspacePath } = await fixture(true);
+  for (const filePath of ["src/a.ts", join(workspacePath, "src", "a.ts")]) {
+    await expect(
+      runExtensionAction(host, target, {
+        type: "openFile",
+        label: "Open",
+        path: filePath,
+        line: 2,
+      }),
+    ).resolves.toEqual({ kind: "openFile", path: join("src", "a.ts"), line: 2 });
+  }
+  await symlink(join(checkout, "src"), join(checkout, "linked-src"), "junction");
+  await expect(
+    runExtensionAction(host, target, {
+      type: "openFile",
+      label: "Open internal link",
+      path: "linked-src/a.ts",
+    }),
+  ).resolves.toEqual({ kind: "openFile", path: join("src", "a.ts") });
+  await symlink(root, join(checkout, "outside-root"), "junction");
+  await expect(
+    runExtensionAction(host, target, {
+      type: "openFile",
+      label: "Outside link",
+      path: "outside-root/outside.ts",
+    }),
+  ).rejects.toThrow("Path escapes workspace");
 });

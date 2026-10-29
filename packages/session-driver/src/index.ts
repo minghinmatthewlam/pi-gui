@@ -34,6 +34,7 @@ export type {
   SessionRef,
   SessionSnapshot,
   SessionSchemaInfo,
+  SessionRunOutcome,
   SessionStatus,
   SessionTreeNodeKind,
   SessionTreeNodeSnapshot,

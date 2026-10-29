@@ -1,7 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  buildSnapshot,
   determineRunOutcome,
+  lastRunOutcome,
+  sessionRunOutcome,
   messageText,
   persistedToolOutput,
   shouldPersistSnapshotForAgentEvent,
@@ -142,4 +145,62 @@ await test("transcriptFromMessages shows displayed custom messages the way termi
       text: "as a string",
     },
   ]);
+});
+
+await test("lastRunOutcome reports how the newest assistant reply ended", () => {
+  const reply = (stopReason: string) => [
+    { role: "user", content: "go" },
+    { role: "assistant", stopReason, content: "partial" },
+  ];
+  assert.equal(lastRunOutcome([]), undefined);
+  assert.equal(lastRunOutcome([{ role: "user", content: "go" }]), undefined);
+  assert.equal(lastRunOutcome(reply("stop")), "completed");
+  assert.equal(lastRunOutcome(reply("aborted")), "stopped");
+  assert.equal(lastRunOutcome(reply("error")), "failed");
+  assert.equal(lastRunOutcome(reply("length")), "incomplete");
+  assert.equal(lastRunOutcome(reply("toolUse")), "incomplete");
+  assert.equal(lastRunOutcome([...reply("aborted"), { role: "toolResult" }]), "stopped");
+  assert.equal(lastRunOutcome([...reply("stop"), { role: "user", content: "and?" }]), "incomplete");
+});
+
+await test("a session stopped after partial text snapshots as stopped, not completed", () => {
+  const source = {
+    ref: { workspaceId: "workspace", sessionId: "session" },
+    workspace: { workspaceId: "workspace", path: "/synthetic/workspace" },
+    title: "Stopped turn",
+    status: "idle" as const,
+    updatedAt: new Date().toISOString(),
+    archivedAt: undefined,
+    preview: undefined,
+    config: undefined,
+    runningRunId: undefined,
+    queuedMessages: [],
+  };
+  const stopped = [
+    { role: "user", content: "write the report" },
+    { role: "assistant", stopReason: "aborted", content: "Here is the first half of" },
+  ];
+  assert.equal(
+    buildSnapshot({ ...source, session: { messages: stopped } }).lastRunOutcome,
+    "stopped",
+  );
+  assert.equal(buildSnapshot(source).lastRunOutcome, undefined);
+});
+
+await test("a stopped reply reads as stopped only while it is still the newest reply", () => {
+  const reply = { role: "assistant", stopReason: "stop", content: "Review in progress" };
+  const branch: unknown[] = [
+    { type: "message", id: "u1", message: { role: "user" } },
+    { type: "message", id: "a1", message: reply },
+    { type: "custom_message", id: "c1" },
+  ];
+  const session = {
+    messages: [{ role: "user", content: "review" }, reply],
+    sessionManager: { getBranch: () => branch },
+  };
+  assert.equal(sessionRunOutcome({ session }), "completed");
+  assert.equal(sessionRunOutcome({ session, stoppedReplyId: "a1" }), "stopped");
+  // A newer reply, from this app or pi run elsewhere, or another branch, decides on its own.
+  branch.push({ type: "message", id: "a2", message: reply });
+  assert.equal(sessionRunOutcome({ session, stoppedReplyId: "a1" }), "completed");
 });

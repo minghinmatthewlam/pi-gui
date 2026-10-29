@@ -189,7 +189,11 @@ export interface ConversationOwner {
     attachments: readonly ComposerAttachment[],
     options?: { readonly rollbackOptimisticMessageOnError?: boolean },
   ): Promise<void>;
-  deliverBackgroundInstruction(sessionRef: SessionRef, text: string): Promise<string | undefined>;
+  deliverBackgroundInstruction(
+    sessionRef: SessionRef,
+    text: string,
+    options?: { readonly rollbackOnError?: boolean },
+  ): Promise<string | undefined>;
 }
 
 export function createConversationOwner(store: ConversationOwnerHost): ConversationOwner {
@@ -225,8 +229,8 @@ export function createConversationOwner(store: ConversationOwnerHost): Conversat
     cancelCurrentRun: (sessionRef) => cancelCurrentRun(store, sessionRef),
     sendMessageToSession: (sessionRef, text, attachments, options) =>
       sendMessageToSession(store, sessionRef, text, attachments, options),
-    deliverBackgroundInstruction: (sessionRef, text) =>
-      deliverBackgroundInstruction(store, sessionRef, text),
+    deliverBackgroundInstruction: (sessionRef, text, options) =>
+      deliverBackgroundInstruction(store, sessionRef, text, options),
   };
 }
 
@@ -551,7 +555,6 @@ async function submitComposerToSession(
       store.conversationState.composerDraftsBySession.delete(key);
       store.conversationState.composerAttachmentsBySession.delete(key);
       store.setQueuedComposerEditState(sessionRef, undefined);
-      await store.persistComposerAttachments(key, []);
       const nextSessionQueuedMessages = toSessionQueuedMessages(nextQueuedMessages);
       optimisticSteerMessage =
         deliverAs === "steer"
@@ -566,7 +569,10 @@ async function submitComposerToSession(
         store.publishSelectedTranscriptFor(sessionRef);
       }
       store.recordUserMessageRecency(sessionRef);
+      // Hand the message to the driver before any await: the session may settle meanwhile, and
+      // the driver must see the queued send before an agent archive can (see archiveSessionIfIdle).
       await store.driver.replaceQueuedMessages(sessionRef, nextSessionQueuedMessages);
+      await store.persistComposerAttachments(key, []);
       return store.refreshState({
         clearLastError: true,
         markSelectedSessionViewed: false,
@@ -726,10 +732,11 @@ async function deliverBackgroundInstruction(
   store: ComposerStore,
   sessionRef: SessionRef,
   text: string,
+  options: { readonly rollbackOnError?: boolean } = {},
 ): Promise<string | undefined> {
   const instruction = text.trim();
   if (!instruction) {
-    throw new Error("Scheduled task instruction is empty.");
+    throw new Error("The instruction is empty.");
   }
   await store.ensureSessionReady(sessionRef);
   const session = store.sessionFromState(sessionRef);
@@ -737,7 +744,7 @@ async function deliverBackgroundInstruction(
     throw new Error(`Unknown session: ${sessionRef.workspaceId}:${sessionRef.sessionId}`);
   }
   if (session.archivedAt) {
-    throw new Error("Scheduled task target thread is archived.");
+    throw new Error("The target thread is archived.");
   }
 
   store.recordUserMessageRecency(sessionRef);
@@ -769,10 +776,23 @@ async function deliverBackgroundInstruction(
   store.publishSelectedTranscriptFor(sessionRef);
   clearActiveAssistantMessage(store.conversationState.activeAssistantMessageBySession, sessionRef);
   store.conversationState.sessionErrorsBySession.delete(key);
-  await store.driver.sendUserMessage(sessionRef, {
-    text: instruction,
-    attachments: [],
-  });
+  try {
+    await store.driver.sendUserMessage(sessionRef, {
+      text: instruction,
+      attachments: [],
+    });
+  } catch (error) {
+    // A caller that reports the failure and may retry must not leave an undelivered row.
+    // A scheduled run keeps it, labelled with the run's error.
+    if (!options.rollbackOnError) throw error;
+    const transcript = store.conversationState.transcriptCache.get(key) ?? [];
+    store.conversationState.transcriptCache.set(
+      key,
+      transcript.filter((message) => message.id !== optimisticMessageId),
+    );
+    store.publishSelectedTranscriptFor(sessionRef);
+    throw error;
+  }
   return optimisticMessageId;
 }
 

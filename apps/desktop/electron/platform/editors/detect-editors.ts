@@ -84,24 +84,46 @@ export function createEditorDetectionHost(): EditorDetectionHost {
   };
 }
 
-/** Command and arguments that hand `workspacePath` to a detected editor. */
+/** A process that opens a checkout in an editor. */
+export interface EditorLaunchCommand {
+  readonly command: string;
+  readonly args: readonly string[];
+  /**
+   * True for a launcher (`open`, `gio`, `gtk-launch`) that hands the checkout
+   * to the editor and exits: its exit code is the only sign the editor is
+   * gone. False for the editor's own executable, whose exit code says nothing
+   * about the launch (it may keep running, or hand off to a running instance).
+   */
+  readonly waitForExit: boolean;
+}
+
+/** The command that hands `workspacePath` to a detected editor. */
 export function buildEditorLaunchCommand(
   editor: DetectedEditor,
   workspacePath: string,
-): { readonly command: string; readonly args: readonly string[] } {
+): EditorLaunchCommand {
   switch (editor.launch.kind) {
     case "mac-app":
       return {
         command: "open",
         // The resolved bundle path beats `-a <name>`, which matches by display name.
         args: ["-a", editor.launch.appPath, workspacePath],
+        waitForExit: true,
       };
     case "command":
-      return { command: editor.launch.commandPath, args: [workspacePath] };
+      return { command: editor.launch.commandPath, args: [workspacePath], waitForExit: false };
     case "desktop-entry":
       return editor.launch.launcher === "gtk-launch"
-        ? { command: "gtk-launch", args: [editor.launch.desktopId, workspacePath] }
-        : { command: "gio", args: ["launch", editor.launch.desktopPath, workspacePath] };
+        ? {
+            command: "gtk-launch",
+            args: [editor.launch.desktopId, workspacePath],
+            waitForExit: true,
+          }
+        : {
+            command: "gio",
+            args: ["launch", editor.launch.desktopPath, workspacePath],
+            waitForExit: true,
+          };
   }
 }
 

@@ -6,6 +6,7 @@ import type {
   ExtensionFlagValues,
   SessionConfig,
   SessionRef,
+  SessionRunOutcome,
   SessionSnapshot,
   WorkspaceRef,
 } from "@pi-gui/session-driver";
@@ -37,6 +38,7 @@ export interface WorkspaceStateView {
 type WorkspaceDriver = Pick<
   PiSdkDriver,
   | "archiveSession"
+  | "archiveSessionIfIdle"
   | "createSession"
   | "forkSession"
   | "generateThreadTitle"
@@ -109,6 +111,14 @@ export interface WorkspaceOwner {
   selectSession(target: WorkspaceSessionTarget): Promise<DesktopAppState>;
   renameSession(target: WorkspaceSessionTarget, title: string): Promise<DesktopAppState>;
   archiveSession(target: WorkspaceSessionTarget): Promise<DesktopAppState>;
+  /**
+   * Archives only if the driver confirms nothing is in flight and the last run outcome
+   * is still the one the caller saw; throws instead of reporting.
+   */
+  archiveIdleSession(
+    sessionRef: SessionRef,
+    expect: { readonly lastRunOutcome: SessionRunOutcome },
+  ): Promise<DesktopAppState>;
   unarchiveSession(target: WorkspaceSessionTarget): Promise<DesktopAppState>;
   createSession(input: CreateSessionInput): Promise<DesktopAppState>;
   syncCurrentWorkspace(): Promise<DesktopAppState>;
@@ -131,6 +141,7 @@ export function createWorkspaceOwner(store: WorkspaceOwnerHost): WorkspaceOwner 
     selectSession: (target) => selectSession(store, target),
     renameSession: (target, title) => renameSession(store, target, title),
     archiveSession: (target) => archiveSession(store, target),
+    archiveIdleSession: (sessionRef, expect) => archiveIdleSession(store, sessionRef, expect),
     unarchiveSession: (target) => unarchiveSession(store, target),
     createSession: (input) => createSession(store, input),
     syncCurrentWorkspace: () => syncCurrentWorkspace(store),
@@ -315,6 +326,20 @@ async function archiveSession(
     await store.driver.archiveSession(sessionRef);
     return store.refreshState(selectionAfterArchiving(store.workspaceState(), target));
   });
+}
+
+async function archiveIdleSession(
+  store: WorkspaceOwnerHost,
+  sessionRef: SessionRef,
+  expect: { readonly lastRunOutcome: SessionRunOutcome },
+): Promise<DesktopAppState> {
+  await store.initialize();
+  // The guarded write comes first: a refused archive leaves pins and titles alone.
+  // An agent asked for this, so the user's selection stays where it is.
+  await store.driver.archiveSessionIfIdle(sessionRef, expect);
+  store.clearPendingAutoTitle(sessionRef);
+  store.unpinSession(sessionRef);
+  return store.refreshState();
 }
 
 function selectionAfterArchiving(

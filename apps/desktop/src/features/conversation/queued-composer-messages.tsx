@@ -2,8 +2,11 @@ import type { ComposerAttachment, QueuedComposerMessage } from "../../../contrac
 import { FileIcon } from "../../ui/icons";
 import { ImageAttachmentThumb } from "./image-attachment-thumb";
 import { parseAnnotatedPrompt } from "./annotations/annotation-prompt";
+import { parseCrossProjectMessage } from "../../../contracts/thread-message";
 
 function queuedPreview(text: string): string {
+  const crossProject = parseCrossProjectMessage(text);
+  if (crossProject) return `From project ${crossProject.project} · ${crossProject.body.trim()}`;
   const annotated = parseAnnotatedPrompt(text);
   if (!annotated) return text;
   const count = annotated.annotations.length;
@@ -58,8 +61,9 @@ export function QueuedComposerMessages({
                   Steer
                 </button>
               ) : null}
-              {/* Its annotations cannot be reattached to the transcript, so it is not editable. */}
-              {parseAnnotatedPrompt(message.text) ? null : (
+              {/* Annotations cannot be reattached, and an origin header must stay intact. */}
+              {parseAnnotatedPrompt(message.text) ||
+              parseCrossProjectMessage(message.text) ? null : (
                 <button type="button" onClick={() => onEditMessage(message.id)}>
                   Edit
                 </button>

@@ -11,6 +11,7 @@ import { PRELOAD_DEV_RELOAD_MARKER } from "./dev-reload-preload-probe";
 import {
   createDesktopCommandSubscription,
   desktopIpc,
+  drawWindowControlsArgument,
   type PiDesktopApi,
   type CustomProviderConfig,
   type CustomProviderProbeInput,
@@ -22,6 +23,9 @@ import {
   type DesktopNotificationPermissionStatus,
   type WorkspaceFilePreview,
   type PiDesktopCommand,
+  type PiDesktopStateListener,
+  type PiDesktopStatePush,
+  type PiDesktopSelectedTranscriptListener,
   type TerminalDataEvent,
   type TerminalErrorEvent,
   type TerminalExitEvent,
@@ -116,6 +120,7 @@ ipcRenderer.on(desktopIpc.appCommand, (_event, command: PiDesktopCommand) => {
 
 contextBridge.exposeInMainWorld("piApp", {
   platform: process.platform,
+  drawsWindowControls: process.argv.includes(drawWindowControlsArgument),
   versions: process.versions,
   ping: () => ipcRenderer.invoke(desktopIpc.ping) as Promise<string>,
   getState: () => ipcRenderer.invoke(desktopIpc.stateRequest) as Promise<DesktopAppState>,
@@ -163,8 +168,8 @@ contextBridge.exposeInMainWorld("piApp", {
       desktopIpc.changeReviewFileStage,
       input,
     ) as Promise<ChangeReviewFileStageResult>,
-  onStateChanged: (listener: (state: DesktopAppState) => void) => {
-    const handle = (_event: Electron.IpcRendererEvent, state: DesktopAppState) => {
+  onStateChanged: (listener: PiDesktopStateListener) => {
+    const handle = (_event: Electron.IpcRendererEvent, state: PiDesktopStatePush) => {
       listener(state);
     };
     ipcRenderer.on(desktopIpc.stateChanged, handle);
@@ -176,10 +181,10 @@ contextBridge.exposeInMainWorld("piApp", {
     ipcRenderer.invoke(
       desktopIpc.selectedTranscriptRequest,
     ) as Promise<SelectedTranscriptRecord | null>,
-  onSelectedTranscriptChanged: (listener: (payload: SelectedTranscriptRecord | null) => void) => {
+  onSelectedTranscriptChanged: (listener: PiDesktopSelectedTranscriptListener) => {
     const handle = (
       _event: Electron.IpcRendererEvent,
-      payload: SelectedTranscriptRecord | null,
+      payload: Parameters<PiDesktopSelectedTranscriptListener>[0],
     ) => {
       listener(payload);
     };
@@ -188,6 +193,7 @@ contextBridge.exposeInMainWorld("piApp", {
       ipcRenderer.removeListener(desktopIpc.selectedTranscriptChanged, handle);
     };
   },
+  resendSelectedTranscript: () => ipcRenderer.send(desktopIpc.selectedTranscriptResend),
   onExtensionUiChanged: (listener: (update: SessionExtensionUiUpdate) => void) => {
     const handle = (_event: Electron.IpcRendererEvent, update: SessionExtensionUiUpdate) => {
       listener(update);
@@ -611,6 +617,8 @@ contextBridge.exposeInMainWorld("piApp", {
       stagingSourcePath,
     ) as Promise<void>,
   toggleWindowMaximize: () => ipcRenderer.invoke(desktopIpc.toggleWindowMaximize) as Promise<void>,
+  minimizeWindow: () => ipcRenderer.send(desktopIpc.minimizeWindow),
+  closeWindow: () => ipcRenderer.send(desktopIpc.closeWindow),
   openExternal: (url: string) => ipcRenderer.invoke(desktopIpc.openExternal, url) as Promise<void>,
   getThemeMode: () =>
     ipcRenderer.invoke(desktopIpc.getThemeMode) as Promise<"system" | "light" | "dark">,

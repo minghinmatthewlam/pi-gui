@@ -37,6 +37,7 @@ import type {
   SessionEventListener,
   SessionModelSelection,
   SessionRef,
+  SessionRunOutcome,
   SessionPlanLimits,
   SessionSnapshot,
   SessionUsageSnapshot,
@@ -110,6 +111,8 @@ import {
   transcriptItemFromPinEntry,
   customMessageTranscriptItem,
   isHiddenCustomMessage,
+  lastRunOutcome,
+  newestReplyEntryId,
   truncate,
   workspaceToRef,
   type RunOutcome,
@@ -194,6 +197,9 @@ export interface SyncWorkspaceResult {
   readonly sessions: SessionCatalogSnapshot["sessions"];
 }
 
+/** A send as the supervisor runs it; only a direct send revives an archived thread. */
+type SendInput = SessionMessageInput & { readonly revivesArchived?: boolean };
+
 interface ManagedSessionRecord {
   ref: SessionRef;
   workspace: WorkspaceRef;
@@ -216,6 +222,18 @@ interface ManagedSessionRecord {
    */
   abortOnRunStart: boolean;
   pendingRunOutcome: RunOutcome | undefined;
+  /**
+   * The newest reply entry when pi settled a run it reports aborted; cleared when the next
+   * run starts. Saved in the session catalog so it survives a restart.
+   */
+  stoppedReplyId: string | undefined;
+  /**
+   * pi started a run (agent_start) and has not published agent_settled yet. A Stop can end
+   * the visible run first, while extension agent_settled handlers still run.
+   */
+  runAwaitingSettle: boolean;
+  /** The user stopped the run in runAwaitingSettle; only its agent_settled clears this. */
+  stopBeforeSettle: boolean;
   queuedMessages: SessionQueuedMessage[];
   /** Taken off the queue to start a turn; shown in the transcript when pi starts it. */
   startingQueuedMessage: SessionQueuedMessage | undefined;
@@ -224,11 +242,17 @@ interface ManagedSessionRecord {
   piQueueSync: Promise<void>;
   /** An idle point arrived while a start was scheduled; check again when it finishes. */
   queuedStartRecheck: boolean;
+  /** Sends accepted but still awaiting reload settlement, before promptStarting is set. */
+  sendsSettling: number;
+  /** Queue changes accepted but not yet applied (see queueStep). */
+  queueStepsPending: number;
   /**
    * Queued messages that already started. The app's list can still hold one for a moment, and a
    * queue change sent from it must not queue it again.
    */
   startedQueuedMessageIds: Set<string>;
+  /** Every queued message id this record accepted, so a late edit is not taken for a send. */
+  acceptedQueuedMessageIds: Set<string>;
   /** Starting a queued message failed; it waits for the person's next send or queue change. */
   queuedStartFailed: boolean;
   closed: boolean;
@@ -294,6 +318,13 @@ interface SkillAdapter {
 }
 
 export class SessionSupervisor {
+  /**
+   * Sessions whose last stopped-run mark write failed: the catalog may be missing a Stop,
+   * so the guarded archive refuses them until a later write for the session succeeds.
+   */
+  private readonly failedStopMarkWrites = new Set<string>();
+  /** Each session's latest stopped-run mark write still in flight; the archive waits on it. */
+  private readonly stopMarkWrites = new Map<string, Promise<void>>();
   private readonly catalogs: SessionFileCatalogStorage;
   private readonly createAgentSessionRuntimeImpl: (
     options?: PiCreateAgentSessionOptions,
@@ -968,22 +999,91 @@ export class SessionSupervisor {
     await this.updateArchivedState(sessionRef, nowIso());
   }
 
+  /**
+   * Archives only a session with nothing in flight: no run, queue, pending start,
+   * or open host dialog. It never stops or drains work. The caller decides whether
+   * the session's work is finished; this guard only makes the write atomic.
+   */
+  async archiveSessionIfIdle(
+    sessionRef: SessionRef,
+    expect: { readonly lastRunOutcome?: SessionRunOutcome } = {},
+  ): Promise<void> {
+    const record = await this.ensureRecord(sessionRef);
+    // Every Stop mark write on its way, including one queued while waiting, must land (or
+    // fail) before the checks below; nothing awaits between the last one and the checks.
+    for (let write; (write = this.stopMarkWrites.get(sessionKey(record.ref)));) await write;
+    const session = this.requireSession(record);
+    if (
+      isRecordBusy(record) ||
+      record.runAwaitingSettle ||
+      record.status !== "idle" ||
+      record.queuedMessages.length > 0 ||
+      record.queuedStartScheduled ||
+      record.sendsSettling > 0 ||
+      record.queueStepsPending > 0 ||
+      session.pendingMessageCount > 0 ||
+      record.startingQueuedMessage ||
+      record.pendingHostUiRequests.size > 0
+    ) {
+      throw new Error(
+        "The thread is running, waiting, or has queued messages; it was not archived.",
+      );
+    }
+    const changed = new Error(
+      "The thread's last run changed since it was checked; it was not archived.",
+    );
+    // The caller judged the work from facts it saw earlier; refuse if they changed since, or
+    // if a Stop may be missing from the catalog because saving it failed.
+    if (
+      (expect.lastRunOutcome !== undefined &&
+        lastRunOutcome(session.messages) !== expect.lastRunOutcome) ||
+      this.failedStopMarkWrites.has(sessionKey(record.ref))
+    ) {
+      throw changed;
+    }
+    // Set before the first await, so a new prompt cannot slip between the busy check and the
+    // write (a send in the meantime revives the thread). The catalog reads the stopped-run
+    // mark and writes archivedAt in one serialized step: a completed reply a Stop marked is
+    // refused, and no other copy of the mark decides.
+    const archivedAt = nowIso();
+    record.archivedAt = archivedAt;
+    const archived = await this.catalogs.sessions
+      .archiveSessionUnlessStopped(
+        record.ref,
+        archivedAt,
+        expect.lastRunOutcome === "completed"
+          ? newestReplyEntryId(session.sessionManager.getBranch())
+          : undefined,
+      )
+      .catch(() => false);
+    if (!archived && record.archivedAt === archivedAt) record.archivedAt = undefined;
+    await this.persistSnapshot(record);
+    if (!archived) throw changed;
+    await this.emit(record, sessionUpdatedEvent(record));
+  }
+
   async unarchiveSession(sessionRef: SessionRef): Promise<void> {
     await this.updateArchivedState(sessionRef, undefined);
   }
 
   async sendUserMessage(sessionRef: SessionRef, input: SessionMessageInput): Promise<void> {
     const record = await this.ensureRecord(sessionRef);
-    await this.settleReloadsBeforeSend(record);
-    record.queuedStartFailed = false;
-    return this.sendReadyMessage(record, input);
+    // Counted until the send marks the session busy, so an idle-only archive cannot
+    // slip in while it waits for reloads to settle.
+    record.sendsSettling += 1;
+    let sending: Promise<void>;
+    try {
+      await this.settleReloadsBeforeSend(record);
+      record.queuedStartFailed = false;
+      sending = this.sendReadyMessage(record, { ...input, revivesArchived: true });
+    } finally {
+      record.sendsSettling -= 1;
+    }
+    return sending;
   }
 
   /** Synchronous until the session counts as busy (promptStarting, or a command running). */
-  private async sendReadyMessage(
-    record: ManagedSessionRecord,
-    input: SessionMessageInput,
-  ): Promise<void> {
+  private async sendReadyMessage(record: ManagedSessionRecord, input: SendInput): Promise<void> {
     const session = this.requireSession(record);
     const isExtensionCommand = this.isExtensionCommand(session, input.text);
     if (input.extensionCommandOnly && !isExtensionCommand) {
@@ -1011,7 +1111,7 @@ export class SessionSupervisor {
   private async sendCheckedMessage(
     record: ManagedSessionRecord,
     session: AgentSession,
-    input: SessionMessageInput,
+    input: SendInput,
     isExtensionCommand: boolean,
   ): Promise<void> {
     const isQueuedMessage = session.isStreaming && !isExtensionCommand && Boolean(input.deliverAs);
@@ -1025,6 +1125,11 @@ export class SessionSupervisor {
     record.runningRunId = runId ?? record.runningRunId;
     record.status = isQueuedMessage || isExtensionCommand ? record.status : "running";
     record.updatedAt = nowIso();
+    // A prompt sent to a thread brings it back from the archive, as the app already does
+    // before a send. This also undoes an agent archive that landed while the caller was
+    // still preparing the send. A queued message starting does not: the user may have
+    // archived the thread while it ran.
+    if (input.revivesArchived && !isExtensionCommand) record.archivedAt = undefined;
     record.config = deriveSessionConfig(session.sessionManager);
     // A card button's command is not something the user said, so it leaves the preview.
     if (!input.extensionCommandOnly) record.preview = truncate(input.text);
@@ -1189,6 +1294,17 @@ export class SessionSupervisor {
         .filter((message) => !record.startedQueuedMessageIds.has(message.id))
         .map((message) => cloneQueuedMessage(message));
       record.queuedStartFailed = false;
+      // A newly queued message is a send, so it brings the thread back from the archive as a
+      // direct send does. This undoes an agent archive that landed while the app was still
+      // preparing the queue change. Editing, removing, or a late copy of a message accepted
+      // before (Stop clears the queue) does not.
+      let accepted = false;
+      for (const message of record.queuedMessages) {
+        if (record.acceptedQueuedMessageIds.has(message.id)) continue;
+        record.acceptedQueuedMessageIds.add(message.id);
+        accepted = true;
+      }
+      if (accepted) record.archivedAt = undefined;
     });
 
     record.updatedAt = nowIso();
@@ -1220,12 +1336,16 @@ export class SessionSupervisor {
     record: ManagedSessionRecord,
     step: (session: AgentSession) => Promise<void>,
   ): Promise<void> {
+    record.queueStepsPending += 1;
     const run = record.piQueueSync
       .catch(() => undefined)
       .then(async () => {
         const session = record.session;
         if (!session || record.closed) return;
         await step(session);
+      })
+      .finally(() => {
+        record.queueStepsPending -= 1;
       });
     record.piQueueSync = run;
     return run;
@@ -1342,6 +1462,7 @@ export class SessionSupervisor {
     }
 
     record.cancellationRequested = true;
+    if (record.runAwaitingSettle) record.stopBeforeSettle = true;
     if (record.promptStarting && !record.session.isStreaming) {
       record.abortOnRunStart = true;
     }
@@ -1757,6 +1878,7 @@ export class SessionSupervisor {
     record.status = sessionEntry.status;
     record.updatedAt = sessionEntry.updatedAt;
     record.archivedAt = sessionEntry.archivedAt;
+    record.stoppedReplyId = sessionEntry.stoppedReplyId;
     record.preview = sessionEntry.previewSnippet ?? undefined;
     record.config = deriveSessionConfig(session.sessionManager);
     record.closed = false;
@@ -1798,12 +1920,18 @@ export class SessionSupervisor {
       promptStarting: false,
       abortOnRunStart: false,
       pendingRunOutcome: undefined,
+      stoppedReplyId: undefined,
+      runAwaitingSettle: false,
+      stopBeforeSettle: false,
       queuedMessages: [],
       startingQueuedMessage: undefined,
       queuedStartScheduled: false,
       piQueueSync: Promise.resolve(),
       queuedStartRecheck: false,
+      sendsSettling: 0,
+      queueStepsPending: 0,
       startedQueuedMessageIds: new Set(),
+      acceptedQueuedMessageIds: new Set(),
       queuedStartFailed: false,
       closed: false,
       listeners: new Set<SessionEventListener>(),
@@ -2004,6 +2132,9 @@ export class SessionSupervisor {
 
     if (previousKey !== nextKey) {
       const existingTarget = this.records.get(nextKey);
+      // The stopped-reply mark belongs to the session being switched to, not the one left.
+      const targetStoppedReplyId = (await this.catalogs.sessions.getSession(nextRef))
+        ?.stoppedReplyId;
       if (existingTarget && existingTarget !== record) {
         for (const listener of existingTarget.listeners) {
           record.listeners.add(listener);
@@ -2015,10 +2146,14 @@ export class SessionSupervisor {
       }
       this.records.delete(previousKey);
       record.ref = nextRef;
+      record.stoppedReplyId = targetStoppedReplyId;
       this.records.set(nextKey, record);
     }
 
     record.session = session;
+    // The old session's agent_settled will not reach this record any more.
+    record.runAwaitingSettle = session.isStreaming;
+    record.stopBeforeSettle = false;
     record.sessionFile = session.sessionFile ?? session.sessionManager.getSessionFile();
     record.unsubscribeAgent?.();
     record.unsubscribeAgent = session.subscribe((event) => {
@@ -2671,6 +2806,32 @@ export class SessionSupervisor {
     );
   }
 
+  /**
+   * Saves which reply a stopped run left newest, straight to the catalog for the session the
+   * run belonged to: a queued snapshot write could land after a session switch re-keys the
+   * record. The record keeps a copy for snapshots only; the guarded archive reads the catalog.
+   */
+  private markStoppedReply(record: ManagedSessionRecord, replyId: string | undefined): void {
+    record.stoppedReplyId = replyId;
+    const ref = { ...record.ref };
+    const key = sessionKey(ref);
+    const settled = () => {
+      if (this.stopMarkWrites.get(key) === write) this.stopMarkWrites.delete(key);
+    };
+    const write: Promise<void> = this.catalogs.sessions.setStoppedReplyId(ref, replyId).then(
+      () => {
+        this.failedStopMarkWrites.delete(key);
+        settled();
+      },
+      (error: unknown) => {
+        this.failedStopMarkWrites.add(key);
+        settled();
+        console.warn(`[pi-sdk-driver] saving the stopped run for ${key} failed:`, error);
+      },
+    );
+    this.stopMarkWrites.set(key, write);
+  }
+
   private handleAgentEvent(record: ManagedSessionRecord, event: AgentSessionEvent): void {
     const mapped = this.mapAgentEvent(record, event);
     if (mapped.length === 0) {
@@ -2709,6 +2870,8 @@ export class SessionSupervisor {
         }
         record.runningRunId ??= crypto.randomUUID();
         record.pendingRunOutcome = undefined;
+        this.markStoppedReply(record, undefined);
+        record.runAwaitingSettle = true;
         record.status = "running";
         return [sessionUpdatedEvent(record)];
       case "turn_start":
@@ -2856,7 +3019,18 @@ export class SessionSupervisor {
           ? { status: "cancelled" as const }
           : record.pendingRunOutcome;
         record.pendingRunOutcome = undefined;
+        // pi captures `aborted` before awaiting extension agent_settled handlers, so a Stop
+        // the driver accepted during them counts too, even if another prompt came since.
+        const stopped = event.aborted || record.stopBeforeSettle;
         record.cancellationRequested = false;
+        record.runAwaitingSettle = false;
+        record.stopBeforeSettle = false;
+        this.markStoppedReply(
+          record,
+          stopped && record.session
+            ? newestReplyEntryId(record.session.sessionManager.getBranch())
+            : undefined,
+        );
         const runId = record.runningRunId;
         record.runningRunId = undefined;
         record.status = outcome?.status === "failed" ? "failed" : "idle";
@@ -3181,22 +3355,10 @@ export class SessionSupervisor {
       return;
     }
 
-    const nextEntry =
-      archivedAt !== undefined
-        ? { ...sessionEntry, archivedAt }
-        : {
-            sessionRef: sessionEntry.sessionRef,
-            workspaceId: sessionEntry.workspaceId,
-            title: sessionEntry.title,
-            updatedAt: sessionEntry.updatedAt,
-            ...(sessionEntry.previewSnippet !== undefined
-              ? { previewSnippet: sessionEntry.previewSnippet }
-              : {}),
-            ...(sessionEntry.sessionFilePath !== undefined
-              ? { sessionFilePath: sessionEntry.sessionFilePath }
-              : {}),
-            status: sessionEntry.status,
-          };
+    // Unarchiving drops only archivedAt; every other field the entry holds stays.
+    const nextEntry: SessionCatalogSnapshot["sessions"][number] = { ...sessionEntry };
+    if (archivedAt === undefined) delete nextEntry.archivedAt;
+    else nextEntry.archivedAt = archivedAt;
 
     await this.catalogs.sessions.upsertSession(nextEntry);
   }

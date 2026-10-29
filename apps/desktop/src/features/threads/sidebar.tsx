@@ -66,6 +66,7 @@ import type { ThreadMenuState } from "./hooks/use-thread-actions";
 import { archiveThreadShortcut, ThreadActionsMenu } from "./thread-actions";
 import {
   recencyHistoryExpansionKey,
+  flattenThreadTrees,
   sessionThreadKey,
   threadHistoryPreview,
   visibleThreadShortcutOrder,
@@ -78,6 +79,7 @@ import {
 import { useThreadShortcutHintsVisible } from "./thread-shortcut-hints";
 import type { Dispatch, SetStateAction } from "react";
 import type { DesktopAppState } from "../../../contracts/desktop-state";
+import { applySnapshotIfNewer } from "../../app/desktop-app-state";
 
 interface SidebarProps {
   readonly activeView: AppView;
@@ -127,9 +129,15 @@ interface ThreadShortcutBadge {
   readonly label: string;
 }
 
-const ThreadShortcutContext = createContext<ReadonlyMap<string, ThreadShortcutBadge> | undefined>(
-  undefined,
-);
+const ThreadListContext = createContext<
+  | {
+      readonly shortcuts: ReadonlyMap<string, ThreadShortcutBadge> | undefined;
+      readonly props: SidebarProps;
+      readonly collapsed: ReadonlySet<string>;
+      readonly toggle: (key: string) => void;
+    }
+  | undefined
+>(undefined);
 
 export function Sidebar(props: SidebarProps) {
   const {
@@ -167,6 +175,13 @@ export function Sidebar(props: SidebarProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [archivedOpen, setArchivedOpen] = useState(false);
   const [expandedHistory, setExpandedHistory] = useState<ReadonlySet<string>>(() => new Set());
+  const [collapsedThreads, setCollapsedThreads] = useState<ReadonlySet<string>>(() => new Set());
+  const toggleThread = (key: string) =>
+    setCollapsedThreads((current) => {
+      const next = new Set(current);
+      if (!next.delete(key)) next.add(key);
+      return next;
+    });
   const commandHeld = useThreadShortcutHintsVisible(api.platform);
   const collapsedFolderIds = new Set(collapsedWorkspaceIds);
   const setFolderCollapsed = (workspaceId: string, collapsed: boolean) => {
@@ -182,6 +197,7 @@ export function Sidebar(props: SidebarProps) {
     expandedHistory,
     archivedOpen,
     collapsedWorkspaceIds,
+    collapsedThreadKeys: collapsedThreads,
   });
   threadShortcutOrderRef.current = shortcutOrder;
   const shortcutByKey = commandHeld
@@ -208,7 +224,7 @@ export function Sidebar(props: SidebarProps) {
   useEffect(() => {
     if (!renameSessionId) return;
     const holds = (threads: readonly ThreadListEntry[]) =>
-      threads.some((thread) => thread.session.id === renameSessionId);
+      flattenThreadTrees(threads).some((thread) => thread.session.id === renameSessionId);
     if (holds(threadSidebarModel.archivedThreads)) {
       setArchivedOpen(true);
       return;
@@ -233,6 +249,42 @@ export function Sidebar(props: SidebarProps) {
     }
     // Reveal once per rename; later list changes should not reopen groups.
   }, [renameSessionId]);
+
+  // Reveal ancestors when another surface selects or renames a nested thread. It runs
+  // once per target and ancestor path, so a parent the user collapses stays collapsed
+  // through later state pushes; a path that changes (links arriving late) reveals again.
+  const revealedPathRef = useRef<{ select?: string; rename?: string }>({});
+  useEffect(() => {
+    const entries = new Map(
+      threadSidebarModel.recencyOrder.map((entry) => [sessionThreadKey(entry), entry]),
+    );
+    let entry = renameSessionId
+      ? threadSidebarModel.recencyOrder.find((item) => item.session.id === renameSessionId)
+      : entries.get(`${selectedWorkspace?.id}:${selectedSession?.id}`);
+    const target = entry ? sessionThreadKey(entry) : "";
+    const ancestors = new Set<string>();
+    while (entry?.parentKey && !ancestors.has(entry.parentKey)) {
+      ancestors.add(entry.parentKey);
+      entry = entries.get(entry.parentKey);
+    }
+    // Rename and selection reveal separately: renaming the selected thread needs its row
+    // mounted, and ending a rename must not reopen what the user collapsed since.
+    const path = [target, ...ancestors].join("\n");
+    const kind = renameSessionId ? "rename" : "select";
+    // Each rename is its own reveal, even of the same thread.
+    if (!renameSessionId) revealedPathRef.current = { select: revealedPathRef.current.select };
+    if (revealedPathRef.current[kind] === path) return;
+    revealedPathRef.current = { ...revealedPathRef.current, [kind]: path };
+    setCollapsedThreads((current) => {
+      if (![...ancestors].some((key) => current.has(key))) return current;
+      return new Set([...current].filter((key) => !ancestors.has(key)));
+    });
+  }, [
+    selectedWorkspace?.id,
+    selectedSession?.id,
+    renameSessionId,
+    threadSidebarModel.recencyOrder,
+  ]);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
   const pinnedSortableId = (thread: ThreadListEntry) => `pinned:${sessionThreadKey(thread)}`;
@@ -302,11 +354,9 @@ export function Sidebar(props: SidebarProps) {
       : [];
   };
 
+  // recencyOrder holds every unarchived thread, including children nested under another folder's parent.
   const folderHasThreads = (folderId: string) =>
-    threadSidebarModel.workspaceGroups.some(
-      (group) => group.workspace.id === folderId && group.threads.length > 0,
-    ) ||
-    threadSidebarModel.pinnedThreads.some((thread) => thread.folderId === folderId) ||
+    threadSidebarModel.recencyOrder.some((thread) => thread.folderId === folderId) ||
     threadSidebarModel.archivedThreads.some((thread) => thread.folderId === folderId);
   const showFolderRow = (group: WorkspaceThreadGroup) =>
     threadGrouping === "workspace" || !folderHasThreads(group.workspace.id);
@@ -338,9 +388,8 @@ export function Sidebar(props: SidebarProps) {
       const newOrder = arrayMove(pinnedSortableIds, oldIndex, newIndex).map(
         pinnedSessionKeyFromSortableId,
       );
-      applyOptimisticReorder(
-        (prev) => ({ ...prev, pinnedSessionOrder: newOrder }),
-        () => api.reorderPinnedSessions(newOrder),
+      applyOptimisticReorder("pinnedSessionOrder", newOrder, () =>
+        api.reorderPinnedSessions(newOrder),
       );
       return;
     }
@@ -350,26 +399,31 @@ export function Sidebar(props: SidebarProps) {
     if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return;
 
     const newOrder = arrayMove(rootGroupIds, oldIndex, newIndex);
-    applyOptimisticReorder(
-      (prev) => ({ ...prev, workspaceOrder: newOrder }),
-      () => api.reorderWorkspaces(newOrder),
-    );
+    applyOptimisticReorder("workspaceOrder", newOrder, () => api.reorderWorkspaces(newOrder));
   }
 
   // Optimistically update local state to avoid snap-back animation, then reconcile with the
-  // authoritative state the IPC call returns; roll back to the pre-reorder snapshot on rejection.
+  // authoritative state the IPC call returns; on rejection, put back only the previous order.
+  // Neither path may restore an older whole snapshot: pushes only carry the model catalog when
+  // it changes, so an older snapshot would leave an old catalog in the window.
   function applyOptimisticReorder(
-    optimistic: (prev: DesktopAppState) => DesktopAppState,
+    field: "workspaceOrder" | "pinnedSessionOrder",
+    order: readonly string[],
     commit: () => Promise<DesktopAppState>,
   ) {
-    let previousSnapshot: DesktopAppState | null = null;
+    let previousOrder: readonly string[] | undefined;
     setSnapshot((prev) => {
-      previousSnapshot = prev;
-      return prev ? optimistic(prev) : prev;
+      previousOrder = prev?.[field];
+      return prev ? { ...prev, [field]: order } : prev;
     });
     void commit().then(
-      (state) => setSnapshot(state),
-      () => setSnapshot(previousSnapshot),
+      (state) => applySnapshotIfNewer(setSnapshot, state),
+      () =>
+        setSnapshot((current) =>
+          current && previousOrder && current[field] === order
+            ? { ...current, [field]: previousOrder }
+            : current,
+        ),
     );
   }
 
@@ -521,7 +575,14 @@ export function Sidebar(props: SidebarProps) {
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
           >
-            <ThreadShortcutContext.Provider value={shortcutByKey}>
+            <ThreadListContext.Provider
+              value={{
+                shortcuts: shortcutByKey,
+                props,
+                collapsed: collapsedThreads,
+                toggle: toggleThread,
+              }}
+            >
               <div className="workspace-list" data-testid="workspace-list">
                 <SortableContext items={rootGroupIds} strategy={verticalListSortingStrategy}>
                   {rootGroups.map((group) => (
@@ -666,7 +727,7 @@ export function Sidebar(props: SidebarProps) {
                   </div>
                 ) : null}
               </DragOverlay>
-            </ThreadShortcutContext.Provider>
+            </ThreadListContext.Provider>
           </DndContext>
         )}
       </div>
@@ -1554,9 +1615,13 @@ const ThreadSessionRow = forwardRef<HTMLDivElement, ThreadSessionRowProps>(
     ref,
   ) {
     const indicatorVariant = sessionIndicatorVariant(thread);
+    const tree = useContext(ThreadListContext);
+    const threadKey = sessionThreadKey(thread);
+    const children = thread.children ?? [];
+    const childrenOpen = !tree?.collapsed.has(threadKey);
     const pinned = Boolean(thread.session.pinnedAt);
     const actionContext = showContext ? ` in ${thread.contextLabel}` : "";
-    const shortcut = useContext(ThreadShortcutContext)?.get(sessionThreadKey(thread));
+    const shortcut = tree?.shortcuts?.get(sessionThreadKey(thread));
     const shortcutBadge = overlay ? undefined : shortcut;
     const menuOpen =
       !overlay &&
@@ -1564,6 +1629,7 @@ const ThreadSessionRow = forwardRef<HTMLDivElement, ThreadSessionRowProps>(
       threadMenu.openMenu.sessionId === thread.session.id;
     const classes = [
       "session-row",
+      children.length > 0 && !overlay ? "session-row--parent" : "",
       active ? "session-row--active" : "",
       pinned ? "session-row--pinned" : "",
       dragging ? "session-row--dragging" : "",
@@ -1581,6 +1647,7 @@ const ThreadSessionRow = forwardRef<HTMLDivElement, ThreadSessionRowProps>(
           data-sidebar-indicator={indicatorVariant}
           data-session-pinned={pinned ? "true" : "false"}
           data-session-id={thread.session.id}
+          data-parent-thread={thread.parentKey}
           data-thread-shortcut={shortcutBadge ? String(shortcutBadge.slot) : undefined}
           aria-keyshortcuts={
             shortcutBadge ? `${IS_MAC ? "Meta" : "Control"}+${shortcutBadge.slot}` : undefined
@@ -1595,6 +1662,20 @@ const ThreadSessionRow = forwardRef<HTMLDivElement, ThreadSessionRowProps>(
             threadMenu.openSidebarMenu(thread.session.id);
           }}
         >
+          {children.length > 0 && !overlay ? (
+            <button
+              type="button"
+              className="session-row__tree-toggle"
+              aria-label={`${childrenOpen ? "Collapse" : "Expand"} children of ${thread.session.title}`}
+              aria-expanded={childrenOpen}
+              onClick={(event) => {
+                event.stopPropagation();
+                tree?.toggle(threadKey);
+              }}
+            >
+              {childrenOpen ? <ChevronDownIcon /> : <ChevronRightIcon />}
+            </button>
+          ) : null}
           <button
             className="session-row__select"
             onClick={(event) => {
@@ -1726,6 +1807,28 @@ const ThreadSessionRow = forwardRef<HTMLDivElement, ThreadSessionRowProps>(
               </button>
             </div>
           </form>
+        ) : null}
+        {tree && !overlay && childrenOpen && children.length > 0 ? (
+          <div
+            className="session-tree__children"
+            data-parent-session-id={thread.session.id}
+            role="group"
+            aria-label={`Children of ${thread.session.title}`}
+          >
+            {children.map((child) => (
+              <HistoryThreadRow
+                key={sessionThreadKey(child)}
+                thread={child}
+                showContext={showContext}
+                selectedWorkspace={tree.props.selectedWorkspace}
+                selectedSession={tree.props.selectedSession}
+                threadMenu={tree.props.threadMenu}
+                onArchiveSession={tree.props.onArchiveSession}
+                onSelectSession={tree.props.onSelectSession}
+                onSetSessionPinned={tree.props.onSetSessionPinned}
+              />
+            ))}
+          </div>
         ) : null}
       </>
     );

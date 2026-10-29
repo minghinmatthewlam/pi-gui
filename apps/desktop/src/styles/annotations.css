@@ -44,9 +44,11 @@
   box-shadow: var(--focus-ring);
 }
 
+/* Above main's other layers and below the narrow-window sidebar drawer backdrop (35), so an
+   open drawer covers a selection's buttons and the annotation editor. */
 .annotation-popover {
   position: fixed;
-  z-index: 40;
+  z-index: 34;
 }
 
 .annotation-add {

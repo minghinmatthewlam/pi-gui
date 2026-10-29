@@ -42,6 +42,13 @@ export interface SessionCatalogEntry {
   previewSnippet?: string;
   sessionFilePath?: string;
   status: SessionStatus;
+  /**
+   * The last run was stopped (pi reported it aborted) while this reply entry was the newest
+   * on its branch. Kept here because pi's session file does not record a Stop that left no
+   * aborted reply. It only counts while that entry is still the newest reply. Written only
+   * by setStoppedReplyId; reads attach it, and entry writes ignore it.
+   */
+  stoppedReplyId?: string;
 }
 
 export interface WorkspaceCatalogSnapshot {

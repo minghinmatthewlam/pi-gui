@@ -1,5 +1,5 @@
 import { webContents, type BrowserWindow } from "electron";
-import { stat } from "node:fs/promises";
+import { realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import type { DesktopHostAction } from "@pi-gui/extension-ui/browser";
 import { desktopIpc } from "../../contracts/ipc";
@@ -88,14 +88,15 @@ export async function performExtensionViewHostAction(
   const existingFile = async (requestedPath: string) => {
     const filePath = await resolveExistingWorkspacePath(workspacePath, requestedPath);
     if (!(await stat(filePath)).isFile()) throw new Error("The selected path is not a file");
-    return filePath;
+    // Keep both open-file and draft attachments relative to the canonical checkout.
+    return path.relative(await realpath(workspacePath), filePath);
   };
   if (action.type === "openFile") {
-    const filePath = await existingFile(action.path);
+    const relativePath = await existingFile(action.path);
     requireCurrentTask();
     contents.send(desktopIpc.extensionViewOpenFile, {
       target: context.target,
-      path: path.relative(workspacePath, filePath),
+      path: relativePath,
       ...(action.line === undefined ? {} : { line: action.line }),
       ...(action.column === undefined ? {} : { column: action.column }),
     });
@@ -103,9 +104,9 @@ export async function performExtensionViewHostAction(
   }
   const files = await Promise.all(
     (action.files ?? []).map(async (file) => {
-      const filePath = await existingFile(file.path);
+      const relativePath = await existingFile(file.path);
       return {
-        path: path.relative(workspacePath, filePath),
+        path: relativePath,
         line: file.line,
       };
     }),

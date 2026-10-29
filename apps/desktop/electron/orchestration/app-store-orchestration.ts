@@ -8,6 +8,7 @@ import type {
   SessionConfig,
   SessionDriverEvent,
   SessionRef,
+  SessionRunOutcome,
   SessionSnapshot,
   WorkspaceRef,
 } from "@pi-gui/session-driver";
@@ -25,9 +26,14 @@ import type {
   TimelineToolCall,
   TranscriptMessage,
 } from "../../contracts/desktop-state";
+import {
+  formatCrossProjectMessage,
+  parseCrossProjectMessage,
+} from "../../contracts/thread-message";
 import { latestSessionActivityAt, previewFromTranscript } from "../application/app-store-utils";
 import type { RefreshStateOptions } from "../application/refresh-state-options";
 import {
+  archiveChildThreadsAction,
   createChildThreadAction,
   createChildThreadPromptFromToolOutput,
   createChildThreadToolName,
@@ -42,6 +48,7 @@ import {
   sendMessageToThreadToolName,
 } from "./orchestration-runtime";
 import type {
+  ArchiveChildThreadsToolDetails,
   CreateChildThreadToolDetails,
   ListThreadsToolDetails,
   OrchestrationThreadListEntry,
@@ -52,6 +59,8 @@ import type {
 const CHILD_TITLE_LIMIT = 56;
 const MAX_CHILD_TRANSCRIPT_MESSAGES = 40;
 const MAX_READ_THREAD_MESSAGES = 60;
+/** How many threads list_threads returns for `workspace: "*"`, most relevant first. */
+export const MAX_ALL_PROJECT_THREADS = 200;
 const MAX_EVIDENCE_RECORDS_PER_CHILD = 80;
 const DEFAULT_SUPERVISION_INTERVAL_MS = 60_000;
 const MIN_SUPERVISION_INTERVAL_MS = 250;
@@ -87,6 +96,16 @@ interface OrchestrationOwnerHost {
     | { archivedAt?: string; updatedAt: string; title: string; status: string; preview?: string }
     | undefined;
   ensureSessionReady(sessionRef: SessionRef): Promise<SessionSnapshot | undefined>;
+  /** The driver's report of how the session's newest assistant reply ended. */
+  lastRunOutcome(sessionRef: SessionRef): SessionRunOutcome | undefined;
+  /**
+   * Archives only if the driver confirms nothing is in flight and the last run outcome
+   * is still `expect.lastRunOutcome`; throws otherwise.
+   */
+  archiveIdleSession(
+    sessionRef: SessionRef,
+    expect: { readonly lastRunOutcome: SessionRunOutcome },
+  ): Promise<void>;
   ensureSessionSubscription(sessionRef: SessionRef): Promise<void>;
   subscribeToSessionEvents(
     listener: (event: SessionDriverEvent, state: DesktopAppState) => void | Promise<void>,
@@ -109,9 +128,19 @@ interface OrchestrationOwnerHost {
     attachments: readonly import("../../contracts/desktop-state").ComposerAttachment[],
     options?: { readonly deliverAs?: "steer" | "followUp"; readonly allowCommands?: boolean },
   ): Promise<DesktopAppState>;
+  /** Sends or queues text without touching the receiving thread's draft or queue edit. */
+  deliverBackgroundInstruction(
+    sessionRef: SessionRef,
+    text: string,
+    options: { readonly rollbackOnError: true },
+  ): Promise<string | undefined>;
 }
 
 export interface OrchestrationOwner {
+  archiveChildThreadsToolResult(
+    parentRef: SessionRef,
+    threadIds: readonly string[],
+  ): Promise<AgentToolResult<ArchiveChildThreadsToolDetails>>;
   reconcileDueSupervisionLoops(): { readonly changed: boolean };
   cancelChildRunsForParent(parentRef: SessionRef): Promise<void>;
   sendChildThreadFollowUp(input: SendChildThreadFollowUpInput): Promise<DesktopAppState>;
@@ -121,8 +150,8 @@ export interface OrchestrationOwner {
   projectOrchestrationChildren(
     children?: readonly OrchestrationChildThread[],
   ): readonly OrchestrationChildThread[];
-  projectOrchestrationChildrenForSession(
-    sessionRef: SessionRef,
+  projectOrchestrationChildrenForSessions(
+    sessionRefs: readonly SessionRef[],
   ): readonly OrchestrationChildThread[];
   handleOrchestrationThreadToolResult(
     event: Extract<SessionDriverEvent, { type: "toolFinished" }>,
@@ -133,7 +162,10 @@ export interface OrchestrationOwner {
     parentRef: SessionRef,
     input: { readonly prompt: string; readonly toolCallId: string },
   ): Promise<AgentToolResult<CreateChildThreadToolDetails>>;
-  listThreadsToolResult(parentRef: SessionRef): AgentToolResult<ListThreadsToolDetails>;
+  listThreadsToolResult(
+    parentRef: SessionRef,
+    workspace?: string,
+  ): AgentToolResult<ListThreadsToolDetails>;
   readThreadToolResult(
     parentRef: SessionRef,
     threadId: string,
@@ -146,6 +178,8 @@ export interface OrchestrationOwner {
 
 export function createOrchestrationOwner(store: OrchestrationOwnerHost): OrchestrationOwner {
   return {
+    archiveChildThreadsToolResult: (parentRef, threadIds) =>
+      archiveChildThreadsToolResult(store, parentRef, threadIds),
     reconcileDueSupervisionLoops: () => reconcileDueSupervisionLoops(store),
     cancelChildRunsForParent: (parentRef) => cancelChildRunsForParent(store, parentRef),
     sendChildThreadFollowUp: (input) => sendChildThreadFollowUp(store, input),
@@ -153,8 +187,8 @@ export function createOrchestrationOwner(store: OrchestrationOwnerHost): Orchest
     hydrateOrchestrationChildren: () => hydrateOrchestrationChildren(store),
     hydrateVisibleOrchestrationChildren: () => hydrateVisibleOrchestrationChildren(store),
     projectOrchestrationChildren: (children) => projectOrchestrationChildren(store, children),
-    projectOrchestrationChildrenForSession: (sessionRef) =>
-      projectOrchestrationChildrenForSession(store, sessionRef),
+    projectOrchestrationChildrenForSessions: (sessionRefs) =>
+      projectOrchestrationChildrenForSessions(store, sessionRefs),
     handleOrchestrationThreadToolResult: (event) =>
       handleOrchestrationThreadToolResult(store, event),
     hasOrchestrationChildSession: (sessionRef) =>
@@ -163,7 +197,8 @@ export function createOrchestrationOwner(store: OrchestrationOwnerHost): Orchest
       hasOrchestrationParentSession(store.orchestrationChildren(), sessionRef),
     createChildThreadToolResult: (parentRef, input) =>
       createChildThreadToolResult(store, parentRef, input),
-    listThreadsToolResult: (parentRef) => listThreadsToolResult(store, parentRef),
+    listThreadsToolResult: (parentRef, workspace) =>
+      listThreadsToolResult(store, parentRef, workspace),
     readThreadToolResult: (parentRef, threadId) => readThreadToolResult(store, parentRef, threadId),
     sendMessageToThreadToolResult: (parentRef, input) =>
       sendMessageToThreadToolResult(store, parentRef, input),
@@ -605,17 +640,147 @@ async function updateSendMessageToThreadToolOutput(
   );
 }
 
+async function archiveChildThreadsToolResult(
+  store: OrchestrationOwnerHost,
+  parentRef: SessionRef,
+  threadIds: readonly string[],
+): Promise<AgentToolResult<ArchiveChildThreadsToolDetails>> {
+  await store.initialize();
+  const archived: string[] = [];
+  const skipped: { threadId: string; reason: string }[] = [];
+  for (const threadId of new Set(threadIds)) {
+    try {
+      const child = ownDirectChild(store, parentRef, threadId);
+      await archiveFinishedChild(store, child);
+      updateChildSupervisionLoop(store, child.id, "stop", "Child thread archived.");
+      archived.push(child.id);
+    } catch (error) {
+      skipped.push({ threadId, reason: errorMessage(error) });
+    }
+  }
+  if (archived.length) {
+    await store.persistUiState();
+    store.emit();
+  }
+  return {
+    content: [
+      {
+        type: "text",
+        text: [
+          `Archived ${archived.length} child thread(s). History and drafts are kept; restore them from the sidebar.`,
+          ...archived.map((id) => `Archived: ${id}`),
+          ...skipped.map((item) => `Skipped ${item.threadId}: ${item.reason}`),
+        ].join("\n"),
+      },
+    ],
+    details: { action: archiveChildThreadsAction, archived, skipped },
+  };
+}
+
+/** Resolves an id only among the caller's own children, never the UI selection. */
+function ownDirectChild(
+  store: OrchestrationOwnerHost,
+  parentRef: SessionRef,
+  threadId: string,
+): OrchestrationChildThread {
+  const child = store
+    .orchestrationChildren()
+    .find(
+      (entry) =>
+        entry.parentWorkspaceId === parentRef.workspaceId &&
+        entry.parentSessionId === parentRef.sessionId &&
+        (entry.id === threadId ||
+          entry.childSessionId === threadId ||
+          sessionKey(childSessionRef(entry)) === threadId),
+    );
+  if (!child || sessionKey(childSessionRef(child)) === sessionKey(parentRef)) {
+    throw new Error("Only direct child threads of this thread can be archived.");
+  }
+  return child;
+}
+
+/**
+ * The app decides that a child's work is finished; the driver only guarantees that
+ * nothing is in flight and the run outcome it saw is unchanged at the moment of the
+ * write. A child that starts or stops a turn after the check is refused by the driver.
+ */
+async function archiveFinishedChild(
+  store: OrchestrationOwnerHost,
+  child: OrchestrationChildThread,
+): Promise<void> {
+  const ref = childSessionRef(child);
+  assertArchivableChild(store, ref);
+  await store.ensureSessionReady(ref);
+  // Opening a cold child awaits; the user may have restored a grandchild or archived the
+  // child meanwhile, so every check runs again once the session is ready.
+  assertArchivableChild(store, ref);
+  const unfinished = unfinishedChildReason(store, ref);
+  if (unfinished) throw new Error(`${unfinished}; it was not archived.`);
+  // The app's copy of the outcome can trail the runtime; the driver re-checks it at the write.
+  await store.archiveIdleSession(ref, { lastRunOutcome: "completed" });
+}
+
+function assertArchivableChild(store: OrchestrationOwnerHost, ref: SessionRef): void {
+  const session = store.sessionFromState(ref);
+  if (!session) throw new Error("Child thread was not found.");
+  if (session.archivedAt) throw new Error("Child thread is already archived.");
+  const openDescendant = store
+    .orchestrationChildren()
+    .some(
+      (entry) =>
+        entry.parentWorkspaceId === ref.workspaceId &&
+        entry.parentSessionId === ref.sessionId &&
+        !store.sessionFromState(childSessionRef(entry))?.archivedAt,
+    );
+  if (openDescendant) throw new Error("This child has its own unarchived child threads.");
+}
+
+/**
+ * Finished means idle with an empty queue, and the driver reports the newest reply
+ * completed normally: not stopped, failed, cut off, or followed by an unanswered message.
+ */
+function unfinishedChildReason(store: OrchestrationOwnerHost, ref: SessionRef): string | undefined {
+  const session = store.sessionFromState(ref);
+  const status = session ? toOrchestrationStatus(session.status, ref, store) : "failed";
+  if (status === "running" || status === "waiting")
+    return "Child thread is running or has queued messages";
+  if (status === "queued") return "Child thread has not started its work";
+  if (status === "failed") return "Child thread's last run failed";
+  const outcome = store.lastRunOutcome(ref);
+  if (outcome === "stopped") return "Child thread's last run was stopped before it finished";
+  if (outcome === "incomplete") return "Child thread's last turn did not end with a reply";
+  if (outcome !== "completed") return "Child thread's last run did not complete";
+  return undefined;
+}
+
 function listThreadsToolResult(
   store: OrchestrationOwnerHost,
   parentRef: SessionRef,
+  workspace?: string,
 ): AgentToolResult<ListThreadsToolDetails> {
   store.replaceOrchestrationChildren(projectOrchestrationChildren(store));
-  const threads = listThreadsForContext(store, parentRef);
+  const listed = workspace
+    ? listThreadsInWorkspaces(store, parentRef, workspace)
+    : listThreadsForContext(store, parentRef);
+  if (typeof listed === "string") {
+    return {
+      content: [{ type: "text", text: listed }],
+      details: { action: listThreadsAction, workspace, error: listed },
+    };
+  }
+  const capped = workspace?.trim() === "*" && listed.length > MAX_ALL_PROJECT_THREADS;
+  const threads = capped ? listed.slice(0, MAX_ALL_PROJECT_THREADS) : listed;
+  const omitted = listed.length - threads.length;
+  const text = capped
+    ? `${formatThreadList(threads)}\nShowing ${threads.length} of ${listed.length} threads: this project's first, then the most recently updated. ${omitted} more are not listed; pass workspace with a project name to list that project's threads.`
+    : formatThreadList(threads);
   return {
-    content: [{ type: "text", text: formatThreadList(threads) }],
+    content: [{ type: "text", text }],
     details: {
       action: listThreadsAction,
+      ...(workspace ? { workspace } : {}),
       threads,
+      ...(capped ? { omittedThreadCount: omitted } : {}),
     },
   };
 }
@@ -626,8 +791,8 @@ async function readThreadToolResult(
   threadId: string,
 ): Promise<AgentToolResult<ReadThreadToolDetails>> {
   const target = resolveThreadTarget(store, parentRef, threadId);
-  if (!target) {
-    return readThreadErrorResult(threadId, `Unknown thread: ${threadId}`);
+  if (typeof target === "string") {
+    return readThreadErrorResult(threadId, target);
   }
 
   await store.ensureSessionReady(target.sessionRef);
@@ -666,18 +831,45 @@ async function sendMessageToThreadToolResult(
   input: { readonly threadId: string; readonly message: string },
 ): Promise<AgentToolResult<SendMessageToThreadToolDetails>> {
   const target = resolveThreadTarget(store, parentRef, input.threadId);
-  if (!target) {
+  if (typeof target === "string") {
+    return sendMessageToThreadErrorResult(input.threadId, input.message, target);
+  }
+  if (parseCrossProjectMessage(input.message)) {
+    // Only the app writes this header, so the receiver's "From project" label is trustworthy.
     return sendMessageToThreadErrorResult(
       input.threadId,
       input.message,
-      `Unknown thread: ${input.threadId}`,
+      "The message cannot start with a [Message from project ...] header; send only the body.",
     );
   }
 
-  await store.submitComposerToSession(target.sessionRef, input.message, [], {
-    deliverAs: "followUp",
-    allowCommands: false,
-  });
+  const workspaces = store.orchestrationState().workspaces;
+  const senderProject = projectOf(workspaces, parentRef.workspaceId);
+  const targetProject = projectOf(workspaces, target.sessionRef.workspaceId);
+  const crossProject = senderProject?.id !== targetProject?.id;
+  if (crossProject) {
+    // Another project's thread may be mid-edit by the user; leave its composer alone.
+    try {
+      await store.deliverBackgroundInstruction(
+        target.sessionRef,
+        formatCrossProjectMessage(
+          {
+            project: senderProject?.name ?? parentRef.workspaceId,
+            threadId: sessionKey(parentRef),
+          },
+          input.message,
+        ),
+        { rollbackOnError: true },
+      );
+    } catch (error) {
+      return sendMessageToThreadErrorResult(input.threadId, input.message, errorMessage(error));
+    }
+  } else {
+    await store.submitComposerToSession(target.sessionRef, input.message, [], {
+      deliverAs: "followUp",
+      allowCommands: false,
+    });
+  }
   if (target.child) {
     updateChildSupervisionLoop(
       store,
@@ -698,6 +890,7 @@ async function sendMessageToThreadToolResult(
     status,
     queuedMessageCount: queuedMessages.length,
     message: input.message,
+    ...(crossProject && targetProject ? { project: targetProject.name } : {}),
   };
 
   return {
@@ -717,16 +910,16 @@ function projectOrchestrationChildren(
   );
 }
 
-function projectOrchestrationChildrenForSession(
+function projectOrchestrationChildrenForSessions(
   store: OrchestrationOwnerHost,
-  sessionRef: SessionRef,
+  sessionRefs: readonly SessionRef[],
 ): readonly OrchestrationChildThread[] {
   const now = new Date().toISOString();
-  const children = store.orchestrationState().orchestrationChildren;
+  const children = store.orchestrationChildren();
   const parentEvidenceByChild = parentEvidenceIndex(store, children);
+  const keys = new Set(sessionRefs.map(sessionKey));
   return children.map((child) =>
-    child.childWorkspaceId === sessionRef.workspaceId &&
-    child.childSessionId === sessionRef.sessionId
+    child.childSessionId && keys.has(sessionKey(childSessionRef(child)))
       ? projectOrchestrationChild(store, child, now, parentEvidenceByChild.get(child.id) ?? [])
       : child,
   );
@@ -1534,7 +1727,7 @@ function listThreadsForContext(
 
   for (const child of parentChildren) {
     const key = sessionKey(childSessionRef(child));
-    if (entries.has(key)) {
+    if (entries.has(key) || store.sessionFromState(childSessionRef(child))?.archivedAt) {
       continue;
     }
     entries.set(key, {
@@ -1551,16 +1744,110 @@ function listThreadsForContext(
     });
   }
 
-  return [...entries.values()].sort((left, right) => {
-    const rank = relationshipRank(left.relationship) - relationshipRank(right.relationship);
-    if (rank !== 0) {
-      return rank;
+  return [...entries.values()].sort(compareThreadListEntries);
+}
+
+/**
+ * Threads in the projects `workspace` names: a name, path or id, or `*` for all of them.
+ * The caller's own project lists exactly as {@link listThreadsForContext} does; other
+ * projects' threads use their unambiguous `workspaceId:sessionId` as the thread id.
+ */
+function listThreadsInWorkspaces(
+  store: OrchestrationOwnerHost,
+  parentRef: SessionRef,
+  workspace: string,
+): readonly ThreadListEntry[] | string {
+  const workspaces = store.orchestrationState().workspaces;
+  const wanted = workspace.trim();
+  const names = (entry: (typeof workspaces)[number] | undefined) =>
+    !!entry &&
+    (entry.id === wanted ||
+      entry.path === wanted ||
+      entry.name.toLowerCase() === wanted.toLowerCase());
+  // Naming a project lists its worktrees too; naming a worktree lists only that worktree.
+  const matches =
+    wanted === "*"
+      ? workspaces
+      : workspaces.filter((entry) => names(entry) || names(projectOf(workspaces, entry.id)));
+  if (matches.length === 0) {
+    const known = workspaces.map((entry) => entry.name).join(", ");
+    return `Unknown project: ${wanted}. Projects: ${known || "none"}.`;
+  }
+  const entries = new Map<string, ThreadListEntry>();
+  if (matches.some((entry) => entry.id === parentRef.workspaceId)) {
+    for (const thread of listThreadsForContext(store, parentRef)) {
+      entries.set(sessionKey(thread), thread);
     }
-    if (left.updatedAt !== right.updatedAt) {
-      return right.updatedAt.localeCompare(left.updatedAt);
+  }
+  const callerProject = projectOf(workspaces, parentRef.workspaceId);
+  for (const entry of matches) {
+    const project = projectOf(workspaces, entry.id);
+    // The caller's own project lists only what its default listing shows, as on main.
+    if (project?.id === callerProject?.id) continue;
+    for (const session of entry.sessions) {
+      const ref = { workspaceId: entry.id, sessionId: session.id };
+      const key = sessionKey(ref);
+      if (session.archivedAt || entries.has(key)) {
+        continue;
+      }
+      entries.set(key, {
+        threadId: key,
+        workspaceId: entry.id,
+        sessionId: session.id,
+        title: session.title,
+        status: session.status,
+        relationship: "other_project",
+        project: project?.name ?? entry.name,
+        updatedAt: session.updatedAt,
+        preview: session.preview ?? "",
+      });
     }
-    return left.title.localeCompare(right.title);
-  });
+  }
+  return [...entries.values()].sort(compareThreadListEntries);
+}
+
+/**
+ * A thread in another project, named by the `workspaceId:sessionId` id list_threads gives it.
+ * Threads of the caller's own project resolve only through its own listing, as before.
+ */
+function resolveOtherProjectThread(
+  store: OrchestrationOwnerHost,
+  parentRef: SessionRef,
+  threadId: string,
+): ResolvedThreadTarget | string {
+  const workspaces = store.orchestrationState().workspaces;
+  const callerProject = projectOf(workspaces, parentRef.workspaceId);
+  for (const workspace of workspaces) {
+    if (projectOf(workspaces, workspace.id)?.id === callerProject?.id) continue;
+    const session = workspace.sessions.find(
+      (entry) =>
+        !entry.archivedAt &&
+        sessionKey({ workspaceId: workspace.id, sessionId: entry.id }) === threadId,
+    );
+    if (session) return { sessionRef: { workspaceId: workspace.id, sessionId: session.id } };
+  }
+  return `Unknown thread: ${threadId}`;
+}
+
+/** The primary workspace a workspace belongs to; its worktrees share the project. */
+function projectOf(
+  workspaces: DesktopAppState["workspaces"],
+  workspaceId: string,
+): DesktopAppState["workspaces"][number] | undefined {
+  const workspace = workspaces.find((entry) => entry.id === workspaceId);
+  const rootId = workspace?.rootWorkspaceId ?? workspaceId;
+  return workspaces.find((entry) => entry.id === rootId) ?? workspace;
+}
+
+function compareThreadListEntries(left: ThreadListEntry, right: ThreadListEntry): number {
+  const rank = relationshipRank(left.relationship) - relationshipRank(right.relationship);
+  if (rank !== 0) {
+    return rank;
+  }
+  if (left.updatedAt !== right.updatedAt) {
+    return right.updatedAt.localeCompare(left.updatedAt);
+  }
+  return left.title.localeCompare(right.title);
 }
 
 function relationshipRank(relationship: ThreadListEntry["relationship"]): number {
@@ -1570,7 +1857,7 @@ function relationshipRank(relationship: ThreadListEntry["relationship"]): number
   if (relationship === "child") {
     return 1;
   }
-  return 2;
+  return relationship === "workspace" ? 2 : 3;
 }
 
 function threadListSupervisionFields(
@@ -1588,14 +1875,15 @@ function threadListSupervisionFields(
   };
 }
 
+/** The thread a tool call names, or the error to report. */
 function resolveThreadTarget(
   store: OrchestrationOwnerHost,
   parentRef: SessionRef,
   threadId: string,
-): ResolvedThreadTarget | undefined {
+): ResolvedThreadTarget | string {
   const normalized = threadId.trim();
   if (!normalized) {
-    return undefined;
+    return `Unknown thread: ${threadId}`;
   }
 
   const visibleThread = listThreadsForContext(store, parentRef).find(
@@ -1606,7 +1894,7 @@ function resolveThreadTarget(
       `${thread.workspaceId}:${thread.sessionId}` === normalized,
   );
   if (!visibleThread) {
-    return undefined;
+    return resolveOtherProjectThread(store, parentRef, normalized);
   }
 
   const child = visibleThread.childThreadId
@@ -1632,6 +1920,7 @@ function formatThreadList(threads: readonly ThreadListEntry[]): string {
     ...threads.map(
       (thread) =>
         `- ${thread.threadId} (${thread.relationship}, ${thread.status}): ${thread.title}` +
+        (thread.project ? ` [project: ${thread.project}]` : "") +
         (thread.supervisionGate
           ? ` [gate=${thread.supervisionGate}: ${thread.supervisionReason ?? "monitoring"}]`
           : "") +
@@ -1674,7 +1963,9 @@ function formatCreateChildThreadResult(result: CreateChildThreadToolDetails): st
 function formatSendMessageToThreadResult(result: SendMessageToThreadToolDetails): string {
   const verb = result.status === "queued" ? "Queued" : "Sent";
   return (
-    `${verb} message to thread ${result.threadId}.` +
+    `${verb} message to thread ${result.threadId}` +
+    (result.project ? ` in project ${result.project}` : "") +
+    "." +
     (result.queuedMessageCount && result.queuedMessageCount > 0
       ? ` Pending messages: ${result.queuedMessageCount}.`
       : "")
@@ -1722,6 +2013,19 @@ function capEvidenceRecords(
   return [...priority, ...remaining].slice(0, MAX_EVIDENCE_RECORDS_PER_CHILD);
 }
 
+interface ParentEvidenceCacheEntry {
+  readonly transcript: readonly TranscriptMessage[];
+  readonly childrenSignature: string;
+  readonly records: readonly OrchestrationEvidenceRecord[];
+}
+
+// The owner and transcript arrays are immutable snapshots. Weak ownership avoids
+// retaining a closed app store; one entry per parent replaces older revisions.
+const parentEvidenceCaches = new WeakMap<
+  OrchestrationOwnerHost,
+  Map<string, ParentEvidenceCacheEntry>
+>();
+
 function parentEvidenceIndex(
   store: OrchestrationOwnerHost,
   children: readonly OrchestrationChildThread[],
@@ -1735,10 +2039,32 @@ function parentEvidenceIndex(
       }),
     ),
   );
+  let cache = parentEvidenceCaches.get(store);
+  if (!cache) {
+    cache = new Map();
+    parentEvidenceCaches.set(store, cache);
+  }
+  for (const key of cache.keys()) {
+    if (!parentKeys.has(key)) cache.delete(key);
+  }
+  // Evidence records include session identities, but not changing child status,
+  // previews or evidence arrays. New/replaced children must invalidate records.
+  const childrenSignature = JSON.stringify(
+    children.map((child) => [child.id, child.parentSessionId, child.childSessionId]),
+  );
   const index = new Map<string, OrchestrationEvidenceRecord[]>();
   for (const key of parentKeys) {
     const transcript = store.transcriptForKey(key);
-    for (const record of evidenceFromParentTranscript(childById, transcript)) {
+    let entry = cache.get(key);
+    if (entry?.transcript !== transcript || entry.childrenSignature !== childrenSignature) {
+      entry = {
+        transcript,
+        childrenSignature,
+        records: evidenceFromParentTranscript(childById, transcript),
+      };
+      cache.set(key, entry);
+    }
+    for (const record of entry.records) {
       const bucket = index.get(record.childThreadId) ?? [];
       bucket.push(record);
       index.set(record.childThreadId, bucket);

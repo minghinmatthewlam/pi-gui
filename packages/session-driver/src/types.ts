@@ -34,6 +34,13 @@ export interface SessionQueuedMessage {
   readonly updatedAt: Timestamp;
 }
 
+/**
+ * How the newest assistant reply ended, from pi's stop reason: "completed" for a normal
+ * stop, "stopped" when the run was aborted (including a user stop), "failed" for an
+ * error, "incomplete" when it was cut off by length or ended on a tool call.
+ */
+export type SessionRunOutcome = "completed" | "stopped" | "failed" | "incomplete";
+
 export interface SessionSnapshot {
   readonly ref: SessionRef;
   readonly workspace: WorkspaceRef;
@@ -46,6 +53,8 @@ export interface SessionSnapshot {
   readonly runningRunId?: RunId;
   readonly queuedMessages?: readonly SessionQueuedMessage[];
   readonly usage?: SessionUsageSnapshot;
+  /** Absent until the session has an assistant reply. */
+  readonly lastRunOutcome?: SessionRunOutcome;
 }
 
 export interface SessionImageAttachment {

@@ -6,12 +6,13 @@ import {
   type Dispatch,
   type SetStateAction,
 } from "react";
-import type {
-  DesktopAppState,
-  SelectedTranscriptRecord,
-  SessionExtensionUiUpdate,
+import {
+  applySelectedTranscriptPatch,
+  type DesktopAppState,
+  type SelectedTranscriptRecord,
+  type SessionExtensionUiUpdate,
 } from "../../contracts/desktop-state";
-import type { PiDesktopApi } from "../../contracts/ipc";
+import type { PiDesktopApi, PiDesktopStatePush } from "../../contracts/ipc";
 
 export type HydrationOperation = "state" | "selected-transcript";
 
@@ -74,7 +75,7 @@ export type DesktopHydrationEvent =
       readonly state: DesktopAppState;
     }
   | { readonly type: "state-pull-failed"; readonly attemptId: number }
-  | { readonly type: "state-pushed"; readonly state: DesktopAppState }
+  | { readonly type: "state-pushed"; readonly state: PiDesktopStatePush }
   | { readonly type: "state-patched"; readonly snapshot: DesktopAppState | null }
   | { readonly type: "extension-ui-pushed"; readonly update: SessionExtensionUiUpdate }
   | { readonly type: "transcript-pull-started"; readonly attemptId: number }
@@ -226,11 +227,23 @@ export function reduceDesktopHydration(
         stateInFlightId: null,
         stateFailed: current.liveSnapshot === null,
       };
-    case "state-pushed":
+    case "state-pushed": {
+      // A push without the model catalog keeps the one the window has. Keeping the same
+      // object also lets the model lists built from it stay cached.
+      const runtimeByWorkspace =
+        event.state.runtimeByWorkspace ?? current.liveSnapshot?.runtimeByWorkspace;
+      if (!runtimeByWorkspace) {
+        // No catalog yet: the state pull, or the first push after load, brings the whole state.
+        return current;
+      }
+      const state = event.state.runtimeByWorkspace
+        ? (event.state as DesktopAppState)
+        : { ...event.state, runtimeByWorkspace };
       return {
-        ...withLiveSnapshot(current, mergeLiveSnapshot(current.liveSnapshot, event.state)),
+        ...withLiveSnapshot(current, mergeLiveSnapshot(current.liveSnapshot, state)),
         stateFailed: false,
       };
+    }
     case "state-patched":
       return withLiveSnapshot(current, event.snapshot);
     case "extension-ui-pushed": {
@@ -435,10 +448,27 @@ export function useDesktopAppState(): DesktopAppSession {
         apply({ type: "state-pushed", state });
       }
     });
-    const unsubscribeTranscript = api.onSelectedTranscriptChanged((record) => {
-      if (active) {
-        apply({ type: "transcript-pushed", record });
+    let resendRequested = false;
+    const unsubscribeTranscript = api.onSelectedTranscriptChanged((payload) => {
+      if (!active) {
+        return;
       }
+      if (payload && "rows" in payload) {
+        // A patch only fits the record main last pushed, not one this window pulled itself.
+        const current = modelRef.current;
+        const record = current.receivedPushedTranscript
+          ? applySelectedTranscriptPatch(current.transcriptRecord, payload)
+          : undefined;
+        if (record) {
+          apply({ type: "transcript-pushed", record });
+        } else if (!resendRequested) {
+          resendRequested = true;
+          api.resendSelectedTranscript();
+        }
+        return;
+      }
+      resendRequested = false;
+      apply({ type: "transcript-pushed", record: payload });
     });
     const unsubscribeExtensionUi = api.onExtensionUiChanged((update) => {
       if (active) {

@@ -200,6 +200,51 @@ export interface OrchestrationChildThread {
   readonly updatedAt: string;
 }
 
+/**
+ * One parent/child link as the window draws it: ids, title and status only, never the
+ * child's goal, transcript or evidence. Main derives these from orchestrationChildren.
+ */
+export interface ChildThreadLink {
+  readonly id: string;
+  readonly parentWorkspaceId: string;
+  readonly parentSessionId: string;
+  readonly childWorkspaceId: string;
+  readonly childSessionId: string;
+  readonly title: string;
+  readonly status: OrchestrationChildThreadStatus;
+}
+
+/** Derives the links, returning `previous` when nothing the window draws has changed. */
+export function childThreadLinksOf(
+  children: readonly OrchestrationChildThread[],
+  previous: readonly ChildThreadLink[] = [],
+): readonly ChildThreadLink[] {
+  const same =
+    children.length === previous.length &&
+    children.every((child, index) => {
+      const link = previous[index]!;
+      return (
+        link.id === child.id &&
+        link.parentWorkspaceId === child.parentWorkspaceId &&
+        link.parentSessionId === child.parentSessionId &&
+        link.childWorkspaceId === child.childWorkspaceId &&
+        link.childSessionId === child.childSessionId &&
+        link.title === child.title &&
+        link.status === child.status
+      );
+    });
+  if (same) return previous;
+  return children.map((child) => ({
+    id: child.id,
+    parentWorkspaceId: child.parentWorkspaceId,
+    parentSessionId: child.parentSessionId,
+    childWorkspaceId: child.childWorkspaceId,
+    childSessionId: child.childSessionId,
+    title: child.title,
+    status: child.status,
+  }));
+}
+
 export interface SendChildThreadFollowUpInput {
   readonly childThreadId: string;
   readonly text: string;
@@ -217,6 +262,81 @@ export interface SelectedTranscriptRecord {
   // Session-file schema-version skew, when known. `writtenByNewerRuntime` drives the version-skew
   // notice; undefined until the (async, static-per-session) header read resolves.
   readonly schemaInfo?: SessionSchemaInfo;
+}
+
+// What changed since the transcript last sent to a window: `deleteCount` rows at `start` were
+// replaced by `rows`. Sending this instead of a tens-of-MB transcript keeps both processes free.
+// `baseLength` is the length of that last-sent transcript. A window holding a transcript of
+// another length asks for the whole transcript instead; this catches a lost or misapplied patch
+// that changed the length, not one that replaced rows and kept it.
+export interface SelectedTranscriptPatch {
+  readonly workspaceId: string;
+  readonly sessionId: string;
+  readonly baseLength: number;
+  readonly start: number;
+  readonly deleteCount: number;
+  readonly rows: readonly TranscriptMessage[];
+}
+
+// Rows are replaced, never edited in place, so identity finds the changed range.
+// Undefined when only a whole record can describe the change.
+export function selectedTranscriptPatch(
+  previous: SelectedTranscriptRecord,
+  next: SelectedTranscriptRecord,
+): SelectedTranscriptPatch | undefined {
+  if (
+    previous.workspaceId !== next.workspaceId ||
+    previous.sessionId !== next.sessionId ||
+    previous.schemaInfo !== next.schemaInfo
+  ) {
+    return undefined;
+  }
+  const before = previous.transcript;
+  const after = next.transcript;
+  const shorter = Math.min(before.length, after.length);
+  let start = 0;
+  while (start < shorter && before[start] === after[start]) {
+    start += 1;
+  }
+  let end = 0;
+  while (
+    end < shorter - start &&
+    before[before.length - 1 - end] === after[after.length - 1 - end]
+  ) {
+    end += 1;
+  }
+  return {
+    workspaceId: next.workspaceId,
+    sessionId: next.sessionId,
+    baseLength: before.length,
+    start,
+    deleteCount: before.length - start - end,
+    rows: after.slice(start, after.length - end),
+  };
+}
+
+// Undefined when the patch does not fit this record, so the window must pull the whole transcript.
+export function applySelectedTranscriptPatch(
+  record: SelectedTranscriptRecord | null,
+  patch: SelectedTranscriptPatch,
+): SelectedTranscriptRecord | undefined {
+  if (
+    !record ||
+    record.workspaceId !== patch.workspaceId ||
+    record.sessionId !== patch.sessionId ||
+    record.transcript.length !== patch.baseLength ||
+    patch.start + patch.deleteCount > patch.baseLength
+  ) {
+    return undefined;
+  }
+  return {
+    ...record,
+    transcript: [
+      ...record.transcript.slice(0, patch.start),
+      ...patch.rows,
+      ...record.transcript.slice(patch.start + patch.deleteCount),
+    ],
+  };
 }
 
 export interface WorktreeRecord {
@@ -371,7 +491,12 @@ export interface DesktopAppState {
   readonly extensionFlagsByWorkspace: Readonly<Record<string, ExtensionFlagValues>>;
   /** Flag values each thread's pi session started with (only the ones pi receives). */
   readonly extensionFlagsBySession: Readonly<Record<string, ExtensionFlagValues>>;
+  /**
+   * Main's full child records, transcripts included. Window state pushes leave this
+   * empty; the window reads childThreadLinks instead.
+   */
   readonly orchestrationChildren: readonly OrchestrationChildThread[];
+  readonly childThreadLinks: readonly ChildThreadLink[];
   readonly scheduledTasks: readonly ScheduledTaskRecord[];
   readonly notificationPreferences: NotificationPreferences;
   readonly integratedTerminalShell: string;
@@ -424,6 +549,7 @@ export function createEmptyDesktopAppState(): DesktopAppState {
     extensionFlagsByWorkspace: {},
     extensionFlagsBySession: {},
     orchestrationChildren: [],
+    childThreadLinks: [],
     scheduledTasks: [],
     notificationPreferences: {
       backgroundCompletion: true,

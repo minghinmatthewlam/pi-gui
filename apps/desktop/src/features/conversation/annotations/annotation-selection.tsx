@@ -53,8 +53,9 @@ function elementOf(node: Node): Element | null {
   return node instanceof Element ? node : node.parentElement;
 }
 
-// Buttons and markers around message text: a drag that runs onto them still means the text.
-const ROW_CHROME = ".timeline-item__actions, .annotation-markers";
+// Buttons, markers and the Working line around message text: a drag that runs onto them
+// still means the text.
+const ROW_CHROME = ".timeline-item__actions, .annotation-markers, .timeline-working";
 
 /** Whether `range` covers any text a reader would take as content, not row chrome. */
 function coversContent(range: Range): boolean {
@@ -72,8 +73,9 @@ function coversContent(range: Range): boolean {
 
 /**
  * A non-empty selection of one message's text in this timeline pane: the message where the
- * drag began. Running past its first or last line (onto the gap between rows or a Fork
- * button) still selects just that message; any other text makes it a different selection.
+ * drag began. Running past its first or last line (onto the gap between rows, a Fork
+ * button or the Working line) still selects just that message; any other text makes it a
+ * different selection.
  */
 function readTranscriptSelection(pane: HTMLElement): TranscriptSelection | null {
   const selection = window.getSelection();

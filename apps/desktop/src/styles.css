@@ -2,6 +2,7 @@
 @import "./styles/base.css";
 @import "./styles/sidebar.css";
 @import "./styles/topbar.css";
+@import "./styles/window-chrome.css";
 @import "./styles/model-selector-panel.css";
 @import "./styles/context-meter.css";
 @import "./styles/new-thread.css";

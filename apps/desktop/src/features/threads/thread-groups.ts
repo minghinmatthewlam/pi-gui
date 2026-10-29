@@ -1,4 +1,5 @@
 import type {
+  ChildThreadLink,
   DesktopAppState,
   SessionRecord,
   ThreadGrouping,
@@ -26,6 +27,10 @@ export interface ThreadListEntry {
   readonly session: SessionRecord;
   readonly environment: ThreadEnvironmentMeta;
   readonly contextLabel: string;
+  /** Set when this row is drawn nested under its parent thread's row. */
+  readonly parentKey?: string;
+  /** Child threads drawn nested under this row, most recent first. */
+  readonly children?: readonly ThreadListEntry[];
 }
 
 export interface WorkspaceThreadGroup {
@@ -65,12 +70,12 @@ export function buildThreadSidebarModel(
   state: DesktopAppState,
   nowMs: number = Date.now(),
 ): ThreadSidebarModel {
-  const entries = collectThreadEntries(state);
+  const entries = nestThreads(collectThreadEntries(state), state.childThreadLinks);
   const pinnedThreads = entries
     .filter((entry) => !entry.session.archivedAt && Boolean(entry.session.pinnedAt))
     .sort((left, right) => comparePinnedThreads(left, right, state.pinnedSessionOrder));
   const historyThreads = entries
-    .filter((entry) => !entry.session.archivedAt && !entry.session.pinnedAt)
+    .filter((entry) => !entry.session.archivedAt && !entry.session.pinnedAt && !entry.parentKey)
     .sort((left, right) => compareByRecency(left.session, right.session));
   const archivedThreads = entries
     .filter((entry) => Boolean(entry.session.archivedAt))
@@ -107,6 +112,80 @@ export function buildThreadSidebarModel(
     archivedThreads,
     recencyOrder,
   };
+}
+
+/**
+ * Nests each child thread under its parent's row. A child stays a top-level row when
+ * it is pinned or archived, its parent is archived or missing, or the saved
+ * links form a cycle, so every thread stays reachable. View-only: no transcript reads.
+ */
+function nestThreads(
+  entries: readonly ThreadListEntry[],
+  links: readonly ChildThreadLink[],
+): ThreadListEntry[] {
+  const byKey = new Map(entries.map((entry) => [sessionThreadKey(entry), entry]));
+  const parentOf = new Map<string, string>();
+  for (const link of links) {
+    const key = `${link.childWorkspaceId}:${link.childSessionId}`;
+    const parentKey = `${link.parentWorkspaceId}:${link.parentSessionId}`;
+    const child = byKey.get(key);
+    const parent = byKey.get(parentKey);
+    if (!child || !parent || key === parentKey || parentOf.has(key)) continue;
+    if (child.session.archivedAt || child.session.pinnedAt) continue;
+    if (parent.session.archivedAt) continue;
+    parentOf.set(key, parentKey);
+  }
+  for (const start of [...parentOf.keys()]) {
+    const path = new Set<string>();
+    for (let cursor: string | undefined = start; cursor; cursor = parentOf.get(cursor)) {
+      if (path.has(cursor)) {
+        parentOf.delete(cursor);
+        break;
+      }
+      path.add(cursor);
+    }
+  }
+  const childKeys = new Map<string, string[]>();
+  for (const [key, parentKey] of parentOf) {
+    const siblings = childKeys.get(parentKey);
+    if (siblings) siblings.push(key);
+    else childKeys.set(parentKey, [key]);
+  }
+  const built = new Map<string, ThreadListEntry>();
+  const build = (key: string): ThreadListEntry => {
+    const done = built.get(key);
+    if (done) return done;
+    const entry = byKey.get(key)!;
+    const children = (childKeys.get(key) ?? [])
+      .map(build)
+      .sort((left, right) => compareByRecency(left.session, right.session));
+    const parentKey = parentOf.get(key);
+    const next: ThreadListEntry = {
+      ...entry,
+      ...(parentKey ? { parentKey } : {}),
+      ...(children.length ? { children } : {}),
+    };
+    built.set(key, next);
+    return next;
+  };
+  return entries.map((entry) => build(sessionThreadKey(entry)));
+}
+
+export function flattenThreadTrees(
+  roots: readonly ThreadListEntry[],
+  collapsed: ReadonlySet<string> = new Set(),
+): ThreadListEntry[] {
+  const result: ThreadListEntry[] = [];
+  const pending = [...roots].reverse();
+  while (pending.length) {
+    const entry = pending.pop()!;
+    result.push(entry);
+    if (!collapsed.has(sessionThreadKey(entry))) {
+      const children = entry.children ?? [];
+      for (let i = children.length - 1; i >= 0; i--) pending.push(children[i]!);
+    }
+  }
+  return result;
 }
 
 function listFolders(state: DesktopAppState): readonly WorkspaceRecord[] {
@@ -217,6 +296,7 @@ export interface VisibleThreadShortcutOptions {
   readonly archivedOpen?: boolean;
   /** Folder groups folded shut in the sidebar; their rows are not on screen. */
   readonly collapsedWorkspaceIds?: readonly string[];
+  readonly collapsedThreadKeys?: ReadonlySet<string>;
 }
 
 export function visibleThreadShortcutOrder(
@@ -242,11 +322,14 @@ export function visibleThreadShortcutOrder(
               expandedHistory.has(recencyHistoryExpansionKey(section.bucket)),
             ).visible,
         );
-  return [
-    ...options.model.pinnedThreads,
-    ...unpinned,
-    ...(options.archivedOpen ? options.model.archivedThreads : []),
-  ];
+  return flattenThreadTrees(
+    [
+      ...options.model.pinnedThreads,
+      ...unpinned,
+      ...(options.archivedOpen ? options.model.archivedThreads : []),
+    ],
+    options.collapsedThreadKeys,
+  );
 }
 
 export function comparePinnedThreads(

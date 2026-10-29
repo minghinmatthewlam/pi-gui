@@ -10,13 +10,15 @@ Users switch folders and conversations in the sidebar and recover the selected t
 - `navigation-new-thread`: open the new-thread composer.
 - `navigation-pinning`: pin/unpin, reorder pinned threads, and preserve pin state across restart.
 - `navigation-pinning-running`: pin/unpin immediately while a composer prompt is still running.
+- `navigation-child-threads`: a thread an agent started from another thread nests under its parent's row, with an `Expand children of <title>` / `Collapse children of <title>` toggle. A child stays a top-level row when it is pinned or archived, or its parent is archived. Children of a pinned parent follow it into Pinned.
+- `navigation-drawer`: at 760px wide or less the sidebar becomes a drawer over the content; Escape (after any open menu or rename), the backdrop, or anything that changes what the main area shows (choosing a thread, New thread, ⌘1…⌘9, the switcher or palette) closes it.
 
 ## How to get to it (user POV)
 
 - Select a folder/thread in the sidebar.
 - Send in a thread and confirm it moves to the top of Today. Opening the same thread must leave its bucket unchanged. ⌘1 stays the first pinned thread, or the first visible row when nothing is pinned. Empty date buckets stay hidden.
 - Hover a thread and click Pin; click its Unpin icon in the Pinned section.
-- Click New thread in the sidebar or press Cmd+N (Control+N elsewhere; File > New Thread). A folder row also has a "+" (`New thread in <folder>`) that opens New thread for that folder; folder rows show under Workspace grouping, or under Time only for a folder with no threads. A fast double Enter starts only one thread. Shift+Cmd+O still works as an alias. Shift+Cmd+N opens a new window instead.
+- Click New thread in the sidebar or press Cmd+N (Control+N elsewhere; File > New Thread on macOS; the Windows menu bar is not verified, but Control+N works there. Linux shows no menu bar, because the app draws its own title bar with minimise, maximise and close buttons, but the shortcut still works). A folder row also has a "+" (`New thread in <folder>`) that opens New thread for that folder; folder rows show under Workspace grouping, or under Time only for a folder with no threads. A fast double Enter starts only one thread. Shift+Cmd+O still works as an alias. Shift+Cmd+N opens a new window instead.
 - Open the one thread-actions menu from the header Thread actions button or by right-clicking a row; Cmd-K lists the same actions. It offers Rename thread (Shift+Cmd+R, inline), Pin thread/Unpin thread, Archive thread (Shift+Cmd+A; an archived thread shows Restore thread instead of Pin and Archive), Mark as read (only when the thread has unseen updates), Add/Edit scheduled task, Copy session ID.
 - Cmd-K opens the command palette (Recents, Chats, Workspaces, Actions); Cmd-P opens the file palette; Ctrl-Tab opens the Recent threads switcher; Cmd+B toggles the sidebar. Drag the sidebar edge ("Sidebar width" separator, also arrow keys) to resize it; the width persists and double-click resets it.
 - Open a folder through the sidebar Open folder button or Cmd+O on macOS (OS folder picker; no Control+O elsewhere); this is a separate native entry.
@@ -34,6 +36,9 @@ Preconditions: isolated profile and two fixture folders for sidebar switching.
 - **Thread-actions menu, switcher, palette:** `thread-menu.spec.ts` (header and right-click menus, Shift+Cmd+R rename, Shift+Cmd+A archive), `thread-switcher.spec.ts`, `command-palette.spec.ts`, and `sidebar-toggle.spec.ts`, each via `test:e2e:runner`. No `prove.sh` lane drives these.
 - **Folder "+" and resize:** `sidebar-layout.spec.ts` via `test:e2e:runner`. No `prove.sh` lane drives these.
 - **Folder fold:** `sidebar-folder-collapse.spec.ts` via `test:e2e:runner` folds a folder group from its row and keeps it folded across restart. No `prove.sh` lane drives it.
+- **Child threads:** `thread-hierarchy-archive.spec.ts` via `test:e2e:runner` nests children under their parent and covers the agent's archive-children tool. It seeds the parent links; no spec drives a real agent starting a child, and none archives a parent from the sidebar.
+- **Narrow drawer:** `sidebar-drawer.spec.ts` via `test:e2e:runner` opens and dismisses the drawer at narrow widths and keeps the docked sidebar above the breakpoint. The `prove.sh` lanes use a wide window, so they never see the drawer.
+- **Linux title bar:** `window-controls.spec.ts` via `test:e2e:runner` checks that every screen draws window controls on Linux and none elsewhere.
 - **Proof:** record the selected row, topbar title, draft before shutdown and after relaunch, with action traces. Cover sidebar and keyboard entries separately when claiming both.
 
 ## Gotchas

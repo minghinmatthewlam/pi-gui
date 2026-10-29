@@ -21,6 +21,7 @@ import type {
   SessionTranscriptCustomMessage,
   SessionTranscriptItem,
   SessionTranscriptPin,
+  SessionRunOutcome,
   SessionUsageSnapshot,
   WorkspaceRef,
 } from "@pi-gui/session-driver";
@@ -46,9 +47,81 @@ export interface SnapshotSource {
   readonly runningRunId: string | undefined;
   readonly queuedMessages: readonly SessionQueuedMessage[];
   readonly usage?: SessionUsageSnapshot | undefined;
+  readonly session?:
+    | {
+        readonly messages: readonly unknown[];
+        readonly sessionManager?: { getBranch(): readonly unknown[] };
+      }
+    | undefined;
+  readonly stoppedReplyId?: string | undefined;
+}
+
+/**
+ * How the newest assistant reply ended, from its stop reason, as a fact; callers decide
+ * what it means. A user message newer than that reply makes it "incomplete": the reply
+ * did not answer the latest input.
+ */
+export function lastRunOutcome(messages: readonly unknown[]): SessionRunOutcome | undefined {
+  let unansweredUserMessage = false;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i];
+    if (!isRecord(message)) continue;
+    if (message.role === "user") unansweredUserMessage = true;
+    if (message.role !== "assistant") continue;
+    if (unansweredUserMessage) return "incomplete";
+    switch (message.stopReason) {
+      case "stop":
+        return "completed";
+      case "aborted":
+        return "stopped";
+      case "error":
+        return "failed";
+      default:
+        return "incomplete";
+    }
+  }
+  return undefined;
+}
+
+/** The entry id of the newest assistant reply on a pi session branch. */
+export function newestReplyEntryId(branch: readonly unknown[]): string | undefined {
+  for (let i = branch.length - 1; i >= 0; i--) {
+    const entry = branch[i];
+    if (
+      isRecord(entry) &&
+      entry.type === "message" &&
+      isRecord(entry.message) &&
+      entry.message.role === "assistant" &&
+      typeof entry.id === "string"
+    ) {
+      return entry.id;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * lastRunOutcome, plus pi's own report that the run was aborted (agent_settled `aborted`).
+ * A Stop while an extension's agent_before_settle handler is pending leaves no aborted
+ * reply, so the earlier normal reply would otherwise read as completed. `stoppedReplyId` is
+ * the newest reply when that Stop settled; once a newer reply exists, or the branch moved,
+ * the newest reply decides on its own.
+ */
+export function sessionRunOutcome(source: {
+  readonly session: NonNullable<SnapshotSource["session"]>;
+  readonly stoppedReplyId?: string | undefined;
+}): SessionRunOutcome | undefined {
+  const outcome = lastRunOutcome(source.session.messages);
+  if (outcome !== "completed" || source.stoppedReplyId === undefined) return outcome;
+  // Without the branch the mark cannot be ruled out, so it counts: an archive is refused.
+  const branch = source.session.sessionManager?.getBranch();
+  return !branch || newestReplyEntryId(branch) === source.stoppedReplyId ? "stopped" : outcome;
 }
 
 export function buildSnapshot(source: SnapshotSource): SessionSnapshot {
+  const outcome = source.session
+    ? sessionRunOutcome({ session: source.session, stoppedReplyId: source.stoppedReplyId })
+    : undefined;
   return {
     ref: { ...source.ref },
     workspace: { ...source.workspace },
@@ -60,6 +133,7 @@ export function buildSnapshot(source: SnapshotSource): SessionSnapshot {
     ...(source.config ? { config: source.config } : {}),
     ...(source.runningRunId !== undefined ? { runningRunId: source.runningRunId } : {}),
     ...(source.usage ? { usage: source.usage } : {}),
+    ...(outcome ? { lastRunOutcome: outcome } : {}),
     ...(source.queuedMessages.length > 0
       ? {
           queuedMessages: source.queuedMessages.map((message) => ({

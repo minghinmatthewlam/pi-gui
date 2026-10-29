@@ -14,6 +14,24 @@ export const readThreadToolName = "read_thread";
 export const readThreadAction = "pi_gui_read_thread";
 export const sendMessageToThreadToolName = "send_message_to_thread";
 export const sendMessageToThreadAction = "pi_gui_send_message_to_thread";
+export const archiveChildThreadsToolName = "archive_child_threads";
+export const archiveChildThreadsAction = "pi_gui_archive_child_threads";
+
+/** Every pi-gui thread tool. Their names are not file or search tools, whatever they contain. */
+export const orchestrationToolNames: ReadonlySet<string> = new Set([
+  createChildThreadToolName,
+  listThreadsToolName,
+  readThreadToolName,
+  sendMessageToThreadToolName,
+  archiveChildThreadsToolName,
+]);
+
+export interface ArchiveChildThreadsToolDetails {
+  readonly action: typeof archiveChildThreadsAction;
+  readonly archived: readonly string[];
+  readonly skipped: readonly { readonly threadId: string; readonly reason: string }[];
+  readonly error?: string;
+}
 
 export interface CreateChildThreadToolDetails {
   readonly action: typeof createChildThreadAction;
@@ -32,7 +50,10 @@ export interface OrchestrationThreadListEntry {
   readonly sessionId: string;
   readonly title: string;
   readonly status: string;
-  readonly relationship: "current" | "child" | "workspace";
+  /** `workspace` threads share the caller's project; `other_project` threads live in another one. */
+  readonly relationship: "current" | "child" | "workspace" | "other_project";
+  /** Display name of the thread's project, set only for `other_project` threads. */
+  readonly project?: string;
   readonly updatedAt: string;
   readonly preview: string;
   readonly childThreadId?: string;
@@ -50,7 +71,11 @@ export interface OrchestrationThreadTranscriptMessage {
 
 export interface ListThreadsToolDetails {
   readonly action: typeof listThreadsAction;
+  /** The `workspace` argument, when the call named another project or `*`. */
+  readonly workspace?: string;
   readonly threads?: readonly OrchestrationThreadListEntry[];
+  /** Threads a `*` listing left out past its cap; name a project to see them. */
+  readonly omittedThreadCount?: number;
   readonly error?: string;
 }
 
@@ -75,15 +100,24 @@ export interface SendMessageToThreadToolDetails {
   readonly sessionId?: string;
   readonly status?: "queued" | "sent";
   readonly queuedMessageCount?: number;
+  /** Display name of the receiving project, set only when it is not the sender's project. */
+  readonly project?: string;
   readonly error?: string;
 }
 
 export interface OrchestrationRuntimeBridge {
+  readonly archiveChildThreads: (
+    ctx: ExtensionContext,
+    threadIds: readonly string[],
+  ) => Promise<AgentToolResult<ArchiveChildThreadsToolDetails>>;
   readonly createChildThread: (
     ctx: ExtensionContext,
     input: { readonly prompt: string; readonly toolCallId: string },
   ) => Promise<AgentToolResult<CreateChildThreadToolDetails>>;
-  readonly listThreads: (ctx: ExtensionContext) => Promise<AgentToolResult<ListThreadsToolDetails>>;
+  readonly listThreads: (
+    ctx: ExtensionContext,
+    input: { readonly workspace?: string },
+  ) => Promise<AgentToolResult<ListThreadsToolDetails>>;
   readonly readThread: (
     ctx: ExtensionContext,
     threadId: string,
@@ -95,6 +129,7 @@ export interface OrchestrationRuntimeBridge {
 }
 
 type OrchestrationToolDetails =
+  | ArchiveChildThreadsToolDetails
   | CreateChildThreadToolDetails
   | ListThreadsToolDetails
   | ReadThreadToolDetails
@@ -139,19 +174,28 @@ function createListThreadsTool(
   return {
     name: listThreadsToolName,
     label: "List threads",
-    description: "List pi-gui threads visible to the current workspace and parent thread.",
+    description:
+      "List pi-gui threads in the current project and parent thread, or in another project.",
     promptSnippet:
-      "list_threads: list relevant pi-gui threads for the current workspace and parent context.",
+      "list_threads: list pi-gui threads for the current project, another project, or every project.",
     promptGuidelines: [
       "Use list_threads before reading or messaging another pi-gui thread when you need the exact thread id.",
+      'Pass workspace with a project name, path or id to list that project\'s threads, or "*" for every project.',
       "Use the returned thread id with read_thread or send_message_to_thread.",
     ],
     parameters: {
       type: "object",
-      properties: {},
+      properties: {
+        workspace: {
+          type: "string",
+          description:
+            'Optional project name, path or id to list instead of the current project, or "*" for every project.',
+        },
+      },
     },
-    async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
-      return bridge.listThreads(ctx);
+    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+      const workspace = isRecord(params) ? stringParam(params, "workspace") : undefined;
+      return bridge.listThreads(ctx, workspace ? { workspace } : {});
     },
   };
 }
@@ -201,10 +245,11 @@ function createSendMessageToThreadTool(
   return {
     name: sendMessageToThreadToolName,
     label: "Send message to thread",
-    description: "Send a follow-up message to an existing pi-gui thread.",
+    description:
+      "Send a follow-up message to an existing pi-gui thread in this project or another project.",
     promptSnippet: "send_message_to_thread: send a follow-up to an existing pi-gui thread.",
     promptGuidelines: [
-      "Use send_message_to_thread to follow up with an existing child or sibling pi-gui thread.",
+      "Use send_message_to_thread to follow up with an existing child, sibling, or other-project pi-gui thread.",
       "Use a thread id returned by list_threads or create_child_thread.",
     ],
     parameters: {
@@ -242,6 +287,64 @@ function createSendMessageToThreadTool(
   };
 }
 
+function createArchiveChildThreadsTool(
+  bridge: OrchestrationRuntimeBridge,
+): ToolDefinition<any, OrchestrationToolDetails> {
+  return {
+    name: archiveChildThreadsToolName,
+    label: "Archive completed child threads",
+    description:
+      "Archive completed direct child threads of the current thread, preserving their history and drafts. Running, queued, incomplete and unrelated threads are skipped. Archived threads can be restored from the sidebar.",
+    promptSnippet:
+      "archive_child_threads: archive completed child threads only when the user requests it.",
+    promptGuidelines: [
+      "Only use archive_child_threads after the user explicitly asks to archive completed child threads; never archive proactively.",
+      "Use list_threads and read_thread to identify your own children and confirm their requested work is finished. A stopped model turn alone does not prove the task is done.",
+      "Pass exact thread ids and report the archived and skipped results. Never stop tasks or discard queued messages to make them eligible.",
+    ],
+    parameters: {
+      type: "object",
+      properties: {
+        thread_ids: {
+          type: "array",
+          items: { type: "string" },
+          minItems: 1,
+          maxItems: 100,
+          description: "Exact completed direct child thread ids returned by list_threads.",
+        },
+      },
+      required: ["thread_ids"],
+    },
+    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+      if (
+        !isRecord(params) ||
+        !Array.isArray(params.thread_ids) ||
+        params.thread_ids.length < 1 ||
+        params.thread_ids.length > 100 ||
+        !params.thread_ids.every(
+          (id): id is string => typeof id === "string" && id.trim().length > 0,
+        )
+      ) {
+        return {
+          content: [
+            { type: "text", text: "archive_child_threads requires 1–100 exact thread_ids." },
+          ],
+          details: {
+            action: archiveChildThreadsAction,
+            archived: [],
+            skipped: [],
+            error: "Invalid thread_ids",
+          },
+        };
+      }
+      return bridge.archiveChildThreads(
+        ctx,
+        params.thread_ids.map((id: string) => id.trim()),
+      );
+    },
+  };
+}
+
 export function createOrchestrationRuntimeTools(
   bridge: OrchestrationRuntimeBridge,
 ): readonly ToolDefinition<any, OrchestrationToolDetails>[] {
@@ -250,6 +353,7 @@ export function createOrchestrationRuntimeTools(
     createListThreadsTool(bridge),
     createReadThreadTool(bridge),
     createSendMessageToThreadTool(bridge),
+    createArchiveChildThreadsTool(bridge),
   ];
 }
 

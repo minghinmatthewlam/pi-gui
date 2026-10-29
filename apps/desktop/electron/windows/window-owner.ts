@@ -7,6 +7,7 @@ import type {
   SelectedTranscriptRecord,
   SessionExtensionUiUpdate,
 } from "../../contracts/desktop-state";
+import { selectedTranscriptPatch } from "../../contracts/desktop-state";
 import { desktopIpc } from "../../contracts/ipc";
 import { SerializedActionQueue } from "./action-queue";
 
@@ -53,6 +54,17 @@ function viewFromState(state: DesktopAppState): WindowViewState {
   };
 }
 
+const NO_ORCHESTRATION_CHILDREN: DesktopAppState["orchestrationChildren"] = [];
+
+// Full child records carry every child thread's transcript and the window never
+// reads them, so pushes drop them. The window draws the tree from childThreadLinks,
+// which every push and every getState() reply carries.
+function stateForPush(state: DesktopAppState): DesktopAppState {
+  return state.orchestrationChildren.length === 0
+    ? state
+    : { ...state, orchestrationChildren: NO_ORCHESTRATION_CHILDREN };
+}
+
 function canPublishToWindow(window: BrowserWindow): boolean {
   return (
     !window.isDestroyed() && !window.webContents.isDestroyed() && !window.webContents.isCrashed()
@@ -61,6 +73,9 @@ function canPublishToWindow(window: BrowserWindow): boolean {
 
 export class WindowOwner {
   private readonly lastPublishedTranscript = new Map<number, SelectedTranscriptRecord | null>();
+  // The model catalog each window last received. It is large and rarely changes, so pushes
+  // leave it out while it is the same object.
+  private readonly lastPublishedCatalog = new Map<number, DesktopAppState["runtimeByWorkspace"]>();
   private readonly windows = new Set<BrowserWindow>();
   private readonly windowIds = new WeakMap<BrowserWindow, number>();
   private readonly views = new Map<number, WindowViewState>();
@@ -106,6 +121,7 @@ export class WindowOwner {
     this.windowIds.delete(window);
     this.views.delete(webContentsId);
     this.lastPublishedTranscript.delete(webContentsId);
+    this.lastPublishedCatalog.delete(webContentsId);
 
     if (this.activeWindow === window) {
       this.activeWindow = [...this.windows].find((candidate) => !candidate.isDestroyed()) ?? null;
@@ -301,7 +317,8 @@ export class WindowOwner {
       return state;
     }
     const projected = this.projectAndRemember(window.webContents.id, state);
-    window.webContents.send(desktopIpc.stateChanged, projected);
+    this.lastPublishedCatalog.set(window.webContents.id, projected.runtimeByWorkspace);
+    window.webContents.send(desktopIpc.stateChanged, stateForPush(projected));
     this.publishTranscriptSoon(window);
     return projected;
   }
@@ -363,7 +380,14 @@ export class WindowOwner {
         : (this.views.get(webContentsId) ?? viewFromState(state));
     const projected = this.projectState(webContentsId, state, view);
     this.views.set(webContentsId, viewFromState(projected));
-    window.webContents.send(desktopIpc.stateChanged, projected);
+    const pushed = stateForPush(projected);
+    if (this.lastPublishedCatalog.get(webContentsId) === projected.runtimeByWorkspace) {
+      const { runtimeByWorkspace: _unchanged, ...withoutCatalog } = pushed;
+      window.webContents.send(desktopIpc.stateChanged, withoutCatalog);
+      return;
+    }
+    this.lastPublishedCatalog.set(webContentsId, projected.runtimeByWorkspace);
+    window.webContents.send(desktopIpc.stateChanged, pushed);
   }
 
   private async publishTranscript(window: BrowserWindow): Promise<void> {
@@ -375,19 +399,9 @@ export class WindowOwner {
     if (!canPublishToWindow(window)) {
       return;
     }
-    const projected = this.projectState(webContentsId);
-    if (payload) {
-      if (
-        projected.selectedWorkspaceId !== payload.workspaceId ||
-        projected.selectedSessionId !== payload.sessionId
-      ) {
-        return;
-      }
-    } else if (projected.selectedSessionId) {
-      return;
-    }
     // Transcript arrays are replaced on writes, so identity detects changes
     // without serializing unchanged transcripts for unrelated session events.
+    // Check it before projecting state, which clones the whole app state.
     const previous = this.lastPublishedTranscript.get(webContentsId);
     if (payload) {
       if (
@@ -402,8 +416,33 @@ export class WindowOwner {
     } else if (previous === null) {
       return;
     }
+    const projected = this.projectState(webContentsId);
+    if (payload) {
+      if (
+        projected.selectedWorkspaceId !== payload.workspaceId ||
+        projected.selectedSessionId !== payload.sessionId
+      ) {
+        return;
+      }
+    } else if (projected.selectedSessionId) {
+      return;
+    }
     this.lastPublishedTranscript.set(webContentsId, payload);
-    window.webContents.send(desktopIpc.selectedTranscriptChanged, payload);
+    const patch = previous && payload ? selectedTranscriptPatch(previous, payload) : undefined;
+    if (patch && patch.deleteCount === 0 && patch.rows.length === 0) {
+      return;
+    }
+    window.webContents.send(desktopIpc.selectedTranscriptChanged, patch ?? payload);
+  }
+
+  // The window could not apply a patch (it reloaded or missed one), so send it the whole transcript.
+  resendSelectedTranscript(sender: WebContents): void {
+    const window = BrowserWindow.fromWebContents(sender);
+    if (!window || !this.windows.has(window)) {
+      return;
+    }
+    this.lastPublishedTranscript.delete(window.webContents.id);
+    this.publishTranscriptSoon(window);
   }
 
   private publishTranscriptSoon(window: BrowserWindow): void {

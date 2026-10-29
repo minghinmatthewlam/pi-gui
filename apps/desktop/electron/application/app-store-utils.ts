@@ -20,20 +20,13 @@ import type {
   WorkspaceRecord,
   WorkspaceSessionTarget,
 } from "../../contracts/desktop-state";
+import {
+  TOOL_IMAGE_SCHEME,
+  isShownToolImageData,
+  isToolImageBlock,
+} from "../../contracts/tool-output-images";
 
 export const LEGACY_TRANSCRIPT_HISTORY_LIMIT = 180;
-
-/** Scheme the window loads tool-output images from, so their data isn't sent with the transcript. */
-export const TRANSCRIPT_IMAGE_SCHEME = "pi-gui-image";
-const SERVED_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
-
-type ImageBlock = { type: "image"; data: string; mimeType?: unknown };
-
-function isImageBlock(value: unknown): value is ImageBlock {
-  if (typeof value !== "object" || value === null) return false;
-  const block = value as Record<string, unknown>;
-  return block.type === "image" && typeof block.data === "string";
-}
 
 function toolOutputContent(message: TranscriptMessage): readonly unknown[] | undefined {
   if (message.kind !== "tool" || typeof message.output !== "object" || message.output === null) {
@@ -51,7 +44,10 @@ const transcriptsForWindow = new WeakMap<
 >();
 const messagesForWindow = new WeakMap<TranscriptMessage, TranscriptMessage>();
 
-/** The transcript as sent to a window: tool-output images become URLs, loaded when shown. */
+/**
+ * The transcript as sent to a window: each tool-output image it can show becomes a URL main serves,
+ * loaded when shown. Every image block loses its data and any `src` the tool set.
+ */
 export function transcriptForWindow(
   sessionRef: SessionRef,
   transcript: readonly TranscriptMessage[],
@@ -66,19 +62,24 @@ export function transcriptForWindow(
 
 function messageForWindow(sessionRef: SessionRef, message: TranscriptMessage): TranscriptMessage {
   const content = toolOutputContent(message);
-  if (!content?.some(isImageBlock)) return message;
+  if (!content?.some(isToolImageBlock)) return message;
   let result = messagesForWindow.get(message);
   if (!result) {
     const url = (index: number) =>
-      `${TRANSCRIPT_IMAGE_SCHEME}://image/${[sessionRef.workspaceId, sessionRef.sessionId, message.id, String(index)].map(encodeURIComponent).join("/")}`;
+      `${TOOL_IMAGE_SCHEME}://image/${[sessionRef.workspaceId, sessionRef.sessionId, message.id, String(index)].map(encodeURIComponent).join("/")}`;
     result = {
       ...message,
       output: {
         ...(message as { output: object }).output,
         content: content.map((block, index) =>
-          isImageBlock(block)
+          isShownToolImageData(block)
             ? { type: "image", mimeType: block.mimeType, src: url(index) }
-            : block,
+            : isToolImageBlock(block)
+              ? {
+                  type: "image",
+                  ...(typeof block.mimeType === "string" ? { mimeType: block.mimeType } : {}),
+                }
+              : block,
         ),
       },
     } as TranscriptMessage;
@@ -103,11 +104,7 @@ export function transcriptImageResponse(
         )
       : undefined;
   const block = message ? toolOutputContent(message)?.[Number(index)] : undefined;
-  if (
-    !isImageBlock(block) ||
-    typeof block.mimeType !== "string" ||
-    !SERVED_IMAGE_TYPES.has(block.mimeType)
-  ) {
+  if (!isShownToolImageData(block)) {
     return new Response("Not found", { status: 404 });
   }
   return new Response(new Uint8Array(Buffer.from(block.data, "base64")), {

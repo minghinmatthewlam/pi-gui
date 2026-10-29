@@ -5,7 +5,7 @@
  * ========================================================================== */
 
 .new-thread {
-  min-height: calc(100vh - 164px);
+  min-height: calc(100vh - var(--window-titlebar-height) - 164px);
   display: grid;
   align-content: center;
   gap: 20px;

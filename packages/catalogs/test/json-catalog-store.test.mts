@@ -315,3 +315,81 @@ await test("session writes that change nothing leave the catalog file alone", as
     assert.equal(await reopened.getSessionFile(session.sessionRef), "/session.jsonl");
   });
 });
+
+await test("only setStoppedReplyId changes a stopped-reply mark; entry writes and syncs keep it", async () => {
+  await withTempDir(async (dir) => {
+    const catalogFilePath = join(dir, "catalogs.json");
+    const entry = (sessionId: string) => ({
+      sessionRef: { workspaceId: "ws", sessionId },
+      workspaceId: "ws",
+      title: sessionId,
+      updatedAt: timestamp,
+      status: "idle" as const,
+    });
+    const store = new JsonCatalogStore({ catalogFilePath });
+    await store.sessions.upsertSession(entry("a"));
+    // A mark can be saved before its session has an entry (a session an extension just made).
+    await store.sessions.setStoppedReplyId(entry("b").sessionRef, "reply-b");
+    await store.sessions.upsertSession(entry("b"));
+    // A sync that scanned before either mark, and before b existed, writes only a.
+    await store.sessions.setStoppedReplyId(entry("a").sessionRef, "reply-a");
+    await store.replaceWorkspaceSessions("ws", [{ ...entry("a"), title: "a (synced)" }], {});
+    // b's entry was dropped by that stale sync; its next snapshot brings it back, marked.
+    await store.sessions.upsertSession({ ...entry("b"), stoppedReplyId: "ignored" });
+    const reopened = new JsonCatalogStore({ catalogFilePath });
+    assert.equal((await reopened.sessions.getSession(entry("a").sessionRef))?.title, "a (synced)");
+    assert.equal(
+      (await reopened.sessions.getSession(entry("a").sessionRef))?.stoppedReplyId,
+      "reply-a",
+    );
+    assert.equal(
+      (await reopened.sessions.getSession(entry("b").sessionRef))?.stoppedReplyId,
+      "reply-b",
+    );
+    await reopened.sessions.setStoppedReplyId(entry("a").sessionRef, undefined);
+    await reopened.sessions.deleteSession(entry("b").sessionRef);
+    const cleared = new JsonCatalogStore({ catalogFilePath });
+    const listed = (await cleared.sessions.listSessions("ws")).sessions;
+    assert.deepEqual(
+      listed.map((session) => [session.sessionRef.sessionId, session.stoppedReplyId]),
+      [["a", undefined]],
+    );
+  });
+});
+
+await test("a catalog that kept the stopped-reply mark on its entry still reads it", async () => {
+  await withTempDir(async (dir) => {
+    const catalogFilePath = join(dir, "catalogs.json");
+    const sessionRef = { workspaceId: "ws", sessionId: "child" };
+    await writeFile(
+      catalogFilePath,
+      JSON.stringify({
+        version: 2,
+        workspaces: [],
+        sessions: [
+          {
+            sessionRef,
+            workspaceId: "ws",
+            title: "Child",
+            updatedAt: timestamp,
+            status: "idle",
+            stoppedReplyId: "reply-1",
+          },
+        ],
+        worktrees: [],
+        sessionFiles: {},
+      }),
+    );
+    const store = new JsonCatalogStore({ catalogFilePath });
+    assert.equal((await store.sessions.getSession(sessionRef))?.stoppedReplyId, "reply-1");
+    await store.sessions.upsertSession({
+      sessionRef,
+      workspaceId: "ws",
+      title: "Child (renamed)",
+      updatedAt: timestamp,
+      status: "idle",
+    });
+    const reopened = new JsonCatalogStore({ catalogFilePath });
+    assert.equal((await reopened.sessions.getSession(sessionRef))?.stoppedReplyId, "reply-1");
+  });
+});

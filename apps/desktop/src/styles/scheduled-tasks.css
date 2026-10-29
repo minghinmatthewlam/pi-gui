@@ -100,8 +100,8 @@
 
 .scheduled-editor-backdrop {
   position: fixed;
-  inset: 0;
-  z-index: 36;
+  inset: var(--window-titlebar-height) 0 0;
+  z-index: 44;
   display: flex;
   justify-content: flex-end;
   background: var(--scrim);
@@ -225,7 +225,8 @@
   min-width: 0;
 }
 
-.timeline-item__scheduled-origin {
+.timeline-item__scheduled-origin,
+.timeline-item__project-origin {
   color: var(--muted-subtle);
   font-size: 11px;
   font-weight: 560;

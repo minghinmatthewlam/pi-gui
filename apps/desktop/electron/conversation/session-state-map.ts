@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type {
   ExtensionFlagValues,
   SessionConfig,
+  SessionRunOutcome,
   SessionUsageSnapshot,
 } from "@pi-gui/session-driver";
 import {
@@ -63,6 +64,8 @@ export class SessionStateMap {
   readonly runMetricsBySession = new Map<string, RunMetrics>();
   readonly sessionCommandsBySession = new Map<string, RuntimeCommandRecord[]>();
   readonly sessionUsageBySession = new Map<string, SessionUsageSnapshot>();
+  /** The driver's lastRunOutcome from the newest snapshot seen for each session. */
+  readonly lastRunOutcomeBySession = new Map<string, SessionRunOutcome>();
   readonly extensionUiBySession = new Map<string, MutableSessionExtensionUiState>();
   readonly pendingAutoTitleBySession = new Map<string, PendingAutoTitle>();
   readonly loadedTranscriptKeys = new Set<string>();
@@ -108,6 +111,7 @@ export class SessionStateMap {
       this.runMetricsBySession,
       this.sessionCommandsBySession,
       this.sessionUsageBySession,
+      this.lastRunOutcomeBySession,
       this.extensionUiBySession,
       this.pendingAutoTitleBySession,
     ];
@@ -171,6 +175,7 @@ export class SessionStateMap {
     this.sessionErrorsBySession.delete(key);
     this.sessionCommandsBySession.delete(key);
     this.sessionUsageBySession.delete(key);
+    this.lastRunOutcomeBySession.delete(key);
     this.extensionUiBySession.delete(key);
     this.pendingAutoTitleBySession.delete(key);
     pendingAutoTitle?.cancel();

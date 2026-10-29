@@ -41,9 +41,12 @@ await test("reads every seeded session and matches pi's per-session usage totals
     assert.equal(thread.replies, expected.replies);
     assert.equal(thread.lastActiveAt, expected.lastActiveAt);
     const counts = sumDays(thread.days, null);
-    assert.deepEqual(
-      { ...counts, cost: Math.round(counts.cost * 1e6) },
-      { ...expected.totals, cost: Math.round(expected.totals.cost * 1e6) },
+    // Per-day buckets add the same costs in a different order than the seed, so the float
+    // sums can differ in the last bits; rounding both could split them across a .5 boundary.
+    assert.deepEqual({ ...counts, cost: 0 }, { ...expected.totals, cost: 0 });
+    assert.ok(
+      Math.abs(counts.cost - expected.totals.cost) < 1e-9,
+      `${expected.title}: cost ${counts.cost} != ${expected.totals.cost}`,
     );
 
     // Cross-check against pi's own session stats accounting.

@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import {
+  type ChildThreadLink,
   createEmptyDesktopAppState,
   type DesktopAppState,
   type SessionRecord,
@@ -8,6 +9,7 @@ import {
 } from "../../contracts/desktop-state";
 import {
   buildThreadSidebarModel,
+  flattenThreadTrees,
   recencyHistoryExpansionKey,
   sessionThreadKey,
   threadHistoryPreview,
@@ -408,4 +410,131 @@ test("caps a history list at five until it is expanded", () => {
   });
   expect(threadHistoryPreview(threads, true).visible).toEqual(threads);
   expect(threadHistoryPreview(threads.slice(0, 5), false).overflow).toBe(false);
+});
+
+function link(
+  id: string,
+  parentId: string,
+  childId: string,
+  parentWorkspaceId = "ws",
+  childWorkspaceId = "ws",
+): ChildThreadLink {
+  return {
+    id,
+    parentWorkspaceId,
+    parentSessionId: parentId,
+    childWorkspaceId,
+    childSessionId: childId,
+    title: childId,
+    status: "complete",
+  };
+}
+
+test("nests children under their parent, even from another workspace, in the parent's bucket", () => {
+  const model = buildThreadSidebarModel(
+    state(
+      [
+        workspace("ws", "Main", [
+          session("parent", "Main task", { updatedAt: isoDaysAgo(2) }),
+          session("unrelated", "Other task", { updatedAt: isoDaysAgo(0) }),
+        ]),
+        workspace("other", "Child folder", [
+          session("child", "Worker", { updatedAt: isoDaysAgo(0) }),
+        ]),
+      ],
+      { childThreadLinks: [link("child-record", "parent", "child", "ws", "other")] },
+    ),
+    nowMs,
+  );
+  expect(model.recencySections.map((section) => section.bucket)).toEqual(["today", "last-7-days"]);
+  expect(model.recencySections[0]!.threads.map(sessionThreadKey)).toEqual(["ws:unrelated"]);
+  const parent = model.recencySections[1]!.threads[0]!;
+  expect(parent.session.id).toBe("parent");
+  expect(parent.children?.map(sessionThreadKey)).toEqual(["other:child"]);
+  expect(parent.children?.[0]?.parentKey).toBe("ws:parent");
+  expect(model.workspaceGroups[1]?.threads).toEqual([]);
+  expect(visibleThreadShortcutOrder({ grouping: "time", model }).map(sessionThreadKey)).toEqual([
+    "ws:unrelated",
+    "ws:parent",
+    "other:child",
+  ]);
+  expect(
+    visibleThreadShortcutOrder({
+      grouping: "time",
+      model,
+      collapsedThreadKeys: new Set(["ws:parent"]),
+    }).map(sessionThreadKey),
+  ).toEqual(["ws:unrelated", "ws:parent"]);
+});
+
+test("pinned, archived and orphaned children stay reachable as their own rows", () => {
+  const model = buildThreadSidebarModel(
+    state(
+      [
+        workspace("ws", "Main", [
+          session("parent", "Main task", { updatedAt: isoDaysAgo(3) }),
+          session("nested", "Nested", { updatedAt: isoDaysAgo(0) }),
+          session("pin", "Pinned child", { updatedAt: isoDaysAgo(0), pinnedAt: isoDaysAgo(0) }),
+          session("archive", "Archived child", {
+            updatedAt: isoDaysAgo(0),
+            archivedAt: isoDaysAgo(0),
+          }),
+          session("orphan", "Orphan", { updatedAt: isoDaysAgo(0) }),
+        ]),
+      ],
+      {
+        childThreadLinks: [
+          link("n", "parent", "nested"),
+          link("p", "parent", "pin"),
+          link("a", "parent", "archive"),
+          link("o", "missing", "orphan"),
+        ],
+      },
+    ),
+    nowMs,
+  );
+  expect(model.pinnedThreads.map((thread) => thread.session.id)).toEqual(["pin"]);
+  expect(model.archivedThreads.map((thread) => thread.session.id)).toEqual(["archive"]);
+  const visible = visibleThreadShortcutOrder({ grouping: "time", model, archivedOpen: true });
+  expect(new Set(visible.map(sessionThreadKey)).size).toBe(5);
+  expect(visible).toHaveLength(5);
+  expect(
+    model.recencyOrder.find((t) => t.session.id === "parent")?.children?.map((t) => t.session.id),
+  ).toEqual(["nested"]);
+});
+
+test("children follow a pinned parent into the pinned section", () => {
+  const model = buildThreadSidebarModel(
+    state(
+      [
+        workspace("ws", "Main", [
+          session("parent", "Main task", { updatedAt: isoDaysAgo(3), pinnedAt: isoDaysAgo(1) }),
+          session("child", "Worker", { updatedAt: isoDaysAgo(0) }),
+        ]),
+      ],
+      { childThreadLinks: [link("c", "parent", "child")] },
+    ),
+    nowMs,
+  );
+  expect(model.pinnedThreads[0]?.children?.map(sessionThreadKey)).toEqual(["ws:child"]);
+  expect(model.recencySections).toEqual([]);
+});
+
+test("malformed cycles cannot hide sessions or loop during hierarchy traversal", () => {
+  const model = buildThreadSidebarModel(
+    state(
+      [
+        workspace(
+          "ws",
+          "Main",
+          ["a", "b", "c"].map((id) => session(id, id, { updatedAt: isoDaysAgo(0) })),
+        ),
+      ],
+      { childThreadLinks: [link("a", "b", "a"), link("b", "c", "b"), link("c", "a", "c")] },
+    ),
+    nowMs,
+  );
+  const visible = flattenThreadTrees(model.recencySections.flatMap((section) => section.threads));
+  expect(new Set(visible.map(sessionThreadKey)).size).toBe(3);
+  expect(visible).toHaveLength(3);
 });

@@ -39,7 +39,7 @@
   min-height: 420px;
   background: transparent;
   position: relative;
-  max-height: calc(100vh - 320px);
+  max-height: calc(100vh - var(--window-titlebar-height) - 320px);
   overflow: auto;
   overflow-anchor: none;
   /* Programmatic timeline scrolls (opening a thread, jump-to-latest,
@@ -595,6 +595,8 @@
   font-size: 13px;
   /* Hold the width steady as the elapsed seconds tick, like the header timer. */
   font-variant-numeric: tabular-nums;
+  /* Status, not transcript: a drag past the end of the reply above leaves it out. */
+  user-select: none;
 }
 
 .timeline-working__label {

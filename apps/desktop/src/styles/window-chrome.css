@@ -1,0 +1,65 @@
+/* =============================================================================
+ * Window title bar — drawn only when main makes the window frameless (Linux).
+ * It is its own row above every screen, so nothing on a screen sits under the
+ * controls and the whole row is a drag area.
+ * ========================================================================== */
+
+/* Fixed overlays, including ones portaled to <body>, start below the bar. */
+:root:has(.window-frame) {
+  --window-titlebar-height: 32px;
+}
+
+.window-frame {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.window-frame__content {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.window-titlebar {
+  -webkit-app-region: drag;
+  /* Above dialogs and drawers, like a native title bar. */
+  position: relative;
+  z-index: 1000;
+  flex: none;
+  height: var(--window-titlebar-height);
+  display: flex;
+  justify-content: flex-end;
+  border-bottom: 1px solid var(--line);
+  background: var(--window);
+}
+
+.window-titlebar__controls {
+  display: flex;
+}
+
+.window-titlebar__control {
+  -webkit-app-region: no-drag;
+  width: 44px;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: var(--muted-strong);
+  cursor: pointer;
+}
+
+.window-titlebar__control:hover {
+  background: var(--surface-overlay-muted);
+  color: var(--text-strong);
+}
+
+.window-titlebar__control:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.window-titlebar__control--close:hover {
+  background: #c42b1c;
+  color: white;
+}

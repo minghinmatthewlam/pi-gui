@@ -76,6 +76,7 @@
     "test:prod:release-zip-smoke:ci": "cross-env PI_APP_TEST_MODE=background pnpm --dir ../.. exec playwright test -c apps/desktop/playwright.config.ts apps/desktop/tests/production/release-zip-smoke.spec.ts",
     "test:prod:open-folder-real": "pnpm build && cross-env PI_APP_TEST_MODE=foreground pnpm --dir ../.. exec playwright test -c apps/desktop/playwright.config.ts apps/desktop/tests/production/open-folder-real.spec.ts",
     "test:live:parallel": "node scripts/require-live-auth.mjs && pnpm build && cross-env PI_APP_TEST_MODE=background pnpm --dir ../.. exec playwright test -c apps/desktop/playwright.config.ts apps/desktop/tests/live/parallel-provider-runs.spec.ts",
+    "test:perf:parallel-children": "cross-env PI_APP_TEST_LANE=core PI_APP_REAL_AUTH=0 PI_APP_TEST_MODE=background pnpm run test:e2e:runner -- apps/desktop/tests/perf/parallel-children-profile.spec.ts",
     "test:perf:scroll": "cross-env PI_APP_TEST_LANE=core PI_APP_REAL_AUTH=0 PI_APP_TEST_MODE=background pnpm run test:e2e:runner -- apps/desktop/tests/perf/streaming-profile.spec.ts --grep \"paced wheel\" --repeat-each=3"
   },
   "dependencies": {
