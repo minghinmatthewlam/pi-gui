@@ -98,3 +98,103 @@ await test("a discrete agent event still writes the catalog", async () => {
   assert.ok(emitted.length > 0, "expected the discrete event to emit");
   assert.equal(catalogWrites, 1);
 });
+
+function releasableRecord() {
+  const { record, emitted } = makeRecord();
+  let disposals = 0;
+  Object.assign(record, {
+    status: "idle",
+    runningRunId: undefined,
+    promptStarting: false,
+    extensionCommandsRunning: 0,
+    queuedStartScheduled: false,
+    reloadPending: false,
+    extensionUiState: { statuses: new Map(), widgets: new Map(), dialogs: [], notices: [] },
+    session: { isStreaming: false, isCompacting: false },
+    runtime: {
+      dispose: async () => {
+        disposals += 1;
+      },
+    },
+  });
+  return { record, emitted, disposals: () => disposals };
+}
+
+function supervisorWith(record: { ref: { workspaceId: string; sessionId: string } }) {
+  const catalog = makeCountingCatalog();
+  const supervisor = new SessionSupervisor({ catalogStorage: catalog as never });
+  (supervisor as unknown as { records: Map<string, unknown> }).records.set(
+    `${record.ref.workspaceId}:${record.ref.sessionId}`,
+    record,
+  );
+  return { supervisor, catalog };
+}
+
+await test("releasing frees the runtime, keeps the listeners and writes no catalog entry", async () => {
+  const { record, emitted, disposals } = releasableRecord();
+  const { supervisor, catalog } = supervisorWith(record);
+
+  assert.equal(supervisor.releaseSession(record.ref), true);
+  await record.eventQueue;
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(disposals(), 1, "the runtime, its lease and its extensions are released");
+  assert.equal(record.session, undefined);
+  assert.equal(record.listeners.size, 1, "subscribers stay attached for the reopen");
+  // A late catalog write could undo an archive made while the release was finishing.
+  assert.equal(catalog.calls.length, 0);
+  assert.ok(
+    emitted.some((event) => event.type === "hostUiRequest"),
+    "the stopped extensions' UI is reset",
+  );
+});
+
+await test("a session is not released while an operation on it is running", async () => {
+  const { record, disposals } = releasableRecord();
+  const { supervisor } = supervisorWith(record);
+  let finish!: () => void;
+  const operation = supervisor.trackOperation(
+    record.ref,
+    () => new Promise<void>((resolve) => (finish = resolve)),
+  );
+
+  assert.equal(supervisor.releaseSession(record.ref), false);
+  finish();
+  await operation;
+  assert.equal(supervisor.releaseSession(record.ref), true);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(disposals(), 1);
+});
+
+await test("extensions shutting down in a released session cannot open dialogs or change the UI", async () => {
+  const { record, emitted } = releasableRecord();
+  const { supervisor } = supervisorWith(record);
+  const ui = (
+    supervisor as unknown as {
+      createExtensionUiContext: (record: unknown) => {
+        confirm: (title: string, message: string) => Promise<boolean>;
+        setStatus: (key: string, text: string | undefined) => void;
+      };
+    }
+  ).createExtensionUiContext(record);
+  let confirmed: boolean | undefined;
+  Object.assign(record, {
+    runtime: {
+      // Like a session_shutdown handler that asks the person something and sets a status.
+      dispose: async () => {
+        ui.setStatus("shutdown", "stopping");
+        confirmed = await ui.confirm("Save?", "Save before stopping?");
+      },
+    },
+  });
+
+  assert.equal(supervisor.releaseSession(record.ref), true);
+  await new Promise((resolve) => setImmediate(resolve));
+  await record.eventQueue;
+
+  assert.equal(confirmed, false, "the dialog answers with its default instead of waiting");
+  const kinds = emitted
+    .filter((event) => event.type === "hostUiRequest")
+    .map((event) => (event as unknown as { request: { kind: string } }).request.kind);
+  assert.deepEqual(kinds, ["reset"]);
+});

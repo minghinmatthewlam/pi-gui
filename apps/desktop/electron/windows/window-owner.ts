@@ -205,6 +205,27 @@ export class WindowOwner {
     return this.stateOwner.getState();
   }
 
+  /**
+   * Whether any open window has this thread selected, including minimized, hidden, background
+   * and acting windows. Unlike isSessionVisibleInAnotherWindow, which decides whether someone
+   * can answer a dialog right now, this decides whether a window still depends on the thread.
+   */
+  isSessionSelectedInAnyWindow(sessionRef: SessionRef): boolean {
+    for (const window of this.windows) {
+      if (window.isDestroyed()) {
+        continue;
+      }
+      const view = this.views.get(window.webContents.id);
+      if (
+        view?.selectedWorkspaceId === sessionRef.workspaceId &&
+        view.selectedSessionId === sessionRef.sessionId
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   isSessionVisibleInAnotherWindow(sessionRef: SessionRef): boolean {
     for (const window of this.windows) {
       if (!canPublishToWindow(window) || window.isMinimized() || !window.isVisible()) {

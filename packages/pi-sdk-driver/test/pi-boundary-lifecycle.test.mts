@@ -162,7 +162,10 @@ async function fixture(
     ref,
     root,
     workspacePath: cwd,
-    runtime,
+    // The latest runtime; reopening a released session creates a new one.
+    get runtime() {
+      return runtime;
+    },
     /** A second driver on the same catalog and agent dir, as after an app restart. */
     restartedDriver: () => {
       const restarted = new PiSdkDriver({
@@ -461,6 +464,52 @@ await test(
       persisted.map((event) => event.runId),
       [h.initialRunId(), extensionRunId],
     );
+  },
+);
+
+await test(
+  "releasing an idle session frees its runtime, keeps its listeners, and it reopens from its file; a running one is kept",
+  { timeout: 15000 },
+  async (t) => {
+    const replying = gate();
+    const finishReply = gate();
+    let requests = 0;
+    const h = await fixture(t, async (model) => {
+      requests += 1;
+      if (requests === 2) {
+        replying.release();
+        await finishReply.promise;
+      }
+      return response(model, `Reply ${requests}`);
+    });
+    await h.driver.sendUserMessage(h.ref, { text: "First" });
+    await h.until(() => h.completions().length === 1);
+    const before = await h.driver.getTranscript(h.ref);
+    const firstRuntime = h.runtime;
+
+    assert.equal(h.driver.releaseSession(h.ref), true);
+    assert.equal(h.driver.isSessionLoaded(h.ref), false);
+    // Reopening builds a new runtime from the session file, with the same transcript. The
+    // listener subscribed before the release still hears the reopened session.
+    const reopened = await h.driver.openSession(h.ref);
+    assert.equal(reopened.status, "idle");
+    assert.equal(h.driver.isSessionLoaded(h.ref), true);
+    assert.notEqual(h.runtime, firstRuntime, "the released runtime is not reused");
+    assert.deepEqual(await h.driver.getTranscript(h.ref), before);
+
+    // A released session still works.
+    const sending = h.driver.sendUserMessage(h.ref, { text: "Second" });
+    try {
+      await replying.promise;
+      assert.equal(h.driver.releaseSession(h.ref), false, "a running session is kept");
+      assert.equal((await h.driver.openSession(h.ref)).status, "running");
+    } finally {
+      finishReply.release();
+      await sending;
+    }
+    await h.until(() => h.completions().length === 2);
+    const after = await h.driver.getTranscript(h.ref);
+    assert.ok(after.some((item) => item.kind === "message" && item.text === "Reply 2"));
   },
 );
 

@@ -166,6 +166,9 @@ import {
   isSessionVisibleInWindow,
 } from "../conversation/session-visibility";
 
+/** Idle threads kept loaded so switching back to them stays instant; older ones are released. */
+const RECENT_THREADS_KEPT_LOADED = 3;
+
 type StateListener = (state: DesktopAppState) => void;
 type SelectedTranscriptListener = (payload: SelectedTranscriptRecord | null) => void;
 type SessionEventListener = (
@@ -184,6 +187,8 @@ export interface DesktopAppStoreOptions {
   readonly initialWorkspacePaths: readonly string[];
   readonly getWindow?: () => BrowserWindow | null;
   readonly shouldKeepSessionDialogs?: (sessionRef: SessionRef) => boolean;
+  /** Whether some open window has the thread selected; such threads are never released. */
+  readonly isSessionSelectedInAnyWindow?: (sessionRef: SessionRef) => boolean;
   readonly driverOptions?: Pick<
     PiSdkDriverConfig,
     | "builtinExtensions"
@@ -216,6 +221,8 @@ export class DesktopAppStore {
    * trailing refresh so the final state is never dropped.
    */
   private readonly sessionCommandRefreshers = new Map<string, { dirty: boolean }>();
+  /** Threads viewed most recently, newest first; these stay loaded when others are released. */
+  private recentlyViewedSessionKeys: string[] = [];
   /**
    * Coalesce token-level assistantDelta / redundant sessionUpdated publishes so
    * the renderer does not apply a full DesktopAppState snapshot per token.
@@ -276,6 +283,7 @@ export class DesktopAppStore {
   private readonly initialWorkspacePaths: readonly string[];
   private readonly getWindow: () => BrowserWindow | null;
   private readonly shouldKeepSessionDialogs: (sessionRef: SessionRef) => boolean;
+  private readonly isSessionSelectedInAnyWindow: (sessionRef: SessionRef) => boolean;
   private composerDraftSyncTarget: SessionRef | undefined;
   private composerDraftProjectionNonce = 0;
   private persistUiStateTimer: NodeJS.Timeout | undefined;
@@ -325,6 +333,7 @@ export class DesktopAppStore {
     this.initialWorkspacePaths = options.initialWorkspacePaths;
     this.getWindow = options.getWindow ?? (() => null);
     this.shouldKeepSessionDialogs = options.shouldKeepSessionDialogs ?? (() => false);
+    this.isSessionSelectedInAnyWindow = options.isSessionSelectedInAnyWindow ?? (() => false);
 
     this.conversationOwner = createConversationOwner({
       driver: this.driver,
@@ -868,6 +877,29 @@ export class DesktopAppStore {
   async emitTestSessionEvent(event: SessionDriverEvent): Promise<void> {
     await this.initialize();
     await this.handleSessionEvent(event);
+  }
+
+  /**
+   * Test only: threads still subscribed whose runtime the driver released, and threads whose
+   * transcript is cached.
+   */
+  loadedThreadsForTest(): { readonly released: string[]; readonly transcripts: string[] } {
+    return {
+      released: this.state.workspaces
+        .flatMap((workspace) =>
+          workspace.sessions.map((session) => ({
+            workspaceId: workspace.id,
+            sessionId: session.id,
+          })),
+        )
+        .filter(
+          (sessionRef) =>
+            this.sessionState.sessionSubscriptions.has(sessionKey(sessionRef)) &&
+            !this.driver.isSessionLoaded(sessionRef),
+        )
+        .map(sessionKey),
+      transcripts: [...this.sessionState.loadedTranscriptKeys],
+    };
   }
 
   subscribe(listener: StateListener): () => void {
@@ -2442,6 +2474,7 @@ export class DesktopAppStore {
         };
         await this.ensureSessionReady(sessionRef);
         await this.ensureComposerAttachmentsLoaded(sessionRef);
+        this.noteSessionShown(sessionRef);
       }
 
       const workspaces = buildWorkspaceRecords(
@@ -2690,7 +2723,7 @@ export class DesktopAppStore {
   async ensureSessionReady(sessionRef: SessionRef): Promise<SessionSnapshot | undefined> {
     await this.ensureTranscriptLoaded(sessionRef);
     let snapshot: SessionSnapshot | undefined;
-    if (!this.sessionState.sessionSubscriptions.has(sessionKey(sessionRef))) {
+    if (!this.isSessionOpen(sessionRef)) {
       snapshot = await this.driver.openSession(sessionRef);
       this.updateSessionConfig(sessionRef, snapshot.config);
       this.updateLastRunOutcome(snapshot);
@@ -2701,13 +2734,25 @@ export class DesktopAppStore {
   }
 
   async ensureSessionSubscription(sessionRef: SessionRef): Promise<void> {
-    if (!this.sessionState.sessionSubscriptions.has(sessionKey(sessionRef))) {
+    if (!this.isSessionOpen(sessionRef)) {
       const snapshot = await this.driver.openSession(sessionRef);
       this.updateSessionConfig(sessionRef, snapshot.config);
       this.updateLastRunOutcome(snapshot);
       this.updateQueuedComposerMessages(sessionRef, snapshot.queuedMessages);
     }
     await this.ensureSessionSubscribed(sessionRef);
+  }
+
+  /**
+   * Whether the thread is open: subscribed, with a live runtime. A released thread keeps its
+   * subscription, so its events still arrive once it reopens, but it is not open: refreshes
+   * leave it alone, and opening it starts its runtime again.
+   */
+  private isSessionOpen(sessionRef: SessionRef): boolean {
+    return (
+      this.sessionState.sessionSubscriptions.has(sessionKey(sessionRef)) &&
+      this.driver.isSessionLoaded(sessionRef)
+    );
   }
 
   private async ensureTranscriptLoaded(sessionRef: SessionRef): Promise<void> {
@@ -3138,7 +3183,7 @@ export class DesktopAppStore {
       try {
         do {
           entry.dirty = false;
-          if (!this.sessionState.sessionSubscriptions.has(key)) {
+          if (!this.isSessionOpen(sessionRef)) {
             break;
           }
           try {
@@ -3156,7 +3201,7 @@ export class DesktopAppStore {
         // The session can close (deleting its commands + unsubscribing) while a
         // refresh is in flight; the resolved refresh would then resurrect a stale
         // commands entry for a gone session, so drop it instead of publishing.
-        if (!this.sessionState.sessionSubscriptions.has(key)) {
+        if (!this.isSessionOpen(sessionRef)) {
           this.sessionState.sessionCommandsBySession.delete(key);
         } else if (refreshed) {
           this.state = this.syncDerivedSessionState(this.state, sessionRef);
@@ -3282,7 +3327,7 @@ export class DesktopAppStore {
           (this.state.selectedWorkspaceId === workspaceId &&
             this.state.selectedSessionId === sessionRef.sessionId) ||
           this.sessionState.sessionCommandsBySession.has(key) ||
-          this.sessionState.sessionSubscriptions.has(key)
+          this.isSessionOpen(sessionRef)
         );
       });
   }
@@ -4412,6 +4457,71 @@ export class DesktopAppStore {
     this.schedulePersistUiState();
     this.emit();
     this.publishSelectedTranscriptFor(sessionRef);
+    this.noteSessionShown(sessionRef);
+  }
+
+  /**
+   * The thread a window shows has loaded. It becomes the most recent thread, and idle threads
+   * that fell out of the recent few are released. Selecting a thread and starting a new one
+   * both reach here.
+   */
+  private noteSessionShown(sessionRef: SessionRef): void {
+    const key = sessionKey(sessionRef);
+    this.recentlyViewedSessionKeys = [
+      key,
+      ...this.recentlyViewedSessionKeys.filter((entry) => entry !== key),
+    ].slice(0, RECENT_THREADS_KEPT_LOADED);
+    this.releaseIdleSessions();
+  }
+
+  /**
+   * Every opened thread used to stay in memory until quit: its pi session and its transcript.
+   * Free idle threads that weren't viewed recently; they reload from their files when opened.
+   * Threads that run, wait on the person, hold an unsent draft or attachments, take part in
+   * orchestration, or show in a window stay loaded. The driver decides synchronously and keeps the subscription, so no event is lost.
+   */
+  private releaseIdleSessions(): void {
+    for (const workspace of this.state.workspaces) {
+      for (const session of workspace.sessions) {
+        const sessionRef = { workspaceId: workspace.id, sessionId: session.id };
+        const key = sessionKey(sessionRef);
+        const holdsSomething =
+          this.isSessionOpen(sessionRef) || this.sessionState.loadedTranscriptKeys.has(key);
+        if (!holdsSomething || !this.canReleaseSession(sessionRef)) {
+          continue;
+        }
+        if (!this.driver.releaseSession(sessionRef)) {
+          continue;
+        }
+        this.sessionState.loadedTranscriptKeys.delete(key);
+        this.sessionState.transcriptCache.delete(key);
+        this.sessionState.sessionCommandsBySession.delete(key);
+      }
+    }
+  }
+
+  private canReleaseSession(sessionRef: SessionRef): boolean {
+    const key = sessionKey(sessionRef);
+    const session = this.findSessionRecord(sessionRef);
+    return (
+      session !== undefined &&
+      session.status !== "running" &&
+      !this.recentlyViewedSessionKeys.includes(key) &&
+      !this.sessionState.runningSinceBySession.has(key) &&
+      !this.isSelectedSession(sessionRef) &&
+      !this.isSessionSelectedInAnyWindow(sessionRef) &&
+      // Reopening starts the thread's extensions again, and a session_start setEditorText
+      // would replace the unsent draft.
+      !this.sessionState.composerDraftsBySession.get(key) &&
+      (this.sessionState.composerAttachmentsBySession.get(key)?.length ?? 0) === 0 &&
+      !this.orchestrationOwner.hasOrchestrationChildSession(sessionRef) &&
+      !this.orchestrationOwner.hasOrchestrationParentSession(sessionRef) &&
+      (this.sessionState.queuedComposerMessagesBySession.get(key)?.length ?? 0) === 0 &&
+      !this.sessionState.queuedComposerEditsBySession.has(key) &&
+      (this.sessionState.extensionUiBySession.get(key)?.pendingDialogs.length ?? 0) === 0 &&
+      !this.pendingRuntimeCommandsBySession.has(key) &&
+      !this.sessionState.pendingAutoTitleBySession.has(key)
+    );
   }
 
   private startSelectedSessionHydration(
