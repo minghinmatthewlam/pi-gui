@@ -1,3 +1,4 @@
+import { useTranslation } from "../../i18n";
 import {
   type ClipboardEvent,
   type Dispatch,
@@ -153,6 +154,8 @@ export function ComposerPanel({
   extensionNotices,
   annotations,
 }: ComposerPanelProps) {
+  const { t } = useTranslation();
+
   const hasComposerInput =
     composerDraft.trim().length > 0 || attachments.length > 0 || annotations.list.length > 0;
   const primaryActionIsStop = selectedSession.status === "running" && !hasComposerInput;
@@ -200,9 +203,9 @@ export function ComposerPanel({
           selectedMentionIndex={selectedMentionIndex}
           onSelectMention={onSelectMention}
           onEnableMentionExtension={onEnableMentionExtension}
-          textareaLabel="Composer"
+          textareaLabel={t("settings.shortcuts.groupComposer")}
           textareaTestId="composer"
-          textareaPlaceholder="Ask pi to inspect the repo, run a fix, or continue the current thread..."
+          textareaPlaceholder={t("ui.askPiToInspectTheRepoRunAFixOrContinueThe")}
           pinnedCards={pinnedCards}
           extensionDock={extensionDock}
           extensionDockExpanded={extensionDockExpanded}
@@ -231,7 +234,7 @@ export function ComposerPanel({
                 </div>
                 <div className="composer__actions">
                   <button
-                    aria-label="Attach files"
+                    aria-label={t("ui.attachFiles")}
                     className="icon-button composer__attach"
                     type="button"
                     onClick={onPickAttachments}
@@ -239,7 +242,7 @@ export function ComposerPanel({
                     <PlusIcon />
                   </button>
                   <button
-                    aria-label={primaryActionIsStop ? "Stop run" : "Send message"}
+                    aria-label={primaryActionIsStop ? t("ui.stopRun") : t("ui.sendMessage")}
                     className="button button--primary button--cta-icon"
                     data-testid="send"
                     type="button"
@@ -260,11 +263,11 @@ export function ComposerPanel({
       {preparingTaskDraft ? (
         <div className="composer__footer-row">
           <p className="composer__hint" role="status" data-testid="composer-prepare-task-status">
-            Preparing task… Your current draft is saved before opening it.
+            {t("ui.preparingTaskYourCurrentDraftIsSavedBeforeOpeningIt")}
           </p>
           {selectedSession.status === "running" ? (
             <button
-              aria-label="Stop run"
+              aria-label={t("ui.stopRun")}
               className="button button--primary button--cta-icon"
               data-testid="stop-while-preparing-task"
               onClick={onStop}

@@ -1,3 +1,4 @@
+import { useTranslation } from "../../i18n";
 import { useEffect, useRef, useState } from "react";
 import type { SessionRef } from "@pi-gui/session-driver/types";
 import type { PiDesktopApi } from "../../../contracts/ipc";
@@ -38,6 +39,8 @@ export function ExtensionViewPanel({
   readonly onBeforePrepareTaskDraft: () => Promise<void>;
   readonly onPrepareTaskDraftPendingChange: (pending: boolean, requestKey: string) => void;
 }) {
+  const { t } = useTranslation();
+
   const [state, setState] = useState<ViewState>({ kind: "opening" });
   const [reloadNonce, setReloadNonce] = useState(0);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
@@ -282,21 +285,21 @@ export function ExtensionViewPanel({
           onClick={() => setReloadNonce((value) => value + 1)}
         >
           <RefreshIcon />
-          Reload view
+          {t("ui.reloadView")}
         </button>
       </header>
       {state.kind === "failed" ? (
         <div className="extension-view-panel__status" role="status">
-          <h3>Couldn’t open this view</h3>
+          <h3>{t("ui.couldnTOpenThisView")}</h3>
           <p>{state.message}</p>
-          <p>The extension’s commands remain available. Reload view reconnects its interface.</p>
+          <p>{t("ui.theExtensionSCommandsRemainAvailableReloadViewReconnectsItsInterface")}</p>
         </div>
       ) : null}
       <div className="extension-view-panel__body">
         {state.kind === "opening" || state.kind === "mounting" ? (
           // Covers the frame while it mounts, so the frame keeps its place when the view becomes ready.
           <div className="extension-view-panel__status extension-view-panel__loading" role="status">
-            Loading extension view…
+            {t("ui.loadingExtensionView")}
           </div>
         ) : null}
         {connection ? (

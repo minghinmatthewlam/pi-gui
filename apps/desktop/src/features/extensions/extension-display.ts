@@ -1,10 +1,14 @@
+import { translate, type Translate } from "../../i18n";
 import type {
   RuntimeExtensionRecord,
   RuntimeSourceScope,
 } from "@pi-gui/session-driver/runtime-types";
 
-export function extensionSourceSummary(extension: RuntimeExtensionRecord): string {
-  return `${extensionScopeLabel(extension)} · ${extension.sourceInfo.origin}`;
+export function extensionSourceSummary(
+  extension: RuntimeExtensionRecord,
+  t: Translate = translate,
+): string {
+  return `${extensionGroupLabel(extension, t)} · ${extension.sourceInfo.origin}`;
 }
 
 export const PI_GUI_TOOLS_LABEL = "pi-gui tools";
@@ -34,19 +38,22 @@ export function extensionScopeLabel(extension: RuntimeExtensionRecord): string {
 }
 
 /** Group heading for where a skill or extension was discovered. */
-export function sourceScopeGroupLabel(scope: RuntimeSourceScope): string {
+export function sourceScopeGroupLabel(scope: RuntimeSourceScope, t: Translate = translate): string {
   switch (scope) {
     case "project":
-      return "Workspace";
+      return t("sidebar.grouping.workspace");
     case "user":
-      return "User";
+      return t("resources.user");
     case "temporary":
-      return "This session";
+      return t("resources.session");
   }
 }
 
-export function extensionGroupLabel(extension: RuntimeExtensionRecord): string {
-  if (isPiGuiBuiltinExtension(extension)) return PI_GUI_TOOLS_LABEL;
-  if (isPiAddonExtension(extension)) return PI_ADDONS_LABEL;
-  return sourceScopeGroupLabel(extension.sourceInfo.scope);
+export function extensionGroupLabel(
+  extension: RuntimeExtensionRecord,
+  t: Translate = translate,
+): string {
+  if (isPiGuiBuiltinExtension(extension)) return t("resources.builtinGui");
+  if (isPiAddonExtension(extension)) return t("resources.builtinPi");
+  return sourceScopeGroupLabel(extension.sourceInfo.scope, t);
 }

@@ -1,3 +1,4 @@
+import { translate, type Translate } from "../../i18n";
 import type { ComponentType, ReactNode } from "react";
 import { BUILTIN_TOOL_KINDS, type BuiltinToolKind } from "../../../contracts/workbench";
 import { DiffIcon, FileIcon, TerminalIcon } from "../../ui/icons";
@@ -12,29 +13,36 @@ interface BuiltinToolDefinition {
 }
 
 /** Presentation for every built-in tool; a missing kind fails the build. */
-export const BUILTIN_TOOLS = {
-  files: { label: "Files", description: "Browse files in this checkout", Icon: FileIcon },
-  changes: {
-    label: "Review",
-    description: "Review uncommitted, branch or turn changes",
-    Icon: DiffIcon,
-    shortcutKey: "R",
-  },
-  terminal: {
-    label: "Terminal",
-    description: "Run commands in this task's checkout",
-    Icon: TerminalIcon,
-    shortcutKey: "J",
-  },
-} as const satisfies Record<BuiltinToolKind, BuiltinToolDefinition>;
+export function builtinTools(t: Translate = translate) {
+  return {
+    files: { label: t("ui.files"), description: t("workbench.browseFiles"), Icon: FileIcon },
+    changes: {
+      label: t("ui.review"),
+      description: t("workbench.reviewDescription"),
+      Icon: DiffIcon,
+      shortcutKey: "R",
+    },
+    terminal: {
+      label: t("settings.general.groupTerminal"),
+      description: t("workbench.terminalDescription"),
+      Icon: TerminalIcon,
+      shortcutKey: "J",
+    },
+  } as const satisfies Record<BuiltinToolKind, BuiltinToolDefinition>;
+}
+export const BUILTIN_TOOLS = builtinTools();
 
 /** Chooser order follows the contract's kind list. */
-export const BUILTIN_TOOL_ENTRIES = BUILTIN_TOOL_KINDS.map(
-  (kind): BuiltinToolDefinition & { readonly kind: BuiltinToolKind } => ({
-    kind,
-    ...BUILTIN_TOOLS[kind],
-  }),
-);
+export function builtinToolEntries(t: Translate = translate) {
+  const tools = builtinTools(t);
+  return BUILTIN_TOOL_KINDS.map(
+    (kind): BuiltinToolDefinition & { readonly kind: BuiltinToolKind } => ({
+      kind,
+      ...tools[kind],
+    }),
+  );
+}
+export const BUILTIN_TOOL_ENTRIES = builtinToolEntries();
 
 /** The composition root supplies one panel per built-in tool; rendered only while selected. */
 type BuiltinToolPanels = Record<BuiltinToolKind, () => ReactNode>;

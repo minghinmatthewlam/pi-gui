@@ -1,3 +1,4 @@
+import { useTranslation } from "../../i18n";
 import { useMemo, useRef } from "react";
 import type {
   SessionTranscriptCustomMessage,
@@ -146,6 +147,8 @@ function TimelineMessage({
   readonly annotationMarkers?: readonly AnnotationMarker[];
   readonly onOpenAnnotation?: OpenAnnotation;
 }) {
+  const { t } = useTranslation();
+
   const articleRef = useRef<HTMLElement | null>(null);
   const crossProject = useMemo(
     () => (item.role === "user" ? parseCrossProjectMessage(item.text) : null),
@@ -172,12 +175,12 @@ function TimelineMessage({
         <div className="timeline-item__user-stack">
           {scheduledOrigin ? (
             <div className="timeline-item__scheduled-origin" data-testid="sent-by-scheduled-task">
-              Sent by scheduled task
+              {t("ui.sentByScheduledTask")}
             </div>
           ) : null}
           {crossProject ? (
             <div className="timeline-item__project-origin" data-testid="message-project-origin">
-              From project {crossProject.project}
+              {t("ui.fromProject", { project: crossProject.project })}
             </div>
           ) : null}
           <div className="timeline-item__bubble">
@@ -219,7 +222,7 @@ function TimelineMessage({
     return (
       <article className="timeline-item timeline-item--summary-card">
         <div className="timeline-item__summary-eyebrow">
-          {item.role === "branchSummary" ? "Branch summary" : "Compaction summary"}
+          {item.role === "branchSummary" ? t("ui.branchSummary") : t("ui.compactionSummary")}
         </div>
         <MessageMarkdown text={item.text} />
       </article>
@@ -244,16 +247,16 @@ function TimelineMessage({
             className="timeline-item__action"
             title={
               onForkFromMessage
-                ? "Fork conversation from this point"
-                : "Fork is available when the run finishes"
+                ? t("ui.forkConversationFromThisPoint")
+                : t("ui.forkIsAvailableWhenTheRunFinishes")
             }
-            aria-label="Fork conversation from this point"
+            aria-label={t("ui.forkConversationFromThisPoint")}
             data-testid="fork-from-message"
             disabled={!onForkFromMessage}
             onClick={() => onForkFromMessage?.(sourceMessageIndex, item.text)}
           >
             <ForkIcon />
-            <span className="timeline-item__action-label">Fork</span>
+            <span className="timeline-item__action-label">{t("ui.fork")}</span>
           </button>
         </div>
       ) : null}
@@ -283,6 +286,8 @@ function TimelineToolCallItem({
   readonly onToggle?: (callId: string) => void;
   readonly onViewFileInDiff?: (path: string) => void;
 }) {
+  const { t } = useTranslation();
+
   const hasContent = item.input !== undefined || item.output !== undefined;
   // An extension's tool shows the label it registered instead of a guess from its name.
   const extensionLabel = useExtensionToolLabel(item.toolName);
@@ -340,7 +345,7 @@ function TimelineToolCallItem({
         </button>
         {filePath && onViewFileInDiff ? (
           <button
-            aria-label={`View ${filePath} in changes`}
+            aria-label={t("ui.viewValueInChanges", { filePath: filePath })}
             className="icon-button timeline-tool__view-in-diff"
             data-testid="timeline-tool-view-in-diff"
             type="button"
@@ -385,7 +390,7 @@ function TimelineToolCallItem({
                   className="icon-button timeline-tool__copy"
                   type="button"
                   onClick={handleCopy}
-                  aria-label="Copy"
+                  aria-label={t("ui.copy")}
                 >
                   <CopyIcon />
                 </button>
@@ -399,7 +404,7 @@ function TimelineToolCallItem({
                   className="icon-button timeline-tool__copy"
                   type="button"
                   onClick={handleCopy}
-                  aria-label="Copy"
+                  aria-label={t("ui.copy")}
                 >
                   <CopyIcon />
                 </button>

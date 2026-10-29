@@ -1,3 +1,4 @@
+import { useTranslation } from "../../i18n";
 import type { RefObject } from "react";
 
 interface ThreadSearchBarProps {
@@ -21,13 +22,15 @@ export function ThreadSearchBar({
   onPrev,
   onClose,
 }: ThreadSearchBarProps) {
+  const { t } = useTranslation();
+
   return (
     <div className="thread-search-bar" data-testid="thread-search-bar">
       <input
         ref={inputRef}
         className="thread-search-bar__input"
         type="text"
-        placeholder="Search thread..."
+        placeholder={t("ui.searchThread")}
         value={query}
         onChange={(e) => onSearch(e.target.value)}
         onKeyDown={(e) => {
@@ -49,7 +52,7 @@ export function ThreadSearchBar({
       </span>
       <div className="thread-search-bar__actions">
         <button
-          aria-label="Previous match"
+          aria-label={t("ui.previousMatch")}
           className="icon-button"
           type="button"
           disabled={matchCount === 0}
@@ -58,7 +61,7 @@ export function ThreadSearchBar({
           &#x25B2;
         </button>
         <button
-          aria-label="Next match"
+          aria-label={t("ui.nextMatch")}
           className="icon-button"
           type="button"
           disabled={matchCount === 0}
@@ -66,7 +69,12 @@ export function ThreadSearchBar({
         >
           &#x25BC;
         </button>
-        <button aria-label="Close search" className="icon-button" type="button" onClick={onClose}>
+        <button
+          aria-label={t("ui.closeSearch")}
+          className="icon-button"
+          type="button"
+          onClick={onClose}
+        >
           &#x2715;
         </button>
       </div>

@@ -45,6 +45,7 @@ export {
   type Translate,
   type TranslateParams,
 } from "./translate";
+export { formatDateTime, formatNumber } from "./format";
 
 interface I18nContextValue {
   readonly locale: AppLocale;

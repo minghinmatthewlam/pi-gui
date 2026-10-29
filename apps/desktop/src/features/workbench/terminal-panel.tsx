@@ -1,3 +1,4 @@
+import { useTranslation } from "../../i18n";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Terminal } from "@xterm/xterm";
 import { ClipboardAddon } from "@xterm/addon-clipboard";
@@ -23,6 +24,8 @@ interface TerminalPanelProps {
 }
 
 export function TerminalPanel({ workspace, sessionId, onHide }: TerminalPanelProps) {
+  const { t } = useTranslation();
+
   const api = window.piApp;
   const panelRef = useRef<HTMLElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -325,7 +328,7 @@ export function TerminalPanel({ workspace, sessionId, onHide }: TerminalPanelPro
       data-testid="integrated-terminal"
     >
       <div className="terminal-panel__toolbar">
-        <div className="terminal-panel__tabs" role="tablist" aria-label="Terminal sessions">
+        <div className="terminal-panel__tabs" role="tablist" aria-label={t("ui.terminalSessions")}>
           {(panel?.sessions ?? []).map((session) => (
             <div
               key={session.id}
@@ -351,7 +354,7 @@ export function TerminalPanel({ workspace, sessionId, onHide }: TerminalPanelPro
               <button
                 type="button"
                 className="terminal-panel__tab-close"
-                aria-label={`Close ${session.title}`}
+                aria-label={t("ui.closeValue", { title: session.title })}
                 onClick={(event) => {
                   event.stopPropagation();
                   void closeTerminal(session.id).catch((error: unknown) => {
@@ -368,8 +371,8 @@ export function TerminalPanel({ workspace, sessionId, onHide }: TerminalPanelPro
           <button
             type="button"
             className="icon-button terminal-panel__action"
-            title="New terminal"
-            aria-label="New terminal"
+            title={t("ui.newTerminal")}
+            aria-label={t("ui.newTerminal")}
             onClick={() =>
               void createTerminal().catch((error: unknown) => {
                 setError(error instanceof Error ? error.message : String(error));
@@ -381,8 +384,8 @@ export function TerminalPanel({ workspace, sessionId, onHide }: TerminalPanelPro
           <button
             type="button"
             className="icon-button terminal-panel__action"
-            title="Restart terminal"
-            aria-label="Restart terminal"
+            title={t("ui.restartTerminal")}
+            aria-label={t("ui.restartTerminal")}
             onClick={() =>
               void restartTerminal().catch((error: unknown) => {
                 setError(error instanceof Error ? error.message : String(error));

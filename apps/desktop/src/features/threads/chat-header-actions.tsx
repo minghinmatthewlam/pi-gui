@@ -1,8 +1,9 @@
 import type { SessionRecord } from "../../../contracts/desktop-state";
+import { useTranslation } from "../../i18n";
+import { formatRelativeTime } from "../../lib/string-utils";
 import { ThreadActionsMenu } from "./thread-actions";
 import type { ThreadAction } from "./thread-actions";
 import type { ThreadMenuState } from "./hooks/use-thread-actions";
-import { formatRelativeTime } from "../../lib/string-utils";
 
 interface ChatHeaderActionsProps {
   readonly session: SessionRecord;
@@ -22,10 +23,12 @@ export function ChatHeaderActions({
   threadMenu,
   actions,
 }: ChatHeaderActionsProps) {
+  const { t } = useTranslation();
+
   return (
     <>
       <div className="chat-header__status">
-        {session.status === "running" ? runningLabel : formatRelativeTime(session.updatedAt)}
+        {session.status === "running" ? runningLabel : formatRelativeTime(session.updatedAt, t)}
       </div>
       <div
         className="chat-header__menu-wrap"
@@ -34,7 +37,7 @@ export function ChatHeaderActions({
         <button
           aria-haspopup="menu"
           aria-expanded={threadMenu.openMenu?.surface === "header"}
-          aria-label="Thread actions"
+          aria-label={t("app.threadActions")}
           className="icon-button"
           data-testid="thread-header-menu"
           type="button"

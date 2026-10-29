@@ -4,6 +4,7 @@
  * copy checks in tests/unit/i18n.spec.ts — derives from this list.
  */
 import { en, type Messages } from "./messages/en";
+import { ja } from "./messages/ja";
 import { zhCN } from "./messages/zh-CN";
 
 export type { MessageKey, Messages } from "./messages/en";
@@ -47,6 +48,12 @@ export const LOCALES = [
     // Every Chinese tag lands on Simplified until a zh-Hant locale is registered
     // ahead of this one and claims the traditional script.
     matchesSystemTag: (languageTag) => languageTagParts(languageTag).primary === "zh",
+  },
+  {
+    id: "ja",
+    label: "日本語",
+    messages: ja,
+    matchesSystemTag: (languageTag) => languageTagParts(languageTag).primary === "ja",
   },
 ] as const satisfies readonly LocaleDefinition[];
 

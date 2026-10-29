@@ -90,7 +90,7 @@ export default [
     // App.tsx composes the screen. Put new behavior in a feature hook or component
     // (commands: app/use-desktop-commands.ts) and lower this limit when App.tsx shrinks.
     files: ["apps/desktop/src/app/App.tsx"],
-    rules: { "max-lines": ["error", { max: 1447 }] },
+    rules: { "max-lines": ["error", { max: 1435 }] },
   },
   {
     // Electron main serves every window's IPC and input on one thread, so a

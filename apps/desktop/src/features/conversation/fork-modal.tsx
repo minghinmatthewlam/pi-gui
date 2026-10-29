@@ -1,3 +1,4 @@
+import { useTranslation } from "../../i18n";
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import type { NewThreadEnvironment } from "../../../contracts/desktop-state";
 import { trapDialogFocus } from "../../ui/dialog-focus";
@@ -21,6 +22,8 @@ export function ForkModal({
   onClose,
   onSubmit,
 }: ForkModalProps) {
+  const { t } = useTranslation();
+
   const [environment, setEnvironment] = useState<NewThreadEnvironment>("local");
   const dialogRef = useRef<HTMLDivElement | null>(null);
 
@@ -61,11 +64,11 @@ export function ForkModal({
       >
         <div className="tree-modal__header">
           <div>
-            <div className="tree-modal__eyebrow">Fork conversation</div>
-            <h2 className="tree-modal__title">Start a new thread</h2>
+            <div className="tree-modal__eyebrow">{t("ui.forkConversation")}</div>
+            <h2 className="tree-modal__title">{t("ui.startANewThread")}</h2>
           </div>
           <button
-            aria-label="Close fork modal"
+            aria-label={t("ui.closeForkModal")}
             className="tree-modal__close"
             disabled={submitting}
             type="button"
@@ -83,9 +86,7 @@ export function ForkModal({
 
         <div className="tree-modal__summary-step">
           <div className="tree-modal__summary-copy">
-            Forks the conversation up to and including this response into a new sidebar thread with
-            an empty composer, so you can continue it in a different direction. The original thread
-            stays untouched.
+            {t("ui.forksTheConversationUpToAndIncludingThisResponseIntoANew")}
           </div>
 
           {messagePreview ? (
@@ -97,7 +98,7 @@ export function ForkModal({
           <div
             className="new-thread__environment-group"
             role="radiogroup"
-            aria-label="Fork environment"
+            aria-label={t("ui.forkEnvironment")}
           >
             <button
               aria-pressed={environment === "local"}
@@ -106,26 +107,26 @@ export function ForkModal({
               type="button"
               onClick={() => setEnvironment("local")}
             >
-              <span>Same worktree</span>
+              <span>{t("ui.sameWorktree")}</span>
             </button>
             <button
               aria-pressed={environment === "worktree"}
               className={`new-thread__environment ${environment === "worktree" ? "new-thread__environment--active" : ""}`}
               data-testid="fork-environment-worktree"
               disabled={!canUseWorktree}
-              title={canUseWorktree ? undefined : "This workspace can't create worktrees."}
+              title={canUseWorktree ? undefined : t("ui.thisWorkspaceCanTCreateWorktrees")}
               type="button"
               onClick={() => setEnvironment("worktree")}
             >
-              <span>New worktree</span>
+              <span>{t("ui.newWorktree")}</span>
             </button>
           </div>
 
           <div className="tree-modal__footer">
             <div className="tree-modal__hint">
               {environment === "worktree"
-                ? "A fresh worktree is created and the forked thread opens there."
-                : "The forked thread opens in the same folder as the original."}
+                ? t("ui.aFreshWorktreeIsCreatedAndTheForkedThreadOpensThere")
+                : t("ui.theForkedThreadOpensInTheSameFolderAsTheOriginal")}
             </div>
             <div className="tree-modal__actions">
               <button
@@ -134,7 +135,7 @@ export function ForkModal({
                 type="button"
                 onClick={onClose}
               >
-                Cancel
+                {t("scheduledTasks.editor.cancel")}
               </button>
               <button
                 className="button button--primary"
@@ -144,7 +145,7 @@ export function ForkModal({
                 type="button"
                 onClick={() => onSubmit(environment)}
               >
-                {submitting ? "Forking…" : "Fork thread"}
+                {submitting ? t("ui.forking") : t("ui.forkThread")}
               </button>
             </div>
           </div>

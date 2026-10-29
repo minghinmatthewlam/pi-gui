@@ -1,3 +1,4 @@
+import { useTranslation, type Translate } from "../../i18n";
 import type { RuntimeSkillRecord } from "@pi-gui/session-driver/runtime-types";
 import type { WorkspaceRecord } from "../../../contracts/desktop-state";
 import { titleCase } from "../../lib/string-utils";
@@ -7,7 +8,7 @@ import { sourceScopeGroupLabel } from "./extension-display";
 import { displayPath, ResourceDetail } from "./resource-detail";
 import { ResourceEmptyState, ResourceList, type ResourceListGroup } from "./resource-list";
 
-const GROUP_ORDER = ["Workspace", "User", "This session"];
+const GROUP_ORDER = ["project", "user", "temporary"] as const;
 
 interface SkillsTabProps {
   readonly workspace: WorkspaceRecord;
@@ -31,21 +32,19 @@ export function SkillsTab({
   onOpenSkillFolder,
   onTrySkill,
 }: SkillsTabProps) {
+  const { t } = useTranslation();
+
   // The list stays mounted under an open detail so expanded groups, scroll and focus survive.
   const list =
     skills.length === 0 ? (
       <ResourceEmptyState
-        title={searching ? "No skills match" : "No skills yet"}
-        body={
-          searching
-            ? "Try another name, description or slash command."
-            : "Skills are discovered in this workspace and your user skill folders. Create one, or refresh after adding one."
-        }
+        title={searching ? t("ui.noSkillsMatch") : t("ui.noSkillsYet")}
+        body={searching ? t("resources.skillSearchHint") : t("resources.skillEmptyHint")}
       />
     ) : (
       <ResourceList
         expanded={searching}
-        groups={groupSkills(skills, onToggleSkill)}
+        groups={groupSkills(skills, onToggleSkill, t)}
         icon={<SkillIcon />}
         testId="skills-list"
         onOpen={onSelect}
@@ -63,18 +62,18 @@ export function SkillsTab({
                 type="button"
                 onClick={() => onOpenSkillFolder(selected.filePath)}
               >
-                Open folder
+                {t("ui.openFolder")}
               </button>
               <button
                 className="button button--primary"
                 type="button"
                 onClick={() => onTrySkill(selected)}
               >
-                Try
+                {t("ui.try")}
               </button>
             </>
           }
-          backLabel="All skills"
+          backLabel={t("ui.allSkills")}
           enabled={selected.enabled}
           icon={<SkillIcon />}
           subtitle={selected.slashCommand}
@@ -85,24 +84,27 @@ export function SkillsTab({
           <p className="resource-detail__description">{selected.description}</p>
           <SettingsGroup>
             <SettingsRow
-              title="Slash command"
-              description="Type it in the composer to run the skill."
+              title={t("ui.slashCommand")}
+              description={t("ui.typeItInTheComposerToRunTheSkill")}
             >
               <code className="resource-detail__code">{selected.slashCommand}</code>
             </SettingsRow>
             <SettingsRow
-              title="Model invocation"
+              title={t("ui.modelInvocation")}
               description={
                 selected.disableModelInvocation
-                  ? "Only runs when you type its slash command."
-                  : "pi can also choose this skill on its own when it fits the task."
+                  ? t("ui.onlyRunsWhenYouTypeItsSlashCommand")
+                  : t("ui.piCanAlsoChooseThisSkillOnItsOwnWhenItFits")
               }
             >
               <span className="settings-row__value">
-                {selected.disableModelInvocation ? "Slash command only" : "Automatic"}
+                {selected.disableModelInvocation ? t("ui.slashCommandOnly") : t("ui.automatic")}
               </span>
             </SettingsRow>
-            <SettingsRow title="Location" description={sourceScopeGroupLabel(selected.scope)}>
+            <SettingsRow
+              title={t("ui.location")}
+              description={sourceScopeGroupLabel(selected.scope, t)}
+            >
               <code className="resource-detail__code" title={selected.filePath}>
                 {displayPath(selected.filePath, workspace.path)}
               </code>
@@ -118,11 +120,12 @@ export function SkillsTab({
 function groupSkills(
   skills: readonly RuntimeSkillRecord[],
   onToggleSkill: (filePath: string, enabled: boolean) => void,
+  t: Translate,
 ): readonly ResourceListGroup[] {
-  return GROUP_ORDER.map((label) => ({
-    label,
+  return GROUP_ORDER.map((scope) => ({
+    label: sourceScopeGroupLabel(scope, t),
     items: skills
-      .filter((skill) => sourceScopeGroupLabel(skill.scope) === label)
+      .filter((skill) => skill.scope === scope)
       .map((skill) => ({
         id: skill.filePath,
         title: titleCase(skill.name),
