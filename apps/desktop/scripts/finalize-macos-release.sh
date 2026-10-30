@@ -14,9 +14,9 @@ fi
 
 release_dir="$(cd "$1" && pwd)"
 version="$2"
-dmg="$release_dir/pi-gui-$version-arm64.dmg"
-zip="$release_dir/pi-gui-$version-arm64.zip"
-packaged_app="$release_dir/mac-arm64/pi-gui.app"
+dmg="$release_dir/pi-gui-$version-universal.dmg"
+zip="$release_dir/pi-gui-$version-universal.zip"
+packaged_app="$release_dir/mac-universal/pi-gui.app"
 
 for artifact in "$dmg" "$zip"; do
   if [[ ! -f "$artifact" ]]; then
@@ -57,8 +57,8 @@ verify_app() {
 
   local architectures
   architectures="$(lipo -archs "$app_path/Contents/MacOS/pi-gui")"
-  if [[ "$architectures" != "arm64" ]]; then
-    echo "Expected an arm64 app, found: $architectures" >&2
+  if [[ "$architectures" != *arm64* || "$architectures" != *x86_64* ]]; then
+    echo "Expected a universal arm64/x86_64 app, found: $architectures" >&2
     exit 1
   fi
 }

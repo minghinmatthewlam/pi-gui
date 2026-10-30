@@ -84,7 +84,7 @@ the review tab, your worktrees, and tabs from desktop extensions. Each task keep
 
 ## Install
 
-pi-gui runs on macOS (Apple Silicon), Linux (x64) and Windows (x64).
+pi-gui runs on macOS, Linux (x64) and Windows (x64).
 
 Download the latest `.dmg` (macOS), `.AppImage` or `.deb` (Linux), or `.exe` (Windows) from the
 [Releases page](https://github.com/minghinmatthewlam/pi-gui/releases).
