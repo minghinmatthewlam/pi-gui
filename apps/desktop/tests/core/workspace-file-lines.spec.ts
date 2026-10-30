@@ -90,7 +90,7 @@ test("assistant file lines open in the Files panel and web links stay external",
   await writeFile(join(workspacePath, "src", "long.ts"), `${longLines.join("\n")}\n`, "utf8");
   await writeFile(
     join(workspacePath, "notes.md"),
-    "# Title\nLine two is here\nLine three\n",
+    "# Title\nLine two is here\nLine three\n\n这是**“中文预览”**。\n",
     "utf8",
   );
   await writeFile(join(workspacePath, ".gitignore"), "secret.txt\n", "utf8");
@@ -179,6 +179,7 @@ test("assistant file lines open in the Files panel and web links stay external",
     );
     await window.getByRole("button", { name: "View source" }).click();
     await expect(window.locator(".file-editor__markdown")).toBeVisible();
+    await expect(window.locator(".file-editor__markdown strong")).toHaveText("“中文预览”");
     await expect(window.locator(".file-editor__source")).toHaveCount(0);
     await window.getByRole("button", { name: "View source" }).click();
     await expect(window.locator(".file-editor__source")).toBeVisible();

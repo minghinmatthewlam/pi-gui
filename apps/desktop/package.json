@@ -150,6 +150,7 @@
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-markdown": "^10.1.0",
+    "remark-cjk-friendly": "2.3.3",
     "remark-gfm": "^4.0.1",
     "retry": "^0.13.1",
     "semver": "7.8.5",

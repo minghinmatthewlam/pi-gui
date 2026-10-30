@@ -1,13 +1,11 @@
 import { memo, useMemo } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { MARKDOWN_PLUGINS } from "../../lib/markdown";
 import {
   remarkWorkspaceFileLines,
   workspaceFileLineFromAnchorProps,
   type WorkspaceFileLine,
 } from "./workspace-file-line";
-
-const REMARK_PLUGINS = [remarkGfm];
 
 function markdownComponents(
   onOpenWorkspaceFileLine?: (target: WorkspaceFileLine) => void,
@@ -75,8 +73,8 @@ export const MessageMarkdown = memo(function MessageMarkdown({
   const remarkPlugins = useMemo(
     () =>
       onOpenWorkspaceFileLine
-        ? [remarkGfm, remarkWorkspaceFileLines(workspacePath ?? null)]
-        : REMARK_PLUGINS,
+        ? [...MARKDOWN_PLUGINS, remarkWorkspaceFileLines(workspacePath ?? null)]
+        : MARKDOWN_PLUGINS,
     [onOpenWorkspaceFileLine, workspacePath],
   );
   return (

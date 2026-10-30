@@ -16,6 +16,8 @@ const markdownResponse = [
   "",
   "Assistant responses should render **strong text**, *emphasis*, and `inline code`.",
   "",
+  "真正的根治手段是**“避免在一个事务里锁整个宇宙”**。",
+  "",
   "- First bullet",
   "- Second bullet",
   "",
@@ -87,7 +89,10 @@ test("renders markdown formatting in assistant responses", async () => {
     await expect(
       messageRow.getByRole("heading", { level: 2, name: "Markdown rendering proof" }),
     ).toBeVisible();
-    await expect(messageRow.locator("strong")).toHaveText("strong text");
+    await expect(messageRow.locator("strong")).toHaveText([
+      "strong text",
+      "“避免在一个事务里锁整个宇宙”",
+    ]);
     await expect(messageRow.locator("em")).toHaveText("emphasis");
     await expect(messageRow.locator(":not(pre) > code")).toHaveText("inline code");
     await expect(messageRow.locator("ul > li")).toHaveText(["First bullet", "Second bullet"]);
