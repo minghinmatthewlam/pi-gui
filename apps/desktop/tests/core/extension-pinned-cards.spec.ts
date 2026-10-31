@@ -1,4 +1,4 @@
-import { writeFile } from "node:fs/promises";
+import { access, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import {
@@ -246,3 +246,125 @@ test("a pinned card stays above the composer through updates, hiding, compaction
     await secondRun.close();
   }
 });
+
+for (const outcome of ["complete", "complete-in-background", "cancel", "fail"] as const) {
+  test(`manual compaction ${outcome} closes autocomplete, reports progress and leaves other chats usable`, async () => {
+    const userDataDir = await makeUserDataDir();
+    const agentDir = join(userDataDir, "agent");
+    const workspacePath = await makeWorkspace("manual-compaction-progress");
+    const started = join(workspacePath, "compaction-started");
+    const release = join(workspacePath, "release-compaction");
+    await seedAgentDir(agentDir, { withOpenAiAuth: false, withDefaultModel: false });
+    await writeFile(
+      join(agentDir, "settings.json"),
+      JSON.stringify({
+        defaultProvider: PROVIDER_ID,
+        defaultModel: MODEL_ID,
+        enabledModels: [`${PROVIDER_ID}/${MODEL_ID}`],
+        packages: [],
+        cacheWarming: "off",
+        compaction: { enabled: false, keepRecentTokens: 1 },
+      }),
+    );
+    const gatedSource =
+      `import { existsSync, readFileSync, writeFileSync } from "node:fs";\n` +
+      extensionSource.replace(
+        "export default function plan(pi) {",
+        `export default function plan(pi) {
+      pi.on("session_before_compact", async (event) => {
+        writeFileSync(${JSON.stringify(started)}, "started");
+        while (!existsSync(${JSON.stringify(release)}) && !event.signal.aborted) {
+          await new Promise(resolve => setTimeout(resolve, 20));
+        }
+      });`,
+      );
+    await writeProjectExtension(
+      workspacePath,
+      "plan.ts",
+      gatedSource.replace(
+        "streamSimple(model) {",
+        `streamSimple(model) {
+        if (existsSync(${JSON.stringify(release)}) && readFileSync(${JSON.stringify(release)}, "utf8") === "fail") {
+          throw new Error("SCRIPTED_COMPACTION_FAILURE");
+        }`,
+      ),
+    );
+    const harness = await launchDesktop(userDataDir, {
+      agentDir,
+      initialWorkspaces: [workspacePath],
+      scrubProviderEnv: true,
+      testMode: "background",
+    });
+    try {
+      const window = await harness.firstWindow();
+      await waitForWorkspaceByPath(window, workspacePath);
+      await createNamedThread(window, "Other compaction chat");
+      await createNamedThread(window, "Compacting chat");
+      await send(window, "First turn");
+      await expect(window.getByRole("button", { name: "Stop run", exact: true })).toHaveCount(0);
+      await send(window, "Second turn");
+      await expect(window.getByRole("button", { name: "Stop run", exact: true })).toHaveCount(0);
+      const composer = window.getByTestId("composer");
+      await composer.fill("/compact");
+      const option = window.getByRole("button", {
+        name: "Compact /compact Compact session context now",
+        exact: true,
+      });
+      await expect(option).toBeVisible();
+      await composer.press("Enter");
+      await expect
+        .poll(async () =>
+          access(started).then(
+            () => true,
+            () => false,
+          ),
+        )
+        .toBe(true);
+      await expect(option).toHaveCount(0);
+      await expect(window.getByRole("button", { name: "Stop run", exact: true })).toBeVisible();
+      await selectSession(window, "Other compaction chat");
+      await composer.fill("Draft while another chat compacts");
+      await expect
+        .poll(async () => (await getDesktopState(window)).composerDraft)
+        .toBe("Draft while another chat compacts");
+      await selectSession(window, "Compacting chat");
+      await composer.fill("New draft during compaction");
+      if (outcome === "cancel") {
+        await composer.fill("");
+        await window.getByRole("button", { name: "Stop run", exact: true }).click();
+        await expect(window.getByTestId("transcript")).toContainText("Compaction cancelled");
+      } else if (outcome === "fail") {
+        await writeFile(release, "fail");
+        await expect
+          .poll(async () => (await getDesktopState(window)).lastError)
+          .toContain("SCRIPTED_COMPACTION_FAILURE");
+        await expect(composer).toHaveValue("New draft during compaction");
+      } else {
+        if (outcome === "complete-in-background")
+          await selectSession(window, "Other compaction chat");
+        await writeFile(release, "release");
+        if (outcome === "complete-in-background") {
+          await expect
+            .poll(async () => {
+              const state = await getDesktopState(window);
+              return state.workspaces
+                .flatMap((workspace) => workspace.sessions)
+                .find((session) => session.title === "Compacting chat")?.status;
+            })
+            .toBe("idle");
+          await expect(window.locator(".chat-header__title")).toHaveText("Other compaction chat");
+          await expect(composer).toHaveValue("Draft while another chat compacts");
+          await selectSession(window, "Compacting chat");
+        }
+        await expect(window.getByTestId("transcript")).toContainText("Compacted session context");
+        await expect(composer).toHaveValue("New draft during compaction");
+      }
+      await expect(window.getByRole("button", { name: "Stop run", exact: true })).toHaveCount(0);
+      await selectSession(window, "Other compaction chat");
+      await expect(composer).toHaveValue("Draft while another chat compacts");
+    } finally {
+      await writeFile(release, "release");
+      await harness.close();
+    }
+  });
+}

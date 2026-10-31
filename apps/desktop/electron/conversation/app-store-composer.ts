@@ -954,9 +954,21 @@ async function runComposerCommand(
   }
 
   if (parsed.type === "compact") {
-    await store.driver.compactSession(sessionRef, parsed.customInstructions);
-    await store.reloadTranscriptFromDriver(sessionRef);
-    return finishComposerCommand(store, sessionRef, key, "Compacted session context");
+    void store.driver
+      .compactSession(sessionRef, parsed.customInstructions)
+      .then(async () => {
+        await store.reloadTranscriptFromDriver(sessionRef);
+        finishSessionChange(store, sessionRef, key, "Compacted session context");
+      })
+      .catch((error: unknown) => {
+        if (error instanceof Error && error.message === "Compaction cancelled") {
+          finishSessionChange(store, sessionRef, key, "Compaction cancelled");
+          return;
+        }
+        return store.withSessionError(sessionRef, error);
+      })
+      .catch((error: unknown) => console.error("[main] compaction failed", error));
+    return finishComposerCommand(store, sessionRef, key, "Compacting session context…");
   }
 
   if (parsed.type === "reload") {
