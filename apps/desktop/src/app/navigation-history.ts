@@ -8,12 +8,24 @@ export interface AppLocation {
   readonly section?: SettingsSection;
 }
 
+export function sameLocation(
+  left: AppLocation | null | undefined,
+  right: AppLocation | null | undefined,
+) {
+  return (
+    left?.view === right?.view &&
+    left?.workspaceId === right?.workspaceId &&
+    left?.sessionId === right?.sessionId &&
+    left?.section === right?.section
+  );
+}
+
 export class NavigationHistory {
   private entries: AppLocation[] = [];
   private index = -1;
 
   record(location: AppLocation) {
-    if (JSON.stringify(this.entries[this.index]) === JSON.stringify(location)) return;
+    if (sameLocation(this.entries[this.index], location)) return;
     this.entries = [...this.entries.slice(0, this.index + 1), location].slice(-200);
     this.index = this.entries.length - 1;
   }

@@ -46,3 +46,10 @@ test("bounds history while retaining the latest destinations", () => {
   for (let i = 248; i >= 50; i--) expect(history.move(-1, available)?.sessionId).toBe(String(i));
   expect(history.move(-1, available)).toBeUndefined();
 });
+
+test("recognizes repeat locations regardless of property order", () => {
+  const history = new NavigationHistory();
+  history.record(alpha);
+  history.record({ sessionId: alpha.sessionId, workspaceId: alpha.workspaceId, view: alpha.view });
+  expect(history.move(-1, available)).toBeUndefined();
+});

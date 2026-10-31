@@ -1,4 +1,5 @@
 import { basename } from "node:path";
+import { desktopIpc } from "../../contracts/ipc";
 import { expect, test } from "@playwright/test";
 import {
   createNamedThread,
@@ -269,6 +270,113 @@ test("history includes scheduled tasks and both Customize tabs", async () => {
     await window.keyboard.press(`${modifier}+]`);
     await expect(window.getByTestId("extensions-surface")).toBeVisible();
   } finally {
+    await harness.close();
+  }
+});
+
+test("records Settings visits made while a history response is delayed", async () => {
+  const harness = await launchDesktop(await makeUserDataDir(), {
+    initialWorkspaces: [await makeWorkspace("history-pending-settings")],
+    testMode: "background",
+  });
+  try {
+    const window = await harness.firstWindow();
+    await createNamedThread(window, "Pending history");
+    const modifier = process.platform === "darwin" ? "Meta" : "Control";
+    await window.keyboard.press(`${modifier}+,`);
+    await expect(window.getByRole("button", { name: "General", exact: true })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    await window.getByRole("button", { name: "Models", exact: true }).click();
+    await expect(window.getByRole("button", { name: "Models", exact: true })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    await harness.electronApp.evaluate(({ ipcMain }, channel) => {
+      type Handler = (...args: unknown[]) => unknown;
+      const handlers = (ipcMain as typeof ipcMain & { _invokeHandlers: Map<string, Handler> })
+        ._invokeHandlers;
+      const original = handlers.get(channel);
+      if (!original) throw new Error("Expected view handler");
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const control = { release, entered: false };
+      (
+        globalThis as typeof globalThis & { navigationResponseGate?: typeof control }
+      ).navigationResponseGate = control;
+      ipcMain.removeHandler(channel);
+      ipcMain.handle(channel, async (...args) => {
+        const result = await original(...args);
+        control.entered = true;
+        await gate;
+        return result;
+      });
+    }, desktopIpc.setActiveView);
+    await window.keyboard.press(`${modifier}+[`);
+    await expect(window.getByRole("button", { name: "General", exact: true })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    await expect
+      .poll(() =>
+        harness.electronApp.evaluate(
+          () =>
+            (globalThis as typeof globalThis & { navigationResponseGate?: { entered: boolean } })
+              .navigationResponseGate?.entered,
+        ),
+      )
+      .toBe(true);
+    await window.getByRole("button", { name: "Providers", exact: true }).click();
+    await expect(window.getByRole("button", { name: "Providers", exact: true })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    await window.getByRole("button", { name: "General", exact: true }).click();
+    await expect(window.getByRole("button", { name: "General", exact: true })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    await window.getByRole("button", { name: "Appearance", exact: true }).click();
+    await expect(window.getByRole("button", { name: "Appearance", exact: true })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    await harness.electronApp.evaluate(() =>
+      (
+        globalThis as typeof globalThis & { navigationResponseGate?: { release: () => void } }
+      ).navigationResponseGate?.release(),
+    );
+    await window.keyboard.press(`${modifier}+[`);
+    await expect(window.getByRole("button", { name: "General", exact: true })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    await window.keyboard.press(`${modifier}+[`);
+    await expect(window.getByRole("button", { name: "Providers", exact: true })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    await window.keyboard.press(`${modifier}+]`);
+    await expect(window.getByRole("button", { name: "General", exact: true })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    await window.keyboard.press(`${modifier}+]`);
+    await expect(window.getByRole("button", { name: "Appearance", exact: true })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+  } finally {
+    await harness.electronApp
+      .evaluate(() =>
+        (
+          globalThis as typeof globalThis & { navigationResponseGate?: { release: () => void } }
+        ).navigationResponseGate?.release(),
+      )
+      .catch(() => undefined);
     await harness.close();
   }
 });
