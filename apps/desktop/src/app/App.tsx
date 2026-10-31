@@ -14,6 +14,7 @@ import { updateSnapshot, useDesktopAppState } from "./desktop-app-state";
 import { DesktopStartupSurface, toStartupSurfaceState } from "./desktop-recovery";
 import { buildFileWorkbenchContexts } from "./file-workbench-contexts";
 import { canTogglePrimarySidebar } from "./app-shell-utils";
+import { useAppNavigation } from "./use-app-navigation";
 import { useDesktopCommands } from "./use-desktop-commands";
 import { useRunningLabel } from "../features/conversation/hooks/use-running-label";
 import { useTimelineViewport } from "../features/conversation/hooks/use-timeline-viewport";
@@ -102,10 +103,6 @@ export default function App() {
   const snapshot = desktop.snapshot;
   const setSnapshot = desktop.setSnapshot;
   const selectedTranscript = desktop.selectedTranscript;
-  const [settingsSection, setSettingsSection] = useState<SettingsSection>("general");
-  const [settingsWorkspaceId, setSettingsWorkspaceId] = useState("");
-  const [skillsWorkspaceId, setSkillsWorkspaceId] = useState("");
-  const [extensionsWorkspaceId, setExtensionsWorkspaceId] = useState("");
   // Unknown until main answers; until then the theme from the last launch stays.
   const [resolvedTheme, setResolvedTheme] = useState<"light" | "dark" | null>(null);
   const [dockExpandedBySession, setDockExpandedBySession] = useState<Record<string, string>>({});
@@ -458,26 +455,26 @@ export default function App() {
     });
   }, []);
 
-  const openSettings = (workspaceId?: string, section?: SettingsSection) => {
-    if (!api) {
-      return;
-    }
-    const nextWorkspaceId =
-      workspaceId && rootWorkspaceOptions.some((workspace) => workspace.id === workspaceId)
-        ? workspaceId
-        : settingsWorkspaceId || rootWorkspaceOptions[0]?.id || "";
-    if (nextWorkspaceId) {
-      setSettingsWorkspaceId(nextWorkspaceId);
-    }
-    if (section) {
-      setSettingsSection(section);
-    }
-    void updateSnapshot(setSnapshot, () => api.setActiveView("settings")).catch(
-      (error: unknown) => {
-        console.error("[renderer] setActiveView failed", error);
-      },
-    );
-  };
+  const {
+    settingsSection,
+    setSettingsSection,
+    settingsWorkspaceId,
+    setSettingsWorkspaceId,
+    skillsWorkspaceId,
+    setSkillsWorkspaceId,
+    extensionsWorkspaceId,
+    setExtensionsWorkspaceId,
+    openSettings,
+    navigate,
+  } = useAppNavigation({
+    api,
+    snapshot,
+    setSnapshot,
+    rootWorkspaceOptions,
+    flushComposerDraft,
+    savePosition: viewport.savePosition,
+    closeSearch: threadSearch.close,
+  });
 
   const {
     treeModalState,
@@ -735,6 +732,7 @@ export default function App() {
     openSkills,
     openExtensions,
     setActiveView,
+    navigate,
   });
   const sidebarDrawer = useNarrowSidebarDrawer(
     primarySidebarToggleVisible && snapshot?.sidebarCollapsed === false,

@@ -247,6 +247,8 @@ export const desktopIpc = {
 } as const;
 
 export const desktopCommands = {
+  navigateBack: "navigate-back",
+  navigateForward: "navigate-forward",
   openSettings: "open-settings",
   openNewThread: "open-new-thread",
   toggleTerminal: "toggle-terminal",
@@ -615,6 +617,13 @@ export function getDesktopCommandFromShortcut(
     return undefined;
   }
 
+  if (!input.shift && (input.key === "[" || input.code === "BracketLeft")) {
+    return desktopCommands.navigateBack;
+  }
+  if (!input.shift && (input.key === "]" || input.code === "BracketRight")) {
+    return desktopCommands.navigateForward;
+  }
+
   if (!input.shift && isComma) {
     return desktopCommands.openSettings;
   }
@@ -686,6 +695,8 @@ export function isPaletteCommand(command: PiDesktopCommand | undefined): boolean
  */
 export function isSinglePressCommand(command: PiDesktopCommand | undefined): boolean {
   return (
+    command === desktopCommands.navigateBack ||
+    command === desktopCommands.navigateForward ||
     isPaletteCommand(command) ||
     command === desktopCommands.toggleReview ||
     command === desktopCommands.newSidePanelTab ||
