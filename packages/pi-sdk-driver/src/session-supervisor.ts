@@ -214,6 +214,7 @@ interface ManagedSessionRecord {
   config: SessionConfig | undefined;
   runningRunId: string | undefined;
   cancellationRequested: boolean;
+  compactionPending?: boolean;
   /** A prompt is in Pi's pre-run steps (input handlers, auth, before_agent_start). */
   promptStarting: boolean;
   /**
@@ -1546,15 +1547,30 @@ export class SessionSupervisor {
       throw new Error(`Session ${sessionKey(sessionRef)} is not active.`);
     }
 
-    await record.session.compact(customInstructions);
-    record.runningRunId = undefined;
-    record.status = "idle";
-    record.config = deriveSessionConfig(record.session.sessionManager);
-    record.preview = extractPreview(record.session.messages) ?? record.preview;
-    this.refreshUsage(record);
-    await this.persistSnapshot(record);
-    await this.emit(record, sessionUpdatedEvent(record));
-    this.whenIdle(record);
+    if (record.compactionPending) throw new Error("Compaction is already in progress.");
+    record.compactionPending = true;
+    record.cancellationRequested = false;
+    record.status = "running";
+    try {
+      await record.session.compact(customInstructions);
+      record.config = deriveSessionConfig(record.session.sessionManager);
+      record.preview = extractPreview(record.session.messages) ?? record.preview;
+    } catch (error) {
+      if (record.cancellationRequested) {
+        const cancelled = new Error("Compaction cancelled", { cause: error });
+        cancelled.name = "AbortError";
+        throw cancelled;
+      }
+      throw error;
+    } finally {
+      record.compactionPending = false;
+      record.cancellationRequested = false;
+      if (!record.runningRunId) record.status = "idle";
+      this.refreshUsage(record);
+      await this.persistSnapshot(record);
+      await this.emit(record, sessionUpdatedEvent(record));
+      this.whenIdle(record);
+    }
   }
 
   /**
@@ -2867,7 +2883,11 @@ export class SessionSupervisor {
         // The reply is persisted by turn_end, so pi's context count includes it.
         this.refreshUsage(record);
         return [sessionUpdatedEvent(record)];
+      case "compaction_start":
+        record.status = "running";
+        return [sessionUpdatedEvent(record)];
       case "compaction_end":
+        if (!isRecordBusy(record)) record.status = "idle";
         this.refreshUsage(record);
         return [sessionUpdatedEvent(record)];
       case "entry_appended":
@@ -3922,6 +3942,7 @@ function isRecordBusy(record: ManagedSessionRecord): boolean {
   return (
     record.runningRunId !== undefined ||
     record.promptStarting ||
+    record.compactionPending === true ||
     record.session?.isStreaming === true ||
     record.session?.isCompacting === true ||
     record.extensionCommandsRunning > 0
