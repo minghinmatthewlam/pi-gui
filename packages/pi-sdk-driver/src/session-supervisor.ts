@@ -971,7 +971,7 @@ export class SessionSupervisor {
 
   async openSession(sessionRef: SessionRef): Promise<SessionSnapshot> {
     const record = await this.ensureRecord(sessionRef);
-    await this.touchWorkspace(record.workspace.workspaceId);
+    this.touchWorkspaceSoon(record.workspace.workspaceId);
     const snapshot = buildSnapshot(record);
     await this.emit(record, {
       type: "sessionOpened",
@@ -1745,7 +1745,7 @@ export class SessionSupervisor {
     if (!workspace) {
       throw new Error(`Workspace ${sessionEntry.workspaceId} is not in the catalog.`);
     }
-    await this.touchWorkspace(workspace.workspaceId);
+    this.touchWorkspaceSoon(workspace.workspaceId);
 
     const sessionFile =
       existing?.sessionFile ??
@@ -3137,6 +3137,19 @@ export class SessionSupervisor {
 
   private async touchWorkspace(workspaceId: WorkspaceId): Promise<void> {
     await this.runWorkspaceMutation(workspaceId, () => this.touchWorkspaceNow(workspaceId));
+  }
+
+  /**
+   * Record that a workspace was opened without making the caller wait. The touch only orders
+   * workspaces by recency, and it queues behind the workspace's other changes, which include the
+   * multi-second session-file re-read that runs whenever the window regains focus. Opening a
+   * thread must not wait for that. It still runs in order, so it cannot undo a later rename or
+   * removal.
+   */
+  private touchWorkspaceSoon(workspaceId: WorkspaceId): void {
+    void this.touchWorkspace(workspaceId).catch((error: unknown) => {
+      console.warn("[pi-sdk-driver] recording when the workspace was opened failed", error);
+    });
   }
 
   private async touchWorkspaceNow(
