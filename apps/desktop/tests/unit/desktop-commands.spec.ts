@@ -169,3 +169,27 @@ test("chord pair gate collapses one chord seen by main and renderer, not two qui
   expect(allow("main", 1_005)).toBe(true);
   expect(allow("renderer", 1_000 + 5 + REVIEW_TOGGLE_DEDUPE_MS)).toBe(true);
 });
+
+test("maps bracket shortcuts once per press without consuming plain or shifted brackets", () => {
+  for (const [key, code, command] of [
+    ["[", "BracketLeft", desktopCommands.navigateBack],
+    ["]", "BracketRight", desktopCommands.navigateForward],
+  ] as const) {
+    expect(getDesktopCommandFromShortcut({ modifier: true, key, code, shift: false })).toBe(
+      command,
+    );
+    expect(
+      getDesktopCommandFromShortcut({ modifier: true, key: "Unidentified", code, shift: false }),
+    ).toBe(command);
+    expect(
+      getDesktopCommandFromShortcut({ modifier: false, key, code, shift: false }),
+    ).toBeUndefined();
+    expect(
+      getDesktopCommandFromShortcut({ modifier: true, key, code, shift: true }),
+    ).toBeUndefined();
+    expect(
+      getDesktopCommandFromShortcut({ modifier: true, key, code, shift: false, alt: true }),
+    ).toBeUndefined();
+    expect(isSinglePressCommand(command)).toBe(true);
+  }
+});

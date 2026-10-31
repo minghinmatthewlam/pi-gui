@@ -1,4 +1,5 @@
 import { basename } from "node:path";
+import { desktopIpc } from "../../contracts/ipc";
 import { expect, test } from "@playwright/test";
 import {
   createNamedThread,
@@ -172,6 +173,210 @@ test("switching sessions republishes the selected transcript", async () => {
     await expect(window.getByTestId("transcript")).toContainText("beta response");
     await expect(window.getByTestId("transcript")).not.toContainText("Loading transcript");
   } finally {
+    await harness.close();
+  }
+});
+
+test("back and forward traverse projects, settings sections, and new thread without losing drafts", async () => {
+  const alphaPath = await makeWorkspace("history-alpha");
+  const betaPath = await makeWorkspace("history-beta");
+  const harness = await launchDesktop(await makeUserDataDir(), {
+    initialWorkspaces: [alphaPath, betaPath],
+    testMode: "background",
+  });
+  try {
+    const window = await harness.firstWindow();
+    await waitForWorkspaceByPath(window, betaPath);
+    await createNamedThread(window, "History Alpha", { workspaceName: basename(alphaPath) });
+    await createNamedThread(window, "History Beta", { workspaceName: basename(betaPath) });
+    await selectSession(window, "History Alpha");
+    await window.getByTestId("composer").fill("Keep Alpha draft");
+    await selectSession(window, "History Beta");
+    await window.getByTestId("composer").fill("Keep Beta draft");
+    const modifier = process.platform === "darwin" ? "Meta" : "Control";
+    await window.keyboard.press(`${modifier}+,`);
+    await expect(window.getByTestId("settings-surface")).toBeVisible();
+    await window.getByRole("button", { name: "Models", exact: true }).click();
+    await expect(window.getByRole("button", { name: "Models", exact: true })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    await window.keyboard.press(`${modifier}+[`);
+    await expect(window.getByRole("button", { name: "General", exact: true })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    await window.keyboard.press(`${modifier}+[`);
+    await expect(window.locator(".chat-header__title")).toHaveText("History Beta");
+    await expect(window.getByTestId("composer")).toHaveValue("Keep Beta draft");
+    await window.keyboard.press(`${modifier}+]`);
+    await expect(window.getByTestId("settings-surface")).toBeVisible();
+    await window.keyboard.press(`${modifier}+]`);
+    await expect(window.getByRole("button", { name: "Models", exact: true })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    await window.keyboard.press(`${modifier}+[`);
+    await expect(window.getByRole("button", { name: "General", exact: true })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    await window.keyboard.press(`${modifier}+[`);
+    await expect(window.locator(".chat-header__title")).toHaveText("History Beta");
+    await selectSession(window, "History Alpha");
+    await expect(window.getByTestId("composer")).toHaveValue("Keep Alpha draft");
+    await window.keyboard.press(`${modifier}+]`);
+    await expect(window.locator(".chat-header__title")).toHaveText("History Alpha");
+    await window.keyboard.press(`${modifier}+[`);
+    await expect(window.locator(".chat-header__title")).toHaveText("History Beta");
+    await window.keyboard.press(`${modifier}+]`);
+    await expect(window.locator(".chat-header__title")).toHaveText("History Alpha");
+    await window.keyboard.press(`${modifier}+n`);
+    await expect.poll(async () => (await getDesktopState(window)).activeView).toBe("new-thread");
+    await window.keyboard.press(`${modifier}+[`);
+    await expect(window.locator(".chat-header__title")).toHaveText("History Alpha");
+    await window.keyboard.press(`${modifier}+]`);
+    await expect.poll(async () => (await getDesktopState(window)).activeView).toBe("new-thread");
+  } finally {
+    await harness.close();
+  }
+});
+
+test("history includes scheduled tasks and both Customize tabs", async () => {
+  const harness = await launchDesktop(await makeUserDataDir(), {
+    initialWorkspaces: [await makeWorkspace("history-surfaces")],
+    testMode: "background",
+  });
+  try {
+    const window = await harness.firstWindow();
+    await createNamedThread(window, "History surfaces");
+    await window.getByTestId("sidebar-scheduled").click();
+    await expect.poll(async () => (await getDesktopState(window)).activeView).toBe("scheduled");
+    await window.getByRole("button", { name: "Skills", exact: true }).click();
+    await expect(window.getByTestId("skills-surface")).toBeVisible();
+    await window.getByRole("tab", { name: /^Extensions/ }).click();
+    await expect(window.getByTestId("extensions-surface")).toBeVisible();
+    const modifier = process.platform === "darwin" ? "Meta" : "Control";
+    await window.keyboard.press(`${modifier}+[`);
+    await expect(window.getByTestId("skills-surface")).toBeVisible();
+    await window.keyboard.press(`${modifier}+[`);
+    await expect.poll(async () => (await getDesktopState(window)).activeView).toBe("scheduled");
+    await window.keyboard.press(`${modifier}+[`);
+    await expect(window.locator(".chat-header__title")).toHaveText("History surfaces");
+    await window.keyboard.press(`${modifier}+]`);
+    await expect.poll(async () => (await getDesktopState(window)).activeView).toBe("scheduled");
+    await window.keyboard.press(`${modifier}+]`);
+    await expect(window.getByTestId("skills-surface")).toBeVisible();
+    await window.keyboard.press(`${modifier}+]`);
+    await expect(window.getByTestId("extensions-surface")).toBeVisible();
+  } finally {
+    await harness.close();
+  }
+});
+
+test("records Settings visits made while a history response is delayed", async () => {
+  const harness = await launchDesktop(await makeUserDataDir(), {
+    initialWorkspaces: [await makeWorkspace("history-pending-settings")],
+    testMode: "background",
+  });
+  try {
+    const window = await harness.firstWindow();
+    await createNamedThread(window, "Pending history");
+    const modifier = process.platform === "darwin" ? "Meta" : "Control";
+    await window.keyboard.press(`${modifier}+,`);
+    await expect(window.getByRole("button", { name: "General", exact: true })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    await window.getByRole("button", { name: "Models", exact: true }).click();
+    await expect(window.getByRole("button", { name: "Models", exact: true })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    await harness.electronApp.evaluate(({ ipcMain }, channel) => {
+      type Handler = (...args: unknown[]) => unknown;
+      const handlers = (ipcMain as typeof ipcMain & { _invokeHandlers: Map<string, Handler> })
+        ._invokeHandlers;
+      const original = handlers.get(channel);
+      if (!original) throw new Error("Expected view handler");
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const control = { release, entered: false };
+      (
+        globalThis as typeof globalThis & { navigationResponseGate?: typeof control }
+      ).navigationResponseGate = control;
+      ipcMain.removeHandler(channel);
+      ipcMain.handle(channel, async (...args) => {
+        const result = await original(...args);
+        control.entered = true;
+        await gate;
+        return result;
+      });
+    }, desktopIpc.setActiveView);
+    await window.keyboard.press(`${modifier}+[`);
+    await expect(window.getByRole("button", { name: "General", exact: true })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    await expect
+      .poll(() =>
+        harness.electronApp.evaluate(
+          () =>
+            (globalThis as typeof globalThis & { navigationResponseGate?: { entered: boolean } })
+              .navigationResponseGate?.entered,
+        ),
+      )
+      .toBe(true);
+    await window.getByRole("button", { name: "Providers", exact: true }).click();
+    await expect(window.getByRole("button", { name: "Providers", exact: true })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    await window.getByRole("button", { name: "General", exact: true }).click();
+    await expect(window.getByRole("button", { name: "General", exact: true })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    await window.getByRole("button", { name: "Appearance", exact: true }).click();
+    await expect(window.getByRole("button", { name: "Appearance", exact: true })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    await harness.electronApp.evaluate(() =>
+      (
+        globalThis as typeof globalThis & { navigationResponseGate?: { release: () => void } }
+      ).navigationResponseGate?.release(),
+    );
+    await window.keyboard.press(`${modifier}+[`);
+    await expect(window.getByRole("button", { name: "General", exact: true })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    await window.keyboard.press(`${modifier}+[`);
+    await expect(window.getByRole("button", { name: "Providers", exact: true })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    await window.keyboard.press(`${modifier}+]`);
+    await expect(window.getByRole("button", { name: "General", exact: true })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    await window.keyboard.press(`${modifier}+]`);
+    await expect(window.getByRole("button", { name: "Appearance", exact: true })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+  } finally {
+    await harness.electronApp
+      .evaluate(() =>
+        (
+          globalThis as typeof globalThis & { navigationResponseGate?: { release: () => void } }
+        ).navigationResponseGate?.release(),
+      )
+      .catch(() => undefined);
     await harness.close();
   }
 });

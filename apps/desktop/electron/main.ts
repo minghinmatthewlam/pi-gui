@@ -896,6 +896,25 @@ function installApplicationMenu(): void {
     {
       label: "View",
       submenu: [
+        {
+          label: "Back",
+          accelerator: "CommandOrControl+[",
+          click: () =>
+            BrowserWindow.getFocusedWindow()?.webContents.send(
+              desktopIpc.appCommand,
+              desktopCommands.navigateBack,
+            ),
+        },
+        {
+          label: "Forward",
+          accelerator: "CommandOrControl+]",
+          click: () =>
+            BrowserWindow.getFocusedWindow()?.webContents.send(
+              desktopIpc.appCommand,
+              desktopCommands.navigateForward,
+            ),
+        },
+        { type: "separator" },
         // Cmd+R toggles Review and Shift+Cmd+R renames the thread, so neither
         // reload has a shortcut.
         {
