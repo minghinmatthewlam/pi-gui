@@ -103,6 +103,7 @@ type ConversationOwner = Pick<
   | "archiveSession"
   | "unarchiveSession"
   | "markSessionRead"
+  | "markSessionUnread"
   | "setSessionPinned"
   | "createSession"
   | "startThread"
@@ -415,6 +416,11 @@ export function registerDesktopIpc({
     const target = expectSessionTarget(rawTarget);
     return run(event, () => owners.conversation.markSessionRead(target));
   });
+  handleMainFrame(desktopIpc.markSessionUnread, expectSessionTarget, (target, request) =>
+    windows.runImmediateStateAction(request.window, () =>
+      owners.conversation.markSessionUnread(target),
+    ),
+  );
   ipcMain.handle(desktopIpc.setSessionPinned, (event, rawTarget: unknown, rawPinned: unknown) => {
     const target = expectSessionTarget(rawTarget);
     const pinned = expectBoolean(rawPinned, "pinned");

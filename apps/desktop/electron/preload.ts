@@ -274,6 +274,8 @@ contextBridge.exposeInMainWorld("piApp", {
     ipcRenderer.invoke(desktopIpc.unarchiveSession, target) as Promise<DesktopAppState>,
   markSessionRead: (target: WorkspaceSessionTarget) =>
     ipcRenderer.invoke(desktopIpc.markSessionRead, target) as Promise<DesktopAppState>,
+  markSessionUnread: (target: WorkspaceSessionTarget) =>
+    ipcRenderer.invoke(desktopIpc.markSessionUnread, target) as Promise<DesktopAppState>,
   setSessionPinned: (target: WorkspaceSessionTarget, pinned: boolean) =>
     ipcRenderer.invoke(desktopIpc.setSessionPinned, target, pinned) as Promise<DesktopAppState>,
   createSession: (input: CreateSessionInput) =>
