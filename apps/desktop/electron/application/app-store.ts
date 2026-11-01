@@ -1037,6 +1037,40 @@ export class DesktopAppStore {
     return this.emit();
   }
 
+  async markSessionUnread(target: WorkspaceSessionTarget): Promise<DesktopAppState> {
+    await this.initialize();
+    const sessionRef = toSessionRef(target);
+    if (!this.sessionFromState(sessionRef)) {
+      return this.withError(`Unknown session: ${target.workspaceId}:${target.sessionId}`);
+    }
+    const viewedAt = new Date(0).toISOString();
+    this.sessionState.lastViewedAtBySession.set(sessionKey(sessionRef), viewedAt);
+    this.state = {
+      ...this.state,
+      workspaces: this.state.workspaces.map((workspace) =>
+        workspace.id === sessionRef.workspaceId
+          ? {
+              ...workspace,
+              sessions: workspace.sessions.map((session) =>
+                session.id === sessionRef.sessionId
+                  ? {
+                      ...session,
+                      lastViewedAt: viewedAt,
+                      hasUnseenUpdate: session.status !== "running",
+                    }
+                  : session,
+              ),
+            }
+          : workspace,
+      ),
+      lastViewedAtBySession: mapToRecord(this.sessionState.lastViewedAtBySession),
+      lastError: undefined,
+      revision: this.state.revision + 1,
+    };
+    await this.persistUiState();
+    return this.emit();
+  }
+
   async setSessionPinned(
     target: WorkspaceSessionTarget,
     pinned: boolean,

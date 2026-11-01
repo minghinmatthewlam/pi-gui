@@ -133,6 +133,8 @@ export function useThreadActions({
     archive: (subject) => archive(targetFor(subject)),
     restore: (subject) => restore(targetFor(subject)),
     markRead: (subject) => mutate((desktopApi) => desktopApi.markSessionRead(targetFor(subject))),
+    markUnread: (subject) =>
+      mutate((desktopApi) => desktopApi.markSessionUnread(targetFor(subject))),
     openScheduledTask: (subject) => {
       const binding = nonCompletedBindingForSession(scheduledTasks, subject.session.id);
       openScheduledEditor(

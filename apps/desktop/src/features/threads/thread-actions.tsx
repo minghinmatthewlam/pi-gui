@@ -4,6 +4,7 @@ import { formatShortcut } from "../../../contracts/ipc";
 import {
   ArchiveIcon,
   CheckIcon,
+  ChatIcon,
   ClockIcon,
   CopyIcon,
   PencilIcon,
@@ -22,6 +23,7 @@ export type ThreadActionId =
   | "archive-thread"
   | "restore-thread"
   | "mark-read"
+  | "mark-unread"
   | "scheduled-task"
   | "copy-session-id";
 
@@ -47,6 +49,7 @@ export interface ThreadActionHandlers {
   readonly archive: (subject: ThreadActionSubject) => void;
   readonly restore: (subject: ThreadActionSubject) => void;
   readonly markRead: (subject: ThreadActionSubject) => void;
+  readonly markUnread: (subject: ThreadActionSubject) => void;
   readonly openScheduledTask: (subject: ThreadActionSubject) => void;
   readonly copySessionId: (subject: ThreadActionSubject) => void;
 }
@@ -105,6 +108,13 @@ export function buildThreadActions(
       title: "Mark as read",
       icon: <CheckIcon />,
       run: () => handlers.markRead(subject),
+    });
+  } else {
+    actions.push({
+      id: "mark-unread",
+      title: "Mark as unread",
+      icon: <ChatIcon />,
+      run: () => handlers.markUnread(subject),
     });
   }
   actions.push(

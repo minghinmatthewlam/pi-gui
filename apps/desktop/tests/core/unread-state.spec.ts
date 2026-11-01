@@ -12,6 +12,48 @@ import {
 } from "../helpers/electron-app";
 import { appendMessagesToSessionFile, sessionFilePathFromCatalog } from "../helpers/session-file";
 
+test("marking a chat unread persists without selecting it and opening it clears the indicator", async () => {
+  const userDataDir = await makeUserDataDir();
+  const workspacePath = await makeWorkspace("manual-unread-workspace");
+  const first = await launchDesktop(userDataDir, {
+    initialWorkspaces: [workspacePath],
+    testMode: "background",
+  });
+  try {
+    const window = await first.firstWindow();
+    await createNamedThread(window, "Mark unread target");
+    await createNamedThread(window, "Keep selected");
+    const row = window.locator(".session-row", { hasText: "Mark unread target" });
+    await row.click({ button: "right" });
+    await row.getByRole("button", { name: "Mark as unread", exact: true }).click();
+    await expect(row).toHaveAttribute("data-sidebar-indicator", "unseen");
+    await expect(window.locator(".chat-header__title")).toHaveText("Keep selected");
+    await row.click({ button: "right" });
+    await expect(row.getByRole("button", { name: "Mark as read", exact: true })).toBeVisible();
+    await window.keyboard.press("Escape");
+  } finally {
+    await first.close();
+  }
+  const second = await launchDesktop(userDataDir, { testMode: "background" });
+  try {
+    const window = await second.firstWindow();
+    const row = window.locator(".session-row", { hasText: "Mark unread target" });
+    await expect(row).toHaveAttribute("data-sidebar-indicator", "unseen");
+    await selectSession(window, "Mark unread target");
+    await expect(row).toHaveAttribute("data-sidebar-indicator", "none");
+    await row.click({ button: "right" });
+    await row.getByRole("button", { name: "Mark as unread", exact: true }).click();
+    await expect(row).toHaveAttribute("data-sidebar-indicator", "unseen");
+    await selectSession(window, "Keep selected");
+    await expect(row).toHaveAttribute("data-sidebar-indicator", "unseen");
+    await row.click({ button: "right" });
+    await row.getByRole("button", { name: "Mark as read", exact: true }).click();
+    await expect(row).toHaveAttribute("data-sidebar-indicator", "none");
+  } finally {
+    await second.close();
+  }
+});
+
 type PersistedUiState = {
   lastViewedAtBySession?: Record<string, string>;
 };

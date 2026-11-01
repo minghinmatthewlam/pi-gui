@@ -34,6 +34,7 @@ function handlers(
     archive: record("archive"),
     restore: record("restore"),
     markRead: record("mark-read"),
+    markUnread: record("mark-unread"),
     openScheduledTask: record("scheduled"),
     copySessionId: record("copy"),
   };
@@ -49,6 +50,7 @@ test("an open thread lists rename, pin, archive, scheduled task and copy with sh
     "Rename thread",
     "Pin thread",
     "Archive thread",
+    "Mark as unread",
     "Add scheduled task…",
     "Copy session ID",
   ]);
@@ -82,8 +84,21 @@ test("state changes the list: pinned, unseen, scheduled and archived threads", (
   expect(titles(archived)).toEqual([
     "Rename thread",
     "Restore thread",
+    "Mark as unread",
     "Add scheduled task…",
     "Copy session ID",
   ]);
   expect(archived.some((action) => action.id === "archive-thread")).toBe(false);
+});
+
+test("read actions toggle between marking unread and marking read", () => {
+  const recorder = handlers("darwin");
+  const subject = { workspaceId: "ws", session: session() };
+  buildThreadActions(subject, recorder)
+    .find((action) => action.id === "mark-unread")
+    ?.run();
+  buildThreadActions({ ...subject, session: session({ hasUnseenUpdate: true }) }, recorder)
+    .find((action) => action.id === "mark-read")
+    ?.run();
+  expect(recorder.calls).toEqual(["mark-unread", "mark-read"]);
 });
