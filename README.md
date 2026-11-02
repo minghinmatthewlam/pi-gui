@@ -61,6 +61,9 @@ the review tab, your worktrees, and tabs from desktop extensions. Each task keep
 | <kbd>⌘</kbd> <kbd>1</kbd> to <kbd>9</kbd>          | Jump to a thread in the sidebar       |
 | <kbd>⌘</kbd> <kbd>J</kbd>                          | Toggle the terminal                   |
 | <kbd>⌘</kbd> <kbd>R</kbd>                          | Toggle the Review tab                 |
+| <kbd>⌘</kbd> <kbd>+</kbd> / <kbd>=</kbd>           | Zoom in                               |
+| <kbd>⌘</kbd> <kbd>-</kbd>                          | Zoom out                              |
+| <kbd>⌘</kbd> <kbd>0</kbd>                          | Reset zoom                            |
 | <kbd>⌘</kbd> <kbd>⌥</kbd> <kbd>B</kbd>             | Show or hide the workbench            |
 | <kbd>Enter</kbd> while a run is going              | Queue a follow-up                     |
 | <kbd>⌘</kbd> <kbd>Enter</kbd> while a run is going | Steer the current run                 |

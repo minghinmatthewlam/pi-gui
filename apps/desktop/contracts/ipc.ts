@@ -714,6 +714,45 @@ export function isCloseFocusedSurfaceShortcut(input: {
   return input.key.toLowerCase() === "w" || input.code === "KeyW";
 }
 
+export type DesktopZoomAction = "in" | "out" | "reset";
+
+/**
+ * Zoom chords for the whole window. Electron's default menu binds zoom in to
+ * CommandOrControl+Plus, which many layouts only reach through Shift, so the
+ * plain Ctrl+= people press on Linux and Windows does nothing. The app only
+ * installs its own menu on macOS, so handle the chord in the main process. The
+ * terminal branch runs first and keeps Control chords for the shell.
+ */
+export function getZoomActionFromShortcut(
+  input: DesktopShortcutInput,
+): DesktopZoomAction | undefined {
+  if (!input.modifier || input.alt) {
+    return undefined;
+  }
+
+  const lowerKey = input.key.toLowerCase();
+  const isPlus =
+    lowerKey === "+" || lowerKey === "=" || input.code === "Equal" || input.code === "NumpadAdd";
+  const isMinus =
+    lowerKey === "-" ||
+    lowerKey === "_" ||
+    input.code === "Minus" ||
+    input.code === "NumpadSubtract";
+  const isZero =
+    !input.shift && (lowerKey === "0" || input.code === "Digit0" || input.code === "Numpad0");
+
+  if (isPlus) {
+    return "in";
+  }
+  if (isMinus) {
+    return "out";
+  }
+  if (isZero) {
+    return "reset";
+  }
+  return undefined;
+}
+
 /**
  * Main passes this to the renderer when the window is frameless and the app
  * must draw its own title bar with minimize, maximize and close (Linux).
