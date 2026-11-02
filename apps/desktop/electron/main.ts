@@ -11,6 +11,7 @@ import {
   shell,
   type MenuItemConstructorOptions,
   type MessageBoxOptions,
+  type WebContents,
 } from "electron";
 import { isValidHttpBaseUrl } from "@pi-gui/pi-sdk-driver";
 import { createRequire } from "node:module";
@@ -64,12 +65,14 @@ import {
   desktopCommands,
   desktopIpc,
   getDesktopCommandFromShortcut,
+  getZoomActionFromShortcut,
   isSinglePressCommand,
   isCloseFocusedSurfaceShortcut,
   getSidePanelTabCommand,
   platformShortcutModifier,
   type CustomProviderProbeInput,
   type CustomProviderProbeResult,
+  type DesktopZoomAction,
 } from "../contracts/ipc";
 import {
   assertComposerImageBytes,
@@ -619,6 +622,22 @@ function createWindow(): BrowserWindow {
       dispatchCloseFocusedSurface(window, event);
       return;
     }
+
+    const zoomAction = getZoomActionFromShortcut({
+      modifier: platformModifier,
+      alt: input.alt,
+      shift: input.shift,
+      key: input.key,
+      code: input.code,
+    });
+    if (zoomAction) {
+      event.preventDefault();
+      if (!input.isAutoRepeat) {
+        applyDesktopZoom(window.webContents, zoomAction);
+      }
+      return;
+    }
+
     if (platformModifier && input.shift && lowerKey === "n") {
       event.preventDefault();
       createAppWindow(windowOwner.viewForWindow(window));
@@ -826,6 +845,18 @@ async function runManualUpdateCheck(): Promise<void> {
       buttons: ["OK"],
     }).catch(() => undefined);
   }
+}
+
+const ZOOM_LEVEL_STEP = 0.5;
+
+/** Mirrors the default menu's zoom roles, which only bind the plus key. */
+function applyDesktopZoom(webContents: WebContents, action: DesktopZoomAction): void {
+  if (action === "reset") {
+    webContents.setZoomLevel(0);
+    return;
+  }
+  const step = action === "in" ? ZOOM_LEVEL_STEP : -ZOOM_LEVEL_STEP;
+  webContents.setZoomLevel(webContents.getZoomLevel() + step);
 }
 
 function installApplicationMenu(): void {
