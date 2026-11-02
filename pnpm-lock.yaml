@@ -221,8 +221,8 @@ importers:
         specifier: ^3.0.2
         version: 3.0.2
       minimatch:
-        specifier: ^10.2.6
-        version: 10.2.6
+        specifier: 11.0.3
+        version: 11.0.3
       node-pty:
         specifier: ^1.1.0
         version: 1.1.0
