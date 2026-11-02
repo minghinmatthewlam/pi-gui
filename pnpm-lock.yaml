@@ -299,6 +299,9 @@ importers:
       '@dnd-kit/utilities':
         specifier: ^3.2.2
         version: 3.2.2(react@19.2.4)
+      '@earendil-works/pi-ai':
+        specifier: ^1.5.0
+        version: 1.5.0(@aws-sdk/credential-provider-node@3.972.61)(@smithy/signature-v4@5.6.1)(undici@8.5.0)(ws@8.21.3)(zod@4.3.6)
       '@shikijs/langs':
         specifier: 4.4.3
         version: 4.4.3
@@ -5468,6 +5471,31 @@ snapshots:
       - ws
       - zod
 
+  '@earendil-works/pi-ai@1.5.0(@aws-sdk/credential-provider-node@3.972.61)(@smithy/signature-v4@5.6.1)(undici@8.5.0)(ws@8.21.3)(zod@4.3.6)':
+    dependencies:
+      '@anthropic-ai/sdk': 0.129.0(zod@4.3.6)
+      '@aws-sdk/client-bedrock-runtime': 3.1127.0
+      '@earendil-works/pi-schema': 1.5.0
+      '@earendil-works/pi-telemetry': 1.5.0
+      '@google/genai': 2.21.0
+      '@smithy/node-http-handler': 4.12.1
+      http-proxy-agent: 9.1.0
+      https-proxy-agent: 9.1.0
+      openai: 7.19.0(@aws-sdk/credential-provider-node@3.972.61)(@smithy/signature-v4@5.6.1)(undici@8.5.0)(ws@8.21.3)(zod@4.3.6)
+      partial-json: 0.1.7
+    transitivePeerDependencies:
+      - '@aws-sdk/credential-provider-node'
+      - '@modelcontextprotocol/sdk'
+      - '@smithy/hash-node'
+      - '@smithy/signature-v4'
+      - bufferutil
+      - kerberos
+      - supports-color
+      - undici
+      - utf-8-validate
+      - ws
+      - zod
+
   '@earendil-works/pi-ai@1.5.0(@aws-sdk/credential-provider-node@3.972.83)(@smithy/signature-v4@5.7.3)(undici@8.12.3)(ws@8.21.3)(zod@4.3.6)':
     dependencies:
       '@anthropic-ai/sdk': 0.129.0(zod@4.3.6)
@@ -9075,6 +9103,14 @@ snapshots:
       '@aws-sdk/credential-provider-node': 3.972.61
       '@smithy/signature-v4': 5.6.1
       undici: 8.12.3
+      ws: 8.21.3
+      zod: 4.3.6
+
+  openai@7.19.0(@aws-sdk/credential-provider-node@3.972.61)(@smithy/signature-v4@5.6.1)(undici@8.5.0)(ws@8.21.3)(zod@4.3.6):
+    optionalDependencies:
+      '@aws-sdk/credential-provider-node': 3.972.61
+      '@smithy/signature-v4': 5.6.1
+      undici: 8.5.0
       ws: 8.21.3
       zod: 4.3.6
 
