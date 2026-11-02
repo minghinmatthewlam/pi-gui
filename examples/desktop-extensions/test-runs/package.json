@@ -16,8 +16,8 @@
   },
   "peerDependencies": {
     "@earendil-works/chord": "^1.0.0",
-    "@earendil-works/pi-ai": "^1.0.0",
     "@earendil-works/pi-coding-agent": "^1.0.0",
-    "@pi-gui/extension-ui": "*"
+    "@pi-gui/extension-ui": "*",
+    "typebox": "^1.3.27"
   }
 }

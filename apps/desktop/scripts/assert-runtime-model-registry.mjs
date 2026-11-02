@@ -100,7 +100,7 @@ for (const model of kimiModels) {
 console.log("Verified bundled kimi-coding models use https://api.kimi.com/coding/v1.");
 
 // Issue #288: Meta exposes muse-wonder-1.0-contributor via its subscription
-// /v1/models endpoint, but upstream Pi (including 1.4.0) only bundles
+// /v1/models endpoint, but upstream Pi (including 1.5.0) only bundles
 // muse-wonder-1.0. Until it does, users can add the contributor variant in
 // models.json; verify that Pi's models.json merge surfaces it.
 const overlayDir = await mkdtemp(join(tmpdir(), "pi-gui-runtime-models-overlay-"));
