@@ -1,6 +1,6 @@
 import { defineFacet } from "@earendil-works/chord";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { registerDesktopView } from "@pi-gui/extension-ui";
 import { GitHub, initialState, needsAttention, type GitHubState } from "./contract.ts";
