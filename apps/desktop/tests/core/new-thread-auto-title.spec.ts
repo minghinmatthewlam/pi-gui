@@ -1,4 +1,4 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import {
@@ -10,6 +10,7 @@ import {
   makeWorkspace,
   resolveDeferredThreadTitle,
   resolveDeferredThreadTitleEventually,
+  seedAgentDir,
   selectSession,
   setDeferredThreadTitleMode,
   startThreadViaIpc,
@@ -18,6 +19,7 @@ import {
   waitForSessionByTitle,
   waitForWorkspaceByPath,
 } from "../helpers/electron-app";
+import { startScriptedOpenAiServer } from "../helpers/scripted-openai-server";
 
 test("auto-titles a brand-new local thread after showing the placeholder first", async () => {
   const userDataDir = await makeUserDataDir("pi-app-user-data-");
@@ -50,6 +52,73 @@ test("auto-titles a brand-new local thread after showing the placeholder first",
     await expect(window.locator(".session-row__select", { hasText: "New thread" })).toHaveCount(0);
   } finally {
     await harness.close();
+  }
+});
+
+// Titles come from a separate request that loads no extensions. It still has to reach a
+// provider an extension registered, or such threads keep the placeholder forever.
+test("auto-titles a thread whose model comes from an extension provider", async () => {
+  test.setTimeout(60_000);
+  const titlePrompt = "Generate a short UI thread title";
+  const server = await startScriptedOpenAiServer((request) =>
+    request.messages.some((message) => message.content.includes(titlePrompt))
+      ? { text: "Extension provider title" }
+      : { text: "Done." },
+  );
+  const userDataDir = await makeUserDataDir("pi-app-user-data-");
+  const agentDir = join(userDataDir, "agent");
+  const workspacePath = await makeWorkspace("auto-title-extension-provider");
+  await seedAgentDir(agentDir, { withOpenAiAuth: false, withDefaultModel: false });
+  await writeFile(
+    join(agentDir, "settings.json"),
+    `${JSON.stringify(
+      {
+        defaultProvider: "ext-title",
+        defaultModel: "title-model",
+        enabledModels: ["ext-title/title-model"],
+      },
+      null,
+      2,
+    )}\n`,
+  );
+  await mkdir(join(agentDir, "extensions"), { recursive: true });
+  await writeFile(
+    join(agentDir, "extensions", "title-provider.ts"),
+    `export default function (pi) {
+  pi.registerProvider("ext-title", {
+    baseUrl: ${JSON.stringify(server.baseUrl)},
+    apiKey: "ext-title-key",
+    api: "openai-completions",
+    models: [{ id: "title-model", name: "Title model", reasoning: false, input: ["text"],
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+      contextWindow: 128000, maxTokens: 16384 }],
+  });
+}
+`,
+  );
+  const harness = await launchDesktop(userDataDir, {
+    agentDir,
+    initialWorkspaces: [workspacePath],
+    scrubProviderEnv: true,
+    testMode: "background",
+  });
+
+  try {
+    const window = await harness.firstWindow();
+    await startThreadViaIpc(window, {
+      prompt: "Thread titles never appear when the provider comes from an extension",
+    });
+
+    await expect(window.locator(".chat-header__title")).toHaveText("Extension provider title");
+    await expect(window.locator(".session-row__select", { hasText: "New thread" })).toHaveCount(0);
+    expect(
+      server.requests.some((request) =>
+        request.messages.some((message) => message.content.includes(titlePrompt)),
+      ),
+    ).toBe(true);
+  } finally {
+    await harness.close();
+    await server.close();
   }
 });
 

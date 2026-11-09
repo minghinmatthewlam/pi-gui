@@ -148,6 +148,22 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
     return this.buildSnapshot(context);
   }
 
+  /**
+   * A fresh model runtime for one-off requests made outside a session, such as
+   * thread titles. It includes the providers this workspace's extensions
+   * registered, so a provider an extension re-points (for example through a
+   * proxy) resolves the same way it does in the workspace's sessions. A new
+   * instance keeps the caller from changing the workspace's own runtime.
+   */
+  async createModelRuntime(workspace: WorkspaceRef): Promise<ModelRuntime> {
+    const context = await this.ensureContext(workspace);
+    const built = await this.buildWorkspaceModelRuntime(
+      context.extensionProviders,
+      context.nativeProviders,
+    );
+    return built.runtime;
+  }
+
   async refreshRuntime(workspace: WorkspaceRef): Promise<RuntimeSnapshot> {
     const context = await this.ensureContext(workspace);
     await context.settingsManager.reload();
