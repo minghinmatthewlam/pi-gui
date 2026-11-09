@@ -1,11 +1,10 @@
-import { join } from "node:path";
 import {
   SessionManager,
   SettingsManager,
   createExtensionRuntime,
   createAgentSession,
-  ModelRuntime,
   type CreateAgentSessionOptions,
+  type ModelRuntime,
   type ResourceLoader,
 } from "@earendil-works/pi-coding-agent";
 import type { SessionModelSelection, WorkspaceRef } from "@pi-gui/session-driver";
@@ -20,6 +19,13 @@ export interface GenerateThreadTitleOptions {
 
 interface ThreadTitleGeneratorDeps {
   readonly agentDir: string;
+  /**
+   * The workspace's model runtime, including providers its extensions
+   * registered. The title session loads no extensions itself, so a runtime
+   * built only from auth.json and models.json misses those providers and the
+   * title request fails.
+   */
+  readonly modelRuntime: ModelRuntime;
 }
 
 const MAX_THREAD_TITLE_LENGTH = 36;
@@ -47,12 +53,7 @@ export async function generateThreadTitle(
     retry: { enabled: false },
   });
   const resourceLoader = createThreadTitleResourceLoader();
-  const modelRuntime = await ModelRuntime.create({
-    authPath: join(deps.agentDir, "auth.json"),
-    modelsPath: join(deps.agentDir, "models.json"),
-    refreshOnCreate: false,
-  });
-  await modelRuntime.refresh({ allowNetwork: false });
+  const { modelRuntime } = deps;
 
   const createOptions: CreateAgentSessionOptions = {
     cwd: workspace.path,

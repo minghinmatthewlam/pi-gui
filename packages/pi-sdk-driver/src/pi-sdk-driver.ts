@@ -191,22 +191,19 @@ export class PiSdkDriver implements SessionDriver {
     return this.supervisor.getSessionSchemaInfo(sessionRef);
   }
 
-  generateThreadTitle(
+  async generateThreadTitle(
     workspace: WorkspaceRef,
     options: GenerateThreadTitleOptions,
   ): Promise<string | null> {
     if (this.generateThreadTitleOverride) {
-      return Promise.resolve(this.generateThreadTitleOverride(workspace, options)).then(
-        (override) =>
-          override !== undefined
-            ? override
-            : generateThreadTitle(workspace, options, {
-                agentDir: this.agentDir,
-              }),
-      );
+      const override = await this.generateThreadTitleOverride(workspace, options);
+      if (override !== undefined) {
+        return override;
+      }
     }
     return generateThreadTitle(workspace, options, {
       agentDir: this.agentDir,
+      modelRuntime: await this.runtimeSupervisor.createModelRuntime(workspace),
     });
   }
 }
