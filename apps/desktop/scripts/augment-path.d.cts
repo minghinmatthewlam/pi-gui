@@ -3,6 +3,7 @@ export interface AugmentPosixPathOptions {
   readonly env?: NodeJS.ProcessEnv;
   readonly delimiter?: string;
   readonly exists?: (dir: string) => boolean;
+  readonly readDir?: (dir: string) => string[];
 }
 
 export interface AugmentPosixPathResult {
