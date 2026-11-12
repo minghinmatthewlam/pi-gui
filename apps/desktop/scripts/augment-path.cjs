@@ -15,7 +15,9 @@ const path = require("node:path");
  *
  * `~/.local/bin`, `~/.volta/bin`, `~/.asdf/shims` and the newest
  * `~/.nvm/versions/node/<version>/bin` are only added when they exist, since
- * many machines never create them.
+ * many machines never create them. The version-manager entries are appended
+ * after the current PATH instead of prepended, so an environment that already
+ * resolves node (a shell-configured PATH, or CI's pinned node) keeps priority.
  *
  * @param {{ platform?: NodeJS.Platform, env?: NodeJS.ProcessEnv, delimiter?: string, exists?: (dir: string) => boolean, readDir?: (dir: string) => string[] }} [options]
  * @returns {{ changed: boolean, path: string }}
@@ -39,6 +41,13 @@ function augmentPosixPath(options = {}) {
     "/usr/local/bin",
     homeDir ? `${homeDir}/.npm-global/bin` : undefined,
     localBin && exists(localBin) ? localBin : undefined,
+  ].filter((entry) => Boolean(entry));
+
+  // Node version managers are appended, not prepended: anything the launch
+  // environment already resolves (a shell-configured PATH, or CI's pinned
+  // node) keeps priority. These entries are a last-resort fallback for
+  // Finder/Dock launches whose PATH has no node at all.
+  const versionManagerPaths = [
     homeDir && exists(`${homeDir}/.volta/bin`) ? `${homeDir}/.volta/bin` : undefined,
     homeDir && exists(`${homeDir}/.asdf/shims`) ? `${homeDir}/.asdf/shims` : undefined,
     homeDir ? newestNvmNodeBin(homeDir, exists, readDir) : undefined,
@@ -46,11 +55,15 @@ function augmentPosixPath(options = {}) {
 
   const existing = new Set(currentPath.split(delimiter));
   const missingPaths = extraBinPaths.filter((entry) => !existing.has(entry));
-  if (missingPaths.length === 0) {
+  const missingFallbacks = versionManagerPaths.filter((entry) => !existing.has(entry));
+  if (missingPaths.length === 0 && missingFallbacks.length === 0) {
     return { changed: false, path: currentPath };
   }
 
-  return { changed: true, path: [...missingPaths, currentPath].join(delimiter) };
+  return {
+    changed: true,
+    path: [...missingPaths, currentPath, ...missingFallbacks].join(delimiter),
+  };
 }
 
 /**

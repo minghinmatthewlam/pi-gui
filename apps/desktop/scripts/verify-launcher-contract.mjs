@@ -60,8 +60,9 @@ function verifyPathContract() {
   );
 
   // Node version managers: volta and asdf bins and the newest nvm node bin are
-  // added when they exist, so npm stays reachable for `npm:` package installs
-  // in Finder/Dock launches.
+  // appended after the current PATH when they exist, so npm stays reachable
+  // for `npm:` package installs in Finder/Dock launches without stealing
+  // priority from an already-resolvable node.
   const versionManagers = augmentPosixPath({
     platform: "darwin",
     env: { PATH: "/usr/bin", HOME: "/Users/pi" },
@@ -79,12 +80,35 @@ function verifyPathContract() {
       "/opt/homebrew/bin",
       "/usr/local/bin",
       "/Users/pi/.npm-global/bin",
+      "/usr/bin",
       "/Users/pi/.volta/bin",
       "/Users/pi/.asdf/shims",
       "/Users/pi/.nvm/versions/node/v24.1.0/bin",
-      "/usr/bin",
     ],
-    "existing version-manager bin dirs must be added after the explicit bins",
+    "existing version-manager bin dirs must be appended after the current PATH",
+  );
+
+  // An environment that already carries a node bin (a shell-configured PATH,
+  // or CI's pinned node ahead of a runner's nvm) keeps resolving to it.
+  const pinnedNode = augmentPosixPath({
+    platform: "linux",
+    env: { PATH: "/opt/hostedtoolcache/node/22.0.0/x64/bin:/usr/bin", HOME: "/Users/pi" },
+    delimiter: POSIX_DELIMITER,
+    exists: (dir) =>
+      dir === "/Users/pi/.nvm/versions/node" || dir === "/Users/pi/.nvm/versions/node/v24.1.0/bin",
+    readDir: () => ["v24.1.0"],
+  });
+  assert.deepEqual(
+    pinnedNode.path.split(POSIX_DELIMITER),
+    [
+      "/opt/homebrew/bin",
+      "/usr/local/bin",
+      "/Users/pi/.npm-global/bin",
+      "/opt/hostedtoolcache/node/22.0.0/x64/bin",
+      "/usr/bin",
+      "/Users/pi/.nvm/versions/node/v24.1.0/bin",
+    ],
+    "an already-resolvable node must keep priority over the appended fallback",
   );
 
   // The nvm versions dir with no recognizable versions adds nothing.
