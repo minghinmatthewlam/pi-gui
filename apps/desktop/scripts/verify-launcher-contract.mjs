@@ -59,6 +59,64 @@ function verifyPathContract() {
     "missing ~/.local/bin must not be added",
   );
 
+  // Node version managers: volta and asdf bins and the newest nvm node bin are
+  // added when they exist, so npm stays reachable for `npm:` package installs
+  // in Finder/Dock launches.
+  const versionManagers = augmentPosixPath({
+    platform: "darwin",
+    env: { PATH: "/usr/bin", HOME: "/Users/pi" },
+    delimiter: POSIX_DELIMITER,
+    exists: (dir) =>
+      dir === "/Users/pi/.volta/bin" ||
+      dir === "/Users/pi/.asdf/shims" ||
+      dir === "/Users/pi/.nvm/versions/node" ||
+      dir === "/Users/pi/.nvm/versions/node/v24.1.0/bin",
+    readDir: () => ["v18.20.0", "v24.1.0", "alias", "README.md"],
+  });
+  assert.deepEqual(
+    versionManagers.path.split(POSIX_DELIMITER),
+    [
+      "/opt/homebrew/bin",
+      "/usr/local/bin",
+      "/Users/pi/.npm-global/bin",
+      "/Users/pi/.volta/bin",
+      "/Users/pi/.asdf/shims",
+      "/Users/pi/.nvm/versions/node/v24.1.0/bin",
+      "/usr/bin",
+    ],
+    "existing version-manager bin dirs must be added after the explicit bins",
+  );
+
+  // The nvm versions dir with no recognizable versions adds nothing.
+  const nvmNoVersions = augmentPosixPath({
+    platform: "darwin",
+    env: { PATH: "/usr/bin", HOME: "/Users/pi" },
+    delimiter: POSIX_DELIMITER,
+    exists: (dir) => dir === "/Users/pi/.nvm/versions/node",
+    readDir: () => ["alias"],
+  });
+  assert.deepEqual(
+    nvmNoVersions.path.split(POSIX_DELIMITER),
+    ["/opt/homebrew/bin", "/usr/local/bin", "/Users/pi/.npm-global/bin", "/usr/bin"],
+    "nvm without installed versions must not be added",
+  );
+
+  // A readdir failure (permissions, race) must degrade to adding nothing.
+  const nvmUnreadable = augmentPosixPath({
+    platform: "darwin",
+    env: { PATH: "/usr/bin", HOME: "/Users/pi" },
+    delimiter: POSIX_DELIMITER,
+    exists: (dir) => dir === "/Users/pi/.nvm/versions/node",
+    readDir: () => {
+      throw new Error("EACCES");
+    },
+  });
+  assert.deepEqual(
+    nvmUnreadable.path.split(POSIX_DELIMITER),
+    ["/opt/homebrew/bin", "/usr/local/bin", "/Users/pi/.npm-global/bin", "/usr/bin"],
+    "an unreadable nvm versions dir must not be added",
+  );
+
   // POSIX without HOME must not inject a literal `undefined/.npm-global/bin`.
   const noHome = augmentPosixPath({
     platform: "linux",
@@ -74,14 +132,22 @@ function verifyPathContract() {
   ]);
 
   // Idempotent: entries already present are not duplicated.
+  const fullExistingPath = [
+    "/usr/bin",
+    "/Users/pi/.local/bin",
+    "/opt/homebrew/bin",
+    "/usr/local/bin",
+    "/Users/pi/.npm-global/bin",
+    "/Users/pi/.volta/bin",
+    "/Users/pi/.asdf/shims",
+    "/Users/pi/.nvm/versions/node/v24.1.0/bin",
+  ].join(POSIX_DELIMITER);
   const already = augmentPosixPath({
     platform: "darwin",
-    env: {
-      PATH: "/usr/bin:/Users/pi/.local/bin:/opt/homebrew/bin:/usr/local/bin:/Users/pi/.npm-global/bin",
-      HOME: "/Users/pi",
-    },
+    env: { PATH: fullExistingPath, HOME: "/Users/pi" },
     delimiter: POSIX_DELIMITER,
-    exists: () => true,
+    exists: (dir) => dir !== "/Users/pi/.nvm/versions/node/v18.20.0/bin",
+    readDir: () => ["v24.1.0"],
   });
   assert.equal(already.changed, false, "already-present entries must not be re-added");
 
