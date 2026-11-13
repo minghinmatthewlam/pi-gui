@@ -112,18 +112,19 @@ test("supports keyboard shortcuts, slash menus, and topbar controls through the 
     await composer.fill("/thinking");
     const optionsMenu = window.getByTestId("slash-options-menu");
     await expect(optionsMenu).toBeVisible();
-    await expect(optionsMenu).toContainText("Low");
-    await expect(optionsMenu).toContainText("Extra High");
-    await expect(optionsMenu).toContainText("Max");
-    await composer.press("ArrowDown");
+    // The seeded model maps minimal/low/medium/high, so pi-gui offers exactly those.
+    await expect(optionsMenu).toContainText("Minimal");
+    await expect(optionsMenu).toContainText("High");
+    await expect(optionsMenu).not.toContainText("Extra High");
+    await expect(optionsMenu).not.toContainText("Max");
     await composer.press("ArrowDown");
     await composer.press("ArrowDown");
     await composer.press("ArrowDown");
     await composer.press("Enter");
     await expect(optionsMenu).toHaveCount(0);
-    await expect(window.getByTestId("transcript")).toContainText("Thinking set to max");
+    await expect(window.getByTestId("transcript")).toContainText("Thinking set to high");
     await expect(
-      window.locator(".composer").getByRole("button", { name: "max", exact: true }),
+      window.locator(".composer").getByRole("button", { name: "high", exact: true }),
     ).toBeVisible();
 
     await composer.fill("Keep the draft /thinking");
@@ -131,7 +132,7 @@ test("supports keyboard shortcuts, slash menus, and topbar controls through the 
     await composer.press("ArrowDown");
     await composer.press("Enter");
     await expect(optionsMenu).toHaveCount(0);
-    await expect(composer).toHaveValue("Keep the draft /thinking medium");
+    await expect(composer).toHaveValue("Keep the draft /thinking low");
 
     const selectedWorkspaceId = (await getDesktopState(window)).selectedWorkspaceId;
     expect(selectedWorkspaceId).toBeTruthy();

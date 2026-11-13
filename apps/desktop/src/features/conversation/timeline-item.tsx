@@ -26,6 +26,7 @@ import { SentAnnotations } from "./annotations/sent-annotations";
 import { ExtensionCardItem, type RunExtensionAction } from "./extension-card";
 import { ImageAttachmentThumb } from "./image-attachment-thumb";
 import { MessageMarkdown } from "./message-markdown";
+import { ThinkingBlock } from "./thinking-block";
 import { stringifyToolValue, toolOutputImages } from "./tool-output-images";
 import { TurnChangesCard, type OpenTurnChange } from "./turn-changes-card";
 import type { WorkspaceFileLine } from "./workspace-file-line";
@@ -55,6 +56,9 @@ export function TimelineItem({
   onExtensionAction,
   annotationMarkers,
   onOpenAnnotation,
+  showThinking = false,
+  expandedThinkingIds,
+  onToggleThinking,
 }: {
   readonly item: DisplayTimelineItem;
   readonly expandedToolCallIds?: ReadonlySet<string>;
@@ -69,6 +73,9 @@ export function TimelineItem({
   readonly onExtensionAction?: RunExtensionAction;
   readonly annotationMarkers?: readonly AnnotationMarker[];
   readonly onOpenAnnotation?: OpenAnnotation;
+  readonly showThinking?: boolean;
+  readonly expandedThinkingIds?: ReadonlySet<string>;
+  readonly onToggleThinking?: (messageId: string) => void;
 }) {
   switch (item.kind) {
     case "turn-marker":
@@ -88,6 +95,9 @@ export function TimelineItem({
           workspacePath={workspacePath}
           annotationMarkers={annotationMarkers}
           onOpenAnnotation={onOpenAnnotation}
+          showThinking={showThinking}
+          thinkingExpanded={expandedThinkingIds?.has(item.id) ?? false}
+          onToggleThinking={onToggleThinking}
         />
       );
     case "activity":
@@ -136,6 +146,9 @@ function TimelineMessage({
   onOpenWorkspaceFileLine,
   annotationMarkers,
   onOpenAnnotation,
+  showThinking,
+  thinkingExpanded,
+  onToggleThinking,
 }: {
   readonly item: SessionTranscriptMessage;
   readonly sourceMessageIndex?: number;
@@ -145,6 +158,9 @@ function TimelineMessage({
   readonly onOpenWorkspaceFileLine?: (target: WorkspaceFileLine) => void;
   readonly annotationMarkers?: readonly AnnotationMarker[];
   readonly onOpenAnnotation?: OpenAnnotation;
+  readonly showThinking?: boolean;
+  readonly thinkingExpanded?: boolean;
+  readonly onToggleThinking?: (messageId: string) => void;
 }) {
   const articleRef = useRef<HTMLElement | null>(null);
   const crossProject = useMemo(
@@ -231,6 +247,13 @@ function TimelineMessage({
   const forkable = sourceMessageIndex !== undefined;
   return (
     <article className="timeline-item timeline-item--assistant" ref={articleRef}>
+      {showThinking && item.thinking?.trim() ? (
+        <ThinkingBlock
+          thinking={item.thinking}
+          expanded={thinkingExpanded ?? false}
+          onToggle={() => onToggleThinking?.(item.id)}
+        />
+      ) : null}
       <MessageMarkdown
         annotationRoot
         onOpenWorkspaceFileLine={onOpenWorkspaceFileLine}

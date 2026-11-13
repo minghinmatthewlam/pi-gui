@@ -9,8 +9,10 @@ interface SettingsGeneralSectionProps {
   readonly runtime?: RuntimeSnapshot;
   readonly modelSettingsScopeMode: ModelSettingsScopeMode;
   readonly integratedTerminalShell: string;
+  readonly showModelThinking: boolean;
   readonly onSetModelSettingsScopeMode: (mode: ModelSettingsScopeMode) => void;
   readonly onSetIntegratedTerminalShell: (shellPath: string) => void;
+  readonly onSetShowModelThinking: (enabled: boolean) => void;
   readonly onToggleSkillCommands: (enabled: boolean) => void;
 }
 
@@ -18,8 +20,10 @@ export function SettingsGeneralSection({
   runtime,
   modelSettingsScopeMode,
   integratedTerminalShell,
+  showModelThinking,
   onSetModelSettingsScopeMode,
   onSetIntegratedTerminalShell,
+  onSetShowModelThinking,
   onToggleSkillCommands,
 }: SettingsGeneralSectionProps) {
   const { t } = useTranslation();
@@ -60,6 +64,16 @@ export function SettingsGeneralSection({
             checked={runtime?.settings.enableSkillCommands ?? true}
             label={t("settings.general.skillCommands.label")}
             onChange={onToggleSkillCommands}
+          />
+        </SettingsRow>
+        <SettingsRow
+          title={t("settings.general.modelThinking.title")}
+          description={t("settings.general.modelThinking.description")}
+        >
+          <SettingsSwitch
+            checked={showModelThinking}
+            label={t("settings.general.modelThinking.label")}
+            onChange={onSetShowModelThinking}
           />
         </SettingsRow>
       </SettingsGroup>

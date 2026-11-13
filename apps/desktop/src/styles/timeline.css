@@ -1143,3 +1143,68 @@
 .timeline-tool__image img {
   object-fit: contain;
 }
+
+/* A turn's reasoning: one quiet line until the user opens it, then the raw text. */
+.timeline-thinking {
+  margin-bottom: 8px;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.timeline-thinking__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 8px 0 4px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--muted-strong);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.timeline-thinking__toggle:hover {
+  background: var(--surface-muted);
+  border-color: var(--line);
+  color: var(--ink);
+}
+
+.timeline-thinking__chevron {
+  display: inline-flex;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  transition: transform var(--motion-base) var(--ease-out);
+  color: var(--muted-soft);
+}
+
+.timeline-thinking__chevron--expanded {
+  transform: rotate(90deg);
+}
+
+.timeline-thinking__label {
+  font-weight: 500;
+}
+
+.timeline-thinking__hint {
+  color: var(--muted-soft);
+  font-size: 11px;
+}
+
+.timeline-thinking__body {
+  margin-top: 4px;
+  padding: 10px 12px;
+  max-height: 320px;
+  overflow-y: auto;
+  border-left: 2px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-muted);
+  color: var(--muted-strong);
+  font-size: 12.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

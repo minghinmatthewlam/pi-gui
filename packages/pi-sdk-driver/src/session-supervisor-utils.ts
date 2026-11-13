@@ -428,6 +428,7 @@ function transcriptFromSources(
 
     const text = messageText(message);
     const attachments = messageAttachments(message);
+    const thinking = role === "assistant" ? messageThinking(message) : "";
     if (text || attachments.length > 0) {
       transcript.push({
         kind: "message",
@@ -435,6 +436,7 @@ function transcriptFromSources(
         ...(typeof message.id === "string" ? { sourceMessageId: message.id } : {}),
         role,
         text,
+        ...(thinking ? { thinking } : {}),
         ...(attachments.length > 0 ? { attachments } : {}),
         createdAt,
       });
@@ -730,6 +732,30 @@ function applyToolResult(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
+}
+
+/**
+ * The assistant's reasoning parts, joined the way terminal pi shows a thinking block. A redacted
+ * part is an opaque payload reserved for the provider, never a description of the reasoning.
+ */
+export function messageThinking(message: Record<string, unknown>): string {
+  const { content } = message;
+  if (!Array.isArray(content)) {
+    return "";
+  }
+
+  return content
+    .map((part) =>
+      isRecord(part) &&
+      part.type === "thinking" &&
+      part.redacted !== true &&
+      typeof part.thinking === "string"
+        ? part.thinking
+        : "",
+    )
+    .filter((thinking) => thinking.trim().length > 0)
+    .join("\n\n")
+    .trim();
 }
 
 export function messageText(message: Record<string, unknown>): string {

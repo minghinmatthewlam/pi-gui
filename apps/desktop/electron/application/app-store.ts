@@ -77,6 +77,7 @@ import {
 import {
   applyTimelineEvent,
   appendAssistantDelta,
+  appendAssistantThinkingDelta,
   clearActiveAssistantMessage,
   timelineFromDriverTranscript,
 } from "../conversation/app-store-timeline";
@@ -1466,6 +1467,21 @@ export class DesktopAppStore {
     return this.emit();
   }
 
+  async setShowModelThinking(showModelThinking: boolean): Promise<DesktopAppState> {
+    await this.initialize();
+    if (this.state.showModelThinking === showModelThinking) {
+      return structuredClone(this.state);
+    }
+    this.state = {
+      ...this.state,
+      showModelThinking,
+      lastError: undefined,
+      revision: this.state.revision + 1,
+    };
+    await this.persistUiState();
+    return this.emit();
+  }
+
   async setThemeMode(themeMode: ThemeMode): Promise<DesktopAppState> {
     await this.initialize();
     if (!isThemeMode(themeMode)) {
@@ -2281,6 +2297,7 @@ export class DesktopAppStore {
       threadGrouping: persisted.threadGrouping ?? "time",
       collapsedWorkspaceIds: persisted.collapsedWorkspaceIds ?? [],
       enableTransparency: persisted.enableTransparency ?? this.state.enableTransparency,
+      showModelThinking: persisted.showModelThinking ?? this.state.showModelThinking,
       ...this.orchestrationChildrenState(persisted.orchestrationChildren ?? []),
     };
 
@@ -3497,6 +3514,14 @@ export class DesktopAppStore {
             event.text,
           );
           break;
+        case "assistantThinkingDelta":
+          appendAssistantThinkingDelta(
+            this.sessionState.transcriptCache,
+            this.sessionState.activeAssistantMessageBySession,
+            event.sessionRef,
+            event.text,
+          );
+          break;
         case "sessionOpened":
         case "runCompleted":
           this.updateSessionConfig(event.sessionRef, event.snapshot.config);
@@ -4144,6 +4169,7 @@ export class DesktopAppStore {
       collapsedWorkspaceIds:
         this.state.collapsedWorkspaceIds.length > 0 ? this.state.collapsedWorkspaceIds : undefined,
       enableTransparency: this.state.enableTransparency,
+      showModelThinking: this.state.showModelThinking,
       orchestrationChildren: orchestration.toPersistedOrchestrationChildren(
         this.state.orchestrationChildren,
       ),

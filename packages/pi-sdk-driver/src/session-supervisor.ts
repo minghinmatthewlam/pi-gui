@@ -96,6 +96,7 @@ import {
   injectFileAttachmentPreamble,
   isExtensionCardEntry,
   isExtensionPinEntry,
+  messageThinking,
   messageText,
   nowIso,
   persistedToolOutput,
@@ -2801,27 +2802,44 @@ export class SessionSupervisor {
           this.appendCustomMessageItem(record, event.message);
         }
         if (event.type === "message_end" && event.message.role === "assistant") {
+          const thinking = messageThinking(event.message as unknown as Record<string, unknown>);
           return toDriverEvents(
-            { type: "assistantMessageEnded", sessionRef: record.ref, timestamp },
+            {
+              type: "assistantMessageEnded",
+              sessionRef: record.ref,
+              timestamp,
+              ...(thinking ? { thinking } : {}),
+            },
             record,
           );
         }
         return [sessionUpdatedEvent(record)];
       case "message_update":
         this.updatePreviewFromMessage(record, event.message);
-        if (
-          event.message.role === "assistant" &&
-          event.assistantMessageEvent.type === "text_delta"
-        ) {
-          return toDriverEvents(
-            {
-              type: "assistantDelta" as const,
-              sessionRef: record.ref,
-              timestamp,
-              text: event.assistantMessageEvent.delta ?? "",
-            },
-            record,
-          );
+        if (event.message.role === "assistant") {
+          const assistantEvent = event.assistantMessageEvent;
+          if (assistantEvent.type === "text_delta") {
+            return toDriverEvents(
+              {
+                type: "assistantDelta" as const,
+                sessionRef: record.ref,
+                timestamp,
+                text: assistantEvent.delta ?? "",
+              },
+              record,
+            );
+          }
+          if (assistantEvent.type === "thinking_delta") {
+            return toDriverEvents(
+              {
+                type: "assistantThinkingDelta" as const,
+                sessionRef: record.ref,
+                timestamp,
+                text: assistantEvent.delta ?? "",
+              },
+              record,
+            );
+          }
         }
         return [sessionUpdatedEvent(record)];
       case "tool_execution_start":

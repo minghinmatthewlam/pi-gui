@@ -2,8 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { RuntimeSnapshot } from "@pi-gui/session-driver/runtime-types";
 import {
   buildModelOptions,
+  buildThinkingOptions,
   MODEL_OPTIONS_EMPTY_TITLE,
-  THINKING_OPTIONS,
   type ComposerModelOption,
 } from "./composer-commands";
 
@@ -43,6 +43,10 @@ export function ModelSelector({
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   const modelOptions = useMemo(() => buildModelOptions(runtime), [runtime]);
+  const thinkingOptions = useMemo(
+    () => buildThinkingOptions(runtime, { provider, modelId }),
+    [runtime, provider, modelId],
+  );
   const filteredModels = useMemo(() => {
     if (!modelFilter) return modelOptions;
     const q = modelFilter.toLowerCase();
@@ -163,7 +167,7 @@ export function ModelSelector({
           ) : null}
         </span>
       ) : null}
-      {thinkingLevel ? (
+      {thinkingLevel && thinkingOptions.length > 1 ? (
         <span className="model-selector__anchor">
           <button
             className="model-selector__badge"
@@ -179,7 +183,7 @@ export function ModelSelector({
               onWheel={(event) => event.stopPropagation()}
             >
               <div className="model-selector__group-title">Thinking Level</div>
-              {THINKING_OPTIONS.map((option) => {
+              {thinkingOptions.map((option) => {
                 const isActive = option.value === thinkingLevel;
                 return (
                   <button

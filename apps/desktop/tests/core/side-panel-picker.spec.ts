@@ -1,3 +1,4 @@
+import { basename } from "node:path";
 import { expect, test } from "@playwright/test";
 import {
   createNamedThread,
@@ -82,6 +83,13 @@ test("one icon and keyboard shortcuts toggle the selected workspace tool", async
 
     // Cmd+R reaches Review from the terminal on macOS; Ctrl+R stays with the shell elsewhere.
     await terminal.locator(".xterm").click();
+    // The shell's own reverse search only exists once it finished starting; without this the
+    // keypress can land before the prompt and be echoed literally.
+    await window.keyboard.type(`pwd`);
+    await window.keyboard.press("Enter");
+    await expect(terminal.locator(".xterm-rows")).toContainText(basename(workspacePath), {
+      timeout: 15_000,
+    });
     await harness.electronApp.evaluate(({ BrowserWindow }, keyModifier) => {
       BrowserWindow.getAllWindows()[0]?.webContents.sendInputEvent({
         type: "keyDown",

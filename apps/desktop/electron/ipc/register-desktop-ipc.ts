@@ -164,6 +164,7 @@ type SettingsOwner = Pick<
   | "setNotificationPreferences"
   | "setIntegratedTerminalShell"
   | "setEnableTransparency"
+  | "setShowModelThinking"
   | "getSkillFilePath"
   | "getExtensionFilePath"
 >;
@@ -681,6 +682,9 @@ export function registerDesktopIpc({
       return state;
     });
   });
+  ipcMain.handle(desktopIpc.setShowModelThinking, (event, rawEnabled: unknown) =>
+    run(event, () => owners.settings.setShowModelThinking(expectBoolean(rawEnabled, "enabled"))),
+  );
 
   registerTerminalIpc(windows, capabilities);
 

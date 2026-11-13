@@ -61,7 +61,12 @@ export function sameRowContent(a: DisplayTimelineItem, b: DisplayTimelineItem): 
   if (a.kind !== b.kind) return false;
   switch (a.kind) {
     case "message":
-      return b.kind === a.kind && a.text === b.text && a.attachments === b.attachments;
+      return (
+        b.kind === a.kind &&
+        a.text === b.text &&
+        a.attachments === b.attachments &&
+        a.thinking === b.thinking
+      );
     case "tool":
       return (
         b.kind === a.kind &&

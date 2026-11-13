@@ -55,6 +55,8 @@ interface ConversationTimelineProps {
   readonly workspacePath?: string;
   readonly annotations?: TranscriptAnnotations;
   readonly platform: NodeJS.Platform;
+  /** Draw each assistant turn's saved reasoning above its answer. */
+  readonly showThinking: boolean;
 }
 const NO_MARKERS: readonly AnnotationMarker[] = [];
 export function ConversationTimeline({
@@ -75,6 +77,7 @@ export function ConversationTimeline({
   workspacePath,
   annotations,
   platform,
+  showThinking,
 }: ConversationTimelineProps) {
   const surfaceRef = useRef<HTMLDivElement | null>(null);
   const annotationSelection = useAnnotationSelection({
@@ -96,6 +99,17 @@ export function ConversationTimeline({
     return markers;
   }, [annotationList]);
   const [expandedToolCallIds, setExpandedToolCallIds] = useState<Set<string>>(() => new Set());
+  const [expandedThinkingIds, setExpandedThinkingIds] = useState<Set<string>>(() => new Set());
+  const toggleThinking = useCallback(
+    (id: string) =>
+      setExpandedThinkingIds((current) => {
+        const next = new Set(current);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        return next;
+      }),
+    [],
+  );
   const toggleToolCall = useCallback(
     (id: string) =>
       setExpandedToolCallIds((current) => {
@@ -175,6 +189,9 @@ export function ConversationTimeline({
                     generation={viewport.layoutGeneration}
                     expandedToolCallIds={expandedToolCallIds}
                     onToggleToolCall={toggleToolCall}
+                    showThinking={showThinking}
+                    expandedThinkingIds={expandedThinkingIds}
+                    onToggleThinking={toggleThinking}
                     onViewFileInDiff={onViewFileInDiff}
                     onOpenTurnChange={onOpenTurnChange}
                     sourceMessageIndex={renderedMessageIndexById.get(item.id)}
@@ -286,6 +303,9 @@ interface MeasuredTimelineItemProps {
   readonly generation: number;
   readonly expandedToolCallIds: ReadonlySet<string>;
   readonly onToggleToolCall: (callId: string) => void;
+  readonly showThinking: boolean;
+  readonly expandedThinkingIds: ReadonlySet<string>;
+  readonly onToggleThinking: (messageId: string) => void;
   readonly onViewFileInDiff?: (path: string) => void;
   readonly onOpenTurnChange?: OpenTurnChange;
   readonly sourceMessageIndex?: number;
@@ -307,6 +327,9 @@ function MeasuredTimelineItemBase({
   generation,
   expandedToolCallIds,
   onToggleToolCall,
+  showThinking,
+  expandedThinkingIds,
+  onToggleThinking,
   onViewFileInDiff,
   onOpenTurnChange,
   sourceMessageIndex,
@@ -355,6 +378,9 @@ function MeasuredTimelineItemBase({
           item={item}
           expandedToolCallIds={expandedToolCallIds}
           onToggleToolCall={onToggleToolCall}
+          showThinking={showThinking}
+          expandedThinkingIds={expandedThinkingIds}
+          onToggleThinking={onToggleThinking}
           onViewFileInDiff={onViewFileInDiff}
           onOpenTurnChange={onOpenTurnChange}
           sourceMessageIndex={sourceMessageIndex}
@@ -387,6 +413,7 @@ function isSameDisplayItem(a: DisplayTimelineItem, b: DisplayTimelineItem): bool
     return (
       a.role === b.role &&
       a.text === b.text &&
+      a.thinking === b.thinking &&
       a.attachments === b.attachments &&
       a.sourceMessageId === b.sourceMessageId
     );
@@ -446,6 +473,9 @@ function areMeasuredTimelineItemPropsEqual(
     prev.onHeightChange === next.onHeightChange &&
     prev.expandedToolCallIds === next.expandedToolCallIds &&
     prev.onToggleToolCall === next.onToggleToolCall &&
+    prev.showThinking === next.showThinking &&
+    prev.expandedThinkingIds === next.expandedThinkingIds &&
+    prev.onToggleThinking === next.onToggleThinking &&
     prev.onViewFileInDiff === next.onViewFileInDiff &&
     prev.onOpenTurnChange === next.onOpenTurnChange &&
     prev.sourceMessageIndex === next.sourceMessageIndex &&

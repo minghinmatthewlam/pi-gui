@@ -32,6 +32,9 @@ export interface RuntimeProviderRecord {
  */
 export type RuntimeModelScope = "all" | "listed" | "matched" | "off";
 
+/** Every reasoning level pi knows, weakest first. */
+export type RuntimeThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+
 export interface RuntimeModelRecord {
   readonly providerId: string;
   readonly providerName: string;
@@ -41,6 +44,12 @@ export interface RuntimeModelRecord {
   readonly authType: RuntimeAuthType;
   readonly reasoning: boolean;
   readonly supportsImages: boolean;
+  /**
+   * The levels this model actually maps to a request, as pi resolves them from the model's
+   * `thinkingLevelMap` (`["off"]` when it does not reason). Absent when the runtime could not
+   * resolve them, so pickers can keep offering every level instead of hiding the control.
+   */
+  readonly thinkingLevels?: readonly RuntimeThinkingLevel[];
   readonly scope: RuntimeModelScope;
 }
 
@@ -119,7 +128,7 @@ export function skillSlashCommand(name: string): string {
 export interface RuntimeSettingsSnapshot {
   readonly defaultProvider?: string;
   readonly defaultModelId?: string;
-  readonly defaultThinkingLevel?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+  readonly defaultThinkingLevel?: RuntimeThinkingLevel;
   readonly enableSkillCommands: boolean;
   readonly enabledModelPatterns: readonly string[];
 }
@@ -127,7 +136,7 @@ export interface RuntimeSettingsSnapshot {
 export interface ModelSettingsSnapshot {
   readonly defaultProvider?: string;
   readonly defaultModelId?: string;
-  readonly defaultThinkingLevel?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+  readonly defaultThinkingLevel?: RuntimeThinkingLevel;
   readonly enabledModelPatterns: readonly string[];
 }
 

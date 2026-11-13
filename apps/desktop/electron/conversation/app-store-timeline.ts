@@ -126,27 +126,66 @@ export function appendAssistantDelta(
   sessionRef: SessionRef,
   text: string,
 ): void {
+  editActiveAssistantMessage(
+    transcriptCache,
+    activeAssistantMessageBySession,
+    sessionRef,
+    (message) => ({ ...message, text: `${message.text}${text}` }),
+  );
+}
+
+/** Reasoning tokens land on the same live row, so one row owns a turn's thinking and answer. */
+export function appendAssistantThinkingDelta(
+  transcriptCache: Map<string, readonly TranscriptMessage[]>,
+  activeAssistantMessageBySession: Map<string, string>,
+  sessionRef: SessionRef,
+  text: string,
+): void {
+  editActiveAssistantMessage(
+    transcriptCache,
+    activeAssistantMessageBySession,
+    sessionRef,
+    (message) => ({ ...message, thinking: `${message.thinking ?? ""}${text}` }),
+  );
+}
+
+/** pi saves the turn's reasoning with the answer; that copy wins over the streamed deltas. */
+function applyFinalThinking(
+  transcriptCache: Map<string, readonly TranscriptMessage[]>,
+  transcript: TranscriptMessage[],
+  key: string,
+  activeId: string | undefined,
+  thinking: string | undefined,
+): void {
+  if (!activeId || !thinking) return;
+  const index = transcript.findIndex((item) => item.id === activeId);
+  const ended = transcript[index];
+  if (ended?.kind !== "message" || ended.role !== "assistant") return;
+  transcript[index] = { ...ended, thinking };
+  transcriptCache.set(key, transcript);
+}
+
+function editActiveAssistantMessage(
+  transcriptCache: Map<string, readonly TranscriptMessage[]>,
+  activeAssistantMessageBySession: Map<string, string>,
+  sessionRef: SessionRef,
+  edit: (
+    message: Extract<TranscriptMessage, { kind: "message" }>,
+  ) => Extract<TranscriptMessage, { kind: "message" }>,
+): void {
   const key = sessionKey(sessionRef);
   const transcript = [...(transcriptCache.get(key) ?? [])];
   const activeId = activeAssistantMessageBySession.get(key);
+  const index = activeId ? transcript.findIndex((message) => message.id === activeId) : -1;
+  const current = index >= 0 ? transcript[index] : undefined;
 
-  if (activeId) {
-    const index = transcript.findIndex((message) => message.id === activeId);
-    const current = index >= 0 ? transcript[index] : undefined;
-    if (current?.kind === "message") {
-      transcript[index] = {
-        ...current,
-        text: `${current.text}${text}`,
-      };
-    } else {
-      const message = makeTranscriptMessage("assistant", text);
-      transcript.push(message);
-      activeAssistantMessageBySession.set(key, message.id);
-    }
+  if (current?.kind === "message") {
+    transcript[index] = edit(current);
   } else {
-    const message = makeTranscriptMessage("assistant", text);
-    transcript.push(message);
-    activeAssistantMessageBySession.set(key, message.id);
+    // A reasoning-only first token still opens the row, so the answer streams into it afterwards.
+    const created = makeTranscriptMessage("assistant", "");
+    transcript.push(edit(created));
+    activeAssistantMessageBySession.set(key, created.id);
   }
 
   transcriptCache.set(key, transcript);
@@ -164,7 +203,7 @@ export function applyTimelineEvent(
   event: SessionDriverEvent,
   state: TimelineRuntimeState,
 ): void {
-  if (event.type === "assistantDelta") {
+  if (event.type === "assistantDelta" || event.type === "assistantThinkingDelta") {
     return;
   }
 
@@ -178,6 +217,7 @@ export function applyTimelineEvent(
       const activeId = state.activeAssistantMessageBySession.get(key);
       if (activeId) state.pendingAssistantMessageBySession.set(key, activeId);
       else state.pendingAssistantMessageBySession.delete(key);
+      applyFinalThinking(transcriptCache, transcript, key, activeId, event.thinking);
       clearActiveAssistantMessage(state.activeAssistantMessageBySession, event.sessionRef);
       return;
     }

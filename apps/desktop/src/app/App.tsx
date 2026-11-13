@@ -1192,6 +1192,7 @@ export default function App() {
                     scheduledOrigins={scheduledOrigins}
                     annotations={transcriptAnnotations}
                     platform={api?.platform ?? "linux"}
+                    showThinking={snapshot.showModelThinking}
                   />
                 </div>
               </section>
