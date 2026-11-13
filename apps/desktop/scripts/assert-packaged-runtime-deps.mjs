@@ -13,6 +13,7 @@ const requiredPackages = [
   // can omit hoisted pnpm dependencies even when local development resolves them.
   "@anthropic-ai/sdk",
   "@earendil-works/chord",
+  "@earendil-works/pi-ai",
   "@pi-gui/extension-ui",
   "@aws-crypto/sha256-browser",
   "@aws-crypto/sha256-js",

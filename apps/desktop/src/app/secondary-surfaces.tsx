@@ -462,6 +462,7 @@ export function SecondarySurfaces({
           themeMode={snapshot.themeMode}
           themePresetId={snapshot.themePresetId}
           enableTransparency={snapshot.enableTransparency}
+          showModelThinking={snapshot.showModelThinking}
           onLoginProvider={handleLoginProvider}
           onSelectSection={onSelectSettingsSection}
           onLogoutProvider={handleLogoutProvider}
@@ -485,6 +486,13 @@ export function SecondarySurfaces({
             void updateSnapshot(setSnapshot, () => api.setEnableTransparency(enabled)).catch(
               (error: unknown) => {
                 console.error("[renderer] setEnableTransparency failed", error);
+              },
+            );
+          }}
+          onSetShowModelThinking={(enabled) => {
+            void updateSnapshot(setSnapshot, () => api.setShowModelThinking(enabled)).catch(
+              (error: unknown) => {
+                console.error("[renderer] setShowModelThinking failed", error);
               },
             );
           }}

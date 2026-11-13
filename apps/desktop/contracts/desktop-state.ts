@@ -514,6 +514,8 @@ export interface DesktopAppState {
   /** Folder groups the user collapsed in the sidebar, by workspace id. */
   readonly collapsedWorkspaceIds: readonly string[];
   readonly enableTransparency: boolean;
+  /** Draw each assistant turn's reasoning in the transcript, collapsed until clicked. */
+  readonly showModelThinking: boolean;
   readonly startupDiagnostics: readonly StartupDiagnostic[];
   readonly revision: number;
   readonly lastError?: string;
@@ -572,6 +574,7 @@ export function createEmptyDesktopAppState(): DesktopAppState {
     threadGrouping: "time",
     collapsedWorkspaceIds: [],
     enableTransparency: false,
+    showModelThinking: false,
     startupDiagnostics: [],
     revision: 0,
   };

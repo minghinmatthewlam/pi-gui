@@ -161,6 +161,10 @@ export const zhCN: Partial<Messages> = {
   "settings.general.skillCommands.title": "技能斜杠命令",
   "settings.general.skillCommands.description": "在输入框中把每个技能作为斜杠命令提供。",
   "settings.general.skillCommands.label": "启用技能斜杠命令",
+  "settings.general.modelThinking.title": "模型思考",
+  "settings.general.modelThinking.description":
+    "显示模型回答前的推理过程。每个对话的回答上方会显示折叠的思考块，点击可展开阅读，再次点击收起。",
+  "settings.general.modelThinking.label": "启用思考视图",
   "settings.general.groupTerminal": "终端",
   "settings.general.shell.title": "Shell",
   "settings.general.shell.description": "内置终端启动所用的 shell。留空则使用登录 shell。",

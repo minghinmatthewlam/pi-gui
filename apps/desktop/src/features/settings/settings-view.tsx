@@ -41,6 +41,7 @@ interface SettingsViewProps {
   readonly themeMode: "system" | "light" | "dark";
   readonly themePresetId: ThemePresetId;
   readonly enableTransparency: boolean;
+  readonly showModelThinking: boolean;
   readonly onSetModelSettingsScopeMode: (mode: ModelSettingsScopeMode) => void;
   readonly onSetDefaultModel: (provider: string, modelId: string) => void;
   readonly onSetThinkingLevel: (
@@ -61,6 +62,7 @@ interface SettingsViewProps {
   readonly onSetThemeMode: (mode: "system" | "light" | "dark") => void;
   readonly onSetThemePresetId: (presetId: ThemePresetId) => void;
   readonly onSetEnableTransparency: (enabled: boolean) => void;
+  readonly onSetShowModelThinking: (enabled: boolean) => void;
   readonly mcpActions: McpSettingsActions;
 }
 
@@ -79,6 +81,7 @@ export function SettingsView({
   themeMode,
   themePresetId,
   enableTransparency,
+  showModelThinking,
   onSetModelSettingsScopeMode,
   onSetDefaultModel,
   onSetThinkingLevel,
@@ -97,6 +100,7 @@ export function SettingsView({
   onSetThemeMode,
   onSetThemePresetId,
   onSetEnableTransparency,
+  onSetShowModelThinking,
   mcpActions,
 }: SettingsViewProps) {
   const { t } = useTranslation();
@@ -157,8 +161,10 @@ export function SettingsView({
               runtime={runtime}
               modelSettingsScopeMode={modelSettingsScopeMode}
               integratedTerminalShell={integratedTerminalShell}
+              showModelThinking={showModelThinking}
               onSetModelSettingsScopeMode={onSetModelSettingsScopeMode}
               onSetIntegratedTerminalShell={onSetIntegratedTerminalShell}
+              onSetShowModelThinking={onSetShowModelThinking}
               onToggleSkillCommands={onToggleSkillCommands}
             />
           ) : null}

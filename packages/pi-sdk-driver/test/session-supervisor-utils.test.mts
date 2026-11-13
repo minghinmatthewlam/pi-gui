@@ -204,3 +204,35 @@ await test("a stopped reply reads as stopped only while it is still the newest r
   branch.push({ type: "message", id: "a2", message: reply });
   assert.equal(sessionRunOutcome({ session, stoppedReplyId: "a1" }), "completed");
 });
+
+await test("a reloaded assistant turn keeps its reasoning, and redacted thinking stays hidden", () => {
+  const transcript = transcriptFromMessages([
+    {
+      role: "assistant",
+      id: "a1",
+      content: [
+        { type: "thinking", thinking: "Check the failing test first." },
+        { type: "text", text: "Fixed the parser." },
+        { type: "thinking", thinking: "opaque-blob", redacted: true },
+      ],
+    },
+    { role: "assistant", id: "a2", content: [{ type: "text", text: "No reasoning here." }] },
+    {
+      role: "user",
+      id: "u1",
+      content: [
+        { type: "thinking", thinking: "not ours" },
+        { type: "text", text: "hi" },
+      ],
+    },
+  ]);
+
+  assert.deepEqual(
+    transcript.map((item) => (item.kind === "message" ? [item.id, item.thinking] : item)),
+    [
+      ["a1", "Check the failing test first."],
+      ["a2", undefined],
+      ["u1", undefined],
+    ],
+  );
+});

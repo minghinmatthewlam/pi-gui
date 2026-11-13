@@ -1,5 +1,6 @@
 export type {
   AssistantDeltaEvent,
+  AssistantThinkingDeltaEvent,
   AssistantMessageEndedEvent,
   AssistantMessagePersistedEvent,
   TranscriptItemAppendedEvent,
@@ -69,6 +70,7 @@ export type {
   RuntimeSourceOrigin,
   RuntimeSourceScope,
   RuntimeSnapshot,
+  RuntimeThinkingLevel,
 } from "./runtime-types.js";
 
 export type {

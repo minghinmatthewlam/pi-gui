@@ -1,9 +1,11 @@
 import { resolveRuntimeCommands } from "../../../contracts/composer-commands";
 import type {
   RuntimeCommandRecord,
+  RuntimeModelRecord,
   RuntimeProviderRecord,
   RuntimeSettingsSnapshot,
   RuntimeSnapshot,
+  RuntimeThinkingLevel,
 } from "@pi-gui/session-driver/runtime-types";
 import type { ExtensionCommandCompatibilityRecord } from "../../../contracts/desktop-state";
 import { titleCase } from "../../lib/string-utils";
@@ -190,33 +192,65 @@ const HOST_ACTION_SLASH_COMMANDS: readonly ComposerSlashCommand[] = [
   },
 ] as const;
 
-export const THINKING_OPTIONS: readonly ComposerSlashOption[] = [
-  {
-    value: "low",
-    label: "Low",
-    description: "Fast responses with lighter reasoning",
-  },
-  {
-    value: "medium",
-    label: "Medium",
-    description: "Balances speed and reasoning depth for everyday tasks",
-  },
-  {
-    value: "high",
-    label: "High",
-    description: "Greater reasoning depth for complex problems",
-  },
-  {
-    value: "xhigh",
-    label: "Extra High",
-    description: "Extra high reasoning depth for complex problems",
-  },
-  {
-    value: "max",
-    label: "Max",
-    description: "Maximum reasoning depth for supported models",
-  },
-] as const;
+export const THINKING_LEVEL_ORDER = [
+  "off",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+] as const satisfies readonly RuntimeThinkingLevel[];
+
+const THINKING_LEVEL_COPY: Record<RuntimeThinkingLevel, { label: string; description: string }> = {
+  off: { label: "Off", description: "No reasoning" },
+  minimal: { label: "Minimal", description: "Very brief reasoning" },
+  low: { label: "Low", description: "Fast responses with lighter reasoning" },
+  medium: { label: "Medium", description: "Balances speed and reasoning depth for everyday tasks" },
+  high: { label: "High", description: "Greater reasoning depth for complex problems" },
+  xhigh: { label: "Extra High", description: "Extra high reasoning depth for complex problems" },
+  max: { label: "Max", description: "Maximum reasoning depth for supported models" },
+};
+
+/** Offered while the runtime has not told us which levels the model maps. */
+const THINKING_OPTIONS: readonly ComposerSlashOption[] = THINKING_LEVEL_ORDER.filter(
+  (level) => level !== "off" && level !== "minimal",
+).map((level) => ({ value: level, ...THINKING_LEVEL_COPY[level] }));
+
+/**
+ * The levels the selected model actually maps, in strength order. A model that does not reason
+ * offers `off`; a model pi maps only `high` and `max` offers exactly those, so the picker never
+ * shows a level the request cannot use.
+ */
+export function buildThinkingOptions(
+  runtime: RuntimeSnapshot | undefined,
+  model: { readonly provider?: string; readonly modelId?: string } | undefined,
+): readonly ComposerSlashOption[] {
+  const record = resolveModelRecord(runtime, model);
+  const levels = record?.thinkingLevels;
+  if (!levels || levels.length === 0) {
+    return THINKING_OPTIONS;
+  }
+
+  const supported = new Set(levels);
+  return THINKING_LEVEL_ORDER.filter((level) => supported.has(level)).map((level) => ({
+    value: level,
+    ...THINKING_LEVEL_COPY[level],
+  }));
+}
+
+function resolveModelRecord(
+  runtime: RuntimeSnapshot | undefined,
+  model: { readonly provider?: string; readonly modelId?: string } | undefined,
+): RuntimeModelRecord | undefined {
+  if (!runtime || !model?.provider || !model.modelId) {
+    return undefined;
+  }
+
+  return runtime.models.find(
+    (record) => record.providerId === model.provider && record.modelId === model.modelId,
+  );
+}
 
 export function buildSlashCommandSections(
   query: string,
@@ -335,13 +369,14 @@ export function buildModelOptions(
 export function slashOptionsForCommand(
   command: ComposerSlashCommand | undefined,
   runtime?: RuntimeSnapshot,
+  model?: { readonly provider?: string; readonly modelId?: string },
 ): readonly ComposerSlashOption[] {
   if (!command) {
     return [];
   }
 
   if (command.kind === "thinking") {
-    return THINKING_OPTIONS;
+    return buildThinkingOptions(runtime, model);
   }
   if (command.kind === "model") {
     return buildModelOptions(runtime);

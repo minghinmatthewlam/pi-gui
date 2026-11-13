@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { basename, dirname, join, relative, resolve } from "node:path";
+import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import {
   CredentialSynchronizationError,
   DefaultPackageManager,
@@ -836,6 +837,7 @@ export class RuntimeSupervisor implements RuntimeResourceDriver {
           authType: provider?.authType ?? "none",
           reasoning: Boolean(model.reasoning),
           supportsImages: model.input.includes("image"),
+          thinkingLevels: getSupportedThinkingLevels(model),
           scope: scopeOf({ providerId: model.provider, modelId: model.id }),
         };
       })

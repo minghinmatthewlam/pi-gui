@@ -220,6 +220,7 @@ export function useNewThreadController(params: UseNewThreadControllerParams) {
     setComposerDraft: updatePrompt,
     selectedRuntime: runtime,
     selectedModelRuntime: runtime,
+    thinkingModel: { provider: resolvedProvider, modelId: resolvedModelId },
     sessionCommands: [],
     commandCompatibility: [],
     selectedSessionKey: `new-thread:${workspace?.id ?? ""}`,

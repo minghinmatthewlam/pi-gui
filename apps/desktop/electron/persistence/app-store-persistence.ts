@@ -53,6 +53,8 @@ export interface PersistedUiState {
   readonly collapsedWorkspaceIds?: readonly string[];
   readonly allowMultiple?: boolean;
   readonly enableTransparency?: boolean;
+  /** Draw each assistant turn's reasoning in the transcript. */
+  readonly showModelThinking?: boolean;
   readonly themeMode?: ThemeMode;
   readonly themePresetId?: ThemePresetId;
   readonly orchestrationChildren?: readonly OrchestrationChildThread[];
@@ -131,6 +133,8 @@ export function decodePersistedUiState(parsed: unknown): LegacyPersistedUiState 
       typeof candidate.allowMultiple === "boolean" ? candidate.allowMultiple : undefined,
     enableTransparency:
       typeof candidate.enableTransparency === "boolean" ? candidate.enableTransparency : undefined,
+    showModelThinking:
+      typeof candidate.showModelThinking === "boolean" ? candidate.showModelThinking : undefined,
     themeMode: toThemeMode(candidate.themeMode),
     themePresetId: toThemePresetId(candidate.themePresetId),
     orchestrationChildren: toPersistedOrchestrationChildren(candidate.orchestrationChildren),
@@ -225,6 +229,7 @@ function validateUiState(value: unknown): Record<string, unknown> {
       "collapsedWorkspaceIds",
       "allowMultiple",
       "enableTransparency",
+      "showModelThinking",
       "themeMode",
       "themePresetId",
       "orchestrationChildren",
@@ -276,7 +281,12 @@ function validateUiState(value: unknown): Record<string, unknown> {
     "collapsedWorkspaceIds",
   ])
     optional(root, key, strings);
-  for (const key of ["sidebarCollapsed", "allowMultiple", "enableTransparency"])
+  for (const key of [
+    "sidebarCollapsed",
+    "allowMultiple",
+    "enableTransparency",
+    "showModelThinking",
+  ])
     optional(root, key, boolean);
   optional(root, "activeView", (v) => toAppView(v) !== undefined);
   optional(root, "threadGrouping", isThreadGrouping);

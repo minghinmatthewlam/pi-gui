@@ -315,7 +315,10 @@ export function toSessionRef(target: WorkspaceSessionTarget): SessionRef {
   };
 }
 
-export function makeTranscriptMessage(role: "user" | "assistant", text: string): TranscriptMessage {
+export function makeTranscriptMessage(
+  role: "user" | "assistant",
+  text: string,
+): Extract<TranscriptMessage, { kind: "message" }> {
   return {
     kind: "message",
     id: randomUUID(),

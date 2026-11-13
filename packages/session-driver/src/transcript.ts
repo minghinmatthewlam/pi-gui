@@ -24,6 +24,11 @@ export interface SessionTranscriptMessage {
   readonly kind: "message";
   readonly role: SessionTranscriptRole;
   readonly text: string;
+  /**
+   * The assistant's reasoning for this turn, as pi stored it. Absent on every other role and on
+   * turns the provider does not expose; a redacted reasoning block is never shown.
+   */
+  readonly thinking?: string;
   readonly attachments?: readonly SessionTranscriptAttachment[];
   readonly createdAt: string;
   readonly id: string;
