@@ -252,6 +252,7 @@ export const desktopCommands = {
   toggleTerminal: "toggle-terminal",
   toggleSidePanel: "toggle-side-panel",
   toggleReview: "toggle-review",
+  toggleThinking: "toggle-thinking",
   newSidePanelTab: "new-side-panel-tab",
   closeFocusedSurface: "close-focused-surface",
   toggleSidebar: "toggle-sidebar",
@@ -604,6 +605,7 @@ export function getDesktopCommandFromShortcut(
   const isP = lowerKey === "p" || input.code === "KeyP";
   const isN = lowerKey === "n" || input.code === "KeyN";
   const isT = lowerKey === "t" || input.code === "KeyT";
+  const isShiftT = input.shift && isT;
   const isShiftO = input.shift && (lowerKey === "o" || input.code === "KeyO");
   const isShiftR = input.shift && isR;
   const isShiftA = input.shift && (lowerKey === "a" || input.code === "KeyA");
@@ -640,6 +642,10 @@ export function getDesktopCommandFromShortcut(
   }
 
   if (!input.shift && isT) {
+    return desktopCommands.toggleThinking;
+  }
+
+  if (isShiftT) {
     return desktopCommands.newSidePanelTab;
   }
 
@@ -682,12 +688,14 @@ export function isPaletteCommand(command: PiDesktopCommand | undefined): boolean
  * Control chords stay with text fields, and off macOS the terminal keeps Control
  * chords. Holding Archive would otherwise archive each next thread in turn, and
  * holding Review would flicker the panel. New Tab is the exception in the terminal,
- * where the shell keeps it to open another terminal.
+ * where the shell keeps it to open another terminal. Thinking follows terminal pi's
+ * Cmd/Ctrl+T, so it is single-press to avoid flipping every next reply.
  */
 export function isSinglePressCommand(command: PiDesktopCommand | undefined): boolean {
   return (
     isPaletteCommand(command) ||
     command === desktopCommands.toggleReview ||
+    command === desktopCommands.toggleThinking ||
     command === desktopCommands.newSidePanelTab ||
     command === desktopCommands.renameThread ||
     command === desktopCommands.archiveThread

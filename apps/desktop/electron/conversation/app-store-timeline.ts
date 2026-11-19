@@ -159,12 +159,47 @@ export function clearActiveAssistantMessage(
   activeAssistantMessageBySession.delete(sessionKey(sessionRef));
 }
 
+/**
+ * Appends streamed reasoning to the reply that is currently streaming, in its own
+ * `thinking` field. Reasoning arrives before prose, so a thinking-only row is the
+ * row the reply later continues into.
+ */
+export function appendThinkingDelta(
+  transcriptCache: Map<string, readonly TranscriptMessage[]>,
+  activeAssistantMessageBySession: Map<string, string>,
+  sessionRef: SessionRef,
+  text: string,
+): void {
+  if (!text) {
+    return;
+  }
+  const key = sessionKey(sessionRef);
+  const transcript = [...(transcriptCache.get(key) ?? [])];
+  const activeId = activeAssistantMessageBySession.get(key);
+  const index = activeId ? transcript.findIndex((message) => message.id === activeId) : -1;
+  const current = index >= 0 ? transcript[index] : undefined;
+
+  if (current?.kind === "message") {
+    transcript[index] = {
+      ...current,
+      thinking: `${current.thinking ?? ""}${text}`,
+    };
+  } else {
+    const message = { ...makeTranscriptMessage("assistant", ""), thinking: text };
+    transcript.push(message);
+    activeAssistantMessageBySession.set(key, message.id);
+  }
+
+  transcriptCache.set(key, transcript);
+}
+
 export function applyTimelineEvent(
   transcriptCache: Map<string, readonly TranscriptMessage[]>,
   event: SessionDriverEvent,
   state: TimelineRuntimeState,
 ): void {
-  if (event.type === "assistantDelta") {
+  if (event.type === "assistantDelta" || event.type === "thinkingDelta") {
+    // Token deltas own their row mutation; the timeline layout is unchanged by them.
     return;
   }
 
