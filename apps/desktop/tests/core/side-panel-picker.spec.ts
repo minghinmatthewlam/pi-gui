@@ -92,7 +92,10 @@ test("one icon and keyboard shortcuts toggle the selected workspace tool", async
     if (process.platform === "darwin") {
       await expect(window.locator(".diff-panel")).toBeVisible();
     } else {
-      await expect(terminal.locator(".xterm-rows")).toContainText(/i-search/);
+      // The chord belongs to the PTY: the shell answers with its incremental-search prompt,
+      // or echoes the control character when readline draws that prompt differently. Both
+      // come from the shell; the next assertion is what proves Review never opened.
+      await expect(terminal.locator(".xterm-rows")).toContainText(/reverse-i-search|i-search|\^R/);
       await expect(window.locator(".diff-panel")).toHaveCount(0);
     }
   } finally {
