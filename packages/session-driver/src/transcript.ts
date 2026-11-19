@@ -24,6 +24,11 @@ export interface SessionTranscriptMessage {
   readonly kind: "message";
   readonly role: SessionTranscriptRole;
   readonly text: string;
+  /**
+   * Model reasoning for this reply, from pi's thinking parts. Kept separate from `text`
+   * so copying, forking, search, and previews keep using the visible reply.
+   */
+  readonly thinking?: string;
   readonly attachments?: readonly SessionTranscriptAttachment[];
   readonly createdAt: string;
   readonly id: string;

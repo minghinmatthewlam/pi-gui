@@ -2823,6 +2823,20 @@ export class SessionSupervisor {
             record,
           );
         }
+        if (
+          event.message.role === "assistant" &&
+          event.assistantMessageEvent.type === "thinking_delta"
+        ) {
+          return toDriverEvents(
+            {
+              type: "thinkingDelta" as const,
+              sessionRef: record.ref,
+              timestamp,
+              text: event.assistantMessageEvent.delta ?? "",
+            },
+            record,
+          );
+        }
         return [sessionUpdatedEvent(record)];
       case "tool_execution_start":
         record.status = "running";
