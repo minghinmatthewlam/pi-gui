@@ -42,16 +42,18 @@ test("Cmd+N and Shift+Cmd+O open a new thread, Shift+Cmd+N does not", () => {
   expect(press("o", false)).toBeUndefined();
 });
 
-test("Cmd+T opens a new side panel tab once per press; Shift+Cmd+T and Alt chords do not", () => {
+test("Cmd+T toggles thinking once per press; Cmd+Shift+T opens a side panel tab", () => {
   const press = (input: { key: string; code?: string; shift?: boolean; alt?: boolean }) =>
     getDesktopCommandFromShortcut({ modifier: true, shift: false, ...input });
-  expect(press({ key: "t", code: "KeyT" })).toBe(desktopCommands.newSidePanelTab);
-  expect(press({ key: "Unidentified", code: "KeyT" })).toBe(desktopCommands.newSidePanelTab);
-  expect(press({ key: "T", code: "KeyT", shift: true })).toBeUndefined();
+  expect(press({ key: "t", code: "KeyT" })).toBe(desktopCommands.toggleThinking);
+  expect(press({ key: "Unidentified", code: "KeyT" })).toBe(desktopCommands.toggleThinking);
+  expect(press({ key: "T", code: "KeyT", shift: true })).toBe(desktopCommands.newSidePanelTab);
   expect(press({ key: "t", code: "KeyT", alt: true })).toBeUndefined();
   expect(
     getDesktopCommandFromShortcut({ modifier: false, shift: false, key: "t", code: "KeyT" }),
   ).toBeUndefined();
+  // Holding the chord must not flip the transcript at the key repeat rate.
+  expect(isSinglePressCommand(desktopCommands.toggleThinking)).toBe(true);
   expect(isSinglePressCommand(desktopCommands.newSidePanelTab)).toBe(true);
 });
 
