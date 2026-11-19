@@ -253,7 +253,9 @@ export function TerminalPanel({ workspace, sessionId, onHide }: TerminalPanelPro
       }
       const commandModifier = api.platform === "darwin" ? event.metaKey : event.ctrlKey;
       const key = event.key.toLowerCase();
-      if (commandModifier && !event.shiftKey && key === "t") {
+      if (commandModifier && event.shiftKey && key === "t") {
+        // Mod+Shift+T opens another shell from inside the terminal; App opens the chooser
+        // everywhere else. Plain Mod+T stays the transcript's thinking toggle.
         void createTerminal().catch((error: unknown) => {
           setError(error instanceof Error ? error.message : String(error));
         });
