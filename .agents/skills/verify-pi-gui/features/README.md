@@ -36,7 +36,7 @@ These user-facing surfaces have no feature file and no `prove.sh` checkpoint yet
 
 - Open in editor split button beside the sidebar toggle, `apps/desktop/src/features/threads/open-in-editor-button.tsx`; core `open-in-editor.spec.ts`. Main detects installed editors per host, so the spec asserts the menu shape and the IPC rejection path rather than a fixed editor list.
 - Side panel tabs on Control+1–9 (macOS) or Alt+1–9 elsewhere, `apps/desktop/src/features/workbench/side-panel-tab-hints.ts`; core `side-panel-tab-shortcuts.spec.ts`.
-- New side panel tab on Cmd/Ctrl+T, which opens the "Open a tool" picker (inside the terminal it opens a new shell instead), `apps/desktop/src/features/workbench/workbench.tsx`; core `workbench-tabs.spec.ts`.
+- New side panel tab on Cmd/Ctrl+Shift+T, which opens the "Open a tool" picker (inside the terminal it opens a new shell instead), `apps/desktop/src/features/workbench/workbench.tsx`; core `workbench-tabs.spec.ts`.
 - Messages an agent in another project sends to a thread ("From project <name>" on the user bubble and the queued row), `apps/desktop/contracts/thread-message.ts`; core `cross-project-thread-messages.spec.ts` checks the bubble only.
 - Context ring beside the model picker, `apps/desktop/src/features/conversation/context-meter.tsx`.
 - Changes card after a turn that edited files, `apps/desktop/src/features/conversation/turn-changes-card.tsx`; core `turn-changes-card.spec.ts`.
@@ -49,6 +49,7 @@ These user-facing surfaces have no feature file and no `prove.sh` checkpoint yet
 - Extension flags chosen per thread on New thread, `apps/desktop/src/features/threads/extension-flags-selector.tsx`; core `extension-flags.spec.ts`.
 - Changing model or thinking level from the composer footer keeps the typed prompt and attachments; picking from `/model` or `/thinking` clears only the command text and keeps attachments, `apps/desktop/electron/conversation/app-store-composer.ts` and `apps/desktop/src/features/conversation/hooks/use-slash-menu.tsx`; core `model-change-keeps-draft.spec.ts` (footer pickers and `/model`; `/thinking` not driven).
 - Side panel width handle ("Side panel width"), `apps/desktop/src/features/workbench/workbench-resize-handle.tsx`; core `workbench-tabs.spec.ts`.
+- A reply's model reasoning as a collapsed "Thinking" section above the answer, opened by clicking that reply or Cmd/Ctrl+T for every reply, `apps/desktop/src/features/conversation/timeline-item.tsx` and `apps/desktop/src/features/conversation/hooks/use-thinking-visibility.ts`; core `thinking-blocks.spec.ts`.
 - Find in thread on Cmd/Ctrl+F (also in Cmd-K), `apps/desktop/src/app/use-desktop-commands.ts`; core `timeline-viewport.spec.ts` (shortcut open/close and match highlight; the Cmd-K entry is not driven).
 
 ## Latest observed proof (2026-10-28)

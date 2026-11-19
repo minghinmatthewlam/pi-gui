@@ -184,7 +184,7 @@ test("adds singleton tool tabs, closes to a neighbor, and keeps an empty chooser
   }
 });
 
-test("Cmd/Ctrl+T opens the Add tab chooser, and a new shell from the terminal", async () => {
+test("Cmd/Ctrl+Shift+T opens the Add tab chooser, and a new shell from the terminal", async () => {
   test.setTimeout(60_000);
   const fixture = await prepareWorkspace();
   const harness = await launchDesktop(fixture.userDataDir, {
@@ -199,7 +199,7 @@ test("Cmd/Ctrl+T opens the Add tab chooser, and a new shell from the terminal", 
         BrowserWindow.getAllWindows()[0]?.webContents.sendInputEvent({
           type: "keyDown",
           keyCode: "t",
-          modifiers: [modifier],
+          modifiers: [modifier, "shift"],
         });
       },
       process.platform === "darwin" ? ("meta" as const) : ("control" as const),
@@ -231,7 +231,7 @@ test("Cmd/Ctrl+T opens the Add tab chooser, and a new shell from the terminal", 
     await chooser.getByRole("button", { name: "Terminal", exact: true }).click();
     await expectActiveTool(window, "Terminal");
 
-    // Inside the shell the shortcut keeps opening another terminal instead.
+    // Inside the shell Cmd/Ctrl+Shift+T keeps opening another terminal instead.
     const terminal = window.getByTestId("integrated-terminal");
     await expect(terminal.getByTestId("terminal-tab")).toHaveCount(1);
     await terminal.locator(".xterm").click();

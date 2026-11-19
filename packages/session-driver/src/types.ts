@@ -205,6 +205,15 @@ export interface AssistantDeltaEvent extends SessionEventBase {
   readonly text: string;
 }
 
+/**
+ * One streamed thinking/reasoning delta for the assistant reply currently streaming.
+ * Token-level like `assistantDelta`, so it belongs to the same coalesced UI publish.
+ */
+export interface ThinkingDeltaEvent extends SessionEventBase {
+  readonly type: "thinkingDelta";
+  readonly text: string;
+}
+
 /** Finalizes one assistant message while the containing run may continue. */
 export interface AssistantMessageEndedEvent extends SessionEventBase {
   readonly type: "assistantMessageEnded";
@@ -378,6 +387,7 @@ export type SessionDriverEvent =
   | SessionOpenedEvent
   | SessionUpdatedEvent
   | AssistantDeltaEvent
+  | ThinkingDeltaEvent
   | AssistantMessageEndedEvent
   | AssistantMessagePersistedEvent
   | TranscriptItemAppendedEvent

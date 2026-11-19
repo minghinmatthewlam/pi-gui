@@ -90,7 +90,7 @@ test("opens task terminals with persistent output and independent shell tabs", a
     await window.getByLabel("New terminal").click();
     await expect(window.getByTestId("terminal-tab")).toHaveCount(2);
     await window.getByTestId("integrated-terminal").locator(".xterm").click();
-    await window.keyboard.press(desktopShortcut("T"));
+    await window.keyboard.press(desktopShortcut("Shift+T"));
     await expect(window.getByTestId("terminal-tab")).toHaveCount(3);
 
     await expect(window.getByTestId("composer")).toBeVisible();

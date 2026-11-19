@@ -255,6 +255,7 @@ export const en = {
   "settings.shortcuts.switchRecent": "Switch to recent thread",
   "settings.shortcuts.cycleThreads": "Cycle through threads",
   "settings.shortcuts.findInThread": "Find in thread",
+  "settings.shortcuts.toggleThinking": "Show or hide thinking",
   "settings.shortcuts.send": "Send message, or queue it during a run",
   "settings.shortcuts.steer": "Steer the running agent",
   "settings.shortcuts.newLine": "New line",

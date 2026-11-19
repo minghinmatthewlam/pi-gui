@@ -232,6 +232,7 @@ export const zhCN: Partial<Messages> = {
   "settings.shortcuts.switchRecent": "切换到最近的会话",
   "settings.shortcuts.cycleThreads": "在会话间循环",
   "settings.shortcuts.findInThread": "在会话中查找",
+  "settings.shortcuts.toggleThinking": "显示或隐藏思考过程",
   "settings.shortcuts.send": "发送消息，运行中则排队",
   "settings.shortcuts.steer": "引导正在运行的智能体",
   "settings.shortcuts.newLine": "换行",

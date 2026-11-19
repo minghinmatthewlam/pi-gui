@@ -6,6 +6,7 @@ import {
   lastRunOutcome,
   sessionRunOutcome,
   messageText,
+  messageThinking,
   persistedToolOutput,
   shouldPersistSnapshotForAgentEvent,
   transcriptFromMessages,
@@ -107,6 +108,54 @@ await test("persistedToolOutput keeps only the content and details Pi saves", ()
   );
   assert.deepEqual(persistedToolOutput({ content }), { content });
   assert.deepEqual(persistedToolOutput(undefined), {});
+});
+
+await test("transcriptFromMessages keeps reasoning out of the reply text", () => {
+  assert.equal(
+    messageThinking({
+      role: "assistant",
+      content: [
+        { type: "thinking", thinking: "First step" },
+        { type: "text", text: "Not reasoning" },
+        { type: "thinking", thinking: "Second step" },
+        { type: "thinking", thinking: "" },
+      ],
+    }),
+    "First step\n\nSecond step",
+  );
+  assert.equal(messageThinking({ role: "user", content: [{ type: "text", text: "hi" }] }), "");
+
+  const transcript = transcriptFromMessages([
+    {
+      role: "assistant",
+      id: "entry-thinking",
+      content: [
+        { type: "thinking", thinking: "Read the file first, then edit it." },
+        { type: "thinking", thinking: "The core lane needs no provider." },
+        { type: "thinking", thinking: "   " },
+        { type: "text", text: "Done." },
+      ],
+      timestamp: Date.parse("2026-09-30T00:00:00.000Z"),
+    },
+    {
+      role: "assistant",
+      id: "entry-reasoning-only",
+      content: [{ type: "thinking", thinking: "Nothing to say yet." }],
+      timestamp: Date.parse("2026-09-30T00:01:00.000Z"),
+    },
+  ]);
+
+  assert.equal(transcript.length, 2);
+  const [reply, reasoning] = transcript;
+  assert.equal(reply?.kind, "message");
+  assert.equal(reply?.text, "Done.");
+  assert.equal(
+    reply?.thinking,
+    "Read the file first, then edit it.\n\nThe core lane needs no provider.",
+  );
+  assert.equal(reasoning?.kind, "message");
+  assert.equal(reasoning?.text, "");
+  assert.equal(reasoning?.thinking, "Nothing to say yet.");
 });
 
 await test("transcriptFromMessages shows displayed custom messages the way terminal pi does", () => {

@@ -598,8 +598,9 @@ function createWindow(): BrowserWindow {
       (terminalFocused || sidePanelFocusedWebContentsIds.has(webContentsId));
     if (terminalFocused) {
       // Control chords belong to the shell, so only macOS Command chords open
-      // a palette or act on the thread from the terminal. New Tab stays with the
-      // terminal, which opens another shell.
+      // a palette or act on the thread from the terminal. New Tab (Cmd+Shift+T)
+      // stays with the terminal, which opens another shell. Thinking (Cmd+T) is
+      // the transcript's own view state, so it still reaches the window.
       if (
         process.platform === "darwin" &&
         isSinglePressCommand(command) &&

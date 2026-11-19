@@ -40,6 +40,7 @@ const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
       { titleKey: "settings.shortcuts.switchRecent", modifiers: ["Mod"], key: "1–9" },
       { titleKey: "settings.shortcuts.cycleThreads", modifiers: ["Ctrl"], key: "Tab" },
       { titleKey: "settings.shortcuts.findInThread", modifiers: ["Mod"], key: "F" },
+      { titleKey: "settings.shortcuts.toggleThinking", modifiers: ["Mod"], key: "T" },
     ],
   },
   {
@@ -54,7 +55,7 @@ const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
     titleKey: "settings.shortcuts.groupWorkbench",
     shortcuts: [
       { titleKey: "settings.shortcuts.toggleTerminal", modifiers: ["Mod"], key: "J" },
-      { titleKey: "settings.shortcuts.newTerminalTab", modifiers: ["Mod"], key: "T" },
+      { titleKey: "settings.shortcuts.newTerminalTab", modifiers: ["Mod", "Shift"], key: "T" },
       { titleKey: "settings.shortcuts.toggleReview", modifiers: ["Mod"], key: "R" },
       { titleKey: "settings.shortcuts.switchSidePanelTab", modifiers: ["TabMod"], key: "1–9" },
       { titleKey: "settings.shortcuts.closeWorkbenchTab", modifiers: ["Mod"], key: "W" },
