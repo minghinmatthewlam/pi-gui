@@ -54,6 +54,7 @@ import {
   isEventInsideTerminal,
 } from "./app-shell-utils";
 import { updateSnapshot } from "./desktop-app-state";
+import { toggleThinkingVisibility } from "../features/conversation/hooks/use-thinking-visibility";
 
 /** Returns false when the command could not act, so its key event is left alone. */
 type CommandHandler = (source: ChordSource) => boolean | void;
@@ -231,6 +232,7 @@ export function useDesktopCommands(input: DesktopCommandsInput) {
       // that same-tick pair while preserving a deliberate second press.
       if (reviewToggleGate.current(performance.now())) toggleWorkbenchTool("changes");
     },
+    [desktopCommands.toggleThinking]: () => toggleThinkingVisibility(),
     [desktopCommands.newSidePanelTab]: newSidePanelTab,
     [desktopCommands.closeFocusedSurface]: closeFocusedSurface,
     [desktopCommands.toggleSidebar]: togglePrimarySidebar,
@@ -477,6 +479,7 @@ export function useDesktopCommands(input: DesktopCommandsInput) {
               };
             }),
           findInThread: threadSearch.open,
+          toggleThinking: toggleThinkingVisibility,
           openPaletteMode: setPaletteMode,
         })
       : [];

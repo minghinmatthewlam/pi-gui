@@ -17,6 +17,7 @@ import {
   SidebarToggleIcon,
   SidePanelIcon,
   SkillIcon,
+  SparkIcon,
 } from "../../ui/icons";
 
 export type PaletteMode = "commands" | "files" | "models";
@@ -68,6 +69,8 @@ export interface PaletteActionContext {
     readonly open: () => void;
   }[];
   readonly findInThread: () => void;
+  /** Opens or closes every reply's reasoning section in the open transcript. */
+  readonly toggleThinking: () => void;
   readonly openPaletteMode: (mode: PaletteMode) => void;
 }
 
@@ -105,6 +108,13 @@ export function buildPaletteActions(context: PaletteActionContext): readonly Pal
         icon: <SearchIcon />,
         hint: formatShortcut(platform, "F"),
         run: context.findInThread,
+      },
+      {
+        id: "toggle-thinking",
+        title: "Show or hide thinking",
+        icon: <SparkIcon />,
+        hint: formatShortcut(platform, "T"),
+        run: context.toggleThinking,
       },
     );
     if (thread.canSwitchModel) {

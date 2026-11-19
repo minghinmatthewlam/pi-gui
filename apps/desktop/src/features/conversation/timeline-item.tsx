@@ -16,6 +16,7 @@ import { parseCrossProjectMessage } from "../../../contracts/thread-message";
 import { extensionToolRowLabel } from "../../../contracts/tool-labels";
 import { useExtensionToolLabel } from "../extensions/extension-tool-labels";
 import { useRunningLabel } from "./hooks/use-running-label";
+import type { ThinkingVisibility } from "./hooks/use-thinking-visibility";
 import {
   AnnotationMarkers,
   type AnnotationMarker,
@@ -55,6 +56,7 @@ export function TimelineItem({
   onExtensionAction,
   annotationMarkers,
   onOpenAnnotation,
+  thinkingVisibility,
 }: {
   readonly item: DisplayTimelineItem;
   readonly expandedToolCallIds?: ReadonlySet<string>;
@@ -69,6 +71,8 @@ export function TimelineItem({
   readonly onExtensionAction?: RunExtensionAction;
   readonly annotationMarkers?: readonly AnnotationMarker[];
   readonly onOpenAnnotation?: OpenAnnotation;
+  /** Whether each reply shows its reasoning; Cmd/Ctrl+T flips the whole transcript. */
+  readonly thinkingVisibility?: ThinkingVisibility;
 }) {
   switch (item.kind) {
     case "turn-marker":
@@ -88,6 +92,7 @@ export function TimelineItem({
           workspacePath={workspacePath}
           annotationMarkers={annotationMarkers}
           onOpenAnnotation={onOpenAnnotation}
+          thinkingVisibility={thinkingVisibility}
         />
       );
     case "activity":
@@ -136,6 +141,7 @@ function TimelineMessage({
   onOpenWorkspaceFileLine,
   annotationMarkers,
   onOpenAnnotation,
+  thinkingVisibility,
 }: {
   readonly item: SessionTranscriptMessage;
   readonly sourceMessageIndex?: number;
@@ -145,6 +151,7 @@ function TimelineMessage({
   readonly onOpenWorkspaceFileLine?: (target: WorkspaceFileLine) => void;
   readonly annotationMarkers?: readonly AnnotationMarker[];
   readonly onOpenAnnotation?: OpenAnnotation;
+  readonly thinkingVisibility?: ThinkingVisibility;
 }) {
   const articleRef = useRef<HTMLElement | null>(null);
   const crossProject = useMemo(
@@ -231,6 +238,14 @@ function TimelineMessage({
   const forkable = sourceMessageIndex !== undefined;
   return (
     <article className="timeline-item timeline-item--assistant" ref={articleRef}>
+      {item.thinking && thinkingVisibility ? (
+        <TimelineThinking
+          messageId={item.id}
+          text={item.thinking}
+          open={thinkingVisibility.isOpen(item.id)}
+          onToggle={() => thinkingVisibility.toggleRow(item.id)}
+        />
+      ) : null}
       <MessageMarkdown
         annotationRoot
         onOpenWorkspaceFileLine={onOpenWorkspaceFileLine}
@@ -259,6 +274,44 @@ function TimelineMessage({
       ) : null}
       {markers}
     </article>
+  );
+}
+
+/**
+ * A reply's reasoning, collapsed beside a glyph like a tool row. Clicking it shows
+ * just this reply; Cmd/Ctrl+T opens or closes every reply at once.
+ */
+function TimelineThinking({
+  messageId,
+  text,
+  open,
+  onToggle,
+}: {
+  readonly messageId: string;
+  readonly text: string;
+  readonly open: boolean;
+  readonly onToggle: () => void;
+}) {
+  return (
+    <details
+      className="timeline-thinking"
+      data-testid="timeline-thinking"
+      open={open}
+      onToggle={(event) => {
+        // Only a real click changes the DOM state; a re-render never re-fires this.
+        if (event.currentTarget.open !== open) onToggle();
+      }}
+    >
+      <summary className="timeline-thinking__summary">
+        <span className="timeline-thinking__glyph" aria-hidden="true">
+          <SparkIcon />
+        </span>
+        <span className="timeline-thinking__label">Thinking</span>
+      </summary>
+      <div className="timeline-thinking__body">
+        <MessageMarkdown text={text} />
+      </div>
+    </details>
   );
 }
 

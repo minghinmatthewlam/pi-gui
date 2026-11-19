@@ -21,6 +21,7 @@ import type { TranscriptAnnotations } from "./annotations/use-transcript-annotat
 import { ThreadSearchBar } from "./thread-search";
 import type { RunExtensionAction } from "./extension-card";
 import { TimelineItem } from "./timeline-item";
+import { useThinkingVisibility, type ThinkingVisibility } from "./hooks/use-thinking-visibility";
 import { sameRowContent, type TimelineRow } from "./timeline-layout";
 import type { OpenTurnChange } from "./turn-changes-card";
 import type { WorkspaceFileLine } from "./workspace-file-line";
@@ -77,6 +78,9 @@ export function ConversationTimeline({
   platform,
 }: ConversationTimelineProps) {
   const surfaceRef = useRef<HTMLDivElement | null>(null);
+  // Reasoning visibility is renderer view state, like tool expansion: Cmd/Ctrl+T flips
+  // it for every reply and the choice carries across thread switches.
+  const thinkingVisibility = useThinkingVisibility();
   const annotationSelection = useAnnotationSelection({
     paneRef: surfaceRef,
     annotations,
@@ -193,6 +197,7 @@ export function ConversationTimeline({
                     scheduledOrigin={
                       item.kind === "message" ? scheduledOrigins?.get(item.id) : undefined
                     }
+                    thinkingVisibility={thinkingVisibility}
                   />
                 ))}
               </div>
@@ -296,6 +301,7 @@ interface MeasuredTimelineItemProps {
   readonly workspacePath?: string;
   readonly annotationMarkers: readonly AnnotationMarker[];
   readonly onOpenAnnotation: OpenAnnotation;
+  readonly thinkingVisibility?: ThinkingVisibility;
 }
 
 function MeasuredTimelineItemBase({
@@ -317,6 +323,7 @@ function MeasuredTimelineItemBase({
   workspacePath,
   annotationMarkers,
   onOpenAnnotation,
+  thinkingVisibility,
 }: MeasuredTimelineItemProps) {
   const rowRef = useRef<HTMLDivElement | null>(null);
 
@@ -365,6 +372,7 @@ function MeasuredTimelineItemBase({
           workspacePath={workspacePath}
           annotationMarkers={annotationMarkers}
           onOpenAnnotation={onOpenAnnotation}
+          thinkingVisibility={thinkingVisibility}
         />
       </div>
     </div>
@@ -387,6 +395,7 @@ function isSameDisplayItem(a: DisplayTimelineItem, b: DisplayTimelineItem): bool
     return (
       a.role === b.role &&
       a.text === b.text &&
+      a.thinking === b.thinking &&
       a.attachments === b.attachments &&
       a.sourceMessageId === b.sourceMessageId
     );
@@ -455,7 +464,8 @@ function areMeasuredTimelineItemPropsEqual(
     prev.workspacePath === next.workspacePath &&
     prev.annotationMarkers === next.annotationMarkers &&
     prev.onOpenAnnotation === next.onOpenAnnotation &&
-    prev.scheduledOrigin?.taskId === next.scheduledOrigin?.taskId
+    prev.scheduledOrigin?.taskId === next.scheduledOrigin?.taskId &&
+    prev.thinkingVisibility === next.thinkingVisibility
   );
 }
 

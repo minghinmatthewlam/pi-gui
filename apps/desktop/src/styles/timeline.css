@@ -309,6 +309,75 @@
   color: var(--muted-soft);
 }
 
+/* ---- Thinking (model reasoning) --------------------------------------- */
+
+/* A reply's reasoning reads as a quiet disclosure above the answer: same row rhythm
+ * as a tool row, dimmer text, and a hairline rail so it never competes with prose. */
+.timeline-thinking {
+  max-width: 100%;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+}
+
+.timeline-thinking__summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  cursor: pointer;
+  list-style: none;
+  color: var(--muted-soft);
+}
+
+.timeline-thinking__summary::-webkit-details-marker {
+  display: none;
+}
+
+.timeline-thinking__summary:hover {
+  color: var(--muted-strong);
+}
+
+.timeline-thinking__glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.timeline-thinking__glyph svg {
+  width: 14px;
+  height: 14px;
+}
+
+.timeline-thinking__label {
+  font-size: 13px;
+  line-height: 1.45;
+  font-weight: var(--font-medium);
+}
+
+.timeline-thinking__body {
+  min-width: 0;
+  padding: 8px 10px;
+  border-left: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-muted);
+  color: var(--muted-strong);
+  font-size: var(--text-sm);
+}
+
+.timeline-thinking__body .message__content {
+  color: inherit;
+}
+
+.timeline-thinking__body .message__content p,
+.timeline-thinking__body .message__content li {
+  line-height: var(--leading-normal);
+}
+
 /* ---- Tool calls --------------------------------------------------------- */
 
 .timeline-tool {
