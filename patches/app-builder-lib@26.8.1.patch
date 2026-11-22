@@ -47,3 +47,57 @@ index c345dee7a888323198897dbab393bd167aedd9b8..bea7c4dafcbba9771fbdca58d0998ea5
 +      Pop $1
        StrCpy $INSTDIR "$0\${APP_FILENAME}"
      ${endif}
+diff --git a/out/toolsets/linux.js b/out/toolsets/linux.js
+--- a/out/toolsets/linux.js
++++ b/out/toolsets/linux.js
+@@ -50,10 +50,10 @@
+     const override = (_a = process.env.APPIMAGE_TOOLS_PATH) === null || _a === void 0 ? void 0 : _a.trim();
+     const artifactPath = override ||
+         (await (0, binDownload_1.downloadArtifact)({
+-            releaseName: "appimage@1.0.2",
++            releaseName: "appimage@1.0.3",
+             filenameWithExt: "appimage-tools-runtime-20251108.tar.gz",
+             checksums: {
+-                "appimage-tools-runtime-20251108.tar.gz": "a784a8c26331ec2e945c23d6bdb14af5c9df27f5939825d84b8709c61dc81eb0",
++                "appimage-tools-runtime-20251108.tar.gz": "84021a78ee214ae6fd33a2d62a92ba25542dd10bc86bf117a9b2d0bba44e7665",
+             },
+             githubOrgRepo: "electron-userland/electron-builder-binaries",
+         }));
+diff --git a/out/configuration.d.ts b/out/configuration.d.ts
+--- a/out/configuration.d.ts
++++ b/out/configuration.d.ts
+@@ -258,11 +258,11 @@
+      * 0.0.0 - legacy toolset (appimage)
+      *
+      * Beta:
+-     * 1.0.2 - Runtime 20251108
++     * 1.0.3 - Runtime 20251108
+      *
+      * @default "0.0.0"
+      */
+-    readonly appimage?: "0.0.0" | "1.0.2" | null;
++    readonly appimage?: "0.0.0" | "1.0.3" | null;
+ }
+ export interface Hooks {
+     /**
+diff --git a/scheme.json b/scheme.json
+--- a/scheme.json
++++ b/scheme.json
+@@ -6471,7 +6471,7 @@
+             {
+               "enum": [
+                 "0.0.0",
+-                "1.0.2"
++                "1.0.3"
+               ],
+               "type": "string"
+             },
+@@ -6480,7 +6480,7 @@
+             }
+           ],
+           "default": "0.0.0",
+-          "description": "`appimage` bundle version to use for Appimage packaging and runtime.\nLocated at https://github.com/electron-userland/electron-builder-binaries/releases?q=appimage&expanded=true\n0.0.0 - legacy toolset (appimage)\n\nBeta:\n1.0.2 - Runtime 20251108"
++          "description": "`appimage` bundle version to use for Appimage packaging and runtime.\nLocated at https://github.com/electron-userland/electron-builder-binaries/releases?q=appimage&expanded=true\n0.0.0 - legacy toolset (appimage)\n\nBeta:\n1.0.3 - Runtime 20251108"
+         },
+         "winCodeSign": {
+           "anyOf": [
