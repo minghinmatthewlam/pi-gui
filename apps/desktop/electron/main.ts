@@ -53,6 +53,7 @@ import { listWorkspaceFiles, readWorkspaceFile } from "./platform/files/app-stor
 import { resolveExistingWorkspacePath } from "./platform/files/workspace-paths";
 import { MAIN_DEV_RELOAD_MARKER } from "./dev-reload-main-probe";
 import { NotificationManager } from "./platform/notification-manager";
+import { createDockBadgeUpdater } from "./platform/dock-badge";
 import { NotificationPermissionService } from "./platform/notification-permission";
 import { checkForUpdate, initUpdateChecker, openReleasesPage } from "./platform/update-checker";
 import { ThemeManager } from "./platform/theme-manager";
@@ -1069,7 +1070,11 @@ app
     integratedTerminalShell = (await store.getState()).integratedTerminalShell;
     nativeTheme.on("updated", refreshWindowBackgrounds);
     let windowBackgroundPresetId = store.snapshot().themePresetId;
+    const updateDockBadge = createDockBadgeUpdater(
+      process.platform === "darwin" ? app.dock : undefined,
+    );
     stopPruningTerminals = store.subscribe((state) => {
+      updateDockBadge(state);
       integratedTerminalShell = state.integratedTerminalShell;
       if (state.themePresetId !== windowBackgroundPresetId) {
         windowBackgroundPresetId = state.themePresetId;

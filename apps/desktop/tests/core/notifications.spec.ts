@@ -7,6 +7,7 @@ import {
   makeWorkspace,
 } from "../helpers/electron-app";
 import {
+  expectDockBadge,
   emitAttentionRequest,
   emitCompletedEvent,
   emitFailedEvent,
@@ -50,6 +51,7 @@ test("does not log a notification or blue dot for a focused selected session com
       .toBe("idle");
 
     await expect(row).toHaveAttribute("data-sidebar-indicator", "none");
+    await expectDockBadge(harness, "");
     await expect.poll(() => readOptionalLog(notificationLogPath), { timeout: 5_000 }).toBe("");
   } finally {
     await harness.close();
@@ -96,6 +98,7 @@ test("logs a completion notification and blue dot for a focused different sessio
       "data-sidebar-indicator",
       "unseen",
     );
+    await expectDockBadge(harness, "1");
     await expect(window.locator(".session-row", { hasText: "Session B" })).toHaveAttribute(
       "data-sidebar-indicator",
       "none",
@@ -143,6 +146,7 @@ test("logs a completion notification and blue dot for a selected session after t
       .poll(() => readOptionalLog(notificationLogPath), { timeout: 30_000 })
       .toContain('"body":"Agent finished responding"');
     await expect(row).toHaveAttribute("data-sidebar-indicator", "unseen");
+    await expectDockBadge(harness, "1");
   } finally {
     await harness.close();
   }
