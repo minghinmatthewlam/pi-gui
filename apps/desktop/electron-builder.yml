@@ -104,7 +104,8 @@ portable:
   artifactName: ${productName}-${version}-${arch}-portable.${ext}
 
 toolsets:
-  appimage: "1.0.2"
+  # Backported to the pinned builder from electron-builder #9673.
+  appimage: "1.0.3"
 
 dmg:
   sign: true
