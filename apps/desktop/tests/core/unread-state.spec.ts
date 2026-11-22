@@ -11,6 +11,7 @@ import {
   selectSession,
 } from "../helpers/electron-app";
 import { appendMessagesToSessionFile, sessionFilePathFromCatalog } from "../helpers/session-file";
+import { expectDockBadge } from "../helpers/notification-events";
 
 type PersistedUiState = {
   lastViewedAtBySession?: Record<string, string>;
@@ -72,9 +73,11 @@ test("selecting an unread thread persists read state through the latest known ac
     const window = await secondRun.firstWindow();
     const row = window.locator(".session-row", { hasText: title });
     await expect(row).toHaveAttribute("data-sidebar-indicator", "unseen");
+    await expectDockBadge(secondRun, "1");
 
     await selectSession(window, title);
     await expect(row).toHaveAttribute("data-sidebar-indicator", "none");
+    await expectDockBadge(secondRun, "");
   } finally {
     await secondRun.close();
   }
@@ -86,6 +89,7 @@ test("selecting an unread thread persists read state through the latest known ac
       "data-sidebar-indicator",
       "none",
     );
+    await expectDockBadge(thirdRun, "");
   } finally {
     await thirdRun.close();
   }

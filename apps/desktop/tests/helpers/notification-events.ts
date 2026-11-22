@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { expect } from "@playwright/test";
 import type { SessionDriverEvent } from "@pi-gui/session-driver";
 import type { DesktopHarness } from "./electron-app";
 import { emitTestSessionEvent } from "./electron-app";
@@ -101,4 +102,12 @@ export async function emitAttentionRequest(
     },
   };
   await emitTestSessionEvent(harness, requestEvent);
+}
+
+export async function expectDockBadge(harness: DesktopHarness, badge: string): Promise<void> {
+  if (process.platform === "darwin") {
+    await expect
+      .poll(() => harness.electronApp.evaluate(({ app }) => app.dock.getBadge()))
+      .toBe(badge);
+  }
 }
