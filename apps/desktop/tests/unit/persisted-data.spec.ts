@@ -163,3 +163,76 @@ test("unknown attachment fields survive rejected replacement and pruning", async
   await expect(store.remove("session")).rejects.toThrow(/unsupported field/);
   expect(await readFile(path, "utf8")).toBe(original);
 });
+
+// Synthetic workspace on a network share. macOS SMB volumes report Hangul names
+// decomposed (NFD), so every syllable percent-encodes to 18–27 bytes and the
+// encoded session key alone exceeds the 255-byte file name limit.
+const longSessionKey =
+  `/Volumes/team-share/${"공유 자료/디자인팀/작업 폴더".normalize("NFD")}` +
+  ":0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b";
+const imageAttachment = {
+  id: "one",
+  kind: "image" as const,
+  name: "image.png",
+  mimeType: "image/png",
+  data: "eA==",
+};
+
+test("attachment owner persists session keys whose encoded name exceeds NAME_MAX", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "attachment-long-key-"));
+  const store = new AttachmentStore(dir);
+  expect(encodeURIComponent(longSessionKey).length).toBeGreaterThan(255);
+
+  await store.write(longSessionKey, [imageAttachment]);
+  await store.write(longSessionKey, []);
+  await store.write(longSessionKey, [imageAttachment]);
+
+  expect(await store.read(longSessionKey)).toEqual([imageAttachment]);
+  expect(await store.readAll()).toEqual([[imageAttachment]]);
+  for (const name of await readdir(join(dir, "attachments"))) {
+    expect(Buffer.byteLength(name)).toBeLessThanOrEqual(255);
+  }
+});
+
+test("attachment pruning keeps active entries for short and long session keys", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "attachment-long-key-prune-"));
+  const store = new AttachmentStore(dir);
+  const orphanedLongKey = longSessionKey.replace("0190a1b2", "0190ffff");
+  await store.write(longSessionKey, [imageAttachment]);
+  await store.write(orphanedLongKey, [imageAttachment]);
+  await store.write("active", [imageAttachment]);
+  await store.write("orphaned", [imageAttachment]);
+
+  await store.pruneExcept(new Set([longSessionKey, "active"]));
+
+  expect(await store.read(longSessionKey)).toEqual([imageAttachment]);
+  expect(await store.read("active")).toEqual([imageAttachment]);
+  expect(await store.read(orphanedLongKey)).toBeUndefined();
+  expect(await store.read("orphaned")).toBeUndefined();
+  expect((await readdir(join(dir, "attachments"))).sort()).toEqual([
+    "active.json",
+    expect.stringMatching(/^sha256=[0-9a-f]{64}\.json$/),
+  ]);
+});
+
+test("attachment owner keeps entries saved under legacy names just past the hash threshold", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "attachment-legacy-name-"));
+  const store = new AttachmentStore(dir);
+  // Before hashed names, the writer saved any key whose name still fit next to the
+  // ".<pid>.<uuid>.tmp" suffix: up to 201–205 encoded bytes depending on PID digits.
+  const legacyKey = "k".repeat(203);
+  await store.write("other", []);
+  const legacyPath = join(dir, "attachments", `${encodeURIComponent(legacyKey)}.json`);
+  const legacyContents = JSON.stringify([imageAttachment]);
+  await writeFile(legacyPath, legacyContents);
+
+  expect(await store.read(legacyKey)).toEqual([imageAttachment]);
+  await store.pruneExcept(new Set([legacyKey]));
+  expect(await readFile(legacyPath, "utf8")).toBe(legacyContents);
+
+  await store.write(legacyKey, []);
+  expect(await store.read(legacyKey)).toEqual([]);
+
+  await store.pruneExcept(new Set());
+  expect(await readdir(join(dir, "attachments"))).toEqual([]);
+});
