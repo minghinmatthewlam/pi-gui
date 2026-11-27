@@ -10,17 +10,23 @@ import type { ComposerAttachment } from "../../contracts/desktop-state";
 // fixed-length hash; the budget leaves room for ".json" and the
 // ".<pid>.<uuid>.tmp" suffix that atomic writes append.
 const MAX_ENCODED_KEY_LENGTH = 200;
+const MAX_FILE_NAME_LENGTH = 255;
 // encodeURIComponent always escapes "=", so a hashed name never collides with an
 // encoded key.
 const HASHED_NAME_PREFIX = "sha256=";
 
-function fileNameForKey(sessionKey: string): string {
+// The first name is where the key is written. Earlier versions saved any key whose
+// plain name still fit next to the temp suffix (up to ~205 encoded bytes), so a
+// hashed key also answers to its plain name when that name fits; reading and
+// pruning honor it so upgrading does not orphan attachments already on disk.
+function fileNamesForKey(sessionKey: string): [string, ...string[]] {
   const encoded = encodeURIComponent(sessionKey);
-  const stem =
-    encoded.length <= MAX_ENCODED_KEY_LENGTH
-      ? encoded
-      : `${HASHED_NAME_PREFIX}${createHash("sha256").update(sessionKey).digest("hex")}`;
-  return `${stem}.json`;
+  const plain = `${encoded}.json`;
+  if (encoded.length <= MAX_ENCODED_KEY_LENGTH) {
+    return [plain];
+  }
+  const hashed = `${HASHED_NAME_PREFIX}${createHash("sha256").update(sessionKey).digest("hex")}.json`;
+  return plain.length <= MAX_FILE_NAME_LENGTH ? [hashed, plain] : [hashed];
 }
 
 export class AttachmentStore {
@@ -31,7 +37,13 @@ export class AttachmentStore {
   }
 
   async read(sessionKey: string): Promise<ComposerAttachment[] | undefined> {
-    return this.readEntry(fileNameForKey(sessionKey));
+    for (const name of fileNamesForKey(sessionKey)) {
+      const entry = await this.readEntry(name);
+      if (entry !== undefined) {
+        return entry;
+      }
+    }
+    return undefined;
   }
 
   async readAll(): Promise<ComposerAttachment[][]> {
@@ -44,18 +56,20 @@ export class AttachmentStore {
   async write(sessionKey: string, data: readonly ComposerAttachment[]): Promise<void> {
     decodeAttachments(data);
     await writeFileAtomicQueued(
-      this.entryPath(fileNameForKey(sessionKey)),
+      this.entryPath(fileNamesForKey(sessionKey)[0]),
       `${JSON.stringify(data, null, 2)}\n`,
       decodeAttachments,
     );
   }
 
   async remove(sessionKey: string): Promise<void> {
-    await this.removeEntry(fileNameForKey(sessionKey));
+    for (const name of fileNamesForKey(sessionKey)) {
+      await this.removeEntry(name);
+    }
   }
 
   async pruneExcept(activeKeys: ReadonlySet<string>): Promise<void> {
-    const keep = new Set([...activeKeys].map(fileNameForKey));
+    const keep = new Set([...activeKeys].flatMap(fileNamesForKey));
     const entries = await this.listEntries();
     await Promise.all(
       entries.filter((name) => !keep.has(name)).map((name) => this.removeEntry(name)),

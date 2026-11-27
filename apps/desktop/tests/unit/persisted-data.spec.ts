@@ -214,3 +214,25 @@ test("attachment pruning keeps active entries for short and long session keys", 
     expect.stringMatching(/^sha256=[0-9a-f]{64}\.json$/),
   ]);
 });
+
+test("attachment owner keeps entries saved under legacy names just past the hash threshold", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "attachment-legacy-name-"));
+  const store = new AttachmentStore(dir);
+  // Before hashed names, the writer saved any key whose name still fit next to the
+  // ".<pid>.<uuid>.tmp" suffix: up to 201–205 encoded bytes depending on PID digits.
+  const legacyKey = "k".repeat(203);
+  await store.write("other", []);
+  const legacyPath = join(dir, "attachments", `${encodeURIComponent(legacyKey)}.json`);
+  const legacyContents = JSON.stringify([imageAttachment]);
+  await writeFile(legacyPath, legacyContents);
+
+  expect(await store.read(legacyKey)).toEqual([imageAttachment]);
+  await store.pruneExcept(new Set([legacyKey]));
+  expect(await readFile(legacyPath, "utf8")).toBe(legacyContents);
+
+  await store.write(legacyKey, []);
+  expect(await store.read(legacyKey)).toEqual([]);
+
+  await store.pruneExcept(new Set());
+  expect(await readdir(join(dir, "attachments"))).toEqual([]);
+});
