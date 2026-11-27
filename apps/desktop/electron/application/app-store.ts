@@ -2381,17 +2381,11 @@ export class DesktopAppStore {
   }
 
   private async validatePersistedAttachments(): Promise<number> {
-    const keys = await this.attachmentStore.listKeys();
-    const skippedCounts = await Promise.all(
-      keys.map(async (key) => {
-        const attachments = await this.attachmentStore.read(key);
-        if (!attachments) {
-          return 0;
-        }
-        return quarantinePersistedComposerAttachments(attachments).skipped;
-      }),
+    const entries = await this.attachmentStore.readAll();
+    return entries.reduce(
+      (total, attachments) => total + quarantinePersistedComposerAttachments(attachments).skipped,
+      0,
     );
-    return skippedCounts.reduce((total, count) => total + count, 0);
   }
 
   async refreshState(options: RefreshStateOptions = {}): Promise<DesktopAppState> {
@@ -2670,10 +2664,7 @@ export class DesktopAppStore {
   }
 
   private async pruneOrphanedAttachmentFiles(activeKeys: Set<string>): Promise<void> {
-    const keys = await this.attachmentStore.listKeys();
-    await Promise.all(
-      keys.filter((key) => !activeKeys.has(key)).map((key) => this.attachmentStore.remove(key)),
-    );
+    await this.attachmentStore.pruneExcept(activeKeys);
   }
 
   private async ensureSubscriptionsForSessions(
